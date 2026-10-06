@@ -1,0 +1,74 @@
+name: Test and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The demo's pak0.pak sits inside the self-extracting q2-314-demo-x86.exe (a zip)
+      - name: Cache the demo pak
+        id: pak
+        uses: actions/cache@v4
+        with:
+          path: public/pak/
+          key: q2-314-demo-${{ hashFiles('scripts/fetch-pak.mjs') }}
+
+      - name: Fetch the demo pak
+        if: steps.pak.outputs.cache-hit != 'true'
+        run: npm run fetch-pak
+
+      # Runs the game's SQL inside the real Firebird WASM engine under Node:
+      # loads the Outer Base, walks, shoots, opens a door, renders frames.
+      - name: SQL smoke test (demo1)
+        run: npm test
+
+      - name: SQL smoke test (demo2)
+        run: npm run test:base2
+
+      # Every monster of the demo: spawned in front of the player, they see, chase, shoot and die
+      - name: The monsters
+        run: npm run test:monsters
+
+      - name: Headless screenshots
+        run: npm run screenshots
+
+      - name: Build site
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

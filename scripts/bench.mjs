@@ -1,0 +1,60 @@
+// bench.mjs – where does a tic and a frame spend their time?
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
+import { Pak } from '../src/pak.js';
+import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));
+const db = new FirebirdBrowser('memory://quake2', { transport: new DirectTransport() });
+await createSchema(db, sql);
+const pak = new Pak(fs.readFileSync(path.join(root, 'public/pak/pak0.pak')).buffer);
+const res = await loadResources(db, pak);
+await loadMap(db, pak, res, process.argv[2] ?? 'demo1', { skill: 2 });
+const t = () => performance.now();
+async function time(label, q, n = 5) {
+  const t0 = t();
+  let r;
+  for (let i = 0; i < n; i++) r = await db.query(q, [], { rowMode: 'array' });
+  console.log(`${label.padEnd(44)} ${((t() - t0) / n).toFixed(1)} ms  (${r.rows.length} rows)`);
+  return r;
+}
+const q1 = (s) => db.query(s).then((r) => r.rows[0]);
+const pe = (await q1('SELECT ent_id e FROM player')).E;
+const p = await q1(`SELECT x, y, z FROM ents WHERE id = ${pe}`);
+await time('tic (1 tic, idle)', 'SELECT * FROM q2_tic(1, 0, 0, 0, 0, 0, 0, 1, 0)');
+await time('tic (1 tic, walking)', 'SELECT * FROM q2_tic(1, 1, 0, 0, 0, 0, 0, 1, 0)');
+await time('player_think only', 'EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_think(0.05, 1, 0, 0, 0, 0, 0, 1, 0); END');
+await time('run_pushers', 'EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE run_pushers(0.05); END');
+await time('run_physics', 'EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE run_physics(0.05); END');
+await time('trace_move (player box, 100 units fwd)', `SELECT * FROM trace_move(${pe}, -16, -16, -24, 16, 16, 32, ${p.X}, ${p.Y}, ${p.Z}, ${p.X + 100}, ${p.Y}, ${p.Z}, 33619971)`);
+await time('trace_move (point, 2048 units)', `SELECT * FROM trace_move(${pe}, 0, 0, 0, 0, 0, 0, ${p.X}, ${p.Y}, ${p.Z + 22}, ${p.X + 2048}, ${p.Y}, ${p.Z + 22}, 100663299)`);
+await time('trace_hull world only (box)', `SELECT * FROM trace_hull((SELECT headnode FROM models WHERE id = (SELECT world_model FROM game)), 0, 0, 0, -16, -16, -24, 16, 16, 32, ${p.X}, ${p.Y}, ${p.Z}, ${p.X + 100}, ${p.Y}, ${p.Z}, 33619971)`);
+await time('trace_hull world only (position test)', `SELECT * FROM trace_hull((SELECT headnode FROM models WHERE id = (SELECT world_model FROM game)), 0, 0, 0, -16, -16, -24, 16, 16, 32, ${p.X}, ${p.Y}, ${p.Z}, ${p.X}, ${p.Y}, ${p.Z}, 33619971)`);
+await time('point_leaf', `SELECT point_leaf(${p.X}, ${p.Y}, ${p.Z}) FROM rdb$database`);
+await time('point_contents', `SELECT point_contents(${p.X}, ${p.Y}, ${p.Z}) FROM rdb$database`);
+await time('link_ent(player)', `EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE link_ent(${pe}); END`);
+await time('check_water(player)', `SELECT * FROM check_water(${pe})`);
+await time('fly_move', `SELECT * FROM fly_move(${pe}, 0.05)`);
+await time('walk_move', `EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE walk_move(${pe}, 0.05); END`);
+await time('test_position', `SELECT test_position(${pe}, ${p.X}, ${p.Y}, ${p.Z}) FROM rdb$database`);
+const m = (await q1("SELECT FIRST 1 id FROM ents WHERE mtype IS NOT NULL AND st = 'stand'"))?.ID;
+if (m) {
+  await time('monster_think (standing)', `EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_think(${m}); END`);
+  await time('find_target', `SELECT find_target(${m}) FROM rdb$database`);
+  await time('visible(monster, player)', `SELECT visible(${m}, ${pe}) FROM rdb$database`);
+  await db.exec(`UPDATE ents SET enemy_id = ${pe}, st = 'run', anim = NULL WHERE id = ${m}`);
+  await time('monster_think (running)', `EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_think(${m}); END`);
+  await time('move_step', `SELECT move_step(${m}, 5, 5, 0) FROM rdb$database`);
+}
+await time('view_setup', 'SELECT * FROM view_setup');
+await time('frame_faces', 'SELECT * FROM frame_faces');
+await time('frame_faces_fast', 'SELECT * FROM frame_faces_fast');
+await time('frame_ents', 'SELECT * FROM frame_ents');
+await time('frame_lightstyles', 'SELECT * FROM frame_lightstyles');
+const v = await q1('SELECT * FROM view_setup');
+await time('mark faces (insert distinct)', `EXECUTE BLOCK AS BEGIN DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL; EXECUTE PROCEDURE mark_faces('${v.PVS}', ${v.CLUSTER}); END`);
+console.log('monsters:', (await db.query("SELECT mtype, st, COUNT(*) n FROM ents WHERE mtype IS NOT NULL GROUP BY mtype, st")).rows);
+await db.close();
+process.exit(0);

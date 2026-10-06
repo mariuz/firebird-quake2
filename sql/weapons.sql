@@ -1,0 +1,594 @@
+-- weapons.sql – p_weapon.c, p_client.c and pmove.c: what the player does each tic.
+
+SET TERM ^ ;
+
+-- the eye and the view vectors
+CREATE OR ALTER PROCEDURE view_vectors
+RETURNS (ex DOUBLE PRECISION, ey DOUBLE PRECISION, ez DOUBLE PRECISION,
+         fx DOUBLE PRECISION, fy DOUBLE PRECISION, fz DOUBLE PRECISION,
+         rx DOUBLE PRECISION, ry DOUBLE PRECISION, rz DOUBLE PRECISION,
+         ux DOUBLE PRECISION, uy DOUBLE PRECISION, uz DOUBLE PRECISION)
+AS
+DECLARE yaw DOUBLE PRECISION; DECLARE pitch DOUBLE PRECISION;
+DECLARE sy DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE sp DOUBLE PRECISION; DECLARE cp DOUBLE PRECISION;
+BEGIN
+  SELECT e.x, e.y, e.z + p.view_ofs, e.yaw, p.pitch FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1 INTO ex, ey, ez, yaw, pitch;
+  sy = SIN(yaw * 0.0174532925e0); cy = COS(yaw * 0.0174532925e0);
+  sp = SIN(pitch * 0.0174532925e0); cp = COS(pitch * 0.0174532925e0);
+  fx = cp * cy; fy = cp * sy; fz = -sp;
+  rx = sy; ry = -cy; rz = 0;
+  ux = sp * cy; uy = sp * sy; uz = cp;
+  SUSPEND;
+END^
+
+-- fire_bullet / fire_shotgun: `count` traces 8192 units out, spread in units at that distance
+CREATE OR ALTER PROCEDURE fire_bullets (shooter INTEGER, cnt INTEGER,
+  ox DOUBLE PRECISION, oy DOUBLE PRECISION, oz DOUBLE PRECISION,
+  dx DOUBLE PRECISION, dy DOUBLE PRECISION, dz DOUBLE PRECISION, hspread DOUBLE PRECISION, vspread DOUBLE PRECISION, dmg INTEGER, kick INTEGER)
+AS
+DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION;
+DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
+DECLARE ax DOUBLE PRECISION; DECLARE ay DOUBLE PRECISION; DECLARE az DOUBLE PRECISION; DECLARE al DOUBLE PRECISION;
+DECLARE f DOUBLE PRECISION; DECLARE hx DOUBLE PRECISION; DECLARE hy DOUBLE PRECISION; DECLARE hz DOUBLE PRECISION;
+DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
+DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+DECLARE i INTEGER = 0; DECLARE r1 DOUBLE PRECISION; DECLARE r2 DOUBLE PRECISION;
+DECLARE td SMALLINT; DECLARE hp INTEGER;
+BEGIN
+  al = vlen(dx, dy, dz);
+  IF (al = 0) THEN EXIT;
+  dx = dx / al; dy = dy / al; dz = dz / al;
+  rx = dy; ry = -dx; rz = 0;
+  al = vlen(rx, ry, rz);
+  IF (al < 1e-6) THEN BEGIN rx = 1; ry = 0; rz = 0; al = 1; END
+  rx = rx / al; ry = ry / al; rz = rz / al;
+  ux = ry * dz - rz * dy; uy = rz * dx - rx * dz; uz = rx * dy - ry * dx;
+  WHILE (i < cnt) DO
+  BEGIN
+    r1 = crand() * hspread; r2 = crand() * vspread;
+    ax = dx * 8192 + r1 * rx + r2 * ux; ay = dy * 8192 + r1 * ry + r2 * uy; az = dz * 8192 + r1 * rz + r2 * uz;
+    EXECUTE PROCEDURE trace_move(shooter, 0, 0, 0, 0, 0, 0, ox, oy, oz, ox + ax, oy + ay, oz + az, 100663299)
+      RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+    IF (f < 1) THEN
+    BEGIN
+      td = 0;
+      IF (hit > 0) THEN SELECT e.takedamage, e.health FROM ents e WHERE e.id = :hit INTO td, hp;
+      IF (td > 0) THEN
+      BEGIN
+        EXECUTE PROCEDURE fx(3, hx, hy, hz, 0, 0, 0, dmg);
+        EXECUTE PROCEDURE t_damage(hit, shooter, shooter, dmg, kick, 16);
+      END
+      ELSE IF (BIN_AND(sf, 4) = 0) THEN
+        EXECUTE PROCEDURE fx(IIF(cnt > 1, 11, 1), hx, hy, hz, nx, ny, nz, 0);
+    END
+    i = i + 1;
+  END
+END^
+
+-- fire_rail: a slug through everything in its path
+CREATE OR ALTER PROCEDURE fire_rail (shooter INTEGER, ox DOUBLE PRECISION, oy DOUBLE PRECISION, oz DOUBLE PRECISION,
+  dx DOUBLE PRECISION, dy DOUBLE PRECISION, dz DOUBLE PRECISION, dmg INTEGER, kick INTEGER)
+AS
+DECLARE f DOUBLE PRECISION; DECLARE hx DOUBLE PRECISION; DECLARE hy DOUBLE PRECISION; DECLARE hz DOUBLE PRECISION;
+DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
+DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+DECLARE sx DOUBLE PRECISION; DECLARE sy DOUBLE PRECISION; DECLARE sz DOUBLE PRECISION; DECLARE ignore INTEGER; DECLARE i INTEGER = 0;
+DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
+BEGIN
+  ex = ox + dx * 8192; ey = oy + dy * 8192; ez = oz + dz * 8192;
+  sx = ox; sy = oy; sz = oz; ignore = shooter;
+  WHILE (i < 8) DO
+  BEGIN
+    EXECUTE PROCEDURE trace_move(ignore, 0, 0, 0, 0, 0, 0, sx, sy, sz, ex, ey, ez, 100663299)
+      RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+    IF (hit > 0 AND EXISTS (SELECT 1 FROM ents e WHERE e.id = :hit AND e.takedamage > 0)) THEN
+    BEGIN
+      EXECUTE PROCEDURE t_damage(hit, shooter, shooter, dmg, kick, 4);
+      -- continue from just past the hit, ignoring what we just shot
+      ignore = hit;
+      sx = hx + dx * 8; sy = hy + dy * 8; sz = hz + dz * 8;
+      i = i + 1;
+      CONTINUE;
+    END
+    LEAVE;
+  END
+  EXECUTE PROCEDURE fx(4, ox, oy, oz, hx, hy, hz, 0);
+END^
+
+-- the weapon's muzzle: 24 forward, 8 right, viewheight - 8 up (P_ProjectSource)
+CREATE OR ALTER PROCEDURE muzzle (side DOUBLE PRECISION, up_ DOUBLE PRECISION)
+RETURNS (mx DOUBLE PRECISION, my DOUBLE PRECISION, mz DOUBLE PRECISION, fx DOUBLE PRECISION, fy DOUBLE PRECISION, fz DOUBLE PRECISION,
+         rx DOUBLE PRECISION, ry DOUBLE PRECISION, rz DOUBLE PRECISION)
+AS
+DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
+DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
+BEGIN
+  EXECUTE PROCEDURE view_vectors RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz;
+  mx = ex + fx * 24 + rx * side + ux * up_;
+  my = ey + fy * 24 + ry * side + uy * up_;
+  mz = ez + fz * 24 + rz * side + uz * up_;
+  SUSPEND;
+END^
+
+-- Weapon_* think: fire if the button is held, the weapon is ready and there is ammo
+CREATE OR ALTER PROCEDURE player_fire (btn SMALLINT)
+AS
+DECLARE pe INTEGER; DECLARE w INTEGER; DECLARE af DOUBLE PRECISION; DECLARE t DOUBLE PRECISION;
+DECLARE mx DOUBLE PRECISION; DECLARE my DOUBLE PRECISION; DECLARE mz DOUBLE PRECISION;
+DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
+DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION;
+DECLARE ammo INTEGER; DECLARE ak SMALLINT; DECLARE need INTEGER; DECLARE ws SMALLINT; DECLARE spin DOUBLE PRECISION; DECLARE shots INTEGER; DECLARE i INTEGER;
+DECLARE quad DOUBLE PRECISION; DECLARE sil INTEGER; DECLARE vol DOUBLE PRECISION; DECLARE kick DOUBLE PRECISION;
+DECLARE yaw DOUBLE PRECISION; DECLARE gt DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION; DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
+DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
+BEGIN
+  SELECT p.ent_id, p.weapon, p.attack_finished, p.quad_finished, p.silencer_shots, p.chaingun_spin, p.grenade_time
+    FROM player p WHERE p.id = 1 INTO pe, w, af, quad, sil, spin, gt;
+  t = now_();
+  vol = IIF(sil > 0, 0.2e0, 1);
+
+  -- a lit hand grenade is thrown when the button is released (or after 3 seconds)
+  IF (gt > 0 AND (btn = 0 OR t - gt >= 3)) THEN
+  BEGIN
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    spd = MINVALUE(800, 400 + (t - gt) * 300);
+    EXECUTE PROCEDURE launch_grenade(pe, mx, my, mz, fx_ * spd, fy * spd, fz * spd + 200, 125, 165, MAXVALUE(0.1e0, 3 - (t - gt)), 1);
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/hgrent1a.wav', vol, 1);
+    UPDATE player p SET p.grenade_time = 0, p.grenades = p.grenades - 1, p.attack_finished = :t + 1, p.attack_start = :t WHERE p.id = 1;
+    IF (ammo_count(3) <= 0) THEN UPDATE player p SET p.weapons = BIN_AND(p.weapons, BIN_NOT(32)), p.weapon = best_weapon() WHERE p.id = 1;
+    EXIT;
+  END
+
+  IF (btn = 0) THEN
+  BEGIN
+    -- the chain gun winds down
+    IF (w = 16 AND spin > 0) THEN
+    BEGIN
+      EXECUTE PROCEDURE snd(pe, 1, 'weapons/chngnd1a.wav', vol, 1);
+      UPDATE player p SET p.chaingun_spin = 0 WHERE p.id = 1;
+    END
+    UPDATE player p SET p.weapon_sound = 0, p.machinegun_shots = 0 WHERE p.id = 1;
+    EXIT;
+  END
+  IF (af > t OR w = 0) THEN EXIT;
+  IF (gt > 0) THEN EXIT;   -- still holding the grenade
+
+  -- ammo
+  ak = weapon_ammo(w);
+  need = CASE w WHEN 4 THEN 2 WHEN 1024 THEN 50 ELSE 1 END;
+  IF (ak > 0 AND ammo_count(ak) < need) THEN
+  BEGIN
+    IF (EXISTS (SELECT 1 FROM player p WHERE p.id = 1 AND p.pain_finished < :t)) THEN
+    BEGIN
+      EXECUTE PROCEDURE snd(pe, 1, 'weapons/noammo.wav', 1, 1);
+      UPDATE player p SET p.pain_finished = :t + 1 WHERE p.id = 1;
+    END
+    UPDATE player p SET p.weapon = best_weapon(), p.attack_finished = :t + 0.5e0 WHERE p.id = 1;
+    EXIT;
+  END
+  UPDATE player p SET p.show_hostile = :t + 1, p.attack_start = :t, p.silencer_shots = MAXVALUE(0, p.silencer_shots - 1) WHERE p.id = 1;
+
+  IF (w = 1) THEN                                                        -- blaster
+  BEGIN
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE launch_bolt(pe, mx, my, mz, fx_, fy, fz, 1000, 15, 8);
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/blastf1a.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 0.5e0, p.punchangle = -1 WHERE p.id = 1;
+  END
+  ELSE IF (w = 2) THEN                                                   -- shotgun
+  BEGIN
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE fire_bullets(pe, 12, mx, my, mz, fx_, fy, fz, 500, 500, 4, 8);
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/shotgf1b.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 1, p.shells = p.shells - 1, p.punchangle = -2 WHERE p.id = 1;
+  END
+  ELSE IF (w = 4) THEN                                                   -- super shotgun: two volleys, 5 degrees apart
+  BEGIN
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    SELECT e.yaw FROM ents e WHERE e.id = :pe INTO yaw;
+    EXECUTE PROCEDURE fire_bullets(pe, 10, mx, my, mz, fx_ * COS(-5 * 0.0174532925e0) - fy * SIN(-5 * 0.0174532925e0), fx_ * SIN(-5 * 0.0174532925e0) + fy * COS(-5 * 0.0174532925e0), fz, 1000, 500, 6, 12);
+    EXECUTE PROCEDURE fire_bullets(pe, 10, mx, my, mz, fx_ * COS(5 * 0.0174532925e0) - fy * SIN(5 * 0.0174532925e0), fx_ * SIN(5 * 0.0174532925e0) + fy * COS(5 * 0.0174532925e0), fz, 1000, 500, 6, 12);
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/sshotf1b.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 1, p.shells = p.shells - 2, p.punchangle = -4 WHERE p.id = 1;
+  END
+  ELSE IF (w = 8) THEN                                                   -- machinegun: the kick climbs while the trigger is held
+  BEGIN
+    SELECT p.machinegun_shots FROM player p WHERE p.id = 1 INTO shots;
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE fire_bullets(pe, 1, mx, my, mz, fx_ + crand() * 0.01e0 * shots, fy + crand() * 0.01e0 * shots, fz + 0.005e0 * shots, 300, 500, 8, 2);
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/machgf' || CAST(1 + FLOOR(RAND() * 5) AS INTEGER) || 'b.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - 1, p.punchangle = -0.5e0 - 0.5e0 * RAND(), p.machinegun_shots = MINVALUE(9, p.machinegun_shots + 1) WHERE p.id = 1;
+  END
+  ELSE IF (w = 16) THEN                                                  -- chaingun: spins up to three barrels a tic
+  BEGIN
+    IF (spin = 0) THEN BEGIN EXECUTE PROCEDURE snd(pe, 1, 'weapons/chngnu1a.wav', vol, 1); spin = t; END
+    shots = IIF(t - spin < 0.6e0, 1, IIF(t - spin < 1.2e0, 2, 3));
+    shots = MINVALUE(shots, ammo_count(2));
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    i = 0;
+    WHILE (i < shots) DO
+    BEGIN
+      EXECUTE PROCEDURE fire_bullets(pe, 1, mx + rx * (i - 1) * 4, my + ry * (i - 1) * 4, mz, fx_, fy, fz, 300, 500, 6, 2);
+      i = i + 1;
+    END
+    IF (shots > 0) THEN EXECUTE PROCEDURE snd(pe, 1, 'weapons/machgf' || CAST(1 + FLOOR(RAND() * 5) AS INTEGER) || 'b.wav', vol, 1);
+    EXECUTE PROCEDURE snd(pe, 0, 'weapons/chngnl1a.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - :shots, p.punchangle = -0.5e0 * :shots, p.chaingun_spin = :spin WHERE p.id = 1;
+  END
+  ELSE IF (w = 32) THEN                                                  -- hand grenade: pull the pin; thrown on release
+  BEGIN
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/hgrena1b.wav', vol, 1);
+    UPDATE player p SET p.grenade_time = :t WHERE p.id = 1;
+  END
+  ELSE IF (w = 64) THEN                                                  -- grenade launcher
+  BEGIN
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE launch_grenade(pe, mx, my, mz, fx_ * 600, fy * 600, fz * 600 + 200, 120, 160, 2.5e0, 0);
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/grenlf1a.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 1, p.grenades = p.grenades - 1, p.punchangle = -1 WHERE p.id = 1;
+  END
+  ELSE IF (w = 128) THEN                                                 -- rocket launcher
+  BEGIN
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE launch_rocket(pe, mx, my, mz, fx_, fy, fz, 650, 100 + FLOOR(RAND() * 20), 120, 120);
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/rocklf1a.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 0.8e0, p.rockets = p.rockets - 1, p.punchangle = -2 WHERE p.id = 1;
+  END
+  ELSE IF (w = 256) THEN                                                 -- hyperblaster: bolts from a spinning muzzle
+  BEGIN
+    SELECT p.weapon_sound FROM player p WHERE p.id = 1 INTO ws;
+    EXECUTE PROCEDURE muzzle(8 + 4 * COS(t * 25), -8 + 4 * SIN(t * 25)) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE launch_bolt(pe, mx, my, mz, fx_, fy, fz, 1000, 15, 64);
+    IF (ws = 0) THEN EXECUTE PROCEDURE snd(pe, 1, 'weapons/hyprbf1a.wav', vol, 1);
+    EXECUTE PROCEDURE snd(pe, 0, 'weapons/hyprbl1a.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.cells = p.cells - 1, p.punchangle = -1, p.weapon_sound = 1 WHERE p.id = 1;
+  END
+  ELSE IF (w = 512) THEN                                                 -- railgun
+  BEGIN
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE fire_rail(pe, mx, my, mz, fx_, fy, fz, 150, 250);
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/railgf1a.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 1.5e0, p.slugs = p.slugs - 1, p.punchangle = -3 WHERE p.id = 1;
+  END
+  ELSE IF (w = 1024) THEN                                                -- BFG10K
+  BEGIN
+    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE launch_bfg(pe, mx, my, mz, fx_, fy, fz, 400, 500, 1000);
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/bfg__f1y.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 1.5e0, p.cells = p.cells - 50, p.punchangle = -5 WHERE p.id = 1;
+  END
+  IF (quad > t) THEN EXECUTE PROCEDURE snd(pe, 3, 'items/damage3.wav', 1, 1);
+  -- out of ammo for this weapon now: switch after this shot
+  IF (ak > 0 AND ammo_count(ak) < need AND w NOT IN (32)) THEN
+    UPDATE player p SET p.weapon = best_weapon() WHERE p.id = 1;
+END^
+
+-- "use <weapon>" for a key 1..0, cycling, and the cheats
+CREATE OR ALTER PROCEDURE player_impulse (imp SMALLINT)
+AS
+DECLARE have INTEGER; DECLARE w INTEGER; DECLARE i INTEGER; DECLARE ak SMALLINT;
+BEGIN
+  SELECT p.weapons, p.weapon FROM player p WHERE p.id = 1 INTO have, w;
+  IF (imp = 99) THEN                                                     -- give all
+  BEGIN
+    UPDATE player p SET p.weapons = 2047, p.bullets = p.max_bullets, p.shells = p.max_shells, p.rockets = p.max_rockets, p.grenades = p.max_grenades,
+           p.cells = p.max_cells, p.slugs = p.max_slugs, p.armor = 200, p.armor_type = 3, p.keys = 511 WHERE p.id = 1;
+    UPDATE ents e SET e.health = e.max_health WHERE e.id = player_ent();
+    EXECUTE PROCEDURE sprint('Very impressive');
+    EXIT;
+  END
+  IF (imp = 12) THEN                                                     -- cycle to the next weapon held
+  BEGIN
+    i = 0;
+    WHILE (i < 11) DO
+    BEGIN
+      w = IIF(w >= 1024, 1, w * 2);
+      IF (BIN_AND(have, w) <> 0) THEN LEAVE;
+      i = i + 1;
+    END
+    UPDATE player p SET p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0 WHERE p.id = 1;
+    EXIT;
+  END
+  w = CASE imp WHEN 1 THEN 1 WHEN 2 THEN 2 WHEN 3 THEN 4 WHEN 4 THEN 8 WHEN 5 THEN 16 WHEN 6 THEN 32 WHEN 7 THEN 64 WHEN 8 THEN 128 WHEN 9 THEN 256 WHEN 10 THEN 512 WHEN 11 THEN 1024 ELSE 0 END;
+  IF (w = 0 OR BIN_AND(have, w) = 0) THEN
+  BEGIN
+    IF (w <> 0) THEN EXECUTE PROCEDURE sprint('Out of item: ' || CASE w WHEN 2 THEN 'Shotgun' WHEN 4 THEN 'Super Shotgun' WHEN 8 THEN 'Machinegun' WHEN 16 THEN 'Chaingun' WHEN 32 THEN 'Grenades' WHEN 64 THEN 'Grenade Launcher' WHEN 128 THEN 'Rocket Launcher' WHEN 256 THEN 'HyperBlaster' WHEN 512 THEN 'Railgun' ELSE 'BFG10K' END);
+    EXIT;
+  END
+  ak = weapon_ammo(w);
+  IF (ak > 0 AND ammo_count(ak) < IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN
+  BEGIN
+    EXECUTE PROCEDURE sprint('Not enough ammo for ' || CASE w WHEN 2 THEN 'Shotgun' WHEN 4 THEN 'Super Shotgun' WHEN 8 THEN 'Machinegun' WHEN 16 THEN 'Chaingun' WHEN 32 THEN 'Grenades' WHEN 64 THEN 'Grenade Launcher' WHEN 128 THEN 'Rocket Launcher' WHEN 256 THEN 'HyperBlaster' WHEN 512 THEN 'Railgun' ELSE 'BFG10K' END || '.');
+    EXIT;
+  END
+  IF (w <> (SELECT p.weapon FROM player p WHERE p.id = 1)) THEN
+  BEGIN
+    UPDATE player p SET p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0, p.attack_finished = MAXVALUE(p.attack_finished, now_() + 0.3e0) WHERE p.id = 1;
+  END
+END^
+
+-- ClientThink + Pmove + ClientEndServerFrame for one tic
+CREATE OR ALTER PROCEDURE player_think (dt DOUBLE PRECISION, fwd DOUBLE PRECISION, side DOUBLE PRECISION,
+  yaw_d DOUBLE PRECISION, pitch_d DOUBLE PRECISION, fire SMALLINT, jump SMALLINT, run SMALLINT, imp SMALLINT)
+AS
+DECLARE pe INTEGER; DECLARE t DOUBLE PRECISION; DECLARE dead SMALLINT; DECLARE flags INTEGER; DECLARE wl SMALLINT; DECLARE wt INTEGER; DECLARE owl SMALLINT;
+DECLARE yaw DOUBLE PRECISION; DECLARE pitch DOUBLE PRECISION;
+DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION;
+DECLARE spd DOUBLE PRECISION; DECLARE ns DOUBLE PRECISION; DECLARE control DOUBLE PRECISION; DECLARE drop_ DOUBLE PRECISION;
+DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
+DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION;
+DECLARE wx DOUBLE PRECISION; DECLARE wy DOUBLE PRECISION; DECLARE wz DOUBLE PRECISION; DECLARE wspd DOUBLE PRECISION; DECLARE maxspd DOUBLE PRECISION;
+DECLARE cur DOUBLE PRECISION; DECLARE add_ DOUBLE PRECISION; DECLARE acc DOUBLE PRECISION;
+DECLARE jr SMALLINT; DECLARE onground SMALLINT;
+DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
+DECLARE mnx DOUBLE PRECISION; DECLARE mny DOUBLE PRECISION; DECLARE mnz DOUBLE PRECISION;
+DECLARE mxx DOUBLE PRECISION; DECLARE mxy DOUBLE PRECISION; DECLARE mxz DOUBLE PRECISION;
+DECLARE tid INTEGER; DECLARE tcls VARCHAR(40); DECLARE tst SMALLINT; DECLARE tn VARCHAR(40); DECLARE thp INTEGER; DECLARE tsf INTEGER;
+DECLARE tdm INTEGER; DECLARE tlt DOUBLE PRECISION;
+DECLARE afin DOUBLE PRECISION; DECLARE hp INTEGER; DECLARE deadt DOUBLE PRECISION; DECLARE oldz DOUBLE PRECISION; DECLARE w INTEGER;
+DECLARE enviro DOUBLE PRECISION; DECLARE breather DOUBLE PRECISION; DECLARE ndt DOUBLE PRECISION; DECLARE ddmg INTEGER; DECLARE mhp INTEGER;
+DECLARE grav DOUBLE PRECISION;
+BEGIN
+  SELECT p.ent_id, p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg
+    FROM player p WHERE p.id = 1 INTO pe, jr, afin, deadt, w, enviro, breather, ndt, ddmg;
+  IF (pe IS NULL) THEN EXIT;
+  SELECT e.deadflag, e.flags, e.waterlevel, e.watertype, e.yaw, e.health, e.z, e.max_health FROM ents e WHERE e.id = :pe INTO dead, flags, owl, wt, yaw, hp, oldz, mhp;
+  t = now_();
+  SELECT g.gravity FROM game g WHERE g.id = 1 INTO grav;
+
+  IF (dead = 1) THEN
+  BEGIN
+    -- the body falls; the level restarts on fire or jump after a moment
+    EXECUTE PROCEDURE toss_move(pe, dt);
+    IF (t > deadt + 1.5e0 AND (fire = 1 OR jump = 1)) THEN
+      UPDATE game g SET g.exit_kind = 3 WHERE g.id = 1;
+    EXIT;
+  END
+
+  -- view angles
+  yaw = anglemod(yaw + yaw_d);
+  UPDATE player p SET p.pitch = MAXVALUE(-89, MINVALUE(89, p.pitch + :pitch_d)), p.punchangle = MINVALUE(0, p.punchangle + 10 * :dt) WHERE p.id = 1 RETURNING p.pitch INTO pitch;
+  UPDATE ents e SET e.yaw = :yaw WHERE e.id = :pe;
+  IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(imp);
+
+  -- P_WorldEffects: water, slime, lava, drowning
+  EXECUTE PROCEDURE check_water(pe) RETURNING_VALUES wl, wt;
+  IF (owl = 0 AND wl > 0) THEN
+  BEGIN
+    IF (BIN_AND(wt, 8) <> 0) THEN EXECUTE PROCEDURE snd(pe, 0, 'player/lava_in.wav', 1, 1);
+    ELSE EXECUTE PROCEDURE snd(pe, 0, 'player/watr_in.wav', 1, 1);
+    UPDATE ents e SET e.flags = BIN_OR(e.flags, 8) WHERE e.id = :pe;
+  END
+  ELSE IF (owl > 0 AND wl = 0) THEN
+  BEGIN
+    EXECUTE PROCEDURE snd(pe, 0, 'player/watr_out.wav', 1, 1);
+    UPDATE ents e SET e.flags = BIN_AND(e.flags, BIN_NOT(8)) WHERE e.id = :pe;
+  END
+  IF (owl <> 3 AND wl = 3) THEN EXECUTE PROCEDURE snd(pe, 0, 'player/watr_un.wav', 1, 1);
+  IF (owl = 3 AND wl <> 3) THEN
+  BEGIN
+    IF (afin < t) THEN EXECUTE PROCEDURE snd(pe, 2, 'player/gasp1.wav', 1, 1);     -- gasp for air
+    ELSE IF (afin < t + 11) THEN EXECUTE PROCEDURE snd(pe, 2, 'player/gasp2.wav', 1, 1);
+  END
+  IF (wl = 3) THEN
+  BEGIN
+    IF (breather > t) THEN
+      UPDATE player p SET p.air_finished = :t + 10 WHERE p.id = 1;
+    ELSE IF (afin < t)
+    THEN BEGIN
+      -- drown: the damage climbs 2 points a second, up to 15
+      IF (ndt < t) THEN
+      BEGIN
+        ddmg = MINVALUE(15, ddmg + 2);
+        UPDATE player p SET p.next_drown_time = :t + 1, p.drown_dmg = :ddmg WHERE p.id = 1;
+        EXECUTE PROCEDURE snd(pe, 2, IIF(hp <= ddmg, 'player/drown1.wav', 'player/male/gurp' || CAST(1 + FLOOR(RAND() * 2) AS INTEGER) || '.wav'), 1, 1);
+        EXECUTE PROCEDURE t_damage(pe, 0, 0, ddmg, 0, 2 + 32);
+      END
+    END
+  END
+  ELSE UPDATE player p SET p.air_finished = :t + 12, p.drown_dmg = 2 WHERE p.id = 1;
+  IF (wl > 0 AND BIN_AND(wt, 24) <> 0 AND enviro < t) THEN
+  BEGIN
+    SELECT p.dmg_lava_time FROM player p WHERE p.id = 1 INTO tlt;
+    IF (tlt < t) THEN
+    BEGIN
+      UPDATE player p SET p.dmg_lava_time = :t + 0.1e0 WHERE p.id = 1;
+      IF (BIN_AND(wt, 8) <> 0) THEN
+      BEGIN
+        IF (RAND() < 0.1e0) THEN EXECUTE PROCEDURE snd(pe, 2, 'player/burn' || CAST(1 + FLOOR(RAND() * 2) AS INTEGER) || '.wav', 1, 1);
+        EXECUTE PROCEDURE t_damage(pe, 0, 0, 3 * wl, 0, 2 + 32);
+      END
+      ELSE EXECUTE PROCEDURE t_damage(pe, 0, 0, 1 * wl, 0, 2 + 32);
+    END
+  END
+
+  SELECT e.vx, e.vy, e.vz, e.flags FROM ents e WHERE e.id = :pe INTO vx, vy, vz, flags;
+  onground = IIF(BIN_AND(flags, 512) <> 0, 1, 0);
+  maxspd = IIF(run = 1, 300, 200);
+
+  -- PM_CheckJump
+  IF (jump = 1) THEN
+  BEGIN
+    IF (wl >= 2) THEN
+    BEGIN
+      IF (vz > -300) THEN vz = IIF(BIN_AND(wt, 32) <> 0, 100, IIF(BIN_AND(wt, 16) <> 0, 80, 50));
+      onground = 0; flags = BIN_AND(flags, BIN_NOT(512));
+    END
+    ELSE IF (onground = 1 AND jr = 1) THEN
+    BEGIN
+      vz = vz + 270;
+      flags = BIN_AND(flags, BIN_NOT(512));
+      onground = 0;
+      UPDATE player p SET p.jump_released = 0 WHERE p.id = 1;
+      EXECUTE PROCEDURE snd(pe, 2, 'player/male/jump1.wav', 1, 1);
+    END
+  END
+  ELSE UPDATE player p SET p.jump_released = 1 WHERE p.id = 1;
+
+  -- PM_Friction
+  IF (onground = 1 OR wl >= 2) THEN
+  BEGIN
+    spd = vlen(vx, vy, vz);
+    IF (spd > 1) THEN
+    BEGIN
+      drop_ = 0;
+      IF (onground = 1) THEN
+      BEGIN
+        control = IIF(spd < 100, 100, spd);
+        drop_ = drop_ + control * 6 * dt;
+      END
+      IF (wl >= 2) THEN drop_ = drop_ + spd * 1 * wl * dt;
+      ns = MAXVALUE(0, spd - drop_) / spd;
+      vx = vx * ns; vy = vy * ns; vz = vz * ns;
+    END
+  END
+
+  -- the wish direction
+  fx_ = COS(yaw * 0.0174532925e0); fy = SIN(yaw * 0.0174532925e0);
+  rx = fy; ry = -fx_;
+  IF (wl >= 2) THEN
+  BEGIN
+    -- PM_WaterMove: the forward vector follows the pitch; sink slowly when idle
+    fz = -SIN(pitch * 0.0174532925e0);
+    fx_ = fx_ * COS(pitch * 0.0174532925e0); fy = fy * COS(pitch * 0.0174532925e0);
+    wx = fx_ * fwd * maxspd + rx * side * maxspd; wy = fy * fwd * maxspd + ry * side * maxspd; wz = fz * fwd * maxspd;
+    IF (fwd = 0 AND side = 0 AND jump = 0) THEN wz = wz - 60;
+    ELSE IF (jump = 1) THEN wz = wz + 200;
+    wspd = vlen(wx, wy, wz);
+    IF (wspd > maxspd) THEN BEGIN wx = wx * maxspd / wspd; wy = wy * maxspd / wspd; wz = wz * maxspd / wspd; wspd = maxspd; END
+    wspd = wspd * 0.5e0;
+    IF (wspd > 0) THEN
+    BEGIN
+      cur = (vx * wx + vy * wy + vz * wz) / vlen(wx, wy, wz);
+      add_ = wspd - cur;
+      IF (add_ > 0) THEN
+      BEGIN
+        acc = MINVALUE(add_, 10 * wspd * dt);
+        vx = vx + acc * wx / vlen(wx, wy, wz); vy = vy + acc * wy / vlen(wx, wy, wz); vz = vz + acc * wz / vlen(wx, wy, wz);
+      END
+    END
+  END
+  ELSE
+  BEGIN
+    wx = fx_ * fwd * maxspd + rx * side * maxspd; wy = fy * fwd * maxspd + ry * side * maxspd;
+    wspd = vlen(wx, wy, 0);
+    IF (wspd > maxspd) THEN BEGIN wx = wx * maxspd / wspd; wy = wy * maxspd / wspd; wspd = maxspd; END
+    -- PM_AirMove: no air control in single player (pm_airaccelerate 0)
+    IF (wspd > 0 AND onground = 1) THEN
+    BEGIN
+      cur = (vx * wx + vy * wy) / wspd;
+      add_ = wspd - cur;
+      IF (add_ > 0) THEN
+      BEGIN
+        acc = MINVALUE(add_, 10 * wspd * dt);
+        vx = vx + acc * wx / wspd; vy = vy + acc * wy / wspd;
+      END
+    END
+    ELSE IF (wspd > 0 AND wl = 1) THEN
+    BEGIN
+      -- wading: some control while the feet are wet
+      cur = (vx * wx + vy * wy) / wspd;
+      add_ = wspd - cur;
+      IF (add_ > 0) THEN
+      BEGIN
+        acc = MINVALUE(add_, 10 * wspd * dt);
+        vx = vx + acc * wx / wspd; vy = vy + acc * wy / wspd;
+      END
+    END
+  END
+  -- gravity
+  IF (onground = 0 AND wl < 2) THEN vz = vz - grav * dt;
+  UPDATE ents e SET e.vx = :vx, e.vy = :vy, e.vz = :vz, e.flags = :flags WHERE e.id = :pe;
+
+  -- move
+  IF (wl >= 2) THEN
+  BEGIN
+    UPDATE ents e SET e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :pe;
+    EXECUTE PROCEDURE fly_move(pe, dt) RETURNING_VALUES tst, tid;
+  END
+  ELSE EXECUTE PROCEDURE walk_move(pe, dt);
+  IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :pe)) THEN EXIT;
+  EXECUTE PROCEDURE link_ent(pe);
+  -- smooth the view over steps
+  SELECT e.z FROM ents e WHERE e.id = :pe INTO pz;
+  UPDATE player p SET p.stepz = IIF(BIN_AND((SELECT e.flags FROM ents e WHERE e.id = :pe), 512) <> 0 AND :pz - :oldz > 0 AND :pz - :oldz <= 18,
+                                     MINVALUE(p.stepz + (:pz - :oldz), 18), MAXVALUE(0, p.stepz - 160 * :dt)) WHERE p.id = 1;
+
+  -- G_TouchTriggers: triggers and items whose box we are in
+  SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz FROM ents e WHERE e.id = :pe INTO px, py, pz, mnx, mny, mnz, mxx, mxy, mxz;
+  FOR SELECT e.id, e.classname FROM ents e
+       WHERE e.solid = 1 AND e.id <> :pe
+         AND e.x + e.maxx >= :px + :mnx AND e.x + e.minx <= :px + :mxx
+         AND e.y + e.maxy >= :py + :mny AND e.y + e.miny <= :py + :mxy
+         AND e.z + e.maxz >= :pz + :mnz AND e.z + e.minz <= :pz + :mxz
+       ORDER BY e.id INTO tid, tcls
+  DO
+  BEGIN
+    IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :tid)) THEN CONTINUE;
+    IF (tcls IN ('trigger_multiple', 'trigger_once')) THEN
+    BEGIN
+      IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :tid AND e.max_health = 0 AND BIN_AND(e.spawnflags, 2) = 0)) THEN
+        EXECUTE PROCEDURE trigger_fire(tid, pe);
+    END
+    ELSE IF (tcls = 'misc_teleporter') THEN EXECUTE PROCEDURE teleport_touch(tid, pe);
+    ELSE IF (tcls = 'target_changelevel') THEN EXECUTE PROCEDURE changelevel(tid);
+    ELSE IF (tcls = 'trigger_push') THEN
+    BEGIN
+      UPDATE ents e SET e.vx = (SELECT tr.p1x * tr.speed * 10 FROM ents tr WHERE tr.id = :tid), e.vy = (SELECT tr.p1y * tr.speed * 10 FROM ents tr WHERE tr.id = :tid),
+             e.vz = (SELECT tr.p1z * tr.speed * 10 FROM ents tr WHERE tr.id = :tid), e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :pe;
+      IF ((SELECT p.fly_sound_time FROM player p WHERE p.id = 1) < t) THEN
+      BEGIN
+        UPDATE player p SET p.fly_sound_time = :t + 1.5e0 WHERE p.id = 1;
+        EXECUTE PROCEDURE snd(pe, 0, 'misc/windfly.wav', 1, 1);
+      END
+    END
+    ELSE IF (tcls = 'trigger_hurt') THEN
+    BEGIN
+      SELECT e.nextthink, e.dmg, e.spawnflags FROM ents e WHERE e.id = :tid INTO tlt, tdm, tsf;
+      IF (tlt IS NULL OR tlt < t) THEN
+      BEGIN
+        UPDATE ents e SET e.nextthink = :t + IIF(BIN_AND(:tsf, 16) <> 0, 1, 0.1e0) WHERE e.id = :tid;
+        IF (BIN_AND(tsf, 4) = 0) THEN EXECUTE PROCEDURE snd(pe, 2, 'world/electro.wav', 1, 1);
+        EXECUTE PROCEDURE t_damage(pe, tid, tid, tdm, 0, IIF(BIN_AND(:tsf, 8) <> 0, 32, 0));
+      END
+    END
+    ELSE IF (tcls LIKE 'item_%' OR tcls LIKE 'weapon_%' OR tcls LIKE 'ammo_%' OR tcls LIKE 'key_%') THEN EXECUTE PROCEDURE item_touch(tid, pe);
+  END
+
+  -- door trigger fields: 60 units around a team of untargeted doors (Think_SpawnDoorTrigger)
+  FOR SELECT DISTINCT COALESCE(d.linked_id, d.id) FROM ents d
+       WHERE d.classname IN ('func_door', 'func_door_rotating')
+         AND d.x + d.maxx + 60 >= :px + :mnx AND d.x + d.minx - 60 <= :px + :mxx
+         AND d.y + d.maxy + 60 >= :py + :mny AND d.y + d.miny - 60 <= :py + :mxy
+         AND d.z + d.maxz >= :pz + :mnz AND d.z + d.minz <= :pz + :mxz
+       INTO tid
+  DO
+  BEGIN
+    SELECT e.mv_state, e.targetname, e.max_health, e.attack_finished FROM ents e WHERE e.id = :tid INTO tst, tn, thp, tlt;
+    IF ((tn IS NULL OR tn = '') AND thp = 0 AND tst IN (1, 3)) THEN EXECUTE PROCEDURE door_use(tid, pe);
+    ELSE IF ((tn IS NULL OR tn = '') AND thp = 0 AND tst = 0) THEN
+      UPDATE ents e SET e.nextthink = e.ltime + e.wait_ WHERE COALESCE(e.linked_id, e.id) = :tid AND e.think = 'door_go_down';
+  END
+  -- plat trigger fields: inside the plat's footprint, up to 8 above its top
+  FOR SELECT e.id, e.mv_state FROM ents e
+       WHERE e.classname = 'func_plat'
+         AND e.p1x + e.maxx - 25 >= :px + :mnx AND e.p1x + e.minx + 25 <= :px + :mxx
+         AND e.p1y + e.maxy - 25 >= :py + :mny AND e.p1y + e.miny + 25 <= :py + :mxy
+         AND e.p1z + e.maxz + 8 >= :pz + :mnz AND e.p2z + e.maxz - 8 <= :pz + :mxz
+       INTO tid, tst
+  DO
+  BEGIN
+    IF (tst = 1) THEN EXECUTE PROCEDURE plat_go_up(tid);
+    ELSE IF (tst = 0) THEN UPDATE ents e SET e.nextthink = e.ltime + 1 WHERE e.id = :tid AND e.think = 'plat_go_down';
+  END
+
+  -- megahealth rots away above the maximum
+  UPDATE player p SET p.mega_time = :t + 1 WHERE p.id = 1 AND p.mega_time < :t AND (SELECT e.health FROM ents e WHERE e.id = :pe) > :mhp;
+  UPDATE ents e SET e.health = e.health - 1 WHERE e.id = :pe AND e.health > e.max_health AND (SELECT p.mega_time FROM player p WHERE p.id = 1) = :t + 1
+     AND MOD((SELECT g.tic FROM game g WHERE g.id = 1), 20) = 0;
+
+  -- weapon
+  EXECUTE PROCEDURE player_fire(fire);
+END^
+
+SET TERM ; ^

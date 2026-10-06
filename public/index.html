@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Firebird Quake 2</title>
+  <meta name="description" content="Quake 2 simulated and rendered inside the Firebird SQL database, running in your browser via Firebird WASM.">
+  <script src="./coi-serviceworker.js"></script>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header>
+    <h1>Firebird <span>Quake 2</span></h1>
+    <p class="tagline">Every game tic is a PSQL procedure. Every frame is a <code>SELECT</code>.
+      Firebird 6 runs in WebAssembly in a Worker in this tab.</p>
+  </header>
+
+  <main>
+    <section class="game">
+      <div class="screen-wrap">
+        <canvas id="screen" width="320" height="240" tabindex="0" aria-label="Quake 2 view rendered from Firebird query results"></canvas>
+        <div id="status" class="status">Loading…</div>
+      </div>
+      <div id="stats" class="stats">&nbsp;</div>
+      <div class="controls">
+        <label>PAK <span id="pakname" class="pill">—</span>
+          <input id="pakfile" type="file" accept=".pak,.PAK"></label>
+        <label>Map <select id="map"></select></label>
+        <label>Skill <select id="skill">
+          <option value="0">Easy</option>
+          <option value="1">Medium</option>
+          <option value="2">Hard</option>
+        </select></label>
+        <label>Detail <select id="detail">
+          <option value="high">320×240</option>
+          <option value="low">160×120</option>
+        </select></label>
+        <label title="The lightmaps as the software renderer had them (1.0) or scaled like the GL renderer's intensity">Brightness <select id="brightness">
+          <option value="1">1.0</option>
+          <option value="1.4">1.4</option>
+          <option value="1.8">1.8</option>
+        </select></label>
+        <label title="How much of the renderer runs in SQL">Renderer <select id="renderer">
+          <option value="fast">SQL picks faces, JS projects (fast)</option>
+          <option value="sql">SQL projects every vertex</option>
+        </select></label>
+        <label title="Sound effects volume">Sound <input id="sfxvol" type="range" min="0" max="100" step="5"></label>
+        <label title="Quake 2's soundtrack was CD audio: put trackNN.ogg files in music/, or pick the folder">Music <select id="music">
+          <option value="tracks">CD tracks (music/trackNN.ogg)</option>
+          <option value="synth">Synth drone</option>
+          <option value="off">Off</option>
+        </select> <input id="musicvol" type="range" min="0" max="100" step="5">
+          <input id="musicdir" type="file" webkitdirectory multiple title="a folder with track02.ogg … track11.ogg"></label>
+        <span id="engine" class="pill">Firebird</span>
+        <span id="mapname" class="pill"></span>
+      </div>
+      <p class="keys">Click the view to capture the mouse ·
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows move · mouse looks ·
+        <kbd>Ctrl</kbd> or click fires · <kbd>Space</kbd> jumps · <kbd>Shift</kbd> walks ·
+        <kbd>1</kbd>–<kbd>0</kbd> weapons · <kbd>/</kbd> or wheel cycles · <kbd>G</kbd> gives everything · <kbd>P</kbd> pause.
+        On touch screens the left half moves, the right half looks, a tap fires.</p>
+    </section>
+
+    <section class="console">
+      <h2>SQL console <small>— the live game database</small></h2>
+      <div class="presets">
+        <button data-sql="SELECT * FROM player">player</button>
+        <button data-sql="SELECT id, classname, mtype, st, anim, health, CAST(x AS INTEGER) x, CAST(y AS INTEGER) y, CAST(z AS INTEGER) z, enemy_id FROM ents WHERE mtype IS NOT NULL ORDER BY st, id">monsters</button>
+        <button data-sql="SELECT id, classname, mv_state, CAST(x AS INTEGER) x, CAST(y AS INTEGER) y, CAST(z AS INTEGER) z, CAST(yaw AS INTEGER) yaw, targetname, target FROM ents WHERE movetype = 7 ORDER BY classname">movers</button>
+        <button data-sql="SELECT classname, COUNT(*) n FROM ents GROUP BY classname ORDER BY n DESC">entities</button>
+        <button data-sql="SELECT FIRST 40 * FROM frame_faces_fast">frame_faces_fast</button>
+        <button data-sql="SELECT FIRST 40 * FROM frame_faces">frame_faces</button>
+        <button data-sql="SELECT * FROM frame_ents">frame_ents</button>
+        <button data-sql="SELECT * FROM view_setup">view_setup</button>
+        <button data-sql="SELECT COUNT(*) brushes, (SELECT COUNT(*) FROM brushsides) sides, (SELECT COUNT(*) FROM leaves) leaves, (SELECT COUNT(*) FROM faces) faces FROM brushes">geometry</button>
+        <button data-sql="EXECUTE PROCEDURE player_impulse(99)">give all</button>
+        <button data-sql="SELECT * FROM spawn_monster('tank', 400)">spawn a tank</button>
+        <button data-sql="SELECT * FROM spawn_monster('berserk', 300)">spawn a berserker</button>
+        <button data-sql="UPDATE ents SET health = 1 WHERE mtype IS NOT NULL AND health > 0">one-hit monsters</button>
+        <button data-sql="UPDATE ents SET flags = BIN_OR(flags, 16) WHERE classname = 'player'">god</button>
+      </div>
+      <textarea id="sql" spellcheck="false" rows="4">SELECT classname, COUNT(*) n FROM ents GROUP BY classname ORDER BY n DESC</textarea>
+      <div class="run"><button id="run-sql">Run</button> <small>Ctrl+Enter</small></div>
+      <pre id="sql-out" class="out"></pre>
+    </section>
+
+    <section class="about">
+      <h2>How it works</h2>
+      <ul>
+        <li><b>The BSP becomes tables.</b> A Quake 2 map (IBSP 38) is copied in lump by lump: <code>FACES</code> with their
+          plane and texture mapping, <code>FACE_VERTS</code> (edges and surfedges resolved), <code>NODES</code>,
+          <code>LEAVES</code> with their cluster and a decompressed PVS as a hex string, <code>LEAFFACES</code>, and the
+          collision geometry Quake 2 ships instead of clipnodes: <code>BRUSHES</code> and <code>BRUSHSIDES</code> with their
+          planes and contents, indexed through <code>LEAFBRUSHES</code>. The MD2 models contribute <code>MODELS</code> and
+          their frame runs in <code>ANIMS</code>; the entity lump becomes <code>MAP_ENTS</code>.</li>
+        <li><b>Collision is a recursive procedure.</b> <code>RHC</code> is <code>CM_RecursiveHullCheck</code>: the moving box's
+          extents push each split plane out, the segment is split at the plane and both sides are visited nearest first; in
+          every leaf reached, <code>CLIP_LEAF</code> clips the segment against each brush whose contents match the mask
+          (<code>CM_ClipBoxToBrush</code>). <code>TRACE_MOVE</code> runs it against the world and every door and platform
+          (rotating doors are traced in their own rotated space) and tests monsters and the player with a Minkowski slab
+          test. <code>FLY_MOVE</code>, <code>WALK_MOVE</code> (the 18-unit step), <code>MOVE_STEP</code> and
+          <code>PUSH_MOVE</code> are g_phys.c in PSQL.</li>
+        <li><b>The game is PSQL.</b> <code>Q2_TIC</code> runs at 20 Hz: pmove's friction, acceleration, jumping and swimming;
+          doors and their teams, rotating doors, platforms, buttons, trains with path corners, rotating fans, timers;
+          triggers (once, multiple, relay, always, key, counter, hurt, push), targets (speaker, explosion, splash, secret,
+          goal, help, laser, changelevel), items from stimpacks to the power shield, the ten weapons from the blaster to
+          the BFG10K, damage with armour and quad, gibs, and the monster AI of g_ai.c for the guards, enforcers, gunners,
+          berserkers, flyers, parasites and the tank.</li>
+        <li><b>The renderer is a query.</b> <code>FRAME_FACES</code> finds the leaf and cluster the eye is in, marks the leaves
+          whose cluster is in its PVS, collects their faces (<code>DISTINCT</code>, Quake's visframe), drops back faces and
+          faces outside the frustum, and walks each polygon in a single cursor: view transform, clipping to the near plane,
+          projection, and the texel coordinates texinfo gives every vertex. Doors and platforms are brush models and go
+          through the same cursor at their own origin and rotation. <code>FRAME_ENTS</code> lists the alias models and
+          sprites in the PVS with their pose and frame; <code>FRAME_LIGHTSTYLES</code> animates the lights.</li>
+        <li><b>JavaScript only paints.</b> It rasterises the polygons with perspective-correct spans over a surface cache
+          (the .wal texture × the lightmap, through colormap.pcx, as ref_soft did), blends translucent surfaces through the
+          alpha map, draws the MD2 models with Gouraud light sampled from the lightmap below them, the sky box, particles,
+          and the status bar from pics/. Sounds are rows in <code>SOUND_EVENTS</code>, spatialised with the Web Audio API;
+          the map's looped speakers play at their origins. The soundtrack was CD audio: drop <code>track02.ogg</code>…
+          into <code>music/</code> and each map plays its <code>worldspawn</code> track; without them a synthesised drone fills in.</li>
+      </ul>
+      <p>A port of <a href="https://github.com/mariuz/firebird-quake">Firebird Quake</a> to Quake 2. The engine is
+        <a href="https://github.com/mariuz/electric-firebird">Electric Firebird</a> (<code>firebird-wasm</code>). The game
+        data is the Quake 2 demo (id Software, 1997), which may be freely redistributed; drop in a registered
+        <code>pak0.pak</code> to play the full game's base unit. Quake 2 is a trademark of id Software.</p>
+    </section>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
