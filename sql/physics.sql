@@ -565,7 +565,11 @@ BEGIN
     INTO px, py, pz, mnx, mny, mnz, mxx, mxy, mxz;
   IF (px IS NULL) THEN EXIT;      -- not moved since the last link (or gone)
   lf = point_leaf(px, py, pz);
-  SELECT l.cluster FROM leaves l WHERE l.id = :lf INTO cl;
+  -- a brush model's origin is usually far outside its box: its leaf says nothing about it
+  IF (mnx > 0 OR mxx < 0 OR mny > 0 OR mxy < 0 OR mnz > 0 OR mxz < 0) THEN
+    SELECT l.cluster FROM leaves l WHERE l.id = point_leaf(:px + (:mnx + :mxx) / 2, :py + (:mny + :mxy) / 2, :pz + (:mnz + :mxz) / 2) INTO cl;
+  ELSE
+    SELECT l.cluster FROM leaves l WHERE l.id = :lf INTO cl;
   cl = COALESCE(cl, -1);
   lst = ',' || IIF(cl >= 0, cl || ',', '');
   -- two opposite corners of the box (enough for the PVS test; Quake walks the tree)
@@ -578,7 +582,7 @@ BEGIN
     i = i + 3;
   END
   IF (lst = ',') THEN lst = NULL;
-  UPDATE ents e SET e.leaf = :lf, e.cluster = :cl, e.clusters = :lst, e.lx = :px, e.ly = :py, e.lz = :pz WHERE e.id = :eid;
+  UPDATE ents e SET e.leaf = :lf, e.cluster = :cl, e.clusters = :lst, e.lx = :px, e.ly = :py, e.lz = :pz, e.vis_cl = NULL WHERE e.id = :eid;
 END^
 
 -- SV_CheckWater / PM_CatagorizePosition: water level 0 none, 1 feet, 2 waist, 3 eyes.

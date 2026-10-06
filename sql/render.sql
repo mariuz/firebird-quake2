@@ -1,18 +1,20 @@
 -- render.sql – r_bsp.c, r_surf.c and r_alias.c as a query.
 --
--- FRAME_FACES is the frame: for the cluster the eye is in, every leaf whose
--- cluster is in its PVS is marked, their faces are collected (DISTINCT, like
--- Quake's visframe marking), back faces are dropped and the survivors are
--- transformed to view space, clipped to the near plane and projected. One
--- row per polygon vertex: screen x/y, depth, and the texel coordinates
--- (s, t) that texinfo gives that point. Brush-model entities (doors, plats)
--- are added the same way at their own origin. JavaScript rasterises the
--- polygons: perspective-correct texturing from the .wal plus the face's
--- lightmap, exactly Quake 2's software surface cache.
+-- FRAME_FACES_FAST is the frame: for the cluster the eye is in, every face of
+-- every leaf whose cluster is in its PVS is marked once (DISTINCT, like
+-- Quake's visframe marking) into VIS_FACES with its plane and bounding sphere
+-- copied in, so each frame is a single scan of that table with the back-face
+-- and frustum tests as expressions, no join. Brush-model entities (doors,
+-- plats) are a second, smaller cursor: the visible entities' faces at their
+-- own origin and rotation. FRAME_FACES projects every vertex in SQL as well.
 --
 -- FRAME_ENTS lists the alias models and sprites in the PVS: the browser
 -- transforms their vertices (an MD2 frame is ~200 vertices; shipping them
 -- through SQL every frame would be the one thing slower than drawing them).
+--
+-- FRAME_ALL gathers everything a frame needs into one result set – faces,
+-- entities, light styles, sounds, effects, brush-model poses – so the page
+-- makes one round trip to the engine per frame instead of six.
 
 SET TERM ^ ;
 
@@ -56,22 +58,18 @@ END^
 
 SET TERM ; ^
 
--- the marked faces (PSQL has no arrays; Quake has visframe): the world's
--- faces in the PVS of the cluster the eye is in (kept until the eye moves to
--- another cluster) at origin 0, and each visible brush model's at its own
--- (m00..m22: the entity's rotation, world = o + M · v; the identity for the world)
+-- the marked world faces (PSQL has no arrays; Quake has visframe): every face
+-- of every leaf in the PVS of the cluster the eye is in, kept until the eye
+-- moves to another cluster, with the plane and bounding sphere copied in so
+-- the frame is a scan of this table alone
 CREATE TABLE vis_faces (
-  face   INTEGER NOT NULL,
-  ent_id INTEGER NOT NULL,
-  ox DOUBLE PRECISION NOT NULL, oy DOUBLE PRECISION NOT NULL, oz DOUBLE PRECISION NOT NULL,
-  m00 DOUBLE PRECISION DEFAULT 1 NOT NULL, m01 DOUBLE PRECISION DEFAULT 0 NOT NULL, m02 DOUBLE PRECISION DEFAULT 0 NOT NULL,
-  m10 DOUBLE PRECISION DEFAULT 0 NOT NULL, m11 DOUBLE PRECISION DEFAULT 1 NOT NULL, m12 DOUBLE PRECISION DEFAULT 0 NOT NULL,
-  m20 DOUBLE PRECISION DEFAULT 0 NOT NULL, m21 DOUBLE PRECISION DEFAULT 0 NOT NULL, m22 DOUBLE PRECISION DEFAULT 1 NOT NULL,
-  rot SMALLINT DEFAULT 0 NOT NULL,
-  PRIMARY KEY (ent_id, face)
+  face   INTEGER NOT NULL PRIMARY KEY,
+  nx DOUBLE PRECISION NOT NULL, ny DOUBLE PRECISION NOT NULL, nz DOUBLE PRECISION NOT NULL, dist DOUBLE PRECISION NOT NULL,
+  cx DOUBLE PRECISION NOT NULL, cy DOUBLE PRECISION NOT NULL, cz DOUBLE PRECISION NOT NULL, radius DOUBLE PRECISION NOT NULL
 );
 
--- the faces that survive this frame's back-face and frustum tests
+-- the faces that survive this frame's back-face and frustum tests (FRAME_FACES),
+-- with the entity's origin and rotation (m00..m22: world = o + M · v)
 CREATE GLOBAL TEMPORARY TABLE sel_faces (
   face   INTEGER NOT NULL,
   ent_id INTEGER NOT NULL,
@@ -91,7 +89,7 @@ AS
 DECLARE p INTEGER; DECLARE q INTEGER; DECLARE c INTEGER;
 BEGIN
   IF (pvs IS NULL OR pvs = '') THEN RETURN 1;
-  IF (clusters IS NULL) THEN RETURN pvs_visible(pvs, cluster);
+  IF (clusters IS NULL) THEN RETURN IIF(cluster IS NULL OR cluster < 0, 1, pvs_visible(pvs, cluster));
   p = 2;
   WHILE (p <= CHAR_LENGTH(clusters)) DO
   BEGIN
@@ -104,82 +102,26 @@ BEGIN
   RETURN 0;
 END^
 
--- mark_faces: R_MarkLeaves. Once per view cluster, every face of every leaf
--- in the PVS goes into VIS_FACES at origin 0 (kept until the eye moves to
--- another cluster); every frame, the brush-model entities whose clusters are
--- in the PVS are added at their own origin.
+-- mark_faces: R_MarkLeaves, once per view cluster: every face of every leaf
+-- in the PVS goes into VIS_FACES (kept until the eye moves to another cluster)
 CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER)
 AS
 DECLARE cur INTEGER; DECLARE world INTEGER;
-DECLARE eid INTEGER; DECLARE emid INTEGER; DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
-DECLARE cls VARCHAR(200) CHARACTER SET ASCII; DECLARE cl INTEGER;
-DECLARE ep DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE er DOUBLE PRECISION;
-DECLARE m00 DOUBLE PRECISION; DECLARE m01 DOUBLE PRECISION; DECLARE m02 DOUBLE PRECISION;
-DECLARE m10 DOUBLE PRECISION; DECLARE m11 DOUBLE PRECISION; DECLARE m12 DOUBLE PRECISION;
-DECLARE m20 DOUBLE PRECISION; DECLARE m21 DOUBLE PRECISION; DECLARE m22 DOUBLE PRECISION;
 BEGIN
-  SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
   SELECT c.vis_cluster FROM viewcfg c WHERE c.id = 1 INTO cur;
-  IF (cur IS DISTINCT FROM vcluster) THEN
-  BEGIN
-    DELETE FROM vis_faces;
-    INSERT INTO vis_faces (face, ent_id, ox, oy, oz)
-    SELECT DISTINCT lf.face, 0, 0, 0, 0
-      FROM leaves l
-      JOIN leaffaces lf ON lf.id >= l.first_lf AND lf.id < l.first_lf + l.num_lf
-      JOIN faces f ON f.id = lf.face
-     WHERE l.cluster >= 0 AND l.num_lf > 0 AND f.model_id = :world AND BIN_AND(f.flags, 128) = 0
-       AND (:pvs = '' OR BIN_AND(POSITION(SUBSTRING(:pvs FROM BIN_SHR(l.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(l.cluster, 3))) <> 0);
-    UPDATE viewcfg c SET c.vis_cluster = :vcluster WHERE c.id = 1;
-  END
-  ELSE DELETE FROM vis_faces v WHERE v.ent_id <> 0;
-
-  FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.clusters, e.cluster, e.pitch, e.yaw, e.roll FROM ents e JOIN models m ON m.id = e.model_id
-       WHERE m.kind = 'B' AND e.model_id <> :world AND e.solid <> 1 INTO eid, emid, ox, oy, oz, cls, cl, ep, ey, er
-  DO
-  BEGIN
-    IF (clusters_visible(pvs, cls, cl) = 0) THEN CONTINUE;
-    IF (ep = 0 AND ey = 0 AND er = 0) THEN
-      INSERT INTO vis_faces (face, ent_id, ox, oy, oz) SELECT f.id, :eid, :ox, :oy, :oz FROM faces f WHERE f.model_id = :emid AND BIN_AND(f.flags, 128) = 0;
-    ELSE
-    BEGIN
-      EXECUTE PROCEDURE angle_matrix(ep, ey, er) RETURNING_VALUES m00, m01, m02, m10, m11, m12, m20, m21, m22;
-      INSERT INTO vis_faces (face, ent_id, ox, oy, oz, m00, m01, m02, m10, m11, m12, m20, m21, m22, rot)
-        SELECT f.id, :eid, :ox, :oy, :oz, :m00, :m01, :m02, :m10, :m11, :m12, :m20, :m21, :m22, 1 FROM faces f WHERE f.model_id = :emid AND BIN_AND(f.flags, 128) = 0;
-    END
-  END
-END^
-
--- FRAME_FACES_FAST: the faces to draw, one row each. SQL decides what is
--- visible (PVS, back faces, frustum); the painter transforms the vertices it
--- already holds from the BSP. About a tenth of the rows of FRAME_FACES.
-CREATE OR ALTER PROCEDURE frame_faces_fast
-RETURNS (face INTEGER, ent_id INTEGER, ox DOUBLE PRECISION, oy DOUBLE PRECISION, oz DOUBLE PRECISION)
-AS
-DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
-DECLARE fx DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
-DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION;
-DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
-DECLARE w INTEGER; DECLARE h INTEGER; DECLARE sc DOUBLE PRECISION; DECLARE nearz DOUBLE PRECISION;
-DECLARE kx DOUBLE PRECISION; DECLARE ky DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE vcl INTEGER; DECLARE vleaf INTEGER;
-DECLARE qx DOUBLE PRECISION; DECLARE qy DOUBLE PRECISION;
-BEGIN
-  EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
-  qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
-  EXECUTE PROCEDURE mark_faces(pvs, vcl);
-  -- (rotated brush models skip the back-face and frustum tests: the painter clips them)
-  FOR SELECT v.face, v.ent_id, v.ox, v.oy, v.oz
-        FROM vis_faces v
-        JOIN faces f ON f.id = v.face
-       WHERE v.rot = 1 OR (
-             f.nx * (:ex - v.ox) + f.ny * (:ey - v.oy) + f.nz * (:ez - v.oz) - f.dist > 0
-         AND (f.cx + v.ox - :ex) * :fx + (f.cy + v.oy - :ey) * :fy + (f.cz + v.oz - :ez) * :fz + f.radius >= :nearz
-         AND ABS((f.cx + v.ox - :ex) * :rx + (f.cy + v.oy - :ey) * :ry + (f.cz + v.oz - :ez) * :rz)
-             <= ((f.cx + v.ox - :ex) * :fx + (f.cy + v.oy - :ey) * :fy + (f.cz + v.oz - :ez) * :fz) * :kx + f.radius * :qx
-         AND ABS((f.cx + v.ox - :ex) * :ux + (f.cy + v.oy - :ey) * :uy + (f.cz + v.oz - :ez) * :uz)
-             <= ((f.cx + v.ox - :ex) * :fx + (f.cy + v.oy - :ey) * :fy + (f.cz + v.oz - :ez) * :fz) * :ky + f.radius * :qy)
-        INTO face, ent_id, ox, oy, oz
-  DO SUSPEND;
+  IF (cur IS NOT DISTINCT FROM vcluster) THEN EXIT;
+  SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
+  DELETE FROM vis_faces;
+  INSERT INTO vis_faces (face, nx, ny, nz, dist, cx, cy, cz, radius)
+  SELECT f.id, f.nx, f.ny, f.nz, f.dist, f.cx, f.cy, f.cz, f.radius
+    FROM faces f
+   WHERE f.model_id = :world AND BIN_AND(f.flags, 128) = 0
+     AND f.id IN (SELECT lf.face
+                    FROM leaves l
+                    JOIN leaffaces lf ON lf.id >= l.first_lf AND lf.id < l.first_lf + l.num_lf
+                   WHERE l.cluster >= 0 AND l.num_lf > 0
+                     AND (:pvs = '' OR BIN_AND(POSITION(SUBSTRING(:pvs FROM BIN_SHR(l.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(l.cluster, 3))) <> 0));
+  UPDATE viewcfg c SET c.vis_cluster = :vcluster WHERE c.id = 1;
 END^
 
 -- FRAME_FACES: the same faces, projected vertex by vertex in SQL.
@@ -193,28 +135,60 @@ DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PREC
 DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
 DECLARE w INTEGER; DECLARE h INTEGER; DECLARE sc DOUBLE PRECISION; DECLARE nearz DOUBLE PRECISION;
 DECLARE kx DOUBLE PRECISION; DECLARE ky DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE vcl INTEGER; DECLARE vleaf INTEGER;
-DECLARE hw DOUBLE PRECISION; DECLARE hh DOUBLE PRECISION; DECLARE qx DOUBLE PRECISION; DECLARE qy DOUBLE PRECISION;
+DECLARE hw DOUBLE PRECISION; DECLARE hh DOUBLE PRECISION; DECLARE qx DOUBLE PRECISION; DECLARE qy DOUBLE PRECISION; DECLARE world INTEGER;
 DECLARE vseq INTEGER; DECLARE eid INTEGER; DECLARE fid INTEGER; DECLARE cur INTEGER; DECLARE curent INTEGER;
+DECLARE emid INTEGER; DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
+DECLARE cls VARCHAR(200) CHARACTER SET ASCII; DECLARE cl INTEGER; DECLARE ep DOUBLE PRECISION; DECLARE eyaw DOUBLE PRECISION; DECLARE er DOUBLE PRECISION;
+DECLARE m00 DOUBLE PRECISION; DECLARE m01 DOUBLE PRECISION; DECLARE m02 DOUBLE PRECISION;
+DECLARE m10 DOUBLE PRECISION; DECLARE m11 DOUBLE PRECISION; DECLARE m12 DOUBLE PRECISION;
+DECLARE m20 DOUBLE PRECISION; DECLARE m21 DOUBLE PRECISION; DECLARE m22 DOUBLE PRECISION;
 BEGIN
   EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
   hw = w / 2e0; hh = h / 2e0;
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
   EXECUTE PROCEDURE mark_faces(pvs, vcl);
 
+  -- the faces that face the eye and whose sphere is in the frustum
   DELETE FROM sel_faces;
-  INSERT INTO sel_faces (face, ent_id, ox, oy, oz, m00, m01, m02, m10, m11, m12, m20, m21, m22)
-  SELECT v.face, v.ent_id, v.ox, v.oy, v.oz, v.m00, v.m01, v.m02, v.m10, v.m11, v.m12, v.m20, v.m21, v.m22
+  INSERT INTO sel_faces (face, ent_id, ox, oy, oz)
+  SELECT v.face, 0, 0, 0, 0
     FROM vis_faces v
-    JOIN faces f ON f.id = v.face
-   WHERE v.rot = 1 OR (
-         f.nx * (:ex - v.ox) + f.ny * (:ey - v.oy) + f.nz * (:ez - v.oz) - f.dist > 0
-     AND (f.cx + v.ox - :ex) * :fx + (f.cy + v.oy - :ey) * :fy + (f.cz + v.oz - :ez) * :fz + f.radius >= :nearz
-     AND ABS((f.cx + v.ox - :ex) * :rx + (f.cy + v.oy - :ey) * :ry + (f.cz + v.oz - :ez) * :rz)
-         <= ((f.cx + v.ox - :ex) * :fx + (f.cy + v.oy - :ey) * :fy + (f.cz + v.oz - :ez) * :fz) * :kx + f.radius * :qx
-     AND ABS((f.cx + v.ox - :ex) * :ux + (f.cy + v.oy - :ey) * :uy + (f.cz + v.oz - :ez) * :uz)
-         <= ((f.cx + v.ox - :ex) * :fx + (f.cy + v.oy - :ey) * :fy + (f.cz + v.oz - :ez) * :fz) * :ky + f.radius * :qy);
+   WHERE v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
+     AND (v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz + v.radius >= :nearz
+     AND ABS((v.cx - :ex) * :rx + (v.cy - :ey) * :ry + (v.cz - :ez) * :rz)
+         <= ((v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz) * :kx + v.radius * :qx
+     AND ABS((v.cx - :ex) * :ux + (v.cy - :ey) * :uy + (v.cz - :ez) * :uz)
+         <= ((v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz) * :ky + v.radius * :qy;
+  SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
+  FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.clusters, e.cluster, e.pitch, e.yaw, e.roll
+        FROM ents e JOIN models m ON m.id = e.model_id
+       WHERE m.kind = 'B' AND e.model_id <> :world AND e.solid <> 1
+        INTO eid, emid, ox, oy, oz, cls, cl, ep, eyaw, er
+  DO
+  BEGIN
+    IF (clusters_visible(pvs, cls, cl) = 0) THEN CONTINUE;
+    IF (ep = 0 AND eyaw = 0 AND er = 0) THEN
+      INSERT INTO sel_faces (face, ent_id, ox, oy, oz)
+      SELECT f.id, :eid, :ox, :oy, :oz FROM faces f
+       WHERE f.model_id = :emid AND BIN_AND(f.flags, 128) = 0
+         AND f.nx * (:ex - :ox) + f.ny * (:ey - :oy) + f.nz * (:ez - :oz) - f.dist > 0
+         AND (f.cx + :ox - :ex) * :fx + (f.cy + :oy - :ey) * :fy + (f.cz + :oz - :ez) * :fz + f.radius >= :nearz
+         AND ABS((f.cx + :ox - :ex) * :rx + (f.cy + :oy - :ey) * :ry + (f.cz + :oz - :ez) * :rz)
+             <= ((f.cx + :ox - :ex) * :fx + (f.cy + :oy - :ey) * :fy + (f.cz + :oz - :ez) * :fz) * :kx + f.radius * :qx
+         AND ABS((f.cx + :ox - :ex) * :ux + (f.cy + :oy - :ey) * :uy + (f.cz + :oz - :ez) * :uz)
+             <= ((f.cx + :ox - :ex) * :fx + (f.cy + :oy - :ey) * :fy + (f.cz + :oz - :ez) * :fz) * :ky + f.radius * :qy;
+    ELSE
+    BEGIN
+      EXECUTE PROCEDURE angle_matrix(ep, eyaw, er) RETURNING_VALUES m00, m01, m02, m10, m11, m12, m20, m21, m22;
+      INSERT INTO sel_faces (face, ent_id, ox, oy, oz, m00, m01, m02, m10, m11, m12, m20, m21, m22)
+      SELECT f.id, :eid, :ox, :oy, :oz, :m00, :m01, :m02, :m10, :m11, :m12, :m20, :m21, :m22 FROM faces f WHERE f.model_id = :emid AND BIN_AND(f.flags, 128) = 0;
+    END
+  END
 
-  -- the rotation is applied in the select list too: wx = ox + m00 x + m01 y + m02 z, …
+  -- one cursor over the selected faces' vertices: the rotation, the view transform and the
+  -- projection are in the select list, evaluated by the engine rather than as PSQL statements.
+  -- The (face, seq) key walks each face's vertices in order. Vertices behind the near plane
+  -- project to NULL; the painter clips those edges in view space.
   cur = -1; curent = -1;
   FOR SELECT v.ent_id, f.id, fv.seq,
              (v.m00 * fv.x + v.m01 * fv.y + v.m02 * fv.z + v.ox - :ex) * :fx + (v.m10 * fv.x + v.m11 * fv.y + v.m12 * fv.z + v.oy - :ey) * :fy + (v.m20 * fv.x + v.m21 * fv.y + v.m22 * fv.z + v.oz - :ez) * :fz,
@@ -245,39 +219,6 @@ BEGIN
   END
 END^
 
--- the alias models and sprites to draw: entities in the PVS, with their pose
-CREATE OR ALTER PROCEDURE frame_ents
-RETURNS (id INTEGER, model_id INTEGER, frame INTEGER, skin INTEGER,
-         x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION,
-         pitch DOUBLE PRECISION, yaw DOUBLE PRECISION, roll DOUBLE PRECISION,
-         effects INTEGER, alpha SMALLINT, kind CHAR(1), renderfx INTEGER)
-AS
-DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE pe INTEGER; DECLARE cls VARCHAR(200) CHARACTER SET ASCII; DECLARE cl INTEGER;
-DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
-DECLARE fx DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
-DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION;
-DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
-DECLARE w INTEGER; DECLARE h INTEGER; DECLARE sc DOUBLE PRECISION; DECLARE nearz DOUBLE PRECISION;
-DECLARE kx DOUBLE PRECISION; DECLARE ky DOUBLE PRECISION; DECLARE vcl INTEGER; DECLARE vleaf INTEGER;
-DECLARE radius DOUBLE PRECISION; DECLARE cf DOUBLE PRECISION;
-BEGIN
-  EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
-  pe = player_ent();
-  FOR SELECT e.id, e.model_id, e.frame, e.skin, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.effects, e.alpha, m.kind, e.renderfx, e.cluster, e.clusters,
-             MAXVALUE(m.radius, vlen(e.maxx - e.minx, e.maxy - e.miny, e.maxz - e.minz) / 2)
-        FROM ents e JOIN models m ON m.id = e.model_id
-       WHERE m.kind IN ('M', 'S') AND e.id <> :pe
-        INTO id, model_id, frame, skin, x, y, z, pitch, yaw, roll, effects, alpha, kind, renderfx, cl, cls, radius
-  DO
-  BEGIN
-    cf = (x - ex) * fx + (y - ey) * fy + (z - ez) * fz;
-    IF (cf + radius + 32 < nearz) THEN CONTINUE;                       -- behind the camera
-    IF (ABS((x - ex) * rx + (y - ey) * ry + (z - ez) * rz) > (cf + radius) * kx + radius + 32) THEN CONTINUE;
-    IF (clusters_visible(pvs, cls, COALESCE(cl, (SELECT l.cluster FROM leaves l WHERE l.id = point_leaf(:x, :y, :z)))) = 0) THEN CONTINUE;
-    SUSPEND;
-  END
-END^
-
 SET TERM ; ^
 
 -- the light style values of this frame: 'a'..'z' → 0..2
@@ -286,3 +227,179 @@ SELECT l.style,
        (ASCII_VAL(SUBSTRING(l.pattern FROM 1 + MOD(CAST(FLOOR(g.time_ * 10) AS INTEGER), CHAR_LENGTH(l.pattern)) FOR 1)) - 97) / 12.5e0 AS value_
   FROM lightstyles l CROSS JOIN game g
  WHERE g.id = 1;
+
+SET TERM ^ ;
+
+-- FRAME_ALL: the frame as one result set, so the page makes one round trip to the
+-- engine per frame. SQL decides what is visible (PVS, back faces, frustum); the painter transforms
+-- the vertices it already holds from the BSP. The visible faces travel as one ',' separated list
+-- per model (LIST() is cheap; a row costs about 6 µs): the world's from VIS_FACES, each brush-model
+-- entity's in the PVS at its origin (rotated models skip the tests: the painter clips them). kind:
+--   1 faces (i2 ent, d1..3 origin, lst the face ids)
+--   8 projected vertex, mode 1 only (i1 face, i2 seq, i3 ent, d1..7 vf vr vu sx sy s t)
+--   2 alias model or sprite (i1 id, i2 model, i3 frame, i4 skin, i5 effects, d1..6 pose, d7 alpha, d8 renderfx, s kind)
+--   3 light styles (lst as style:value pairs)
+--   4 sound after last_sound (i1 id, i2 ent, i3 chan, d1 vol, d2 attn, d3..5 at, s name)
+--   5 effect after last_fx (i1 id, i2 kind, i3 n, d1..6 at/to)
+--   6 brush-model pose (i1 ent, i2 frame, d1..3 angles)
+--   7 the looped speakers that are on (lst their ids), when want_speakers = 1
+CREATE OR ALTER PROCEDURE frame_all (mode SMALLINT, last_sound INTEGER, last_fx INTEGER, want_speakers SMALLINT)
+RETURNS (kind SMALLINT, i1 INTEGER, i2 INTEGER, i3 INTEGER, i4 INTEGER, i5 INTEGER,
+         d1 DOUBLE PRECISION, d2 DOUBLE PRECISION, d3 DOUBLE PRECISION, d4 DOUBLE PRECISION, d5 DOUBLE PRECISION,
+         d6 DOUBLE PRECISION, d7 DOUBLE PRECISION, d8 DOUBLE PRECISION, s VARCHAR(64),
+         lst BLOB SUB_TYPE TEXT CHARACTER SET ASCII)
+AS
+DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
+DECLARE fx DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
+DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION;
+DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
+DECLARE w INTEGER; DECLARE h INTEGER; DECLARE sc DOUBLE PRECISION; DECLARE nearz DOUBLE PRECISION;
+DECLARE kx DOUBLE PRECISION; DECLARE ky DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE vcl INTEGER; DECLARE vleaf INTEGER;
+DECLARE qx DOUBLE PRECISION; DECLARE qy DOUBLE PRECISION; DECLARE world INTEGER; DECLARE pe INTEGER;
+DECLARE eid INTEGER; DECLARE emid INTEGER; DECLARE cls VARCHAR(200) CHARACTER SET ASCII; DECLARE cl INTEGER; DECLARE rot SMALLINT;
+DECLARE vis SMALLINT; DECLARE vis_cl INTEGER;
+DECLARE alpha SMALLINT; DECLARE k CHAR(1); DECLARE rfx INTEGER;
+BEGIN
+  SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
+  pe = player_ent();
+  EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
+  qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
+  IF (mode = 1) THEN
+  BEGIN
+    kind = 8;
+    FOR SELECT f.face, f.seq, f.ent_id, f.vf, f.vr, f.vu, f.sx, f.sy, f.s, f.t FROM frame_faces f INTO i1, i2, i3, d1, d2, d3, d4, d5, d6, d7 DO SUSPEND;
+    i3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL; d7 = NULL;
+  END
+  ELSE
+  BEGIN
+    EXECUTE PROCEDURE mark_faces(pvs, vcl);
+    kind = 1; i2 = 0; d1 = 0; d2 = 0; d3 = 0;
+    SELECT LIST(v.face, ',')
+      FROM vis_faces v
+     WHERE v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
+       AND (v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz + v.radius >= :nearz
+       AND ABS((v.cx - :ex) * :rx + (v.cy - :ey) * :ry + (v.cz - :ez) * :rz)
+           <= ((v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz) * :kx + v.radius * :qx
+       AND ABS((v.cx - :ex) * :ux + (v.cy - :ey) * :uy + (v.cz - :ez) * :uz)
+           <= ((v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz) * :ky + v.radius * :qy
+      INTO lst;
+    IF (lst IS NOT NULL) THEN SUSPEND;
+
+    -- the brush-model entities in the PVS. Whether a model's clusters are in the PVS is decided
+    -- once per view cluster and kept on the row until the model is relinked.
+    FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.clusters, e.cluster, IIF(e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0, 1, 0), e.vis_cl, e.vis
+          FROM ents e JOIN models m ON m.id = e.model_id
+         WHERE m.kind = 'B' AND e.model_id <> :world AND e.solid <> 1
+          INTO eid, emid, d1, d2, d3, cls, cl, rot, vis_cl, vis
+    DO
+    BEGIN
+      IF (vis_cl IS DISTINCT FROM vcl OR vis IS NULL) THEN
+      BEGIN
+        vis = clusters_visible(pvs, cls, cl);
+        UPDATE ents e SET e.vis_cl = :vcl, e.vis = :vis WHERE e.id = :eid;
+      END
+      IF (vis = 0) THEN CONTINUE;
+      i2 = eid;
+      SELECT LIST(f.id, ',')
+        FROM faces f
+       WHERE f.model_id = :emid AND BIN_AND(f.flags, 128) = 0
+         AND (:rot = 1 OR (
+             f.nx * (:ex - :d1) + f.ny * (:ey - :d2) + f.nz * (:ez - :d3) - f.dist > 0
+         AND (f.cx + :d1 - :ex) * :fx + (f.cy + :d2 - :ey) * :fy + (f.cz + :d3 - :ez) * :fz + f.radius >= :nearz
+         AND ABS((f.cx + :d1 - :ex) * :rx + (f.cy + :d2 - :ey) * :ry + (f.cz + :d3 - :ez) * :rz)
+             <= ((f.cx + :d1 - :ex) * :fx + (f.cy + :d2 - :ey) * :fy + (f.cz + :d3 - :ez) * :fz) * :kx + f.radius * :qx
+         AND ABS((f.cx + :d1 - :ex) * :ux + (f.cy + :d2 - :ey) * :uy + (f.cz + :d3 - :ez) * :uz)
+             <= ((f.cx + :d1 - :ex) * :fx + (f.cy + :d2 - :ey) * :fy + (f.cz + :d3 - :ez) * :fz) * :ky + f.radius * :qy))
+        INTO lst;
+      IF (lst IS NOT NULL) THEN SUSPEND;
+    END
+    lst = NULL;
+  END
+
+  -- the alias models and sprites in the frustum and the PVS, with their pose. The frustum test
+  -- is in the WHERE clause so only the entities in view reach the PVS test; the sphere is the
+  -- model's radius plus a margin that covers any monster's box.
+  kind = 2;
+  FOR SELECT e.id, e.model_id, e.frame, e.skin, e.effects, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.alpha, e.renderfx, m.kind, e.cluster, e.clusters
+        FROM ents e JOIN models m ON m.id = e.model_id
+       WHERE m.kind IN ('M', 'S') AND e.id <> :pe
+         AND (e.x - :ex) * :fx + (e.y - :ey) * :fy + (e.z - :ez) * :fz + m.radius + 64 >= :nearz
+         AND ABS((e.x - :ex) * :rx + (e.y - :ey) * :ry + (e.z - :ez) * :rz)
+             <= ((e.x - :ex) * :fx + (e.y - :ey) * :fy + (e.z - :ez) * :fz + m.radius + 64) * :kx + m.radius + 64
+        INTO i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, alpha, rfx, k, cl, cls
+  DO
+  BEGIN
+    IF (clusters_visible(pvs, cls, COALESCE(cl, (SELECT l.cluster FROM leaves l WHERE l.id = point_leaf(:d1, :d2, :d3)))) = 0) THEN CONTINUE;
+    d7 = alpha; d8 = rfx; s = k;
+    SUSPEND;
+  END
+  kind = 3; i1 = NULL; i2 = NULL; i3 = NULL; i4 = NULL; i5 = NULL; d1 = NULL; d2 = NULL; d3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL; d7 = NULL; d8 = NULL; s = NULL;
+  SELECT LIST(l.style || ':' || l.value_, ',') FROM frame_lightstyles l INTO lst;
+  SUSPEND;
+  lst = NULL;
+  kind = 4;
+  FOR SELECT se.id, se.ent_id, se.chan, se.vol, se.attn, se.x, se.y, se.z, se.snd FROM sound_events se WHERE se.id > :last_sound ORDER BY se.id
+        INTO i1, i2, i3, d1, d2, d3, d4, d5, s DO SUSPEND;
+  kind = 5; s = NULL;
+  FOR SELECT fe.id, fe.kind, fe.n, fe.x, fe.y, fe.z, fe.x2, fe.y2, fe.z2 FROM fx_events fe WHERE fe.id > :last_fx ORDER BY fe.id
+        INTO i1, i2, i3, d1, d2, d3, d4, d5, d6 DO SUSPEND;
+  kind = 6; i3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL;
+  FOR SELECT e.id, e.frame, e.pitch, e.yaw, e.roll FROM ents e JOIN models m ON m.id = e.model_id
+       WHERE m.kind = 'B' AND (e.frame <> 0 OR e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0) INTO i1, i2, d1, d2, d3 DO SUSPEND;
+  IF (want_speakers = 1) THEN
+  BEGIN
+    kind = 7; i1 = NULL; i2 = NULL; d1 = NULL; d2 = NULL; d3 = NULL;
+    SELECT LIST(e.id, ',') FROM ents e WHERE e.classname = 'target_speaker' AND e.sounds = 1 INTO lst;
+    SUSPEND;
+  END
+END^
+
+-- FRAME_FACES_FAST: the faces to draw, one row each (FRAME_ALL's lists split), for scripts and the console
+CREATE OR ALTER PROCEDURE frame_faces_fast
+RETURNS (face INTEGER, ent_id INTEGER, ox DOUBLE PRECISION, oy DOUBLE PRECISION, oz DOUBLE PRECISION)
+AS
+DECLARE lst BLOB SUB_TYPE TEXT CHARACTER SET ASCII; DECLARE buf VARCHAR(32000) CHARACTER SET ASCII;
+DECLARE p INTEGER; DECLARE q INTEGER; DECLARE n INTEGER; DECLARE off INTEGER;
+BEGIN
+  FOR SELECT r.i2, r.d1, r.d2, r.d3, r.lst FROM frame_all(0, 2147483647, 2147483647, 0) r WHERE r.kind = 1 INTO ent_id, ox, oy, oz, lst
+  DO
+  BEGIN
+    n = CHAR_LENGTH(lst); off = 1;
+    WHILE (off <= n) DO
+    BEGIN
+      -- 32000 characters at a time, cut at a ','
+      buf = SUBSTRING(lst FROM off FOR 32000);
+      IF (off + 32000 <= n) THEN
+      BEGIN
+        q = CHAR_LENGTH(buf);
+        WHILE (q > 0 AND SUBSTRING(buf FROM q FOR 1) <> ',') DO q = q - 1;
+        buf = SUBSTRING(buf FROM 1 FOR q);
+      END
+      off = off + CHAR_LENGTH(buf);
+      p = 1;
+      WHILE (p <= CHAR_LENGTH(buf)) DO
+      BEGIN
+        q = POSITION(',', buf, p);
+        IF (q = 0) THEN q = CHAR_LENGTH(buf) + 1;
+        face = CAST(SUBSTRING(buf FROM p FOR q - p) AS INTEGER);
+        SUSPEND;
+        p = q + 1;
+      END
+    END
+  END
+END^
+
+-- FRAME_ENTS: the alias models and sprites to draw, with their pose (the entity rows of FRAME_ALL)
+CREATE OR ALTER PROCEDURE frame_ents
+RETURNS (id INTEGER, model_id INTEGER, frame INTEGER, skin INTEGER,
+         x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION,
+         pitch DOUBLE PRECISION, yaw DOUBLE PRECISION, roll DOUBLE PRECISION,
+         effects INTEGER, alpha SMALLINT, kind CHAR(1), renderfx INTEGER)
+AS
+BEGIN
+  FOR SELECT r.i1, r.i2, r.i3, r.i4, r.d1, r.d2, r.d3, r.d4, r.d5, r.d6, r.i5, r.d7, r.s, r.d8
+        FROM frame_all(0, 2147483647, 2147483647, 0) r WHERE r.kind = 2
+        INTO id, model_id, frame, skin, x, y, z, pitch, yaw, roll, effects, alpha, kind, renderfx DO SUSPEND;
+END^
+
+SET TERM ; ^

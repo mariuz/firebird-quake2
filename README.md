@@ -14,10 +14,10 @@ monster AI, and the visibility and projection of every polygon on screen — hap
 
 ```
 keyboard/mouse → SELECT * FROM q2_tic(...)        game logic: 20 Hz, PSQL
-               → SELECT * FROM frame_faces_fast   visible polygons (or frame_faces: projected, with texel coordinates)
-               → SELECT * FROM frame_ents          MD2 models and sprites in the PVS, with their pose
-               → SELECT * FROM frame_lightstyles   this frame's light animation
-               → SELECT ... FROM sound_events      what to play, and where
+               → SELECT * FROM frame_all(...)      the frame, in one result set: the visible polygons
+                                                   (or every vertex projected, with texel coordinates),
+                                                   the MD2 models and sprites in the PVS with their pose,
+                                                   this frame's light animation, what to play and where
                → JS rasterises polygons and models through colormap.pcx → canvas
 ```
 
@@ -96,15 +96,19 @@ simulation wants heard is a row in `sound_events`; temp entities are rows in `fx
 
 ### The renderer is a query (`sql/render.sql`)
 
-`FRAME_FACES` finds the leaf and cluster the eye is in and, once per cluster, marks every face of every
-leaf whose cluster is in its PVS into `vis_faces` (Quake's `visframe`). Visible brush models are marked
-too, at their origin and with their rotation matrix. One cursor then joins the marked faces to their
-vertices, dropping back faces and faces whose bounding sphere is outside the frustum in the `WHERE`
-clause and computing the rotation, the view transform, the projection and the texel coordinates in the
-select list. Two renderer modes are selectable in the page: **SQL picks faces, JS projects** (the
-default, `FRAME_FACES_FAST`, one row per visible face) and **SQL projects every vertex**
-(`FRAME_FACES`); both paint the same pixels (`node scripts/screenshot.mjs demo1 --compare`).
-`FRAME_ENTS` lists the MD2 models and sprites whose clusters are in the PVS.
+`FRAME_ALL` finds the leaf and cluster the eye is in and, once per cluster, marks every face of every
+leaf whose cluster is in its PVS into `vis_faces` (Quake's `visframe`), with each face's plane and
+bounding sphere copied in. The frame is then a scan of that table with the back-face and frustum tests
+as expressions, aggregated with `LIST()` into one row holding the visible face ids; each brush model in
+the PVS (doors, plats, the fan — whether its clusters are visible is decided once per view cluster and
+kept on its row) adds a row of its own faces at its origin. The same result set carries the MD2 models
+and sprites in the PVS with their pose, the light styles, the new sounds and effects and the brush
+models' poses, so a frame is one round trip to the engine. Two renderer modes are selectable in the
+page: **SQL picks faces, JS projects** (the default) and **SQL projects every vertex** (`FRAME_FACES`:
+one cursor joins the selected faces to their vertices and computes the rotation, the view transform,
+the projection and the texel coordinates in the select list); both paint the same pixels
+(`node scripts/screenshot.mjs demo1 --compare`). `FRAME_FACES_FAST` and `FRAME_ENTS` expose the face
+and entity rows for scripts and the SQL console.
 
 ### JavaScript only paints (`src/renderer.js`)
 
@@ -144,8 +148,16 @@ text). New here:
   PVS test; an entity that did not move is not relinked, and three point lookups serve instead of ten.
 - **Idle rows should cost nothing.** Pushers that are not moving and have no think pending are skipped
   entirely; patrolling monsters out of the player's PVS think at 3 Hz and stride three times as far.
+- **A row out of a procedure costs about 6 µs; a `LIST()` costs about 1 µs per element.** The frame used to
+  be six queries returning some 600 rows (one per visible face), each row fetched through the WASM
+  boundary; in the browser each query is a round trip to the engine's worker as well. Now the visible
+  face ids travel as one ',' separated list per model, and faces, entities, light styles, sounds and
+  effects come back from a single procedure as rows tagged with their kind. The marked faces carry their
+  plane and sphere, so the scan needs no join, and whether a door's clusters are in the PVS is decided once
+  per view cluster rather than parsed from strings every frame.
 
-With all that, a tic on the Outer Base at medium skill (21 monsters) costs about 20 ms in Node, down from 40.
+With all that, a tic on the Outer Base at medium skill (21 monsters) costs about 20 ms in Node, down from
+40, and the frame's queries 5 to 8 ms, down from about 18.
 
 ## Licence
 

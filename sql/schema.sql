@@ -299,6 +299,8 @@ CREATE TABLE ents (
   cluster    INTEGER,
   clusters   VARCHAR(200) CHARACTER SET ASCII,   -- ',' separated clusters the box touches
   lx DOUBLE PRECISION, ly DOUBLE PRECISION, lz DOUBLE PRECISION,   -- where it was last linked
+  vis_cl     INTEGER,                      -- brush models: the view cluster VIS was decided for
+  vis        SMALLINT,                     -- ... and whether the model is in that cluster's PVS
   waterlevel SMALLINT DEFAULT 0 NOT NULL,
   watertype  INTEGER DEFAULT 0 NOT NULL,
   ltime      DOUBLE PRECISION DEFAULT 0 NOT NULL,

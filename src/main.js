@@ -2,10 +2,8 @@
 //
 // Per frame the browser does a handful of queries:
 //   SELECT * FROM q2_tic(...)         – advance the game by N tics
-//   SELECT * FROM frame_faces_fast    – the polygons on screen
-//   SELECT * FROM frame_ents          – the models in view
-//   SELECT * FROM frame_lightstyles   – this frame's light animation
-//   SELECT ... FROM sound_events / fx_events
+//   SELECT * FROM frame_all(...)      – the frame: the polygons on screen, the models in view,
+//                                       this frame's light animation, what to play, the effects
 // and then paints. All game state lives in Firebird tables.
 
 import { FirebirdBrowser } from 'firebird-wasm/browser';
@@ -217,20 +215,30 @@ async function frame() {
     }
 
     t = performance.now();
-    const q = (sql) => db.query(sql, [], arr).then((r) => r.rows);
-    const [faces, ents, styles, sounds, fx, bents] = await Promise.all([
-      q(settings.renderer === 'sql' ? 'SELECT * FROM frame_faces' : 'SELECT * FROM frame_faces_fast'), q('SELECT * FROM frame_ents'), q('SELECT * FROM frame_lightstyles'),
-      q(`SELECT id, tic, ent_id, chan, snd, vol, attn, x, y, z FROM sound_events WHERE id > ${lastSoundId} ORDER BY id`),
-      q(`SELECT id, kind, x, y, z, x2, y2, z2, n FROM fx_events WHERE id > ${lastFxId} ORDER BY id`),
-      q("SELECT e.id, e.frame, e.pitch, e.yaw, e.roll FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B' AND (e.frame <> 0 OR e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0)"),
-    ]);
+    // one round trip: every row is tagged with what it is (see FRAME_ALL in sql/render.sql)
+    //   r = [kind, i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, d7, d8, s, lst]
+    const wantSpeakers = ++frameNo % 10 === 0;
+    const rows = (await db.query(`SELECT * FROM frame_all(${settings.renderer === 'sql' ? 1 : 0}, ${lastSoundId}, ${lastFxId}, ${wantSpeakers ? 1 : 0})`, [], arr)).rows;
+    const faces = [], ents = [], sounds = [], fx = [];
+    const styleMap = new Float32Array(64);
+    let speakers = null;
     brushFrames.clear(); brushAngles.clear();
-    for (const [id, f, p, y, r] of bents) { brushFrames.set(id, f); if (p || y || r) brushAngles.set(id, [p, y, r]); }
-    if (++frameNo % 10 === 0) audio.setSpeakersOn((await q("SELECT id FROM ents WHERE classname = 'target_speaker' AND sounds = 1")).map((r) => r[0]));
+    for (const r of rows) {
+      switch (r[0]) {
+        case 1: { const ent = r[2], ox = r[6], oy = r[7], oz = r[8]; for (const id of r[15].split(',')) faces.push([+id, ent, ox, oy, oz]); break; }
+        case 8: faces.push([r[1], r[2], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[3]]); break;
+        case 2: ents.push([r[1], r[2], r[3], r[4], r[6], r[7], r[8], r[9], r[10], r[11], r[5], r[12], r[14], r[13]]); break;
+        case 3: if (r[15]) for (const kv of r[15].split(',')) { const i = kv.indexOf(':'); const st = +kv.slice(0, i); if (st < 64) styleMap[st] = +kv.slice(i + 1); } break;
+        case 4: sounds.push([r[1], 0, r[2], r[3], r[14], r[6], r[7], r[8], r[9], r[10]]); break;
+        case 5: fx.push([r[1], r[2], r[6], r[7], r[8], r[9], r[10], r[11], r[3]]); break;
+        case 6: brushFrames.set(r[1], r[2]); if (r[6] || r[7] || r[8]) brushAngles.set(r[1], [r[6], r[7], r[8]]); break;
+        case 7: speakers = r[15] ? r[15].split(',').map(Number) : []; break;
+        default: break;
+      }
+    }
+    if (speakers) audio.setSpeakersOn(speakers);
     perf.faces = performance.now() - t;
     perf.rows = faces.length;
-    const styleMap = new Float32Array(64);
-    for (const [s, v] of styles) if (s < 64) styleMap[s] = v;
     const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
     if (sounds.length) { lastSoundId = sounds[sounds.length - 1][0]; audio.playEvents(sounds, listener); }
     audio.update(listener);

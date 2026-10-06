@@ -53,6 +53,8 @@ await time('frame_faces', 'SELECT * FROM frame_faces');
 await time('frame_faces_fast', 'SELECT * FROM frame_faces_fast');
 await time('frame_ents', 'SELECT * FROM frame_ents');
 await time('frame_lightstyles', 'SELECT * FROM frame_lightstyles');
+await time('frame_all (fast)', 'SELECT * FROM frame_all(0, 0, 0, 1)');
+await time('frame_all (sql)', 'SELECT * FROM frame_all(1, 0, 0, 1)');
 const v = await q1('SELECT * FROM view_setup');
 await time('mark faces (insert distinct)', `EXECUTE BLOCK AS BEGIN DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL; EXECUTE PROCEDURE mark_faces('${v.PVS}', ${v.CLUSTER}); END`);
 console.log('monsters:', (await db.query("SELECT mtype, st, COUNT(*) n FROM ents WHERE mtype IS NOT NULL GROUP BY mtype, st")).rows);
