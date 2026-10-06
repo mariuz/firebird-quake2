@@ -129,13 +129,23 @@ The ones from Firebird Quake still hold (join the marked set rather than `IN (su
 the select list is cheap, PSQL statements are not; rows are the cost; keep what does not change; bind as
 text). New here:
 
-- **Brush collision is more work than clipnodes, and the pruning matters.** `RHC` stops descending as
-  soon as a nearer hit is known (`fraction <= p1f`), and the leaf's brushes are filtered by contents in
-  the `JOIN` before any side is read. A player-sized trace is about 1.5 ms; a 2048-unit bullet 5 ms.
+- **Brush collision is more work than clipnodes, and most of the work is visiting leaves.** A player-sized
+  box straddles many split planes, so the walk reaches dozens of leaves, nearly all of them empty. The
+  `nodes` rows carry each leaf child's contents, so an empty leaf is skipped without a call, and the walk
+  descends iteratively while the segment stays on one side, recursing only at a split. Each procedure
+  call costs about 18 µs with 36 parameters, so calls are what to count.
+- **Clip the whole segment in every leaf.** `CM_TraceToLeaf` clips the full trace, not the piece of it
+  inside the leaf; clipping sub-segments made fractions incomparable and produced phantom hits at the start.
+- **Arithmetic belongs in the select list; PSQL runs once per brush side.** The side's distances to both
+  endpoints are expressions of the cursor, the loop only branches. An attempt to go further, one aggregate
+  row per brush (`MAX`/`MIN` over the sides' enter and leave fractions from a grid of brushes), was
+  slower: derived tables are inlined, so every reference to `d1` and `d2` re-evaluated the dot products.
 - **Linking is the hidden cost of a move.** Every step relinks the entity to find its clusters for the
-  PVS test; five point lookups instead of ten halved the monsters' frame.
+  PVS test; an entity that did not move is not relinked, and three point lookups serve instead of ten.
 - **Idle rows should cost nothing.** Pushers that are not moving and have no think pending are skipped
   entirely; patrolling monsters out of the player's PVS think at 3 Hz and stride three times as far.
+
+With all that, a tic on the Outer Base at medium skill (21 monsters) costs about 20 ms in Node, down from 40.
 
 ## Licence
 

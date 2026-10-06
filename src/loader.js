@@ -16,7 +16,7 @@ const CHUNK = 30000;
 
 // column specs: name:type where type ∈ i (integer) d (double) s (string)
 const TABLES = {
-  nodes: 'id:i nx:d ny:d nz:d dist:d ptype:i c0:i c1:i',
+  nodes: 'id:i nx:d ny:d nz:d dist:d ptype:i c0:i c1:i cc0:i cc1:i',
   leaves: 'id:i contents:i cluster:i area:i minx:d miny:d minz:d maxx:d maxy:d maxz:d first_lf:i num_lf:i first_lb:i num_lb:i pvs:s',
   leaffaces: 'id:i face:i',
   leafbrushes: 'id:i brush:i',
@@ -193,7 +193,8 @@ function geometryRows(bsp, res) {
   });
   bsp.nodes.forEach((n, ni) => {
     const pl = bsp.planes[n.plane];
-    out.nodes.push([ni, pl.nx, pl.ny, pl.nz, pl.dist, pl.type < 3 ? pl.type : 3, n.children[0], n.children[1]]);
+    const cc = (c) => (c < 0 ? bsp.leaves[-1 - c].contents : null);
+    out.nodes.push([ni, pl.nx, pl.ny, pl.nz, pl.dist, pl.type < 3 ? pl.type : 3, n.children[0], n.children[1], cc(n.children[0]), cc(n.children[1])]);
   });
   bsp.leaves.forEach((l, li) => {
     out.leaves.push([li, l.contents, l.cluster, l.area, ...l.mins, ...l.maxs, l.firstLeafFace, l.numLeafFaces, l.firstLeafBrush, l.numLeafBrushes,
@@ -210,10 +211,22 @@ function geometryRows(bsp, res) {
       for (let a = 0; a < 3; a++) { if (lf.mins[a] < bb[b + a]) bb[b + a] = lf.mins[a]; if (lf.maxs[a] > bb[b + 3 + a]) bb[b + 3 + a] = lf.maxs[a]; }
     }
   }
+  const brushBounds = new Array(bsp.brushes.length);
   bsp.brushes.forEach((b, bi) => {
     const o = bi * 6;
     const fin = (v, d) => (Number.isFinite(v) ? v : d);
-    out.brushes.push([bi, b.contents, b.firstSide, b.numSides, fin(bb[o], -99999), fin(bb[o + 1], -99999), fin(bb[o + 2], -99999), fin(bb[o + 3], 99999), fin(bb[o + 4], 99999), fin(bb[o + 5], 99999)]);
+    const bounds = [fin(bb[o], -99999), fin(bb[o + 1], -99999), fin(bb[o + 2], -99999), fin(bb[o + 3], 99999), fin(bb[o + 4], 99999), fin(bb[o + 5], 99999)];
+    // an axial side bounds the brush exactly on its axis
+    for (let k = 0; k < b.numSides; k++) {
+      const pl = bsp.planes[bsp.brushsides[b.firstSide + k].plane];
+      const n = [pl.nx, pl.ny, pl.nz];
+      for (let ax = 0; ax < 3; ax++) {
+        if (n[ax] > 0.9999) bounds[3 + ax] = Math.min(bounds[3 + ax], pl.dist);
+        else if (n[ax] < -0.9999) bounds[ax] = Math.max(bounds[ax], -pl.dist);
+      }
+    }
+    out.brushes.push([bi, b.contents, b.firstSide, b.numSides, ...bounds]);
+    brushBounds[bi] = bounds;
   });
   bsp.brushsides.forEach((s, si) => {
     const pl = bsp.planes[s.plane];

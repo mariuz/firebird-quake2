@@ -84,7 +84,9 @@ CREATE TABLE nodes (
   dist DOUBLE PRECISION NOT NULL,
   ptype SMALLINT DEFAULT 3 NOT NULL,
   c0 INTEGER NOT NULL,
-  c1 INTEGER NOT NULL
+  c1 INTEGER NOT NULL,
+  cc0 INTEGER,                         -- a leaf child's contents (NULL for a node): empty leaves are skipped without a visit
+  cc1 INTEGER
 );
 
 CREATE TABLE leaves (
@@ -296,6 +298,7 @@ CREATE TABLE ents (
   leaf       INTEGER,                      -- leaf of the origin
   cluster    INTEGER,
   clusters   VARCHAR(200) CHARACTER SET ASCII,   -- ',' separated clusters the box touches
+  lx DOUBLE PRECISION, ly DOUBLE PRECISION, lz DOUBLE PRECISION,   -- where it was last linked
   waterlevel SMALLINT DEFAULT 0 NOT NULL,
   watertype  INTEGER DEFAULT 0 NOT NULL,
   ltime      DOUBLE PRECISION DEFAULT 0 NOT NULL,

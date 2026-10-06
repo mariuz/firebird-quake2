@@ -139,13 +139,17 @@ BEGIN
   bmaxx = MAXVALUE(p1x, p2x) + mxx + 1; bmaxy = MAXVALUE(p1y, p2y) + mxy + 1; bmaxz = MAXVALUE(p1z, p2z) + mxz + 1;
 
   enterfrac = -1; leavefrac = 1; getout = 0; startout = 0; skip = 0; cnx = 0; cny = 0; cnz = 0; cd = 0; cfl = 0; curc = 0;
-  FOR SELECT br.id, br.contents, s.nx, s.ny, s.nz, s.dist, s.flags
+  -- the side's distance to the box's leading corner and both endpoints' distances, as expressions: the
+  -- engine evaluates them far cheaper than PSQL statements would
+  FOR SELECT br.id, br.contents, s.nx, s.ny, s.nz, s.dist, s.flags,
+             :p1x * s.nx + :p1y * s.ny + :p1z * s.nz - (s.dist - IIF(:ispoint = 1, 0, IIF(s.nx < 0, :mxx, :mnx) * s.nx + IIF(s.ny < 0, :mxy, :mny) * s.ny + IIF(s.nz < 0, :mxz, :mnz) * s.nz)),
+             :p2x * s.nx + :p2y * s.ny + :p2z * s.nz - (s.dist - IIF(:ispoint = 1, 0, IIF(s.nx < 0, :mxx, :mnx) * s.nx + IIF(s.ny < 0, :mxy, :mny) * s.ny + IIF(s.nz < 0, :mxz, :mnz) * s.nz))
         FROM leafbrushes lb
         JOIN brushes br ON br.id = lb.brush
         JOIN brushsides s ON s.id >= br.first_side AND s.id < br.first_side + br.num_sides
        WHERE lb.id >= :flb AND lb.id < :flb + :nlb AND BIN_AND(br.contents, :mask) <> 0
          AND br.maxx >= :bminx AND br.minx <= :bmaxx AND br.maxy >= :bminy AND br.miny <= :bmaxy AND br.maxz >= :bminz AND br.minz <= :bmaxz
-        INTO b, bc, snx, sny, snz, sd, sfl
+        INTO b, bc, snx, sny, snz, sd, sfl, d1, d2
   DO
   BEGIN
     IF (b <> cur) THEN
@@ -168,10 +172,6 @@ BEGIN
       enterfrac = -1; leavefrac = 1; getout = 0; startout = 0; skip = 0; cnx = 0; cny = 0; cnz = 0; cd = 0; cfl = 0;
     END
     IF (skip = 1) THEN CONTINUE;
-    IF (ispoint = 1) THEN dist = sd;
-    ELSE dist = sd - (IIF(snx < 0, mxx, mnx) * snx + IIF(sny < 0, mxy, mny) * sny + IIF(snz < 0, mxz, mnz) * snz);
-    d1 = p1x * snx + p1y * sny + p1z * snz - dist;
-    d2 = p2x * snx + p2y * sny + p2z * snz - dist;
     IF (d2 > 0) THEN getout = 1;
     IF (d1 > 0) THEN startout = 1;
     IF (d1 > 0 AND d2 >= d1) THEN BEGIN skip = 1; CONTINUE; END     -- completely in front of this face
@@ -226,47 +226,45 @@ RETURNS (
   sflags INTEGER, contents INTEGER, allsolid SMALLINT, startsolid SMALLINT)
 AS
 DECLARE plnx DOUBLE PRECISION; DECLARE plny DOUBLE PRECISION; DECLARE plnz DOUBLE PRECISION; DECLARE pld DOUBLE PRECISION; DECLARE ptype SMALLINT;
-DECLARE c0 INTEGER; DECLARE c1 INTEGER;
+DECLARE c0 INTEGER; DECLARE c1 INTEGER; DECLARE cc0 INTEGER; DECLARE cc1 INTEGER; DECLARE ccn INTEGER; DECLARE ccf INTEGER;
 DECLARE t1 DOUBLE PRECISION; DECLARE t2 DOUBLE PRECISION; DECLARE offset_ DOUBLE PRECISION;
 DECLARE frac DOUBLE PRECISION; DECLARE frac2 DOUBLE PRECISION; DECLARE idist DOUBLE PRECISION; DECLARE midf DOUBLE PRECISION;
 DECLARE mx DOUBLE PRECISION; DECLARE my DOUBLE PRECISION; DECLARE mz DOUBLE PRECISION;
-DECLARE side_ SMALLINT;
+DECLARE side_ SMALLINT; DECLARE n INTEGER;
 BEGIN
   fraction = frac_in; nx = nx_in; ny = ny_in; nz = nz_in; pdist = pd_in; sflags = sflags_in; contents = contents_in;
   allsolid = allsolid_in; startsolid = startsolid_in;
   IF (fraction <= p1f) THEN BEGIN SUSPEND; EXIT; END      -- already hit something nearer
 
-  IF (node < 0) THEN
+  n = node;
+  WHILE (n >= 0) DO
   BEGIN
-    EXECUTE PROCEDURE clip_leaf(-node - 1, mnx, mny, mnz, mxx, mxy, mxz, s1x, s1y, s1z, s2x, s2y, s2z, mask, ispoint,
+    SELECT h.nx, h.ny, h.nz, h.dist, h.ptype, h.c0, h.c1, h.cc0, h.cc1 FROM nodes h WHERE h.id = :n INTO plnx, plny, plnz, pld, ptype, c0, c1, cc0, cc1;
+    IF (plnx IS NULL) THEN BEGIN SUSPEND; EXIT; END
+    t1 = plnx * p1x + plny * p1y + plnz * p1z - pld;
+    t2 = plnx * p2x + plny * p2y + plnz * p2z - pld;
+    IF (ispoint = 1) THEN offset_ = 0;
+    ELSE IF (ptype = 0) THEN offset_ = ex;
+    ELSE IF (ptype = 1) THEN offset_ = ey;
+    ELSE IF (ptype = 2) THEN offset_ = ez;
+    ELSE offset_ = ABS(ex * plnx) + ABS(ey * plny) + ABS(ez * plnz);
+    -- the whole segment on one side: just descend (into an empty leaf: nothing to hit, done)
+    IF (t1 >= offset_ AND t2 >= offset_) THEN
+    BEGIN
+      IF (c0 < 0 AND BIN_AND(cc0, mask) = 0) THEN BEGIN SUSPEND; EXIT; END
+      n = c0; CONTINUE;
+    END
+    IF (t1 < -offset_ AND t2 < -offset_) THEN
+    BEGIN
+      IF (c1 < 0 AND BIN_AND(cc1, mask) = 0) THEN BEGIN SUSPEND; EXIT; END
+      n = c1; CONTINUE;
+    END
+    LEAVE;
+  END
+  IF (n < 0) THEN
+  BEGIN
+    EXECUTE PROCEDURE clip_leaf(-n - 1, mnx, mny, mnz, mxx, mxy, mxz, s1x, s1y, s1z, s2x, s2y, s2z, mask, ispoint,
                                 fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid)
-      RETURNING_VALUES fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid;
-    SUSPEND;
-    EXIT;
-  END
-
-  SELECT h.nx, h.ny, h.nz, h.dist, h.ptype, h.c0, h.c1 FROM nodes h WHERE h.id = :node INTO plnx, plny, plnz, pld, ptype, c0, c1;
-  IF (plnx IS NULL) THEN BEGIN SUSPEND; EXIT; END
-  t1 = plnx * p1x + plny * p1y + plnz * p1z - pld;
-  t2 = plnx * p2x + plny * p2y + plnz * p2z - pld;
-  IF (ispoint = 1) THEN offset_ = 0;
-  ELSE IF (ptype = 0) THEN offset_ = ex;
-  ELSE IF (ptype = 1) THEN offset_ = ey;
-  ELSE IF (ptype = 2) THEN offset_ = ez;
-  ELSE offset_ = ABS(ex * plnx) + ABS(ey * plny) + ABS(ez * plnz);
-
-  IF (t1 >= offset_ AND t2 >= offset_) THEN
-  BEGIN
-    EXECUTE PROCEDURE rhc(c0, p1f, p2f, p1x, p1y, p1z, p2x, p2y, p2z, s1x, s1y, s1z, s2x, s2y, s2z, mnx, mny, mnz, mxx, mxy, mxz, ex, ey, ez, mask, ispoint,
-                          fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid)
-      RETURNING_VALUES fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid;
-    SUSPEND;
-    EXIT;
-  END
-  IF (t1 < -offset_ AND t2 < -offset_) THEN
-  BEGIN
-    EXECUTE PROCEDURE rhc(c1, p1f, p2f, p1x, p1y, p1z, p2x, p2y, p2z, s1x, s1y, s1z, s2x, s2y, s2z, mnx, mny, mnz, mxx, mxy, mxz, ex, ey, ez, mask, ispoint,
-                          fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid)
       RETURNING_VALUES fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid;
     SUSPEND;
     EXIT;
@@ -290,11 +288,13 @@ BEGIN
     side_ = 0; frac = 1; frac2 = 0;
   END
 
-  -- move up to the node
+  ccn = IIF(side_ = 0, cc0, cc1); ccf = IIF(side_ = 0, cc1, cc0);
+  -- move up to the node (an empty leaf on either side needs no visit)
   IF (frac < 0) THEN frac = 0;
   IF (frac > 1) THEN frac = 1;
   midf = p1f + (p2f - p1f) * frac;
   mx = p1x + frac * (p2x - p1x); my = p1y + frac * (p2y - p1y); mz = p1z + frac * (p2z - p1z);
+  IF (NOT (IIF(side_ = 0, c0, c1) < 0 AND BIN_AND(ccn, mask) = 0)) THEN
   EXECUTE PROCEDURE rhc(IIF(side_ = 0, c0, c1), p1f, midf, p1x, p1y, p1z, mx, my, mz, s1x, s1y, s1z, s2x, s2y, s2z, mnx, mny, mnz, mxx, mxy, mxz, ex, ey, ez, mask, ispoint,
                         fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid)
     RETURNING_VALUES fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid;
@@ -304,6 +304,7 @@ BEGIN
   IF (frac2 > 1) THEN frac2 = 1;
   midf = p1f + (p2f - p1f) * frac2;
   mx = p1x + frac2 * (p2x - p1x); my = p1y + frac2 * (p2y - p1y); mz = p1z + frac2 * (p2z - p1z);
+  IF (NOT (IIF(side_ = 0, c1, c0) < 0 AND BIN_AND(ccf, mask) = 0)) THEN
   EXECUTE PROCEDURE rhc(IIF(side_ = 0, c1, c0), midf, p2f, mx, my, mz, p2x, p2y, p2z, s1x, s1y, s1z, s2x, s2y, s2z, mnx, mny, mnz, mxx, mxy, mxz, ex, ey, ez, mask, ispoint,
                         fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid)
     RETURNING_VALUES fraction, nx, ny, nz, pdist, sflags, contents, allsolid, startsolid;
@@ -560,23 +561,24 @@ DECLARE lf INTEGER; DECLARE cl INTEGER; DECLARE c2 INTEGER;
 DECLARE lst VARCHAR(200) CHARACTER SET ASCII;
 DECLARE i INTEGER;
 BEGIN
-  SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz FROM ents e WHERE e.id = :eid
+  SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz FROM ents e WHERE e.id = :eid AND (e.lx IS DISTINCT FROM e.x OR e.ly IS DISTINCT FROM e.y OR e.lz IS DISTINCT FROM e.z)
     INTO px, py, pz, mnx, mny, mnz, mxx, mxy, mxz;
+  IF (px IS NULL) THEN EXIT;      -- not moved since the last link (or gone)
   lf = point_leaf(px, py, pz);
   SELECT l.cluster FROM leaves l WHERE l.id = :lf INTO cl;
   cl = COALESCE(cl, -1);
   lst = ',' || IIF(cl >= 0, cl || ',', '');
-  -- four corners of the box (enough for the PVS test; Quake walks the tree)
+  -- two opposite corners of the box (enough for the PVS test; Quake walks the tree)
   i = 0;
   WHILE (i < 4) DO
   BEGIN
     c2 = NULL;
-    SELECT l.cluster FROM leaves l WHERE l.id = point_leaf(:px + IIF(BIN_AND(:i, 1) = 0, :mnx, :mxx), :py + IIF(BIN_AND(:i, 2) = 0, :mny, :mxy), :pz + IIF(BIN_AND(:i, 1) = BIN_SHR(:i, 1), :mnz, :mxz)) INTO c2;
+    SELECT l.cluster FROM leaves l WHERE l.id = point_leaf(:px + IIF(:i = 0, :mnx, :mxx), :py + IIF(:i = 0, :mny, :mxy), :pz + IIF(:i = 0, :mnz, :mxz)) INTO c2;
     IF (c2 >= 0 AND POSITION(',' || c2 || ',', lst) = 0 AND CHAR_LENGTH(lst) < 180) THEN lst = lst || c2 || ',';
-    i = i + 1;
+    i = i + 3;
   END
   IF (lst = ',') THEN lst = NULL;
-  UPDATE ents e SET e.leaf = :lf, e.cluster = :cl, e.clusters = :lst WHERE e.id = :eid;
+  UPDATE ents e SET e.leaf = :lf, e.cluster = :cl, e.clusters = :lst, e.lx = :px, e.ly = :py, e.lz = :pz WHERE e.id = :eid;
 END^
 
 -- SV_CheckWater / PM_CatagorizePosition: water level 0 none, 1 feet, 2 waist, 3 eyes.
