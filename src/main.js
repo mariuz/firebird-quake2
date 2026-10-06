@@ -192,7 +192,7 @@ async function frame() {
   }
   try {
     const now = performance.now();
-    const tics = Math.max(1, Math.min(4, Math.round((now - lastTic) / TIC_MS)));
+    const tics = Math.max(1, Math.min(2, Math.round((now - lastTic) / TIC_MS)));   // at most two tics a frame: better slow motion than a stall
     lastTic += tics * TIC_MS;
     if (now - lastTic > 200) lastTic = now;
 
