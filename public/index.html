@@ -106,12 +106,13 @@
           goal, help, laser, changelevel), items from stimpacks to the power shield, the ten weapons from the blaster to
           the BFG10K, damage with armour and quad, gibs, and the monster AI of g_ai.c for the guards, enforcers, gunners,
           berserkers, flyers, parasites and the tank.</li>
-        <li><b>The renderer is a query.</b> <code>FRAME_FACES</code> finds the leaf and cluster the eye is in, marks the leaves
-          whose cluster is in its PVS, collects their faces (<code>DISTINCT</code>, Quake's visframe), drops back faces and
-          faces outside the frustum, and walks each polygon in a single cursor: view transform, clipping to the near plane,
-          projection, and the texel coordinates texinfo gives every vertex. Doors and platforms are brush models and go
-          through the same cursor at their own origin and rotation. <code>FRAME_ENTS</code> lists the alias models and
-          sprites in the PVS with their pose and frame; <code>FRAME_LIGHTSTYLES</code> animates the lights.</li>
+        <li><b>The renderer is a query.</b> <code>FRAME_ALL</code> finds the leaf and cluster the eye is in and, once per
+          cluster, marks every face of every leaf whose cluster is in its PVS (Quake's visframe) with its plane and bounding
+          sphere. A frame is then a scan of the marked faces with the back-face and frustum tests as expressions, aggregated
+          with <code>LIST()</code> into one row of face ids; doors, platforms and the fan are brush models and add a row each
+          at their own origin. The same result set carries the alias models and sprites in the PVS with their pose and
+          frame, the light styles, the sounds and effects of the tic: one round trip per frame. The other renderer mode,
+          <code>FRAME_FACES</code>, projects every vertex in SQL as well.</li>
         <li><b>JavaScript only paints.</b> It rasterises the polygons with perspective-correct spans over a surface cache
           (the .wal texture × the lightmap, through colormap.pcx, as ref_soft did), blends translucent surfaces through the
           alpha map, draws the MD2 models with Gouraud light sampled from the lightmap below them, the sky box, particles,
