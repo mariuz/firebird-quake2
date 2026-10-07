@@ -18,7 +18,8 @@
     "bench:raster": "node scripts/raster-bench.mjs",
     "bench:tic": "node scripts/tic-bench.mjs",
     "bench:calls": "node scripts/call-counts.mjs",
-    "bench:ab": "node scripts/ab-bench.mjs"
+    "bench:ab": "node scripts/ab-bench.mjs",
+    "test:save": "node scripts/save-test.mjs"
   },
   "license": "MIT",
   "dependencies": {

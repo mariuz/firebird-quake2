@@ -7,10 +7,11 @@ them.
 
 ## Playing the demo
 
-- **Save and load.** The whole game is tables, so a save is `SELECT`s of `game`, `player`, `ents`,
-  `lightstyles` and the queues, and a load is the reverse (plus `init_map` with `newGame = 0`).
-  Nothing of this exists yet; the page restarts a map on death. Firebird could even keep the save
-  in the same database as another set of rows.
+- **Save and load**: done as one quick slot (`F6` / `F9`, `src/savegame.js`, tested by
+  `scripts/save-test.mjs`). Left: several named slots and a load/save menu, autosave on entering a
+  map, saving across a level change (the save is one map's tables; the unit's cross-level flags are
+  below), and a save format version bump whenever `ents` or `player` gain columns (the format is the
+  schema's column list, so old saves simply fail to load).
 - **Cross-level state.** `target_crosslevel_trigger` / `target_crosslevel_target` are recognised
   at spawn but do nothing (`game.sql`). The demo's unit uses them for the second map's goals.
   Needs a `cross_flags` column on `game` surviving `init_map`.

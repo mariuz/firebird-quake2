@@ -17,6 +17,7 @@ import { Pak, loadColormap } from './pak.js';
 import { createSchema, loadResources, loadMap, setView } from './loader.js';
 import { Renderer, lightPoint } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
+import { exportSave, importSave } from './savegame.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS } from './gamedata.js';
 
@@ -73,7 +74,42 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Slash') impulse = 12;
   if (e.code === 'KeyG') impulse = 99;
   if (e.code === 'KeyP' || e.code === 'Pause') paused = !paused;
+  if (e.code === 'F6') { e.preventDefault(); saveGame(); }
+  if (e.code === 'F9') { e.preventDefault(); loadGame(); }
 });
+
+// ── saved games: the four game tables as JSON in localStorage (F6 saves, F9 loads) ─────────
+const SAVE_KEY = 'firebird-quake2:save:quick';
+async function saveGame() {
+  if (!running || !map) return;
+  try {
+    const save = await exportSave(db, map.name);
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    setStatus(`Game saved (${map.name}, ${(JSON.stringify(save).length / 1024).toFixed(0)} KB)`);
+    setTimeout(() => { if (statusEl.textContent.startsWith('Game saved')) setStatus(''); }, 2000);
+  } catch (err) { console.error(err); setStatus(`Save failed: ${err.message}`, true); }
+}
+async function loadGame() {
+  let save;
+  try { save = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null'); } catch { save = null; }
+  if (!save) { setStatus('No saved game', true); setTimeout(() => setStatus(''), 2000); return; }
+  if (!pak.has(`maps/${save.map}.bsp`)) { setStatus(`The saved game is on ${save.map}, which is not in this pak`, true); return; }
+  running = false;
+  try {
+    await startMap(save.map, false);          // the map's geometry and models afresh, then the saved rows
+    running = false;
+    setStatus('Loading the saved game…');
+    await importSave(db, save);
+    await loadStyleBase();
+    brushFrames.clear(); brushAngles.clear();
+    const { rows } = await db.query('SELECT MAX(id) m FROM sound_events');
+    lastSoundId = rows[0].M ?? 0; lastFxId = 0;
+    setStatus('Game loaded');
+    setTimeout(() => { if (statusEl.textContent === 'Game loaded') setStatus(''); }, 2000);
+    lastTic = performance.now();
+    running = true;
+  } catch (err) { console.error(err); setStatus(`Load failed: ${err.message}`, true); }
+}
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 canvas.addEventListener('click', () => {
@@ -155,9 +191,7 @@ async function startMap(name, newGame, spawnpoint = null) {
   beams = []; explosions = [];
   const g = (await db.query('SELECT sky, cd_track FROM game')).rows[0];
   renderer.setSky(g.SKY);
-  // the light styles' resting values: the frame lists only the ones that animate or that the map switches
-  styleBase.fill(0);
-  for (const [s, p] of (await db.query('SELECT style, pattern FROM lightstyles', [], arr)).rows) if (s < 64 && p) styleBase[s] = (p.charCodeAt(0) - 97) / 12.5;
+  await loadStyleBase();
   const speakers = (await db.query("SELECT id, x, y, z, noise1, speed, height, sounds FROM ents WHERE classname = 'target_speaker' AND BIN_AND(spawnflags, 3) <> 0 AND noise1 IS NOT NULL", [], arr)).rows;
   audio.setSpeakers(speakers);
   audio.playMusic(Number(g.CD_TRACK ?? 0));
@@ -183,6 +217,11 @@ function nextFrame() {
 const arr = { rowMode: 'array' };
 const brushFrames = new Map();
 const styleBase = new Float32Array(64);
+/** The light styles' resting values: the frame lists only the ones that animate or that the map has switched. */
+async function loadStyleBase() {
+  styleBase.fill(0);
+  for (const [s, p] of (await db.query('SELECT style, pattern FROM lightstyles', [], arr)).rows) if (s < 64 && p) styleBase[s] = (p.charCodeAt(0) - 97) / 12.5;
+}
 const brushAngles = new Map();
 
 async function frame() {

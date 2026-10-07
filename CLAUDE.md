@@ -23,12 +23,13 @@ npm install && npm run fetch-pak      # once: the demo's pak0.pak (needs 7-Zip o
 node scripts/sql-check.mjs            # compile the SQL (run after every SQL edit; ~20 s)
 npm test && npm run test:base2        # smoke tests, demo1 and demo2 (~1 min each)
 npm run test:monsters                 # every monster: sees, attacks, dies
+npm run test:save                     # save, play on, load: the game comes back exactly
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
 ```
 
-A change is done when: `sql-check` passes, both smoke tests and the monsters test say `all good`,
+A change is done when: `sql-check` passes, both smoke tests, the monsters test and the save test say `all good`,
 `screenshot.mjs --compare` reports `differ in 0 of 76800 pixels` on demo1 and demo2 (and the
 viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), the page runs
 in a real browser without console errors, and CI is green. Commit messages here are written as
@@ -102,6 +103,8 @@ short stories of what changed and what it measured; keep that.
   comparison depends on both selecting the same faces.
 - When adding a column to `ents`, remember `set_model` (kind, radius), `link_core` (leaf,
   clusters, link position), and that the row is already ~120 columns wide: prefer fewer writes.
+  A per-frame cache column goes into `SKIP` in `src/savegame.js`; any other new column changes the
+  save format (bump `SAVE_VERSION` if old saves must not load).
 - README and docs are updated in the same commit as the change they describe; the docs
   screenshots are regenerated with `npm run screenshots` when the painter changes visibly.
 - Attribution: end commit messages with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`

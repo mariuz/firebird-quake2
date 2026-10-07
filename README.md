@@ -31,6 +31,7 @@ npm run fetch-pak      # downloads the Quake 2 demo (q2-314-demo-x86.exe) and ex
 npm test               # SQL smoke test in Node against the real Firebird WASM engine: the Outer Base
 npm run test:base2     # the same on the Installation (demo2)
 npm run test:monsters  # every monster of the demo: spawned, it sees the player, attacks, and dies
+npm run test:save      # save, play on, load: the game comes back exactly and keeps running
 npm run serve          # http://localhost:8080/ — add -- --coi if your browser blocks service workers
 npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs demo1 --at=x,y,z,yaw)
 npm run bench          # where a tic and a frame spend their time
@@ -137,6 +138,11 @@ surfaces ripple and flow; the sky is the `env/` cube map sampled by each pixel's
 are drawn with the lightmap value under the entity and Gouraud light from the vertex normals, clipped
 against the near plane triangle by triangle; sprites are billboards; explosions, blood, blaster sparks
 and the rail trail are particles. The status bar comes from `pics/`.
+
+Saved games: `F6` saves and `F9` loads. A save is the four game tables (`game`, `player`, `ents`,
+`lightstyles`) read out as rows and kept as JSON in the browser's `localStorage` (about 140 KB); a load
+reloads the map's geometry and puts the rows back, remapping model ids by name and restarting the entity
+id sequence above the highest saved id (`src/savegame.js`). It takes about a fifth of a second.
 
 Sound: `sound_events` rows are played with the Web Audio API, attenuated and panned from where they
 happened. The map's looped `target_speaker`s play at their origins and follow their on/off state in the

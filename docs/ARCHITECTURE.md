@@ -259,6 +259,12 @@ brightness, renderer mode, sound, music) persist in `localStorage`. Input: WASD/
 under pointer lock, digits for weapons (`impulse` 1–10), `/` or the wheel to cycle (12), `G` gives
 everything (99), `P` pauses; on touch screens the halves of the screen move and look.
 
+Saved games (`src/savegame.js`): `F6` reads the four game tables (`game`, `player`, `ents`,
+`lightstyles`) as rows, with the column names from the result's field list and the model ids' names,
+and keeps them as JSON in `localStorage`; `F9` reloads the map, empties the four tables, inserts the
+saved rows with model ids remapped by name, restarts `ent_seq` above the highest id and resets the
+frame's caches. The per-frame cache columns of `ents` are not saved.
+
 The loop: compute the tics owed (one or two), `q2_tic`, then one `frame_all`, split its rows by
 kind, play sounds and effects, draw the frame, the view weapon and the HUD, and present. A hidden
 tab pauses the loop (`document.hidden`). The stats line shows the costs of the tic, the frame
@@ -271,6 +277,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `sql-check.mjs` | compiles the six SQL files against the engine (run first after any SQL edit) |
 | `sql-smoke.mjs [map]` | end-to-end in Node: load, tics, movement, weapons, doors, all referenced sounds exist |
 | `monsters-test.mjs` | every monster of the demo: spawned, sees the player, attacks, dies, is counted |
+| `save-test.mjs` | save, play on, load: every entity, mover and light style back as it was; the game keeps running with fresh ids |
 | `screenshot.mjs [map] [prefix] [--at=x,y,z,yaw] [--sql] [--compare]` | headless frames to PNG; `--compare` asserts both renderer modes paint identical pixels |
 | `bench.mjs`, `tic-bench.mjs`, `raster-bench.mjs`, `call-counts.mjs`, `ab-bench.mjs` | where the time goes (section 10) |
 | `probe.mjs`, `inspect.mjs` | traces around a point; what is in the pak |
