@@ -445,15 +445,44 @@ BEGIN
 END^
 
 -- door_blocked / plat_blocked: hurt and reverse (crushers don't reverse)
+-- A pusher that cannot move something out of its way (door_blocked, plat_blocked, train_blocked,
+-- rotating_blocked in g_func.c). Doors, plats and trains first get rid of anything that is not a monster
+-- or the player: a chance to go away on its own terms (gibs, barrels), else it explodes. A train hurts
+-- a monster or the player at most every half second, and not at all with TRAIN_BLOCK_STOPS (dmg 0);
+-- a door, plat or fan hurts every time, and a door or plat then turns back. Buttons hurt no one.
 CREATE OR ALTER PROCEDURE mover_blocked (eid INTEGER, other INTEGER)
 AS
 DECLARE cls VARCHAR(40); DECLARE st SMALLINT; DECLARE dmg INTEGER; DECLARE wt DOUBLE PRECISION; DECLARE sf INTEGER; DECLARE d INTEGER; DECLARE master INTEGER;
+DECLARE deb DOUBLE PRECISION; DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
 BEGIN
-  SELECT e.classname, e.mv_state, e.dmg, e.wait_, e.spawnflags, COALESCE(e.linked_id, e.id) FROM ents e WHERE e.id = :eid INTO cls, st, dmg, wt, sf, master;
+  SELECT e.classname, e.mv_state, e.dmg, e.wait_, e.spawnflags, COALESCE(e.linked_id, e.id), e.attack_finished FROM ents e WHERE e.id = :eid
+    INTO cls, st, dmg, wt, sf, master, deb;
+  IF (cls NOT IN ('func_door', 'func_door_rotating', 'func_water', 'func_plat', 'func_train', 'func_rotating')) THEN EXIT;
+  IF (cls <> 'func_rotating' AND NOT EXISTS (SELECT 1 FROM ents o WHERE o.id = :other AND (o.mtype IS NOT NULL OR o.classname = 'player'))) THEN
+  BEGIN
+    EXECUTE PROCEDURE t_damage(other, eid, eid, 100000, 1, 0);
+    -- if it's still there, nuke it (BecomeExplosion1)
+    SELECT o.x + (o.minx + o.maxx) / 2, o.y + (o.miny + o.maxy) / 2, o.z + (o.minz + o.maxz) / 2 FROM ents o WHERE o.id = :other INTO ox, oy, oz;
+    IF (ox IS NOT NULL) THEN
+    BEGIN
+      EXECUTE PROCEDURE fx(2, ox, oy, oz, 0, 0, 0, 0);
+      EXECUTE PROCEDURE snd_at(ox, oy, oz, 'weapons/rocklx1a.wav', 1, 1);
+      DELETE FROM ents o WHERE o.id = :other;
+    END
+    EXIT;
+  END
+  IF (cls = 'func_train') THEN
+  BEGIN
+    IF (COALESCE(dmg, 0) = 0 OR now_() < deb) THEN EXIT;
+    UPDATE ents e SET e.attack_finished = now_() + 0.5e0 WHERE e.id = :eid;   -- the touch debounce
+    EXECUTE PROCEDURE t_damage(other, eid, eid, dmg, 1, 0);
+    EXIT;
+  END
   EXECUTE PROCEDURE t_damage(other, eid, eid, dmg, 1, 0);
   IF (cls IN ('func_door', 'func_door_rotating', 'func_water')) THEN
   BEGIN
     IF (BIN_AND(sf, 4) <> 0) THEN EXIT;          -- DOOR_CRUSHER
+    -- a door with a negative wait would never come back if blocked: it squashes
     IF (wt >= 0) THEN
     FOR SELECT e.id FROM ents e WHERE COALESCE(e.linked_id, e.id) = :master AND e.classname = :cls INTO d DO
     BEGIN
@@ -462,13 +491,51 @@ BEGIN
   END
   ELSE IF (cls = 'func_plat') THEN
   BEGIN
-    IF (st = 2) THEN EXECUTE PROCEDURE plat_go_down(eid); ELSE EXECUTE PROCEDURE plat_go_up(eid);
+    IF (st = 2) THEN EXECUTE PROCEDURE plat_go_down(eid); ELSE IF (st = 3) THEN EXECUTE PROCEDURE plat_go_up(eid);
   END
-  ELSE IF (cls = 'func_train') THEN
-  BEGIN
-    -- gib corpses and items in the way
-    IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :other AND (e.health <= 0 OR e.solid IN (0, 1)))) THEN DELETE FROM ents e WHERE e.id = :other;
-  END
+END^
+
+-- KillBox: everything that can be hurt inside the entity's box dies (func_killbox, func_object's arrival)
+CREATE OR ALTER PROCEDURE killbox (eid INTEGER)
+AS
+DECLARE o INTEGER;
+BEGIN
+  FOR SELECT o.id FROM ents o JOIN ents k ON k.id = :eid
+       WHERE o.id <> :eid AND o.takedamage > 0 AND o.solid IN (2, 3)
+         AND o.x + o.minx <= k.x + k.maxx AND o.x + o.maxx >= k.x + k.minx
+         AND o.y + o.miny <= k.y + k.maxy AND o.y + o.maxy >= k.y + k.miny
+         AND o.z + o.minz <= k.z + k.maxz AND o.z + o.maxz >= k.z + k.minz
+        INTO o
+  DO EXECUTE PROCEDURE t_damage(o, eid, eid, 100000, 0, 32);
+END^
+
+-- SP_func_object: a brush that falls. The box a unit smaller each way; with no spawnflags it drops after two
+-- frames, with any it waits, solid-less and unseen, until used (it then kills what is in its way and drops).
+CREATE OR ALTER PROCEDURE spawn_func_object (eid INTEGER, sf INTEGER, dmg INTEGER)
+AS
+BEGIN
+  UPDATE ents e SET e.minx = e.minx + 1, e.miny = e.miny + 1, e.minz = e.minz + 1, e.maxx = e.maxx - 1, e.maxy = e.maxy - 1, e.maxz = e.maxz - 1,
+         e.dmg = IIF(COALESCE(:dmg, 0) = 0, 100, :dmg), e.movetype = 7, e.clipmask = 33685507, e.spawnflags = :sf, e.ltime = 0,
+         e.solid = IIF(:sf = 0, 4, 0), e.mkind = IIF(:sf = 0, e.mkind, NULL),
+         e.think = IIF(:sf = 0, 'object_release', NULL), e.nextthink = IIF(:sf = 0, 0.2e0, NULL) WHERE e.id = :eid;
+  EXECUTE PROCEDURE link_ent(eid);
+END^
+
+-- func_object_release: it falls (MOVETYPE_TOSS)
+CREATE OR ALTER PROCEDURE object_release (eid INTEGER)
+AS
+BEGIN
+  UPDATE ents e SET e.movetype = 6, e.think = NULL, e.nextthink = NULL, e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :eid;
+END^
+
+-- func_object_use: once
+CREATE OR ALTER PROCEDURE object_use (eid INTEGER)
+AS
+BEGIN
+  IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.solid = 0 AND e.movetype = 7)) THEN EXIT;
+  UPDATE ents e SET e.solid = 4, e.mkind = 'B' WHERE e.id = :eid;
+  EXECUTE PROCEDURE killbox(eid);
+  EXECUTE PROCEDURE object_release(eid);
 END^
 
 -- ── plats ────────────────────────────────────────────────────────────────
@@ -743,6 +810,14 @@ BEGIN
       DELETE FROM ents e WHERE e.id = :t;
     END
     ELSE IF (tcls = 'func_areaportal') THEN EXECUTE PROCEDURE areaportal_use(t, eid);
+    ELSE IF (tcls = 'func_killbox') THEN EXECUTE PROCEDURE killbox(t);
+    ELSE IF (tcls = 'func_object') THEN EXECUTE PROCEDURE object_use(t);
+    ELSE IF (tcls = 'func_conveyor') THEN
+      -- func_conveyor_use: on and off (TOGGLE keeps it usable); the speed only scrolls the belt's texture
+      -- (without TOGGLE it is used once: mv_state 9 marks it spent; conveyors do not move)
+      UPDATE ents e SET e.speed = IIF(BIN_AND(e.spawnflags, 1) <> 0, 0, e.count_), e.spawnflags = BIN_XOR(e.spawnflags, 1),
+             e.mv_state = IIF(BIN_AND(e.spawnflags, 2) <> 0, e.mv_state, 9)
+       WHERE e.id = :t AND (BIN_AND(e.spawnflags, 2) <> 0 OR e.mv_state <> 9);
     ELSE IF (tcls IN ('info_null', 'info_notnull', 'path_corner', 'point_combat', 'target_crosslevel_target')) THEN BEGIN END
     ELSE EXECUTE PROCEDURE use_targets(t, activator);               -- anything with a target of its own
   END
@@ -1512,6 +1587,13 @@ DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISI
 DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION;
 BEGIN
   SELECT e.classname, e.owner_id, e.dmg, e.x, e.y, e.z, e.vx, e.vy, e.vz, e.dmg_radius, e.count_ FROM ents e WHERE e.id = :e1 INTO c1, own, dmg, x, y, z, vx, vy, vz, rad, rdmg;
+  IF (c1 = 'func_object') THEN
+  BEGIN
+    -- func_object_touch: only what it falls on top of, if it can be hurt
+    IF (vz < 0 AND EXISTS (SELECT 1 FROM ents o JOIN ents f ON f.id = :e1 WHERE o.id = :e2 AND o.takedamage > 0 AND o.z + o.maxz <= f.z + f.minz + 2)) THEN
+      EXECUTE PROCEDURE t_damage(e2, e1, e1, dmg, 1, 0);
+    EXIT;
+  END
   IF (c1 IS NULL) THEN EXIT;
   IF (e2 > 0) THEN SELECT e.classname, e.takedamage, e.health FROM ents e WHERE e.id = :e2 INTO c2, td2, hp2;
   ELSE BEGIN c2 = 'worldspawn'; td2 = 0; END
@@ -1694,24 +1776,27 @@ BEGIN
     BEGIN
       IF (cls = 'func_water') THEN
       BEGIN
-        IF (snds = 1) THEN BEGIN n1 = NULL; n2 = NULL; n3 = NULL; END   -- water: 1 is silent too
-        ELSE IF (snds = 2) THEN BEGIN n1 = 'world/lava1.wav'; n2 = NULL; n3 = NULL; END
-        ELSE BEGIN n1 = 'world/mov_watr.wav'; n2 = NULL; n3 = 'world/stp_watr.wav'; END
+        -- SP_func_water: sounds 1 (water) and 2 (lava) both use the water's start and stop, others none;
+        -- speed 25, wait -1 (a toggle) by default, no damage
+        IF (snds IN (1, 2)) THEN BEGIN n1 = 'world/mov_watr.wav'; n2 = NULL; n3 = 'world/stp_watr.wav'; END
+        ELSE BEGIN n1 = NULL; n2 = NULL; n3 = NULL; END
         IF (spd IS NULL OR spd = 0) THEN spd = 25;
-        IF (wt IS NULL) THEN wt = -1;
+        IF (wt IS NULL OR wt = 0) THEN wt = -1;
+        IF (wt = -1) THEN sf = BIN_OR(sf, 32);                          -- DOOR_TOGGLE
       END
       ELSE
       BEGIN
         IF (snds = 1) THEN BEGIN n1 = NULL; n2 = NULL; n3 = NULL; END
         ELSE BEGIN n1 = 'doors/dr1_strt.wav'; n2 = 'doors/dr1_mid.wav'; n3 = 'doors/dr1_end.wav'; END
         IF (spd IS NULL OR spd = 0) THEN spd = 100;
-        IF (wt IS NULL) THEN wt = 3;
+        IF (wt IS NULL OR wt = 0) THEN wt = 3;
+        IF (dmg IS NULL OR dmg = 0) THEN dmg = 2;
       END
       EXECUTE PROCEDURE movedir(COALESCE(ang, 0)) RETURNING_VALUES dx, dy, dz;
       IF (lip IS NULL OR lip = 0) THEN lip = 8;
-      IF (dmg IS NULL OR dmg = 0) THEN dmg = 2;
+      dmg = COALESCE(dmg, 0);
       dist = ABS(dx * sx + dy * sy + dz * sz) - lip;
-      UPDATE ents e SET e.solid = 4, e.movetype = 7, e.yaw = 0, e.speed = :spd, e.wait_ = :wt, e.lip = :lip, e.dmg = :dmg,
+      UPDATE ents e SET e.solid = 4, e.movetype = 7, e.yaw = 0, e.speed = :spd, e.wait_ = :wt, e.lip = :lip, e.dmg = :dmg, e.spawnflags = :sf,
              e.noise1 = :n1, e.noise2 = :n2, e.noise3 = :n3, e.takedamage = IIF(:hp > 0, 1, 0),
              e.p1x = e.x, e.p1y = e.y, e.p1z = e.z, e.p2x = e.x + :dx * :dist, e.p2y = e.y + :dy * :dist, e.p2z = e.z + :dz * :dist, e.mv_state = 1 WHERE e.id = :eid;
       IF (BIN_AND(sf, 1) <> 0) THEN     -- DOOR_START_OPEN
@@ -1772,7 +1857,8 @@ BEGIN
     ELSE IF (cls = 'func_train') THEN
     BEGIN
       IF (spd IS NULL OR spd = 0) THEN spd = 100;
-      UPDATE ents e SET e.solid = 4, e.movetype = 7, e.yaw = 0, e.speed = :spd, e.noise1 = :noise, e.noise3 = NULL, e.dmg = IIF(COALESCE(:dmg, 0) = 0, 2, :dmg),
+      -- SP_func_train: 100 damage when blocked, none with TRAIN_BLOCK_STOPS (spawnflags 4)
+      UPDATE ents e SET e.solid = 4, e.movetype = 7, e.yaw = 0, e.speed = :spd, e.noise1 = :noise, e.noise3 = NULL, e.dmg = IIF(BIN_AND(:sf, 4) <> 0, 0, IIF(COALESCE(:dmg, 0) = 0, 100, :dmg)),
              e.mv_state = IIF(:tn IS NULL OR :tn = '' OR BIN_AND(:sf, 1) <> 0, 2, 1), e.think = 'train_find', e.nextthink = 0.1e0 WHERE e.id = :eid;
     END
     ELSE IF (cls = 'misc_strogg_ship') THEN
@@ -1854,6 +1940,16 @@ BEGIN
       -- noise1 holds the sound; speed = volume, height = attenuation; sounds = 1 while a looped speaker plays
       UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.speed = IIF(COALESCE(:vol, 0) = 0, 1, :vol), e.height = COALESCE(:attn, 1),
              e.sounds = IIF(BIN_AND(:sf, 1) <> 0, 1, 0), e.noise1 = IIF(POSITION('.', :noise) = 0, :noise || '.wav', :noise) WHERE e.id = :eid;
+    END
+    ELSE IF (cls = 'func_object') THEN EXECUTE PROCEDURE spawn_func_object(eid, sf, dmg);
+    ELSE IF (cls = 'func_killbox') THEN
+      UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL WHERE e.id = :eid;    -- unseen; the box is the model's
+    ELSE IF (cls = 'func_conveyor') THEN
+    BEGIN
+      -- SP_func_conveyor: a solid brush; count keeps the speed while it is off (START_ON is spawnflags 1)
+      UPDATE ents e SET e.solid = 4, e.movetype = 0, e.count_ = IIF(COALESCE(:spd, 0) = 0, 100, :spd),
+             e.speed = IIF(BIN_AND(:sf, 1) <> 0, IIF(COALESCE(:spd, 0) = 0, 100, :spd), 0) WHERE e.id = :eid;
+      EXECUTE PROCEDURE link_ent(eid);
     END
     ELSE IF (cls = 'point_combat') THEN
       -- SP_point_combat: a 16×16×32 trigger the monster that runs to it touches

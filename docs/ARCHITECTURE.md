@@ -142,7 +142,8 @@ level counts, water, powerups, the eye's leaf and cluster. Each tic:
    second. The player and entity rows are each written once per tic.
 2. `run_pushers` – doors (with teams, and the area portals they target: open on the way up, closed at
    the bottom), rotating doors, plats, buttons, trains and path corners,
-   rotating fans, timers: `push_move` is `SV_Push` with the pushed set in the `pushed` GTT, the
+   rotating fans, timers, falling `func_object`s; a blocked mover does what g_func.c's `*_blocked` did
+   (`mover_blocked`: anything not a monster or the player is blown away; trains hurt every half second): `push_move` is `SV_Push` with the pushed set in the `pushed` GTT, the
    crush and the blocked callbacks; an idle pusher costs nothing.
 3. `run_physics` – the thinks that are due (dispatched by name in `run_think`), then
    `SV_Physics_Step`/`Toss` for everything that falls, flies or bounces, then monsters touching

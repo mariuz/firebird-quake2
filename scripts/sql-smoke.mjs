@@ -158,7 +158,7 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
     UPDATE ents e SET e.solid = 0, e.targetname = 'xl_fire' WHERE e.id = :c;
     EXECUTE PROCEDURE spawn_ent('target_crosslevel_target', 0, 0, 0) RETURNING_VALUES b;
     UPDATE ents e SET e.solid = 0, e.spawnflags = 2, e.target = 'xl_fire', e.targetname = 'xl_target', e.think = 'crosslevel_think', e.nextthink = now_() + 0.2e0 WHERE e.id = :b;
-    EXECUTE PROCEDURE spawn_ent('target_crosslevel_trigger', 0, 0, 0) RETURNING_VALUES a;
+    EXECUTE PROCEDURE spawn_ent('target_crosslevel_trigger', 0, 0, 0) RETURNING_VALUES a;   -- (demo3 has one of its own: this one is found by its name)
     UPDATE ents e SET e.solid = 0, e.spawnflags = 2, e.targetname = 'xl_set' WHERE e.id = :a;
     EXECUTE PROCEDURE spawn_ent('trigger_relay', 0, 0, 0) RETURNING_VALUES r;
     UPDATE ents e SET e.solid = 0, e.target = 'xl_set', e.targetname = 'xl_relay' WHERE e.id = :r;
@@ -168,7 +168,7 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert((await db.query("SELECT COUNT(*) n FROM ents WHERE targetname = 'xl_target'")).rows[0].N === 1, '... and stays');
   await db.query("EXECUTE BLOCK AS DECLARE r INTEGER; BEGIN SELECT e.id FROM ents e WHERE e.targetname = 'xl_relay' INTO r; EXECUTE PROCEDURE use_targets(r, player_ent()); END");
   assert((await db.query('SELECT serverflags f FROM game')).rows[0].F === 2, 'using a crosslevel trigger sets its flag in the unit');
-  assert((await db.query("SELECT COUNT(*) n FROM ents WHERE classname = 'target_crosslevel_trigger'")).rows[0].N === 0, '... and the trigger is spent');
+  assert((await db.query("SELECT COUNT(*) n FROM ents WHERE targetname = 'xl_set'")).rows[0].N === 0, '... and the trigger is spent');
   await db.query("EXECUTE BLOCK AS DECLARE b INTEGER; BEGIN SELECT e.id FROM ents e WHERE e.targetname = 'xl_target' INTO b; UPDATE ents e SET e.think = 'crosslevel_think', e.nextthink = now_() + 0.1e0 WHERE e.id = :b; END");
   for (let i = 0; i < 4; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
   assert((await db.query('SELECT found_secrets s FROM game')).rows[0].S === secrets0 + 1, 'with the flag set, the target fires its targets');
@@ -259,6 +259,54 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE run_physics(0.05); END');
   e = await row(j.ID);
   assert(Math.abs(e.VX) < 1e-6 && e.VY === 200 && e.VZ === 250 && (e.FLAGS & 512) === 0, `a monster jump trigger throws a running monster the trigger's way (v ${e.VX.toFixed(1)} ${e.VY} ${e.VZ})`);
+}
+
+// movers: what a blocked train or door does, func_water's defaults, a func_object that drops, a func_killbox
+{
+  const one = async (q) => (await db.query(q)).rows[0];
+  const mk = async (cls, set, x, y, z) => (await db.query(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('${cls}', ${x}, ${y}, ${z}) RETURNING_VALUES id; UPDATE ents e SET ${set} WHERE e.id = :id; SUSPEND; END`)).rows[0].ID;
+  const train = await one("SELECT FIRST 1 id, dmg, spawnflags sf FROM ents WHERE classname = 'func_train' ORDER BY id");
+  if (train) {
+    assert(train.DMG === ((train.SF & 4) ? 0 : 100), `a train deals 100 when blocked, none with TRAIN_BLOCK_STOPS (dmg ${train.DMG}, spawnflags ${train.SF})`);
+    if (train.DMG > 0) {
+      const item = await mk('item_health', 'e.solid = 1, e.minx = -16, e.miny = -16, e.minz = -16, e.maxx = 16, e.maxy = 16, e.maxz = 16', 0, 0, 0);
+      const fx0 = (await one('SELECT COUNT(*) n FROM fx_events')).N;
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE mover_blocked(${train.ID}, ${item}); END`);
+      assert((await one(`SELECT COUNT(*) n FROM ents WHERE id = ${item}`)).N === 0 && (await one('SELECT COUNT(*) n FROM fx_events')).N > fx0, 'a train blocked by an item blows it away');
+      const mon = (await one("SELECT FIRST 1 id FROM ents WHERE mtype IS NOT NULL AND health > 0 ORDER BY id")).ID;
+      await db.exec(`UPDATE ents SET health = 1000 WHERE id = ${mon}; UPDATE ents SET attack_finished = 0 WHERE id = ${train.ID};`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE mover_blocked(${train.ID}, ${mon}); EXECUTE PROCEDURE mover_blocked(${train.ID}, ${mon}); END`);
+      assert((await one(`SELECT health h FROM ents WHERE id = ${mon}`)).H === 1000 - train.DMG, 'a train blocked by a monster hurts it once per half second');
+    }
+  }
+  const water = await one("SELECT FIRST 1 id, dmg, wait_ w, spawnflags sf, noise1 FROM ents WHERE classname = 'func_water'");
+  if (water) assert(water.DMG === 0 && (water.W !== -1 || (water.SF & 32)), `func_water: no damage, a toggle when its wait is -1 (wait ${water.W}, spawnflags ${water.SF}, sound ${water.NOISE1})`);
+  // a func_object made of a func_wall's model, moved to open air beside the player: it drops after two frames and lands
+  const wall = await one("SELECT FIRST 1 m.name, m.minx, m.miny, m.minz, m.maxx, m.maxy, m.maxz FROM ents e JOIN models m ON m.id = e.model_id WHERE e.classname = 'func_wall' ORDER BY e.id");
+  if (wall) {
+    const p = await one('SELECT x, y, z FROM ents WHERE id = (SELECT ent_id FROM player)');
+    const cx = (wall.MINX + wall.MAXX) / 2, cy = (wall.MINY + wall.MAXY) / 2;
+    let off = null;
+    for (const [dx, dy] of [[160, 0], [-160, 0], [0, 160], [0, -160], [160, 160], [-160, -160], [160, -160], [-160, 160], [240, 0], [0, 240]]) {
+      const ox = p.X + dx - cx, oy = p.Y + dy - cy, oz = p.Z + 96 - wall.MINZ;
+      const t = await one(`SELECT fraction f, startsolid s FROM trace_move(NULL, ${wall.MINX}, ${wall.MINY}, ${wall.MINZ}, ${wall.MAXX}, ${wall.MAXY}, ${wall.MAXZ}, ${ox}, ${oy}, ${oz}, ${ox}, ${oy}, ${oz - 256}, 33685507)`);
+      if (t.S === 0 && t.F > 0.1 && t.F < 1) { off = { ox, oy, oz }; break; }
+    }
+    if (off) {
+      const obj = (await db.query(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('func_object', ${off.ox}, ${off.oy}, ${off.oz}) RETURNING_VALUES id;
+        EXECUTE PROCEDURE set_model(id, '${wall.NAME}'); EXECUTE PROCEDURE spawn_func_object(id, 0, 0); SUSPEND; END`)).rows[0].ID;
+      for (let i = 0; i < 40; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+      const o = await one(`SELECT z, flags, movetype FROM ents WHERE id = ${obj}`);
+      await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+      const o2 = await one(`SELECT z FROM ents WHERE id = ${obj}`);
+      assert(o.MOVETYPE === 6 && o.Z < off.oz - 8 && (o.FLAGS & 512) && o2.Z === o.Z, `a func_object drops and comes to rest (z ${off.oz.toFixed(0)} → ${o.Z.toFixed(1)})`);
+    } else console.log('     (no open spot beside the player for the func_object check)');
+  }
+  const victim = await one("SELECT FIRST 1 id, x, y, z FROM ents WHERE mtype IS NOT NULL AND health > 0 ORDER BY id DESC");
+  await mk('func_killbox', `e.solid = 0, e.targetname = 'xkill', e.minx = -40, e.miny = -40, e.minz = -40, e.maxx = 40, e.maxy = 40, e.maxz = 80`, victim.X, victim.Y, victim.Z);
+  await db.query("EXECUTE BLOCK AS DECLARE r INTEGER; BEGIN EXECUTE PROCEDURE spawn_ent('trigger_relay', 0, 0, 0) RETURNING_VALUES r; UPDATE ents e SET e.solid = 0, e.target = 'xkill' WHERE e.id = :r; EXECUTE PROCEDURE use_targets(r, player_ent()); END");
+  const v = await one(`SELECT health h FROM ents WHERE id = ${victim.ID}`);
+  assert(!v || v.H <= 0, 'a func_killbox kills what is inside it when used');
 }
 
 // the console's commands: god, notarget, noclip through a wall, give, kill

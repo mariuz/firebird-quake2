@@ -4,7 +4,7 @@
 SET TERM ^ ;
 
 CREATE OR ALTER PROCEDURE run_think (eid INTEGER, think VARCHAR(24)) AS BEGIN END^
-CREATE OR ALTER PROCEDURE mover_blocked (eid INTEGER, other INTEGER) AS BEGIN END^
+-- (mover_blocked is defined in game.sql, which loads first: a stub here used to replace it with an empty body)
 
 -- the current frame of an entity's animation
 CREATE OR ALTER PROCEDURE set_anim (eid INTEGER, anim VARCHAR(16))
@@ -551,14 +551,23 @@ BEGIN
     END
     IF (BIN_AND(aif, 2) <> 0 AND goal IS NOT NULL) THEN
     BEGIN
-      -- ai_run with AI_COMBAT_POINT: run for the point, ignoring the enemy; touch it on arrival
-      SELECT vectoyaw(c.x - :x, c.y - :y) FROM ents c WHERE c.id = :goal INTO iy;
-      IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd, iy);
+      -- ai_run with AI_COMBAT_POINT: run for the point, ignoring the enemy; touch it on arrival (looked at
+      -- before the step as well as after it: a fast runner's stride can carry it past the touch distance)
       IF (EXISTS (SELECT 1 FROM ents m JOIN ents c ON c.id = :goal WHERE m.id = :eid
                      AND c.x + c.minx <= m.x + m.maxx AND c.x + c.maxx >= m.x + m.minx
                      AND c.y + c.miny <= m.y + m.maxy AND c.y + c.maxy >= m.y + m.miny
                      AND c.z + c.minz <= m.z + m.maxz AND c.z + c.maxz >= m.z + m.minz)) THEN
         EXECUTE PROCEDURE point_combat_touch(goal, eid);
+      ELSE
+      BEGIN
+        SELECT vectoyaw(c.x - :x, c.y - :y) FROM ents c WHERE c.id = :goal INTO iy;
+        IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd, iy);
+        IF (EXISTS (SELECT 1 FROM ents m JOIN ents c ON c.id = :goal WHERE m.id = :eid
+                     AND c.x + c.minx <= m.x + m.maxx AND c.x + c.maxx >= m.x + m.minx
+                     AND c.y + c.miny <= m.y + m.maxy AND c.y + c.maxy >= m.y + m.miny
+                     AND c.z + c.minz <= m.z + m.maxz AND c.z + c.maxz >= m.z + m.minz)) THEN
+          EXECUTE PROCEDURE point_combat_touch(goal, eid);
+      END
       af = MOD(af + 1, fc);
       UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
       EXIT;
@@ -868,6 +877,7 @@ BEGIN
   ELSE IF (think = 'always_fire') THEN EXECUTE PROCEDURE always_fire(eid);
   ELSE IF (think = 'multi_wait') THEN EXECUTE PROCEDURE multi_wait(eid);
   ELSE IF (think = 'delayed_use') THEN EXECUTE PROCEDURE delayed_use(eid);
+  ELSE IF (think = 'object_release') THEN EXECUTE PROCEDURE object_release(eid);
   ELSE IF (think = 'crosslevel_think') THEN EXECUTE PROCEDURE crosslevel_think(eid);
   ELSE IF (think = 'grenade_explode') THEN EXECUTE PROCEDURE grenade_explode(eid);
   ELSE IF (think = 'bfg_think') THEN EXECUTE PROCEDURE bfg_think(eid);

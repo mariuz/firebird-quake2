@@ -48,6 +48,9 @@ jobs:
       - name: SQL smoke test (demo2)
         run: npm run test:base2
 
+      - name: The same on demo3 (its func_water, its own crosslevel trigger)
+        run: npm run test:base3
+
       # Every monster of the demo: spawned in front of the player, they see, chase, shoot and die
       - name: The monsters
         run: npm run test:monsters

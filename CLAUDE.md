@@ -21,7 +21,7 @@ tools), `public/` (page, service worker, the pak goes in `public/pak/`), `docs/`
 ```bash
 npm install && npm run fetch-pak      # once: the demo's pak0.pak (needs 7-Zip or unzip)
 node scripts/sql-check.mjs            # compile the SQL (run after every SQL edit; ~20 s)
-npm test && npm run test:base2        # smoke tests, demo1 and demo2 (~1 min each)
+npm test && npm run test:base2 && npm run test:base3   # smoke tests, demo1, demo2 and demo3 (~1 min each)
 npm run test:monsters                 # every monster: sees, attacks, dies
 npm run test:save                     # save, play on, load: the game comes back exactly
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
@@ -29,7 +29,7 @@ npm run serve -- --coi                # dev server with cross-origin isolation (
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
 ```
 
-A change is done when: `sql-check` passes, both smoke tests, the monsters test and the save test say `all good`,
+A change is done when: `sql-check` passes, the three smoke tests, the monsters test and the save test say `all good`,
 `screenshot.mjs --compare` reports `differ in 0 of 76800 pixels` on demo1 and demo2 (and the
 viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), the page runs
 in a real browser without console errors, and CI is green. Commit messages here are written as
@@ -71,6 +71,10 @@ short stories of what changed and what it measured; keep that.
 9. In Bash on this Windows machine, long heredocs that contain `'` sometimes fail to parse;
    write the edit script to a file (the scratchpad) and run it. `python -` falls into a REPL;
    `cat > file` without a heredoc blocks on stdin.
+
+- A forward-declaration stub (`CREATE OR ALTER PROCEDURE x (...) AS BEGIN END^`) must sit in the same
+  file as the real body or an earlier one: the files load in order, and a stub in a later file
+  replaces the body. `mover_blocked` was empty from the start that way, and no blocked mover reacted.
 
 ## Game-logic rules learned the hard way
 

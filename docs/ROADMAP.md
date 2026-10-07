@@ -55,10 +55,16 @@ them.
   the monster's own facing). Left: the soldiers' crouch-and-fire (`attack3`) as a dodge on medium and
   hard, the gunner's grenade from the duck, the exact `ai_run` sub-states (lost sight, trail following,
   sliding), and the parasite's drain is a laser beam, not the hooked animation.
-- **Pusher edge cases.** Trains with `func_train` `block` damage and `movewith` are not there;
-  rotating doors with `X_AXIS`/`Y_AXIS` exist, `func_door` `TOGGLE` and `START_OPEN` are honoured,
-  but `func_water` moves only as a plain door (no `WATER_SMART`). `func_conveyor`, `func_killbox`,
-  `func_object` and `func_clock` are not implemented (none in the demo).
+- **Pusher edge cases**: done, against Quake 2 3.14's g_func.c. A door, plat or train blocked by
+  anything but a monster or the player hurts it to death and blows it away; a train deals 100 at most
+  every half second (none with `TRAIN_BLOCK_STOPS`), buttons none. `func_water` has the water sounds
+  for sounds 1 and 2, speed 25, no damage, and is a toggle when its wait is -1. `func_object` (a brush
+  that drops, at once or when used), `func_killbox` and `func_conveyor` (solid; its speed only
+  scrolls textures) are spawned and tested on synthetic entities, as none of the demo maps has one.
+  Testing it found `mover_blocked` had never run: a forward-declaration stub in monsters.sql, which
+  loads after game.sql, replaced its body with an empty one. Left: `func_clock`, which needs
+  `target_string`'s digits. (The roadmap used to list `movewith`
+  and `WATER_SMART`: those come from later mods, not from Quake 2.)
 - **Damage effects.** Armour, power screen/shield, quad and invulnerability work; missing are the
   `DAMAGE_RADIUS` falloff details for the BFG's final blast against the world, `MOD_*` death
   messages (there is one generic message), and the `means of death` bookkeeping.

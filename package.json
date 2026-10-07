@@ -19,7 +19,8 @@
     "bench:tic": "node scripts/tic-bench.mjs",
     "bench:calls": "node scripts/call-counts.mjs",
     "bench:ab": "node scripts/ab-bench.mjs",
-    "test:save": "node scripts/save-test.mjs"
+    "test:save": "node scripts/save-test.mjs",
+    "test:base3": "node scripts/sql-smoke.mjs demo3"
   },
   "license": "MIT",
   "dependencies": {
