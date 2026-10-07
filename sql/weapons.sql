@@ -83,7 +83,7 @@ BEGIN
       RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
     IF (hit > 0 AND EXISTS (SELECT 1 FROM ents e WHERE e.id = :hit AND e.takedamage > 0)) THEN
     BEGIN
-      EXECUTE PROCEDURE t_damage(hit, shooter, shooter, dmg, kick, 4);
+      EXECUTE PROCEDURE t_damage(hit, shooter, shooter, dmg, kick, 0);     -- (fire_rail: armour protects fully)
       -- continue from just past the hit, ignoring what we just shot
       ignore = hit;
       sx = hx + dx * 8; sy = hy + dy * 8; sz = hz + dz * 8;

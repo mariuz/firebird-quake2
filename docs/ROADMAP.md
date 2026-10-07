@@ -65,15 +65,25 @@ them.
   loads after game.sql, replaced its body with an empty one. Left: `func_clock`, which needs
   `target_string`'s digits. (The roadmap used to list `movewith`
   and `WATER_SMART`: those come from later mods, not from Quake 2.)
-- **Damage effects.** Armour, power screen/shield, quad and invulnerability work; missing are the
-  `DAMAGE_RADIUS` falloff details for the BFG's final blast against the world, `MOD_*` death
-  messages (there is one generic message), and the `means of death` bookkeeping.
+- **Damage effects**: done, against g_combat.c and g_weapon.c. Blast damage reaches as far as
+  `findradius` (the radius, measured to the middle of the target) and no farther, and `CanDamage`
+  looks along five lines, as Quake 2 did. The BFG has its final blast (the frame after the ball
+  strikes, up to 500 × (1 − √(d/1000)) to everything both the ball and the shooter can see), its
+  impact splash over 100 units rather than the blast's 1000, a core hit that is not energy damage,
+  and lasers of 10 that carry on through monsters to the wall and reach barrels too. The railgun is
+  no longer marked as energy damage, so armour protects fully against it. The per-cause death
+  messages and the means-of-death bookkeeping are left out on purpose: Quake 2 prints them only in
+  deathmatch and coop, and in single player says "died." and nothing else.
 - **Water.** Swimming, drowning, lava and slime damage, water surface warping and the underwater
   tint are in. Missing: the water-entry splash particles and bubbles, `SURF_WARP` turbulence
   speed by contents, the swim animation of monsters.
 - **View.** Bob, step smoothing, kick and the death roll exist; the view weapon has no bob
   animation of its own, there is no `cl_run` toggle (shift walks), and crouching is not
   implemented at all (pmove's duck state and the 32-unit box).
+- **Weapon keys.** The page's 1–0 keys give hand grenades slot 6, so 6–0 select one weapon later than
+  Quake 2's default layout (6 grenade launcher, 7 rocket launcher, 8 hyperblaster, 9 railgun, 0 BFG10K;
+  hand grenades had no number key). Changing it means remapping the keys in `src/main.js` and the
+  impulse numbers the tests use.
 - **HUD.** The status bar and the main numbers, pickup messages, centre prints and the help
   computer (`F1`) are in; the inventory screen, the score board and the menu system are not.
 

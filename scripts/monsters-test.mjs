@@ -132,6 +132,61 @@ for (const m of MONSTERS) {
   await db.exec('UPDATE game SET killed = 0');
 }
 
+// blast damage: the radius reaches as far as Quake's findradius and no farther; the BFG's lasers and its final blast
+{
+  console.log('── blast damage');
+  await teleport(128, -320, 32, 135);
+  await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16), health = 100 WHERE id = ${pe}`);
+  const id = (await q1("SELECT * FROM spawn_monster('soldier', 220)")).ID;
+  await db.exec(`UPDATE ents SET health = 100000, max_health = 100000, nextthink = NULL, st = 'stand' WHERE id = ${id}`);
+  const mon = await q1(`SELECT x + (minx + maxx) / 2 cx, y + (miny + maxy) / 2 cy, z + (minz + maxz) / 2 cz FROM ents WHERE id = ${id}`);
+  const p = await q1(`SELECT x, y, z FROM ents WHERE id = ${pe}`);
+  // a point d units from the monster's middle, on the way to the player
+  const toward = (d) => { const dx = p.X - mon.CX, dy = p.Y - mon.CY, l = Math.hypot(dx, dy); return [mon.CX + dx / l * d, mon.CY + dy / l * d, mon.CZ]; };
+  const hp = async () => (await q1(`SELECT health h FROM ents WHERE id = ${id}`)).H;
+  const blast = async (d, dmg, radius) => {
+    const [x, y, z] = toward(d);
+    const before = await hp();
+    await db.query(`EXECUTE BLOCK AS DECLARE g INTEGER; BEGIN EXECUTE PROCEDURE spawn_ent('blast', ${x}, ${y}, ${z}) RETURNING_VALUES g;
+      UPDATE ents e SET e.solid = 0 WHERE e.id = :g; EXECUTE PROCEDURE t_radius_damage(g, ${pe}, ${dmg}, NULL, ${radius}); DELETE FROM ents e WHERE e.id = :g; END`);
+    return before - (await hp());
+  };
+  assert((await blast(100, 120, 120)) === 70, 'a rocket\'s blast 100 units off takes 120 - 100/2 = 70');
+  assert((await blast(150, 120, 120)) === 0, '... and 150 units off, beyond its 120 radius, nothing (it used to reach 160 along each axis)');
+  // the BFG ball in flight, 200 units from the monster: a laser of 10
+  const ball = async (d) => {
+    const [x, y, z] = toward(d);
+    return (await q1(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('bfg_ball', ${x}, ${y}, ${z}) RETURNING_VALUES id;
+      UPDATE ents e SET e.owner_id = ${pe}, e.solid = 0, e.dmg = 500, e.dmg_radius = 1000, e.teleport_time = 1e9 WHERE e.id = :id; SUSPEND; END`)).ID;
+  };
+  let b = await ball(200);
+  let before = await hp();
+  await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE bfg_think(${b}); END`);
+  assert(before - (await hp()) === 10, 'the flying BFG ball\'s laser takes 10 a frame');
+  await db.exec(`DELETE FROM ents WHERE id = ${b}`);
+  // its final blast, 150 units off (between the two): 500 * (1 - sqrt(150 / 1000))
+  b = await ball(150);
+  before = await hp();
+  await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE bfg_explode(${b}); END`);
+  const want = Math.trunc(500 * (1 - Math.sqrt(150 / 1000)));
+  const got = before - (await hp());
+  assert(Math.abs(got - want) <= 1, `the BFG's final blast 150 units off takes 500 × (1 − √0.15) = ${want} (took ${got})`);
+  assert((await q1(`SELECT COUNT(*) n FROM ents WHERE id = ${b}`)).N === 0, '... and the explosion is gone after it');
+  // and the real thing: the player fires the BFG10K at it (flight, lasers, the strike, the blast a frame later)
+  await db.exec(`UPDATE player SET cells = 200, weapon = 1024, attack_finished = 0 WHERE id = 1`);
+  const m2 = await q1(`SELECT x, y, z FROM ents WHERE id = ${id}`);
+  const p2 = await q1(`SELECT x, y, z FROM ents WHERE id = ${pe}`);
+  const yaw = (Math.atan2(m2.Y - p2.Y, m2.X - p2.X) * 180) / Math.PI;
+  await db.exec(`UPDATE ents SET yaw = ${yaw} WHERE id = ${pe}; UPDATE player SET pitch = 0 WHERE id = 1`);
+  before = await hp();
+  await tic([1, 0, 0, 0, 0, 1, 0, 1, 0]);
+  for (let i = 0; i < 40; i++) await tic();
+  const took = before - (await hp());
+  const balls = (await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'bfg_ball'")).N;
+  assert(took >= 200 + 150 && balls === 0, `a BFG10K shot hits it with the strike and the blast (took ${took}), and leaves nothing behind`);
+  await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL");
+}
+
 await db.close();
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

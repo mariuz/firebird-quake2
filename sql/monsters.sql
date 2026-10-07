@@ -878,6 +878,7 @@ BEGIN
   ELSE IF (think = 'multi_wait') THEN EXECUTE PROCEDURE multi_wait(eid);
   ELSE IF (think = 'delayed_use') THEN EXECUTE PROCEDURE delayed_use(eid);
   ELSE IF (think = 'object_release') THEN EXECUTE PROCEDURE object_release(eid);
+  ELSE IF (think = 'bfg_explode') THEN EXECUTE PROCEDURE bfg_explode(eid);
   ELSE IF (think = 'crosslevel_think') THEN EXECUTE PROCEDURE crosslevel_think(eid);
   ELSE IF (think = 'grenade_explode') THEN EXECUTE PROCEDURE grenade_explode(eid);
   ELSE IF (think = 'bfg_think') THEN EXECUTE PROCEDURE bfg_think(eid);

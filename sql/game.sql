@@ -1424,32 +1424,63 @@ BEGIN
 END^
 
 -- T_RadiusDamage
-CREATE OR ALTER PROCEDURE t_radius_damage (inflictor INTEGER, attacker INTEGER, damage DOUBLE PRECISION, ignore INTEGER, radius DOUBLE PRECISION)
+-- CanDamage (g_combat.c): a clear line (MASK_SOLID: monsters don't block) from the inflictor to the
+-- target's origin, or to four points 15 units off it; a brush model is aimed at the middle of its box.
+CREATE OR ALTER FUNCTION can_damage (targ INTEGER, inflictor INTEGER) RETURNS SMALLINT
 AS
 DECLARE ix DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE iz DOUBLE PRECISION;
-DECLARE eid INTEGER; DECLARE d DOUBLE PRECISION; DECLARE pts DOUBLE PRECISION;
+DECLARE tx DOUBLE PRECISION; DECLARE ty DOUBLE PRECISION; DECLARE tz DOUBLE PRECISION; DECLARE mt SMALLINT;
+DECLARE cx DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE cz DOUBLE PRECISION; DECLARE k INTEGER = 0;
 DECLARE f DOUBLE PRECISION; DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
 DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
 DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+BEGIN
+  SELECT e.x, e.y, e.z FROM ents e WHERE e.id = :inflictor INTO ix, iy, iz;
+  SELECT e.x, e.y, e.z, e.movetype, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2
+    FROM ents e WHERE e.id = :targ INTO tx, ty, tz, mt, cx, cy, cz;
+  IF (ix IS NULL OR tx IS NULL) THEN RETURN 0;
+  IF (mt = 7) THEN
+  BEGIN
+    EXECUTE PROCEDURE trace_move(inflictor, 0, 0, 0, 0, 0, 0, ix, iy, iz, cx, cy, cz, 3) RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sf, ct, als, sts, hit;
+    RETURN IIF(f = 1 OR hit = targ, 1, 0);
+  END
+  WHILE (k < 5) DO
+  BEGIN
+    EXECUTE PROCEDURE trace_move(inflictor, 0, 0, 0, 0, 0, 0, ix, iy, iz,
+        tx + CASE k WHEN 0 THEN 0 WHEN 1 THEN 15 WHEN 2 THEN 15 WHEN 3 THEN -15 ELSE -15 END,
+        ty + CASE k WHEN 0 THEN 0 WHEN 1 THEN 15 WHEN 2 THEN -15 WHEN 3 THEN 15 ELSE -15 END, tz, 3)
+      RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sf, ct, als, sts, hit;
+    IF (f = 1) THEN RETURN 1;
+    k = k + 1;
+  END
+  RETURN 0;
+END^
+
+-- T_RadiusDamage: everything that can be hurt within the radius of the inflictor (findradius measures to the
+-- middle of the target's box) takes damage - half the distance, half of it again if it is the attacker,
+-- if CanDamage says the blast reaches it
+CREATE OR ALTER PROCEDURE t_radius_damage (inflictor INTEGER, attacker INTEGER, damage DOUBLE PRECISION, ignore INTEGER, radius DOUBLE PRECISION)
+AS
+DECLARE ix DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE iz DOUBLE PRECISION;
+DECLARE eid INTEGER; DECLARE d DOUBLE PRECISION; DECLARE pts DOUBLE PRECISION; DECLARE ok SMALLINT;
 DECLARE cx DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE cz DOUBLE PRECISION;
 BEGIN
   SELECT e.x, e.y, e.z FROM ents e WHERE e.id = :inflictor INTO ix, iy, iz;
   IF (ix IS NULL) THEN EXIT;
   FOR SELECT e.id, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2
         FROM ents e
-       WHERE e.takedamage > 0 AND (:ignore IS NULL OR e.id <> :ignore)
-         AND ABS(e.x - :ix) < :radius + 40 AND ABS(e.y - :iy) < :radius + 40 AND ABS(e.z - :iz) < :radius + 40
+       WHERE e.takedamage > 0 AND (:ignore IS NULL OR e.id <> :ignore) AND e.id <> :inflictor
+         AND ABS(e.x + (e.minx + e.maxx) / 2 - :ix) <= :radius AND ABS(e.y + (e.miny + e.maxy) / 2 - :iy) <= :radius AND ABS(e.z + (e.minz + e.maxz) / 2 - :iz) <= :radius
         INTO eid, cx, cy, cz
   DO
   BEGIN
     d = vlen(cx - ix, cy - iy, cz - iz);
+    IF (d > radius) THEN CONTINUE;
     pts = damage - 0.5e0 * d;
     IF (eid = attacker) THEN pts = pts * 0.5e0;
     IF (pts <= 0) THEN CONTINUE;
-    -- CanDamage: a clear line to the centre
-    EXECUTE PROCEDURE trace_move(NULL, 0, 0, 0, 0, 0, 0, ix, iy, iz, cx, cy, cz, 3)
-      RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sf, ct, als, sts, hit;
-    IF (f = 1 OR als = 1 OR hit = eid) THEN EXECUTE PROCEDURE t_damage(eid, inflictor, attacker, CAST(pts AS INTEGER), CAST(pts AS INTEGER), 1);
+    ok = can_damage(eid, inflictor);
+    IF (ok = 1) THEN EXECUTE PROCEDURE t_damage(eid, inflictor, attacker, CAST(pts AS INTEGER), CAST(pts AS INTEGER), 1);
   END
 END^
 
@@ -1539,6 +1570,8 @@ BEGIN
 END^
 
 -- bfg_think: lasers to everything in sight while the ball flies
+-- bfg_think (g_weapon.c): every frame of the ball's flight, a laser to each monster, player or barrel within
+-- 256 units, carried on through monsters (each takes 10, energy) until it reaches something else
 CREATE OR ALTER PROCEDURE bfg_think (eid INTEGER)
 AS
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE own INTEGER; DECLARE tt DOUBLE PRECISION;
@@ -1546,23 +1579,65 @@ DECLARE t INTEGER; DECLARE cx DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DEC
 DECLARE f DOUBLE PRECISION; DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
 DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
 DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+DECLARE dx DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; DECLARE dz DOUBLE PRECISION; DECLARE dl DOUBLE PRECISION;
+DECLARE sx DOUBLE PRECISION; DECLARE sy DOUBLE PRECISION; DECLARE sz DOUBLE PRECISION; DECLARE ign INTEGER; DECLARE n INTEGER;
+DECLARE hmon SMALLINT;
 BEGIN
   SELECT e.x, e.y, e.z, e.owner_id, e.teleport_time FROM ents e WHERE e.id = :eid INTO x, y, z, own, tt;
   IF (x IS NULL) THEN EXIT;
   IF (tt < now_()) THEN BEGIN DELETE FROM ents e WHERE e.id = :eid; EXIT; END
   FOR SELECT e.id, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2 FROM ents e
-       WHERE e.takedamage > 0 AND e.health > 0 AND e.id <> :own AND BIN_AND(e.flags, 32) <> 0
-         AND ABS(e.x - :x) < 256 AND ABS(e.y - :y) < 256 AND ABS(e.z - :z) < 256 INTO t, cx, cy, cz
+       WHERE e.takedamage > 0 AND e.id <> :own AND e.id <> :eid
+         AND (e.mtype IS NOT NULL OR e.classname IN ('player', 'misc_explobox'))
+         AND ABS(e.x - :x) < 256 + 64 AND ABS(e.y - :y) < 256 + 64 AND ABS(e.z - :z) < 256 + 64 INTO t, cx, cy, cz
   DO
   BEGIN
-    EXECUTE PROCEDURE trace_move(eid, 0, 0, 0, 0, 0, 0, x, y, z, cx, cy, cz, 100663299)
-      RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sf, ct, als, sts, hit;
-    IF (hit <> t AND f < 1) THEN CONTINUE;
-    EXECUTE PROCEDURE t_damage(t, eid, own, 5, 1, 4);
-    EXECUTE PROCEDURE fx(12, x, y, z, cx, cy, cz, 0);
+    dl = vlen(cx - x, cy - y, cz - z);
+    IF (dl > 256 OR dl = 0) THEN CONTINUE;
+    dx = (cx - x) / dl; dy = (cy - y) / dl; dz = (cz - z) / dl;
+    sx = x; sy = y; sz = z; ign = eid; n = 0;
+    WHILE (n < 8) DO
+    BEGIN
+      EXECUTE PROCEDURE trace_move(ign, 0, 0, 0, 0, 0, 0, sx, sy, sz, x + dx * 2048, y + dy * 2048, z + dz * 2048, 100663297)
+        RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sf, ct, als, sts, hit;
+      IF (hit IS NULL OR hit = 0 OR f = 1) THEN LEAVE;
+      IF (hit <> own) THEN EXECUTE PROCEDURE t_damage(hit, eid, own, 10, 1, 4);
+      SELECT IIF(e.mtype IS NOT NULL OR e.classname = 'player', 1, 0) FROM ents e WHERE e.id = :hit INTO hmon;
+      IF (COALESCE(hmon, 0) = 0) THEN LEAVE;
+      ign = hit; sx = ex; sy = ey; sz = ez; n = n + 1;
+      hmon = NULL;
+    END
+    EXECUTE PROCEDURE fx(12, x, y, z, ex, ey, ez, 0);
   END
   EXECUTE PROCEDURE snd(eid, 0, 'weapons/bfg__l1a.wav', 1, 1);
   UPDATE ents e SET e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
+END^
+
+-- bfg_explode: the frame after the ball strikes, everything within its radius that both the ball and the
+-- shooter can see takes up to the ball's full damage, falling off as 1 - sqrt(distance / radius) (energy)
+CREATE OR ALTER PROCEDURE bfg_explode (eid INTEGER)
+AS
+DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE own INTEGER;
+DECLARE rdmg DOUBLE PRECISION; DECLARE rad DOUBLE PRECISION; DECLARE t INTEGER; DECLARE d DOUBLE PRECISION; DECLARE pts DOUBLE PRECISION;
+DECLARE cx DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE cz DOUBLE PRECISION; DECLARE ok SMALLINT;
+BEGIN
+  SELECT e.x, e.y, e.z, e.owner_id, e.dmg, e.dmg_radius FROM ents e WHERE e.id = :eid INTO x, y, z, own, rdmg, rad;
+  IF (x IS NULL) THEN EXIT;
+  FOR SELECT e.id, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2 FROM ents e
+       WHERE e.takedamage > 0 AND e.id <> :eid AND (:own IS NULL OR e.id <> :own)
+         AND ABS(e.x - :x) < :rad + 64 AND ABS(e.y - :y) < :rad + 64 AND ABS(e.z - :z) < :rad + 64 INTO t, cx, cy, cz
+  DO
+  BEGIN
+    d = vlen(cx - x, cy - y, cz - z);
+    IF (d > rad) THEN CONTINUE;
+    ok = can_damage(t, eid);
+    IF (ok = 0) THEN CONTINUE;
+    IF (own IS NOT NULL) THEN BEGIN ok = can_damage(t, own); IF (ok = 0) THEN CONTINUE; END
+    pts = rdmg * (1 - SQRT(d / rad));
+    EXECUTE PROCEDURE fx(8, cx, cy, cz, 0, 0, 0, 0);
+    EXECUTE PROCEDURE t_damage(t, eid, own, CAST(pts AS INTEGER), 0, 4);
+  END
+  DELETE FROM ents e WHERE e.id = :eid;
 END^
 
 CREATE OR ALTER PROCEDURE grenade_explode (eid INTEGER)
@@ -1626,11 +1701,15 @@ BEGIN
   ELSE IF (c1 = 'bfg_ball') THEN
   BEGIN
     IF (BIN_AND(sflags, 4) <> 0) THEN BEGIN DELETE FROM ents e WHERE e.id = :e1; EXIT; END
-    IF (td2 > 0 AND hp2 > 0) THEN EXECUTE PROCEDURE t_damage(e2, e1, own, 200, 0, 4);
-    EXECUTE PROCEDURE t_radius_damage(e1, own, 200, e2, rad);
+    -- bfg_touch: the core explosion (so firing it into a wall still hurts), then the ball stops a frame back
+    -- along its flight and becomes the explosion that bfg_explode finishes the next frame
+    IF (e2 = own) THEN EXIT;
+    IF (td2 > 0 AND hp2 > 0) THEN EXECUTE PROCEDURE t_damage(e2, e1, own, 200, 0, 0);
+    EXECUTE PROCEDURE t_radius_damage(e1, own, 200, e2, 100);
     EXECUTE PROCEDURE snd_at(x, y, z, 'weapons/bfg__x1b.wav', 1, 1);
     EXECUTE PROCEDURE fx(8, x, y, z, 0, 0, 0, 0);
-    DELETE FROM ents e WHERE e.id = :e1;
+    UPDATE ents e SET e.solid = 0, e.movetype = 0, e.x = e.x - e.vx * 0.1e0, e.y = e.y - e.vy * 0.1e0, e.z = e.z - e.vz * 0.1e0,
+           e.vx = 0, e.vy = 0, e.vz = 0, e.model_id = NULL, e.mkind = NULL, e.think = 'bfg_explode', e.nextthink = now_() + 0.1e0 WHERE e.id = :e1;
   END
   ELSE IF (c1 IN ('grenade', 'hgrenade')) THEN
   BEGIN

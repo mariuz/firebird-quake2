@@ -159,8 +159,10 @@ help, laser, lightramp, changelevel, and the unit's cross-level flags on
 are set); items from stimpacks to the power
 shield, ammo, keys, timed powerups (g_items.c); the ten weapons (p_weapon.c, g_weapon.c:
 bullets with the 8192-unit spread, rail, blaster bolts, grenades with the held-grenade timing,
-rockets, hyperblaster, BFG with its think); `t_damage`, `t_radius_damage`, armour
-(`CheckArmor`, power armour), knockback, gibs (g_combat.c, g_misc.c). Sounds and temp entities
+rockets, hyperblaster, BFG with its think); `t_damage`, `t_radius_damage` (to `findradius`'s radius, with `can_damage`'s five lines of sight), armour
+(`CheckArmor`, with energy damage less well stopped, power armour), knockback, gibs (g_combat.c,
+g_misc.c); the BFG ball's lasers (`bfg_think`), its strike and its final blast a frame later
+(`bfg_explode`). Sounds and temp entities
 are rows: `snd`, `snd_at` and `fx` insert into `sound_events` / `fx_events`.
 
 Monsters are g_ai.c's state machine over the `monster_types` table (`src/gamedata.js`: model,
