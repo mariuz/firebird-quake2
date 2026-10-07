@@ -52,8 +52,11 @@ CREATE OR ALTER FUNCTION point_contents (px DOUBLE PRECISION, py DOUBLE PRECISIO
 RETURNS INTEGER
 AS
 DECLARE c INTEGER; DECLARE c2 INTEGER; DECLARE head INTEGER; DECLARE eox DOUBLE PRECISION; DECLARE eoy DOUBLE PRECISION; DECLARE eoz DOUBLE PRECISION;
+DECLARE lf INTEGER;
 BEGIN
-  SELECT l.contents FROM leaves l WHERE l.id = point_leaf(:px, :py, :pz) INTO c;
+  -- (a function in a WHERE clause is evaluated three times; call it once)
+  lf = point_leaf(px, py, pz);
+  SELECT l.contents FROM leaves l WHERE l.id = :lf INTO c;
   c = COALESCE(c, 1);
   FOR SELECT m.headnode, e.x, e.y, e.z FROM ents e JOIN models m ON m.id = e.model_id
        WHERE e.solid = 4 AND e.x + e.minx <= :px AND e.x + e.maxx >= :px AND e.y + e.miny <= :py AND e.y + e.maxy >= :py
@@ -61,7 +64,8 @@ BEGIN
         INTO head, eox, eoy, eoz
   DO
   BEGIN
-    SELECT l.contents FROM leaves l WHERE l.id = model_point_leaf(:head, :px - :eox, :py - :eoy, :pz - :eoz) INTO c2;
+    lf = model_point_leaf(head, px - eox, py - eoy, pz - eoz);
+    SELECT l.contents FROM leaves l WHERE l.id = :lf INTO c2;
     c = BIN_OR(c, COALESCE(c2, 0));
     c2 = NULL;
   END
@@ -557,17 +561,26 @@ AS
 DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
 DECLARE mnx DOUBLE PRECISION; DECLARE mny DOUBLE PRECISION; DECLARE mnz DOUBLE PRECISION;
 DECLARE mxx DOUBLE PRECISION; DECLARE mxy DOUBLE PRECISION; DECLARE mxz DOUBLE PRECISION;
-DECLARE lf INTEGER; DECLARE cl INTEGER; DECLARE c2 INTEGER;
+DECLARE lf INTEGER; DECLARE cl INTEGER; DECLARE c2 INTEGER; DECLARE lf2 INTEGER; DECLARE oldleaf INTEGER;
 DECLARE lst VARCHAR(200) CHARACTER SET ASCII;
 DECLARE i INTEGER;
 BEGIN
-  SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz FROM ents e WHERE e.id = :eid AND (e.lx IS DISTINCT FROM e.x OR e.ly IS DISTINCT FROM e.y OR e.lz IS DISTINCT FROM e.z)
-    INTO px, py, pz, mnx, mny, mnz, mxx, mxy, mxz;
+  SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz, e.leaf FROM ents e WHERE e.id = :eid AND (e.lx IS DISTINCT FROM e.x OR e.ly IS DISTINCT FROM e.y OR e.lz IS DISTINCT FROM e.z)
+    INTO px, py, pz, mnx, mny, mnz, mxx, mxy, mxz, oldleaf;
   IF (px IS NULL) THEN EXIT;      -- not moved since the last link (or gone)
   lf = point_leaf(px, py, pz);
+  IF (lf = oldleaf AND mnx <= 0 AND mxx >= 0 AND mny <= 0 AND mxy >= 0 AND mnz <= 0 AND mxz >= 0) THEN
+  BEGIN
+    -- a step that stays in the same leaf: the box's clusters are taken to be unchanged
+    UPDATE ents e SET e.lx = :px, e.ly = :py, e.lz = :pz WHERE e.id = :eid;
+    EXIT;
+  END
   -- a brush model's origin is usually far outside its box: its leaf says nothing about it
   IF (mnx > 0 OR mxx < 0 OR mny > 0 OR mxy < 0 OR mnz > 0 OR mxz < 0) THEN
-    SELECT l.cluster FROM leaves l WHERE l.id = point_leaf(:px + (:mnx + :mxx) / 2, :py + (:mny + :mxy) / 2, :pz + (:mnz + :mxz) / 2) INTO cl;
+  BEGIN
+    i = point_leaf(px + (mnx + mxx) / 2, py + (mny + mxy) / 2, pz + (mnz + mxz) / 2);
+    SELECT l.cluster FROM leaves l WHERE l.id = :i INTO cl;
+  END
   ELSE
     SELECT l.cluster FROM leaves l WHERE l.id = :lf INTO cl;
   cl = COALESCE(cl, -1);
@@ -577,7 +590,8 @@ BEGIN
   WHILE (i < 4) DO
   BEGIN
     c2 = NULL;
-    SELECT l.cluster FROM leaves l WHERE l.id = point_leaf(:px + IIF(:i = 0, :mnx, :mxx), :py + IIF(:i = 0, :mny, :mxy), :pz + IIF(:i = 0, :mnz, :mxz)) INTO c2;
+    lf2 = point_leaf(px + IIF(i = 0, mnx, mxx), py + IIF(i = 0, mny, mxy), pz + IIF(i = 0, mnz, mxz));
+    SELECT l.cluster FROM leaves l WHERE l.id = :lf2 INTO c2;
     IF (c2 >= 0 AND POSITION(',' || c2 || ',', lst) = 0 AND CHAR_LENGTH(lst) < 180) THEN lst = lst || c2 || ',';
     i = i + 3;
   END
@@ -927,6 +941,12 @@ BEGIN
   UPDATE ents e SET e.vz = :vz, e.yaw = MOD(e.yaw + e.avel_yaw * :dt + 360, 360) WHERE e.id = :eid;
   EXECUTE PROCEDURE push_entity(eid, vx * dt, vy * dt, vz * dt) RETURNING_VALUES f, nx, ny, nz, als, sts, hit, sfl;
   IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid)) THEN EXIT;
+  IF (als = 1 AND mt IN (6, 10)) THEN
+  BEGIN
+    -- stuck in solid (a gib placed inside a wall): it rests rather than falling forever
+    UPDATE ents e SET e.flags = BIN_OR(e.flags, 512), e.vx = 0, e.vy = 0, e.vz = 0, e.avel_yaw = 0 WHERE e.id = :eid;
+    EXIT;
+  END
   EXECUTE PROCEDURE link_ent(eid);
   IF (f < 1) THEN
   BEGIN

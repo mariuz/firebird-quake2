@@ -366,13 +366,16 @@ DECLARE run_spd DOUBLE PRECISION; DECLARE walk_spd DOUBLE PRECISION; DECLARE sta
 DECLARE melee_a VARCHAR(16); DECLARE melee_f INTEGER; DECLARE missile_a VARCHAR(16); DECLARE missile_f VARCHAR(60); DECLARE idle_s VARCHAR(64); DECLARE search_s VARCHAR(64);
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE gx DOUBLE PRECISION; DECLARE gy DOUBLE PRECISION; DECLARE gz DOUBLE PRECISION;
 DECLARE d DOUBLE PRECISION; DECLARE gt VARCHAR(40); DECLARE gw DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE cl INTEGER;
+DECLARE nt DOUBLE PRECISION;
 BEGIN
+  -- (an UPDATE of the wide ents row costs as much as a trace step: the next think time rides
+  -- along with whatever else the think writes, and a path that writes nothing thinks again next tic)
   t = now_();
+  nt = t + 0.1e0;
   SELECT e.st, e.anim, e.anim_frame, e.model_id, e.enemy_id, e.flags, e.mtype, e.attack_state, e.target, e.goal_id, e.x, e.y, e.z, e.cluster
     FROM ents e WHERE e.id = :eid INTO st, anim, af, mid, enemy, flags, mt, atkst, tgt, goal, x, y, z, cl;
   SELECT t.run_speed, t.walk_speed, t.stand_anim, t.walk_anim, t.run_anim, t.melee_anim, t.melee_frame, t.missile_anim, t.missile_frames, t.idle_snd, t.search_snd
     FROM monster_types t WHERE t.name = :mt INTO run_spd, walk_spd, stand_a, walk_a, run_a, melee_a, melee_f, missile_a, missile_f, idle_s, search_s;
-  UPDATE ents e SET e.nextthink = :t + 0.1e0 WHERE e.id = :eid;
   IF (st = 'dead' OR st = 'asleep') THEN
   BEGIN
     UPDATE ents e SET e.nextthink = NULL WHERE e.id = :eid;
@@ -398,7 +401,7 @@ BEGIN
       IF (st IN ('run', 'melee', 'missile')) THEN
       BEGIN
         st = 'stand';
-        UPDATE ents e SET e.st = 'stand' WHERE e.id = :eid;
+        UPDATE ents e SET e.st = 'stand', e.nextthink = :nt WHERE e.id = :eid;
         EXECUTE PROCEDURE set_anim(eid, stand_a);
         EXIT;
       END
@@ -421,7 +424,7 @@ BEGIN
     BEGIN
       -- follow the path_corner chain (out of the player's sight: at 3 Hz, striding thrice as far)
       IF (pvs IS NULL) THEN SELECT l.pvs FROM leaves l WHERE l.id = (SELECT e.leaf FROM ents e WHERE e.id = player_ent()) INTO pvs;
-      IF (pvs_visible(pvs, cl) = 0) THEN BEGIN UPDATE ents e SET e.nextthink = :t + 0.3e0 WHERE e.id = :eid; walk_spd = walk_spd * 3; END
+      IF (pvs_visible(pvs, cl) = 0) THEN BEGIN nt = t + 0.3e0; walk_spd = walk_spd * 3; END
       IF (goal IS NULL) THEN
       BEGIN
         SELECT FIRST 1 e.id FROM ents e WHERE e.targetname = :tgt AND e.classname = 'path_corner' INTO goal;
@@ -435,7 +438,7 @@ BEGIN
           UPDATE ents e SET e.target = :gt, e.goal_id = NULL, e.ideal_yaw = vectoyaw(:gx - e.x, :gy - e.y) WHERE e.id = :eid;
           IF (gt IS NULL OR gw > 0) THEN
           BEGIN
-            UPDATE ents e SET e.st = 'stand', e.search_time = :t + COALESCE(:gw, 0) WHERE e.id = :eid;
+            UPDATE ents e SET e.st = 'stand', e.search_time = :t + COALESCE(:gw, 0), e.nextthink = :nt WHERE e.id = :eid;
             EXECUTE PROCEDURE set_anim(eid, stand_a);
             EXIT;
           END
@@ -449,14 +452,14 @@ BEGIN
     END
     ELSE IF (st = 'stand' AND tgt IS NOT NULL AND (SELECT e.search_time FROM ents e WHERE e.id = :eid) < t AND EXISTS (SELECT 1 FROM ents c WHERE c.targetname = :tgt AND c.classname = 'path_corner')) THEN
     BEGIN
-      UPDATE ents e SET e.st = 'walk' WHERE e.id = :eid;
+      UPDATE ents e SET e.st = 'walk', e.nextthink = :nt WHERE e.id = :eid;
       EXECUTE PROCEDURE set_anim(eid, walk_a);
       EXIT;
     END
     IF (st = 'stand' AND RAND() < 0.01e0 AND idle_s IS NOT NULL) THEN EXECUTE PROCEDURE snd(eid, 2, idle_s, 1, 2);
     af = af + 1;
     IF (af >= fc) THEN af = 0;
-    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af WHERE e.id = :eid;
+    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
     EXIT;
   END
 
@@ -464,7 +467,7 @@ BEGIN
   BEGIN
     IF (enemy IS NULL) THEN
     BEGIN
-      UPDATE ents e SET e.st = 'stand' WHERE e.id = :eid;
+      UPDATE ents e SET e.st = 'stand', e.nextthink = :nt WHERE e.id = :eid;
       EXECUTE PROCEDURE set_anim(eid, stand_a);
       EXIT;
     END
@@ -474,7 +477,7 @@ BEGIN
       EXECUTE PROCEDURE change_yaw(eid);
       IF (facing_ideal(eid) = 1) THEN
       BEGIN
-        UPDATE ents e SET e.st = 'melee', e.attack_state = 1 WHERE e.id = :eid;
+        UPDATE ents e SET e.st = 'melee', e.attack_state = 1, e.nextthink = :nt WHERE e.id = :eid;
         EXECUTE PROCEDURE set_anim(eid, melee_a);
       END
       EXIT;
@@ -484,7 +487,7 @@ BEGIN
       EXECUTE PROCEDURE change_yaw(eid);
       IF (facing_ideal(eid) = 1) THEN
       BEGIN
-        UPDATE ents e SET e.st = 'missile', e.attack_state = 1 WHERE e.id = :eid;
+        UPDATE ents e SET e.st = 'missile', e.attack_state = 1, e.nextthink = :nt WHERE e.id = :eid;
         EXECUTE PROCEDURE set_anim(eid, missile_a);
         IF (mt = 'gunner') THEN EXECUTE PROCEDURE snd(eid, 1, 'gunner/gunatck1.wav', 1, 1);
       END
@@ -494,10 +497,10 @@ BEGIN
     SELECT vlen(a.x - b.x, a.y - b.y, a.z - b.z) FROM ents a CROSS JOIN ents b WHERE a.id = :eid AND b.id = :enemy INTO d;
     IF (d > 1200 AND pvs_visible((SELECT l.pvs FROM leaves l WHERE l.id = (SELECT e.leaf FROM ents e WHERE e.id = :enemy)), cl) = 0) THEN
     BEGIN
-      UPDATE ents e SET e.nextthink = :t + 0.3e0 WHERE e.id = :eid;
+      nt = t + 0.3e0;
       IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd * 3);
       af = MOD(af + 1, fc);
-      UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af WHERE e.id = :eid;
+      UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
       EXIT;
     END
     IF (RAND() < 0.01e0 AND search_s IS NOT NULL AND visible(eid, enemy) = 0) THEN EXECUTE PROCEDURE snd(eid, 2, search_s, 1, 1);
@@ -505,7 +508,7 @@ BEGIN
     IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd);
     ELSE EXECUTE PROCEDURE change_yaw(eid);
     af = MOD(af + 1, fc);
-    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af WHERE e.id = :eid;
+    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
     EXIT;
   END
 
@@ -523,11 +526,11 @@ BEGIN
     af = af + 1;
     IF (af >= fc) THEN
     BEGIN
-      UPDATE ents e SET e.st = 'run' WHERE e.id = :eid;
+      UPDATE ents e SET e.st = 'run', e.nextthink = :nt WHERE e.id = :eid;
       EXECUTE PROCEDURE set_anim(eid, run_a);
       EXIT;
     END
-    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af WHERE e.id = :eid;
+    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
     EXIT;
   END
 
@@ -536,11 +539,11 @@ BEGIN
     af = af + 1;
     IF (af >= fc) THEN
     BEGIN
-      UPDATE ents e SET e.st = IIF(e.enemy_id IS NULL, 'stand', 'run') WHERE e.id = :eid;
+      UPDATE ents e SET e.st = IIF(e.enemy_id IS NULL, 'stand', 'run'), e.nextthink = :nt WHERE e.id = :eid;
       EXECUTE PROCEDURE set_anim(eid, IIF(enemy IS NULL, stand_a, run_a));
       EXIT;
     END
-    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af WHERE e.id = :eid;
+    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
     EXIT;
   END
 
@@ -552,7 +555,7 @@ BEGIN
       UPDATE ents e SET e.st = 'dead', e.anim_frame = :fc - 1, e.frame = :ff + :fc - 1, e.nextthink = NULL WHERE e.id = :eid;
       EXIT;
     END
-    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af WHERE e.id = :eid;
+    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
     EXIT;
   END
 END^
@@ -786,6 +789,7 @@ BEGIN
       -- SV_Physics_Step: a monster that is not on the ground falls
       UPDATE ents e SET e.vz = e.vz - (SELECT g.gravity FROM game g WHERE g.id = 1) * :dt WHERE e.id = :eid;
       EXECUTE PROCEDURE fly_move(eid, dt) RETURNING_VALUES wl, tid;
+      IF (wl = 3) THEN UPDATE ents e SET e.flags = BIN_OR(e.flags, 512) WHERE e.id = :eid;   -- could not move at all: it is standing in the floor
       IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND BIN_AND(e.flags, 512) <> 0)) THEN
         UPDATE ents e SET e.vx = 0, e.vy = 0, e.vz = 0 WHERE e.id = :eid;
       EXECUTE PROCEDURE link_ent(eid);
@@ -794,7 +798,8 @@ BEGIN
     IF (BIN_AND(flags, 512) <> 0 AND mt <> 9) THEN CONTINUE;      -- resting
     EXECUTE PROCEDURE toss_move(eid, dt);
   END
-  -- monsters touching teleporters / monster jumps / hurt triggers
+  -- monsters touching monster jumps / hurt triggers (on maps that have any)
+  IF (NOT EXISTS (SELECT 1 FROM ents tr WHERE tr.classname IN ('trigger_monsterjump', 'trigger_hurt') AND tr.solid = 1)) THEN EXIT;
   FOR SELECT m.id, m.x, m.y, m.z FROM ents m WHERE BIN_AND(m.flags, 32) <> 0 AND m.health > 0 AND m.st IN ('run', 'walk') INTO eid, wl, wl, wl DO
   BEGIN
     FOR SELECT tr.id, tr.classname FROM ents tr JOIN ents m ON m.id = :eid

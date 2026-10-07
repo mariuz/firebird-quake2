@@ -231,10 +231,13 @@ DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLI
 BEGIN
   SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz FROM ents e WHERE e.id = :eid
     INTO px, py, pz, mnx, mny, mnz, mxx, mxy, mxz;
-  EXECUTE PROCEDURE trace_move(eid, mnx, mny, mnz, mxx, mxy, mxz, px, py, pz, px, py, pz - 256, 3)
+  -- M_droptofloor starts a unit up: a thing placed exactly on the floor would otherwise start in solid
+  EXECUTE PROCEDURE trace_move(eid, mnx, mny, mnz, mxx, mxy, mxz, px, py, pz + 1, px, py, pz - 256, 3)
     RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sf, ct, als, sts, hit;
   IF (f < 1 AND als = 0) THEN
     UPDATE ents e SET e.z = :ez, e.flags = BIN_OR(e.flags, 512) WHERE e.id = :eid;
+  ELSE IF (als = 1) THEN
+    UPDATE ents e SET e.flags = BIN_OR(e.flags, 512) WHERE e.id = :eid;   -- embedded in the floor: it stands, it does not fall
   EXECUTE PROCEDURE link_ent(eid);
 END^
 

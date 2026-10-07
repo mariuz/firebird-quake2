@@ -15,7 +15,9 @@
     "screenshots": "node scripts/screenshot.mjs demo1",
     "check": "node scripts/sql-check.mjs",
     "inspect": "node scripts/inspect.mjs",
-    "bench:raster": "node scripts/raster-bench.mjs"
+    "bench:raster": "node scripts/raster-bench.mjs",
+    "bench:tic": "node scripts/tic-bench.mjs",
+    "bench:calls": "node scripts/call-counts.mjs"
   },
   "license": "MIT",
   "dependencies": {

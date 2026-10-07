@@ -32,6 +32,8 @@ npm run test:monsters  # every monster of the demo: spawned, it sees the player,
 npm run serve          # http://localhost:8080/ — add -- --coi if your browser blocks service workers
 npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs demo1 --at=x,y,z,yaw)
 npm run bench          # where a tic and a frame spend their time
+npm run bench:tic      # the cost of a tic over 200 tics of play (median, p90); add --walk for a moving player
+npm run bench:calls    # how many traces, leaf lookups and links a tic makes
 npm run bench:raster   # where the painter spends its time (add --cold to rebuild every surface each frame)
 npm run inspect        # what is in the pak (maps, models and their frame runs, sounds)
 ```
@@ -153,6 +155,16 @@ text). New here:
   PVS test; an entity that did not move is not relinked, and three point lookups serve instead of ten.
 - **Idle rows should cost nothing.** Pushers that are not moving and have no think pending are skipped
   entirely; patrolling monsters out of the player's PVS think at 3 Hz and stride three times as far.
+- **Count the calls before timing the bodies.** A tic was making 43 tree descents, three per leaf
+  lookup: a function in a `WHERE` clause (`WHERE l.id = point_leaf(…)`) is evaluated three times, for the
+  index probe, the predicate and the fetch. Assigning it to a variable first made it one. And six
+  exploding barrels and a dozen standing monsters were falling every tic: placed exactly on the floor,
+  their first trace started in solid and never set the ground flag. Starting the drop a unit up, as
+  `M_droptofloor` does, and treating a thing that cannot move at all as standing, removed 17 ms a tic.
+- **An `UPDATE` of the wide `ents` row costs about 85 µs, as much as a trace step.** A monster's think
+  wrote its next think time in one statement and its frame in another; now the think time rides along
+  with whatever the think writes anyway. A step that stays in the same leaf keeps its cluster list
+  instead of probing the box's corners again.
 - **A row out of a procedure costs about 6 µs; a `LIST()` costs about 1 µs per element.** The frame used to
   be six queries returning some 600 rows (one per visible face), each row fetched through the WASM
   boundary; in the browser each query is a round trip to the engine's worker as well. Now the visible
@@ -161,8 +173,9 @@ text). New here:
   plane and sphere, so the scan needs no join, and whether a door's clusters are in the PVS is decided once
   per view cluster rather than parsed from strings every frame.
 
-With all that, a tic on the Outer Base at medium skill (21 monsters) costs about 20 ms in Node, down from
-40, and the frame's queries 5 to 8 ms, down from about 18.
+With all that, an idle tic on the Outer Base at medium skill (31 monsters, 14 of them patrolling) costs
+about 6 ms in Node (about 9 with the player walking), down from 40 at first and 20 after the first round;
+the frame's queries 5 to 8 ms, down from about 18.
 
 ## Licence
 

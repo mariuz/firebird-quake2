@@ -316,6 +316,7 @@ CREATE INDEX ents_tname ON ents (targetname);
 CREATE INDEX ents_solid ON ents (solid);
 CREATE INDEX ents_think ON ents (nextthink);
 CREATE INDEX ents_model ON ents (model_id);
+CREATE INDEX ents_movetype ON ents (movetype);
 CREATE INDEX ents_team ON ents (team);
 
 -- The one client.
