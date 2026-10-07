@@ -142,7 +142,9 @@ Translucent surfaces (`SURF_TRANS33/66`) are blended through the alpha map in th
 surfaces ripple and flow; the sky is the `env/` cube map sampled by each pixel's direction. MD2 models
 are drawn with the lightmap value under the entity and Gouraud light from the vertex normals, clipped
 against the near plane triangle by triangle; sprites are billboards; explosions, blood, blaster sparks
-and the rail trail are particles. The status bar comes from `pics/`.
+and the rail trail are particles. Muzzle flashes, rockets, blaster bolts, the BFG ball and explosions are
+dynamic lights, added to the lightmaps of the faces they reach as ref_soft's `R_AddDynamicLights` did
+(those faces are rebuilt for the frame) and to the models near them. The status bar comes from `pics/`.
 
 Saved games: Escape brings up Quake 2's menus (`F2` save, `F3` load, `F10` quit), with fifteen slots and
 an autosave as each map starts; `F6` quick-saves and `F9` quick-loads. A save is the four game tables (`game`, `player`, `ents`,

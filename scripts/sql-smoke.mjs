@@ -516,6 +516,38 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
     UPDATE ents SET health = ${hp0} WHERE id = ${pe}`);
 }
 
+// muzzle flashes: a light for the frame (fx 15, its radius in n) from the player's gun and a monster's
+{
+  const one = async (q) => (await db.query(q)).rows[0];
+  const keep = await one('SELECT weapon, weapons, bullets, silencer_shots FROM player WHERE id = 1');
+  const flashes = async (id0) => (await db.query(`SELECT x, y, z, n FROM fx_events WHERE id > ${id0} AND kind = 15`)).rows;
+  const top = async () => (await one('SELECT COALESCE(MAX(id), 0) m FROM fx_events')).M;
+  const p = await one('SELECT e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = (SELECT ent_id FROM player)');
+  let id0 = await top();
+  await db.exec('UPDATE player SET weapon = 8, weapons = BIN_OR(weapons, 8), bullets = 50, attack_finished = 0, silencer_shots = 0, grenade_time = 0 WHERE id = 1');
+  await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_fire(1); END');
+  let fl = await flashes(id0);
+  const a = p.YAW * Math.PI / 180;
+  const ex = p.X + Math.cos(a) * 18 + Math.sin(a) * 16, ey = p.Y + Math.sin(a) * 18 - Math.cos(a) * 16;
+  assert(fl.length === 1 && fl[0].N >= 200 && fl[0].N < 232 && Math.hypot(fl[0].X - ex, fl[0].Y - ey) < 0.01,
+    `a shot flashes a light of 200-231 (${fl[0]?.N}) 18 ahead of the player and 16 to the right`);
+  id0 = await top();
+  await db.exec('UPDATE player SET attack_finished = 0, silencer_shots = 5 WHERE id = 1');
+  await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_fire(1); END');
+  fl = await flashes(id0);
+  assert(fl.length === 1 && fl[0].N >= 100 && fl[0].N < 132, `... a silenced one 100-131 (${fl[0]?.N})`);
+  const mon = await one("SELECT FIRST 1 e.id FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE t.missile_kind IS NOT NULL AND e.health > 0 ORDER BY e.id");
+  if (mon) {
+    id0 = await top();
+    await db.exec(`UPDATE ents SET enemy_id = (SELECT ent_id FROM player) WHERE id = ${mon.ID}`);
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_missile(${mon.ID}); END`);
+    fl = await flashes(id0);
+    assert(fl.length === 1 && fl[0].N >= 200 && fl[0].N < 232, `a monster's shot flashes too (${fl[0]?.N})`);
+    await db.exec(`UPDATE ents SET enemy_id = NULL WHERE id = ${mon.ID}`);
+  }
+  await db.exec(`UPDATE player SET weapon = ${keep.WEAPON}, weapons = ${keep.WEAPONS}, bullets = ${keep.BULLETS}, silencer_shots = ${keep.SILENCER_SHOTS}, attack_finished = 0 WHERE id = 1`);
+}
+
 // the console's commands: god, notarget, noclip through a wall, give, kill
 {
   const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;

@@ -455,7 +455,8 @@ CREATE TABLE sound_events (
 
 -- Temp entities the browser draws for a moment (TE_*): 1 gunshot, 2 explosion,
 -- 3 blood, 4 rail trail (to x2 y2 z2), 5 teleport effect, 6 blaster hit, 7 sparks,
--- 8 bfg explosion, 9 grenade explosion, 10 bubbles, 11 shotgun puff, 12 laser sparks
+-- 8 bfg explosion, 9 grenade explosion, 10 bubbles, 11 shotgun puff, 12 laser sparks, 14 bubble trail,
+-- 15 a muzzle flash's light (n: its radius)
 CREATE SEQUENCE fx_seq;
 CREATE TABLE fx_events (
   id   INTEGER NOT NULL PRIMARY KEY,

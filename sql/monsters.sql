@@ -290,6 +290,8 @@ BEGIN
   sx = x1 + COS(yaw * 0.0174532925e0) * 20 + SIN(yaw * 0.0174532925e0) * 8; sy = y1 + SIN(yaw * 0.0174532925e0) * 20 - COS(yaw * 0.0174532925e0) * 8; sz = z1 + vh - 4;
   dx = x2 - sx; dy = y2 - sy; dz = z2 - sz; dl = vlen(dx, dy, dz);
   IF (dl = 0) THEN EXIT;
+  -- the muzzle flash (MZ2_*): CL_ParseMuzzleFlash2 lit 200 + 0..31 units at the flash for a frame
+  EXECUTE PROCEDURE fx(15, sx, sy, sz, 0, 0, 0, 200 + CAST(FLOOR(RAND() * 32) AS INTEGER));
   IF (mk = 'blaster') THEN
   BEGIN
     EXECUTE PROCEDURE snd(eid, 1, asnd, 1, 1);

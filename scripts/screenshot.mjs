@@ -2,7 +2,8 @@
 // under Node, the painter runs against a stub canvas, and the frames are
 // written as PNGs to docs/. Also a convenient end-to-end test.
 //
-//   node scripts/screenshot.mjs [map] [out-prefix] [--at=x,y,z,yaw] [--sql] [--compare]
+//   node scripts/screenshot.mjs [map] [out-prefix] [--at=x,y,z,yaw] [--sql] [--compare] [--flash]
+// (--flash: each frame lit by a muzzle flash's dynamic light, radius 216, where the player's gun is)
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -52,6 +53,7 @@ const tic = (a) => db.query('SELECT * FROM q2_tic(?, ?, ?, ?, ?, ?, ?, ?, ?)', a
 const arr = { rowMode: 'array' };
 const useSql = process.argv.includes('--sql');
 const compare = process.argv.includes('--compare');
+const flash = process.argv.includes('--flash');
 
 async function shot(name) {
   const last = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
@@ -65,6 +67,8 @@ async function shot(name) {
   const t1 = performance.now();
   const entFrames = new Map(), entAngles = new Map();
   for (const [id, f, p, y, r] of bents) { entFrames.set(id, f); if (p || y || r) entAngles.set(id, [p, y, r]); }
+  const ya = last.YAW * Math.PI / 180;
+  renderer.dlights = flash ? [{ x: last.PX + Math.cos(ya) * 18 + Math.sin(ya) * 16, y: last.PY + Math.sin(ya) * 18 - Math.cos(ya) * 16, z: last.PZ, r: 216 }] : [];
   renderer.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? 0, fov: 90 });
   if (useSql) renderer.drawFaces(faces, styles, last.TIME_, entFrames);
   else renderer.drawFaceList(faces, styles, last.TIME_, entFrames, entAngles);

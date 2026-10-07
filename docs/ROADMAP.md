@@ -133,15 +133,22 @@ them.
 
 ## Rendering
 
-- **Dynamic lights**: muzzle flashes, rockets, the BFG glow and explosions light nothing;
-  `R_PushDlights` would mark surfaces to rebuild with an added light term (the surface cache key
-  would carry it).
+- **Dynamic lights**: done, as ref_soft lit them. The page gathers each frame's lights as the client did:
+  muzzle flashes (fx 15 from `player_fire` and `monster_missile`: 200 + 0..31, 100 + 0..31 silenced, for
+  the frame they arrive in), rockets, blaster and hyperblaster bolts and the BFG ball at 200 (their
+  `EF_*` bits), explosions fading with their frames (350, `CL_AddExplosions`'s `ex_poly` alpha; a blaster
+  hitting a wall 150). The painter marks a face lit when a light's reach, less its distance to the plane,
+  leaves the minimum 32 and overlaps the face (from either side, as Quake 2's lights shone through thin
+  walls), adds `R_AddDynamicLights`'s term to its light samples and builds it afresh for the frame, not
+  cached; models get `R_LightPoint`'s intensity less distance. Monochrome, as ref_soft was. Left: brush
+  models are lit in their BSP position (a moved door or a rotating fan takes the light where it stood), and
+  only lights carried by drawn entities count (one behind the view does not light the wall in front).
 - **Mipmaps**: the painter samples mip 0 always; ref_soft picked the mip level by scale, which
   is the visible difference on far walls (shimmer). `Wal.mips` has all four.
 - **Translucent water from inside / warp surfaces**: the underwater screen warp
   (`D_WarpScreen`) is not done; the tint is.
-- **Entity lighting**: alias models take the lightmap value under them plus Gouraud; there is no
-  light from dynamic lights and no shadow (ref_soft had none either).
+- **Entity lighting**: alias models take the lightmap value under them, the dynamic lights near them and
+  Gouraud; there is no shadow (ref_soft had none either).
 - **Sprites**: oriented sprites (`SPR_ORIENTED`) are drawn as billboards.
 - **Sky**: the cube map is sampled per pixel; the sky's rotation (`sky_rotate`, `sky_axis`) is
   stored by the loader but the painter does not turn it.

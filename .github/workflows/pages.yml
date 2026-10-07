@@ -63,6 +63,10 @@ jobs:
       - name: The menus
         run: npm run test:menu
 
+      # Dynamic lights in the painter
+      - name: Dynamic lights
+        run: npm run test:dlight
+
       - name: Headless screenshots
         run: npm run screenshots
 

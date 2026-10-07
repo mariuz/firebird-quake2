@@ -249,6 +249,13 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   did: one row of light values interpolated per texel row, stepped along it; the texture column
   wrap is tabled. Surfaces are cached by face, texture (animation frame) and the face's light
   style values; the cache clears at 2000 entries and when the brightness setting changes.
+- **Dynamic lights.** `renderer.dlights` is the frame's lights (`frameDlights` in `src/main.js`: muzzle
+  flashes from fx 15, projectiles by their effects bits, explosions fading). `faceDlights` is
+  `R_MarkLights` face by face (the plane distance, the reach across the face); a face it returns lights
+  for is built by `buildSurface` with `R_AddDynamicLights`'s term added to the samples and is not
+  cached. `dlightAt` is `R_LightPoint`'s dynamic part for models and the view weapon.
+  `scripts/dlight-test.mjs` checks it headless; `scripts/screenshot.mjs --flash` paints frames lit by a
+  muzzle flash.
 - **Polygons.** `drawFaceList` takes the frame's face rows, transforms the BSP vertices it holds
   (with the brush model's origin and rotation matrix), clips at the near plane in view space and
   scan-converts with `fillPolygon`: 1/z, s/z, t/z affine in screen space, the texel coordinates

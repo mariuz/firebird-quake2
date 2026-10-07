@@ -31,6 +31,7 @@ export class Renderer {
     this.sbarLines = 0;
     this.sky = null;             // [6 × { w, h, data }]
     this.lightScale = 1.4;       // ref_gl's intensity: the software lightmaps are dim on their own
+    this.dlights = [];           // this frame's dynamic lights: [{ x, y, z, r }] (V_AddLight)
     this.vv = new Float64Array(64 * 7);   // a polygon's vertices in view space
     this.pp = new Float64Array(64 * 5);   // ... and on screen, clipped
     this.av = new Float32Array(1024 * 7); // an alias model's transformed vertices
@@ -111,6 +112,11 @@ export class Renderer {
       }
       tex = t;
     }
+    // a face a dynamic light reaches is built afresh for this frame and not cached (ref_soft did the same)
+    if (this.dlights.length && !(f.flags & (SURF.SKY | SURF.WARP))) {
+      const lit = this.faceDlights(bsp, f, ti);
+      if (lit) return this.buildSurface(bsp, f, tex, styles, lit);
+    }
     let light = 0;
     const fs = f.styles;
     for (let i = 0; i < 4 && fs[i] !== 255; i++) {
@@ -128,11 +134,34 @@ export class Renderer {
   }
 
   /**
+   * R_MarkLights, face by face: the lights within reach of the face's plane (`rad - |dist|` at least the
+   * minimum light of 32: from either side, as Quake 2's lights shone through thin walls) whose reach also
+   * overlaps the face across it. Returns [rad, minlight, s, t, …] (s, t: where the light falls, in lightmap
+   * units from the face's corner) or null.
+   */
+  faceDlights(bsp, f, ti) {
+    let out = null;
+    const pl = bsp.planes[f.plane];
+    for (const d of this.dlights) {
+      const dist = d.x * pl.nx + d.y * pl.ny + d.z * pl.nz - pl.dist;
+      const rad = d.r - Math.abs(dist);
+      if (rad < 32) continue;
+      const minlight = rad - 32;
+      const ix = d.x - pl.nx * dist, iy = d.y - pl.ny * dist, iz = d.z - pl.nz * dist;
+      const ls = ix * ti.s[0] + iy * ti.s[1] + iz * ti.s[2] + ti.soff - f.texturemins[0];
+      const lt = ix * ti.t[0] + iy * ti.t[1] + iz * ti.t[2] + ti.toff - f.texturemins[1];
+      if (ls < -minlight || lt < -minlight || ls > f.extents[0] + minlight || lt > f.extents[1] + minlight) continue;
+      (out ??= []).push(rad, minlight, ls, lt);
+    }
+    return out;
+  }
+
+  /**
    * The texture tiled under the face's lightmap, through the colormap. The
    * lightmap is bilinear over 16×16 texel blocks: one row of light values is
    * interpolated per texel row, then stepped along it (R_DrawSurfaceBlock8).
    */
-  buildSurface(bsp, f, tex, styles) {
+  buildSurface(bsp, f, tex, styles, lit = null) {
     const sw = Math.max(1, f.extents[0]);
     const sh = Math.max(1, f.extents[1]);
     const data = new Uint8Array(sw * sh);
@@ -150,6 +179,22 @@ export class Renderer {
       }
     } else {
       block.fill((f.flags & (SURF.WARP | SURF.SKY) ? 255 : f.lightofs === -1 ? 255 : 0) * ls);
+    }
+    // R_AddDynamicLights: each sample within the light's reach of where it falls gains what is left of it
+    // (distances in the octagonal measure sd + td/2, in whole units as the C had them; not scaled by the
+    // brightness, which is the lightmaps' modulate)
+    if (lit) {
+      for (let j = 0; j < lit.length; j += 4) {
+        const rad = lit[j], minlight = lit[j + 1], s0 = Math.trunc(lit[j + 2]), t0 = Math.trunc(lit[j + 3]);
+        for (let t = 0; t < lh; t++) {
+          const td = Math.abs(t0 - t * 16);
+          for (let s = 0; s < lw; s++) {
+            const sd = Math.abs(s0 - s * 16);
+            const dist = sd > td ? sd + (td >> 1) : td + (sd >> 1);
+            if (dist < minlight) block[t * lw + s] += rad - dist;
+          }
+        }
+      }
     }
     const cm = this.colormap;
     const texw = tex.w, texh = tex.h, mip = tex.mips[0];
@@ -842,6 +887,19 @@ function skyDir(sky, dx, dy, dz) {
   if (u < 0) u = 0; else if (u >= face.w) u = face.w - 1;
   if (v < 0) v = 0; else if (v >= face.h) v = face.h - 1;
   return face.data[v * face.w + u];
+}
+
+/**
+ * R_LightPoint's dynamic part: what the lights add at a point (intensity less distance, by the light's
+ * colour averaged as ref_soft's alias lighting averaged it), on the lightmap's 0-255 scale.
+ */
+export function dlightAt(lights, x, y, z) {
+  let add = 0;
+  for (const d of lights) {
+    const a = d.r - Math.hypot(x - d.x, y - d.y, z - d.z);
+    if (a > 0) add += a * (d.c ?? 2 / 3);
+  }
+  return add;
 }
 
 /** R_LightPoint: the lightmap value of the floor below a point (for models). */

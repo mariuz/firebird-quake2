@@ -163,6 +163,7 @@ DECLARE ammo INTEGER; DECLARE ak SMALLINT; DECLARE need INTEGER; DECLARE ws SMAL
 DECLARE quad DOUBLE PRECISION; DECLARE sil INTEGER; DECLARE vol DOUBLE PRECISION; DECLARE kick DOUBLE PRECISION;
 DECLARE yaw DOUBLE PRECISION; DECLARE gt DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION; DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
 DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
+DECLARE fl_x DOUBLE PRECISION; DECLARE fl_y DOUBLE PRECISION; DECLARE fl_z DOUBLE PRECISION; DECLARE fl_yaw DOUBLE PRECISION;
 BEGIN
   SELECT p.ent_id, p.weapon, p.attack_finished, p.quad_finished, p.silencer_shots, p.chaingun_spin, p.grenade_time
     FROM player p WHERE p.id = 1 INTO pe, w, af, quad, sil, spin, gt;
@@ -209,6 +210,15 @@ BEGIN
     EXIT;
   END
   UPDATE player p SET p.show_hostile = :t + 1, p.attack_start = :t, p.silencer_shots = MAXVALUE(0, p.silencer_shots - 1) WHERE p.id = 1;
+  -- the muzzle flash (MZ_*): CL_ParseMuzzleFlash lit 200 + 0..31 units (100 + 0..31 silenced) for a frame, 18 ahead of
+  -- the player and 16 to the right; pulling a hand grenade's pin makes none
+  IF (w <> 32) THEN
+  BEGIN
+    SELECT e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = :pe INTO fl_x, fl_y, fl_z, fl_yaw;
+    fl_yaw = fl_yaw * 0.0174532925e0;
+    EXECUTE PROCEDURE fx(15, fl_x + COS(fl_yaw) * 18 + SIN(fl_yaw) * 16, fl_y + SIN(fl_yaw) * 18 - COS(fl_yaw) * 16, fl_z, 0, 0, 0,
+      IIF(sil > 0, 100, 200) + CAST(FLOOR(RAND() * 32) AS INTEGER));
+  END
 
   IF (w = 1) THEN                                                        -- blaster
   BEGIN

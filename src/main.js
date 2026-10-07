@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMap, setView } from './loader.js';
-import { Renderer, lightPoint } from './renderer.js';
+import { Renderer, lightPoint, dlightAt } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
 import { Menu, saveComment } from './menu.js';
 import { exportSave, importSave } from './savegame.js';
@@ -40,6 +40,8 @@ let lastFxId = 0;
 let frameNo = 0;
 let beams = [];          // [{ a, b, color, until }]
 let explosions = [];     // [{ x, y, z, t0, spr }]
+let flashes = [];        // muzzle flashes' lights: [{ x, y, z, r, die }] (each lasts the frame it is seen in)
+let exLights = [];       // explosions' lights: [{ x, y, z, t0, light, frames, misc }]
 const settings = { map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90, renderer: 'fast', brightness: 1.4, alwaysRun: true,
   sensitivity: 7, invertMouse: false, crosshair: 1 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('firebird-quake2:settings') || '{}')); } catch { /* defaults */ }
@@ -336,7 +338,7 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   map = { name, bsp };
   renderer.setResources(res);
   renderer.particles = [];
-  beams = []; explosions = [];
+  beams = []; explosions = []; flashes = []; exLights = [];
   const g = (await db.query('SELECT sky, cd_track FROM game')).rows[0];
   renderer.setSky(g.SKY);
   await loadStyleBase();
@@ -491,16 +493,17 @@ function handleFx(rows, time) {
     switch (kind) {
       case 1: renderer.spawnParticles('gunshot', x, y, z, 40, [x2, y2, z2], 0); break;
       case 11: renderer.spawnParticles('gunshot', x, y, z, 20, [x2, y2, z2], 0); break;
-      case 2: renderer.spawnParticles('explosion', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_explod.sp2') }); break;
-      case 9: renderer.spawnParticles('explosion', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_explod.sp2') }); break;
+      case 2: renderer.spawnParticles('explosion', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_explod.sp2') }); exLights.push({ x, y, z, t0: time, light: 350, frames: 15 }); break;
+      case 9: renderer.spawnParticles('explosion', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_explod.sp2') }); exLights.push({ x, y, z, t0: time, light: 350, frames: 19 }); break;
       case 3: renderer.spawnParticles('blood', x, y, z, Math.min(n * 2, 60), [0, 0, 0], 0xe8); break;
       case 4: renderer.spawnParticles('rail', x, y, z, 0, [x2, y2, z2]); break;
       case 5: renderer.spawnParticles('teleport', x, y, z, 0); break;
-      case 6: renderer.spawnParticles('gunshot', x, y, z, 40, [0, 0, 0], 0xe0); break;
+      case 6: renderer.spawnParticles('gunshot', x, y, z, 40, [0, 0, 0], 0xe0); exLights.push({ x, y, z, t0: time, light: 150, frames: 4, misc: true }); break;
+      case 15: flashes.push({ x, y, z, r: n, die: time }); break;   // a muzzle flash (MZ_*, MZ2_*)
       // TE_SPLASH: count and colour (cl_tent.c's splash_color: unknown, sparks, blue water, brown water, slime, lava, blood)
       case 7: renderer.spawnParticles('gunshot', x, y, z, Math.min(n >> 4, 64), [x2 || 0, y2 || 0, z2 || 1], [0x00, 0xe0, 0xb0, 0x50, 0xd0, 0xe0, 0xe8][n & 7] ?? 0); break;
       case 14: renderer.spawnParticles('bubbles', x, y, z, 0, [x2, y2, z2]); break;   // TE_BUBBLETRAIL
-      case 8: renderer.spawnParticles('bfg', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_bfg3.sp2'), scale: 1 }); break;
+      case 8: renderer.spawnParticles('bfg', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_bfg3.sp2'), scale: 1 }); exLights.push({ x, y, z, t0: time, light: 350, frames: 4, c: 1 / 3 }); break;
       case 10: renderer.spawnParticles('gunshot', x, y, z, 8, [0, 0, 1], 4); break;
       case 12: beams.push({ a: [x, y, z], b: [x2, y2, z2], color: 0xd0, until: time + 0.1 }); break;
       case 13: beams.push({ a: [x, y, z], b: [x2, y2, z2], color: n & 2 ? 0xf2 : n & 4 ? 0xd0 : n & 8 ? 0xf3 : n & 16 ? 0xdc : 0xe0, until: time + 0.12 }); break;
@@ -509,8 +512,33 @@ function handleFx(rows, time) {
   }
 }
 
+/**
+ * The frame's dynamic lights: muzzle flashes for the frame they come in, rockets, blaster and
+ * hyperblaster bolts and the BFG ball at 200 (EF_ROCKET, EF_BLASTER, EF_HYPERBLASTER, EF_BFG), and the
+ * explosions fading with their frames (CL_AddExplosions: ex_poly at (16 - frame) / 16 of 350 from frame 1,
+ * the blaster's hit, ex_misc, at 1 - frac / 3 of 150).
+ */
+function frameDlights(ents, time) {
+  const lights = [];
+  flashes = flashes.filter((f) => f.die >= time);
+  lights.push(...flashes);
+  for (const e of ents) {
+    const effects = e[10];
+    if (effects & (8 | 16 | 64 | 128)) lights.push({ x: e[4], y: e[5], z: e[6], r: 200, c: effects & 128 ? 1 / 3 : 2 / 3 });
+  }
+  exLights = exLights.filter((l) => {
+    const frac = 1 + (time - l.t0) * 10, f = Math.floor(frac);
+    if (f >= l.frames - 1) return false;
+    const a = l.misc ? 1 - frac / (l.frames - 1) : (16 - f) / 16;
+    if (a > 0) lights.push({ x: l.x, y: l.y, z: l.z, r: l.light * a, c: l.c });
+    return true;
+  });
+  return lights;
+}
+
 function drawFrame(faces, ents, styles, time, dt = 0.05) {
   const r = renderer;
+  r.dlights = frameDlights(ents, time);
   const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? (last.DEAD ? 40 : 0), fov: settings.fov };
   r.beginFrame(view);
   if (faces) {
@@ -525,7 +553,7 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
     if (!m) continue;
     if (kind === 'M') {
       const glow = effects & (8 | 16 | 64 | 128) ? 255 : 0;
-      const light = glow || lightPoint(bsp, x, y, z + 8);
+      const light = glow || lightPoint(bsp, x, y, z + 8) + dlightAt(r.dlights, x, y, z) / r.lightScale;
       const spin = effects & 1 ? (time * 100) % 360 : 0;   // EF_ROTATE items spin
       r.drawAlias(m.mdl, frame, skin, [x, y, z], [pitch, yaw + spin, roll], light, { time, alpha: alpha === 1 });
       if (effects & 8) r.particles.push({ x, y, z, vx: 0, vy: 0, vz: 0, color: 0xe0 + (Math.random() * 4 | 0), die: time + 0.05, type: 'still' });   // the blaster bolt's glow
@@ -557,7 +585,7 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
         gr += 0.1 * dy; gy += 0.2 * dy; gp += 0.2 * lag(gunPrev.pitch, last.PITCH);
       }
       gunPrev = { yaw: last.YAW, pitch: last.PITCH };
-      const light = Math.max(lightPoint(bsp, last.PX, last.PY, last.PZ), 32);
+      const light = Math.max(lightPoint(bsp, last.PX, last.PY, last.PZ), 32) + dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z) / r.lightScale;
       r.zb.fill(0, 0, r.w * r.h);
       r.drawAlias(vm.mdl, viewFrame(vm.mdl, last, time), 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light, { near: 1, time });
     }
@@ -668,7 +696,7 @@ async function usePak(buffer, label) {
 async function boot() {
   try {
     db = await openDatabase();
-    window.quake2 = { db, audio, menu, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
+    window.quake2 = { db, audio, menu, get renderer() { return renderer; }, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));
     if (!resp.ok) throw new Error(`could not fetch pak0.pak (${resp.status}); pick a PAK file instead`);
