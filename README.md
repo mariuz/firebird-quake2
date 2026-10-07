@@ -5,7 +5,9 @@
 Quake 2, simulated and rendered inside the [Firebird](https://firebirdsql.org) SQL database, running
 entirely in your browser on Firebird 6 compiled to WebAssembly. The sequel to
 [Firebird Quake](https://github.com/mariuz/firebird-quake), which grew out of
-[Firebird DOOM](https://github.com/mariuz/firebird-doom).
+[Firebird DOOM](https://github.com/mariuz/firebird-doom); the next in the series is
+[Firebird Quake III Arena](https://github.com/mariuz/firebird-quake3) ([play it](https://mariuz.github.io/firebird-quake3/)),
+with Bézier patches, MD3 player models and deathmatch bots that think in SQL.
 
 Every game tic is a PSQL procedure call. Every frame is a `SELECT`. JavaScript handles the keyboard,
 the mouse and the canvas; everything else — collision against the BSP's brushes, the player's physics,
