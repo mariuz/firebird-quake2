@@ -225,6 +225,44 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert((await game()).INTERMISSION_TIME === null, 'the next level starts without the intermission');
 }
 
+// the console's commands: god, notarget, noclip through a wall, give, kill
+{
+  const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;
+  const flags = async () => (await db.query('SELECT flags f FROM ents WHERE id = (SELECT ent_id FROM player)')).rows[0].F;
+  assert((await cmd('god')) === 'godmode ON' && ((await flags()) & 16) !== 0, 'god turns godmode on');
+  assert((await cmd('god')) === 'godmode OFF' && ((await flags()) & 16) === 0, '... and off');
+  assert((await cmd('notarget')) === 'notarget ON' && ((await flags()) & 64) !== 0, 'notarget sets FL_NOTARGET');
+  await cmd('notarget');
+  // the nearest wall in one of eight directions, then noclip through it
+  const p = (await db.query('SELECT e.x, e.y, e.z + 22 ez FROM ents e WHERE e.id = (SELECT ent_id FROM player)')).rows[0];
+  let best = null;
+  for (let yaw = 0; yaw < 360; yaw += 45) {
+    const dx = Math.cos(yaw * Math.PI / 180), dy = Math.sin(yaw * Math.PI / 180);
+    const t = (await db.query(`SELECT fraction f FROM trace_move(NULL, 0, 0, 0, 0, 0, 0, ${p.X}, ${p.Y}, ${p.EZ}, ${p.X + dx * 1024}, ${p.Y + dy * 1024}, ${p.EZ}, 1)`)).rows[0].F;
+    if (!best || t < best.t) best = { yaw, t, dist: t * 1024 };
+  }
+  await db.exec(`UPDATE ents SET yaw = ${best.yaw} WHERE id = (SELECT ent_id FROM player); UPDATE player SET pitch = 0 WHERE id = 1;`);
+  assert((await cmd('noclip')) === 'noclip ON', `noclip on, facing a wall ${best.dist.toFixed(0)} units away`);
+  const tics = Math.ceil((best.dist + 80) / 15);
+  for (let i = 0; i < tics; i++) await tic([1, 1, 0, 0, 0, 0, 0, 1, 0]);
+  const q = (await db.query('SELECT e.x, e.y FROM ents e WHERE e.id = (SELECT ent_id FROM player)')).rows[0];
+  const moved = Math.hypot(q.X - p.X, q.Y - p.Y);
+  assert(moved > best.dist + 40, `noclip flies through the wall (${moved.toFixed(0)} units in ${tics} tics)`);
+  assert((await cmd('noclip')) === 'noclip OFF', '... and noclip off');
+  await db.exec('UPDATE player SET weapons = 1, bullets = 0, armor = 0 WHERE id = 1');
+  await cmd('give', 'weapons');
+  await cmd('give', 'ammo');
+  await cmd('give', 'armor');
+  const inv = (await db.query('SELECT weapons w, bullets b, max_bullets mb, armor a FROM player')).rows[0];
+  assert(inv.W === 2047 && inv.B === inv.MB && inv.A === 200, 'give weapons, ammo and armor fill them');
+  assert((await cmd('give', 'banana')).startsWith('unknown item'), 'give refuses what it does not know');
+  await cmd('god');
+  await cmd('kill');
+  const dead = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  assert(dead.HEALTH <= 0 && dead.DEAD === 1, 'kill kills, godmode or not');
+  assert((await cmd('fly')).startsWith('unknown command'), 'an unknown command says so');
+}
+
 await db.close();
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

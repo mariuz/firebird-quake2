@@ -31,11 +31,16 @@ them.
   chains. The help computer (`F1`) shows the level's counts and the two `target_help` messages, and the
   status bar blinks its icon while there is news. Left: cinematics (`.cin`) are skipped; Quake 2 single
   player shows nothing over the intermission view, while here the help computer's counts are drawn on it.
-- **Teleporter in demo3** does not spawn (`misc_teleporter` is handled in `spawn_map_ents`; the
-  one in demo3 is skipped, probably by a spawnflag filter: check). The teleport effect and sound
-  exist.
-- **Cheats and console commands** beyond `give all` (`G`) and the SQL console helpers (`god`,
-  `spawn a tank`, `one-hit monsters`): `noclip`, `notarget`, `kill`, `map <name>` from the page.
+- **Teleporter in demo3**: not a bug. It and its destination carry spawnflags 1792 (not easy, not
+  medium, not hard), Quake 2's mark for deathmatch-only entities, like every other entity the demo
+  maps leave out in single player. Checking it found the filter skipping spawnflag 4096 as "coop
+  only"; it is `SPAWNFLAG_NOT_COOP`, which single player ignores, so that line is gone, and the
+  five filter bits are now cleared after filtering, as `SpawnEntities` did.
+- **Cheats and console commands**: done. The backquote opens a command line over the view:
+  `god`, `notarget`, `noclip` (flies where the view points, through walls, touching nothing),
+  `give all|health|weapons|ammo|armor|keys`, `kill` (godmode or not), `map <name>` (a new game),
+  `save`, `load` (`player_command` in weapons.sql for the game's part). Left: `give` of a single
+  named item, `fov`, `use`/`drop`, command history and completion.
 - **Demo playback / recording** (the `.dm2` files in the pak) is out of scope for now.
 
 ## Fidelity gaps in what exists

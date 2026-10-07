@@ -308,6 +308,61 @@ BEGIN
 END^
 
 -- ClientThink + Pmove + ClientEndServerFrame for one tic
+-- The console's commands and cheats (g_cmds.c: Cmd_God_f, Cmd_Notarget_f, Cmd_Noclip_f, Cmd_Give_f,
+-- Cmd_Kill_f). The answer goes to the top-left message line, as gi.cprintf did, and out.
+CREATE OR ALTER PROCEDURE player_command (cmd VARCHAR(32), arg VARCHAR(64))
+RETURNS (msg VARCHAR(80))
+AS
+DECLARE pe INTEGER; DECLARE fl INTEGER; DECLARE mt SMALLINT; DECLARE hp INTEGER;
+BEGIN
+  cmd = LOWER(TRIM(COALESCE(cmd, ''))); arg = LOWER(TRIM(COALESCE(arg, '')));
+  pe = player_ent();
+  SELECT e.flags, e.movetype, e.health FROM ents e WHERE e.id = :pe INTO fl, mt, hp;
+  IF (hp IS NULL) THEN BEGIN msg = 'no player'; SUSPEND; EXIT; END
+  msg = '';
+  IF (cmd = 'god') THEN
+  BEGIN
+    UPDATE ents e SET e.flags = BIN_XOR(e.flags, 16) WHERE e.id = :pe;
+    msg = TRIM(IIF(BIN_AND(fl, 16) = 0, 'godmode ON', 'godmode OFF'));   -- (IIF pads the shorter literal)
+  END
+  ELSE IF (cmd = 'notarget') THEN
+  BEGIN
+    UPDATE ents e SET e.flags = BIN_XOR(e.flags, 64) WHERE e.id = :pe;
+    msg = TRIM(IIF(BIN_AND(fl, 64) = 0, 'notarget ON', 'notarget OFF'));
+  END
+  ELSE IF (cmd = 'noclip') THEN
+  BEGIN
+    UPDATE ents e SET e.movetype = IIF(:mt = 2, 3, 2), e.vx = 0, e.vy = 0, e.vz = 0 WHERE e.id = :pe;
+    msg = TRIM(IIF(mt = 2, 'noclip OFF', 'noclip ON'));
+  END
+  ELSE IF (cmd = 'kill') THEN
+  BEGIN
+    -- suicide: godmode does not save you from it
+    IF (hp > 0) THEN
+    BEGIN
+      UPDATE ents e SET e.flags = BIN_AND(e.flags, BIN_NOT(16)) WHERE e.id = :pe;
+      EXECUTE PROCEDURE t_damage(pe, pe, pe, 100000, 0, 34);
+    END
+  END
+  ELSE IF (cmd = 'give') THEN
+  BEGIN
+    IF (arg = '') THEN arg = 'all';
+    IF (arg NOT IN ('all', 'health', 'weapons', 'ammo', 'armor', 'keys')) THEN msg = 'unknown item ' || arg;
+    ELSE
+    BEGIN
+      IF (arg IN ('all', 'health')) THEN UPDATE ents e SET e.health = e.max_health WHERE e.id = :pe AND e.health < e.max_health;
+      IF (arg IN ('all', 'weapons')) THEN UPDATE player p SET p.weapons = 2047 WHERE p.id = 1;
+      IF (arg IN ('all', 'ammo')) THEN UPDATE player p SET p.bullets = p.max_bullets, p.shells = p.max_shells, p.rockets = p.max_rockets,
+             p.grenades = p.max_grenades, p.cells = p.max_cells, p.slugs = p.max_slugs WHERE p.id = 1;
+      IF (arg IN ('all', 'armor')) THEN UPDATE player p SET p.armor = 200, p.armor_type = 3 WHERE p.id = 1;     -- body armor, full
+      IF (arg IN ('all', 'keys')) THEN UPDATE player p SET p.keys = 511 WHERE p.id = 1;
+    END
+  END
+  ELSE msg = 'unknown command "' || cmd || '"';
+  IF (msg <> '') THEN EXECUTE PROCEDURE sprint(msg);
+  SUSPEND;
+END^
+
 CREATE OR ALTER PROCEDURE player_think (dt DOUBLE PRECISION, fwd DOUBLE PRECISION, side DOUBLE PRECISION,
   yaw_d DOUBLE PRECISION, pitch_d DOUBLE PRECISION, fire SMALLINT, jump SMALLINT, run SMALLINT, imp SMALLINT)
 AS
@@ -328,7 +383,7 @@ DECLARE tdm INTEGER; DECLARE tlt DOUBLE PRECISION;
 DECLARE afin DOUBLE PRECISION; DECLARE hp INTEGER; DECLARE deadt DOUBLE PRECISION; DECLARE oldz DOUBLE PRECISION; DECLARE w INTEGER;
 DECLARE enviro DOUBLE PRECISION; DECLARE breather DOUBLE PRECISION; DECLARE ndt DOUBLE PRECISION; DECLARE ddmg INTEGER; DECLARE mhp INTEGER;
 DECLARE grav DOUBLE PRECISION;
-DECLARE ppitch DOUBLE PRECISION; DECLARE pstepz DOUBLE PRECISION; DECLARE gtic INTEGER; DECLARE stepz2 DOUBLE PRECISION; DECLARE jr2 SMALLINT; DECLARE afin2 DOUBLE PRECISION; DECLARE ddmg2 INTEGER;
+DECLARE noclip SMALLINT; DECLARE ppitch DOUBLE PRECISION; DECLARE pstepz DOUBLE PRECISION; DECLARE gtic INTEGER; DECLARE stepz2 DOUBLE PRECISION; DECLARE jr2 SMALLINT; DECLARE afin2 DOUBLE PRECISION; DECLARE ddmg2 INTEGER;
 BEGIN
   -- (the player and ents rows are wide: what the think decides is written back once, at the end)
   SELECT p.ent_id, p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz
@@ -404,7 +459,7 @@ BEGIN
     END
   END
 
-  SELECT e.vx, e.vy, e.vz, e.flags FROM ents e WHERE e.id = :pe INTO vx, vy, vz, flags;
+  SELECT e.vx, e.vy, e.vz, e.flags, IIF(e.movetype = 2, 1, 0) FROM ents e WHERE e.id = :pe INTO vx, vy, vz, flags, noclip;
   onground = IIF(BIN_AND(flags, 512) <> 0, 1, 0);
   maxspd = IIF(run = 1, 300, 200);
 
@@ -500,7 +555,17 @@ BEGIN
   END
   -- gravity
   IF (onground = 0 AND wl < 2) THEN vz = vz - grav * dt;
-  IF (onground = 1 AND vx = 0 AND vy = 0 AND vz = 0 AND wl < 2 AND MOD(gtic, 10) <> 0) THEN
+  IF (noclip = 1) THEN
+  BEGIN
+    -- noclip (PM_SPECTATOR): fly where the view points, jump to rise, through everything
+    vx = (fwd * COS(yaw * 0.0174532925e0) * COS(pitch * 0.0174532925e0) + side * SIN(yaw * 0.0174532925e0)) * maxspd;
+    vy = (fwd * SIN(yaw * 0.0174532925e0) * COS(pitch * 0.0174532925e0) - side * COS(yaw * 0.0174532925e0)) * maxspd;
+    vz = (-fwd * SIN(pitch * 0.0174532925e0) + jump) * maxspd;
+    UPDATE ents e SET e.x = e.x + :vx * :dt, e.y = e.y + :vy * :dt, e.z = e.z + :vz * :dt, e.vx = :vx, e.vy = :vy, e.vz = :vz,
+           e.flags = BIN_AND(:flags, BIN_NOT(512)), e.yaw = :yaw WHERE e.id = :pe;
+    EXECUTE PROCEDURE link_ent(pe);
+  END
+  ELSE IF (onground = 1 AND vx = 0 AND vy = 0 AND vz = 0 AND wl < 2 AND MOD(gtic, 10) <> 0) THEN
   BEGIN
     -- standing still on the ground: nothing to move. The ground under us is re-checked twice a
     -- second (pmove traces for it every frame; a tenth of that keeps a vanished floor honest)
@@ -519,7 +584,9 @@ BEGIN
   -- smooth the view over steps
   stepz2 = IIF(BIN_AND(flags, 512) <> 0 AND pz - oldz > 0 AND pz - oldz <= 18, MINVALUE(pstepz + (pz - oldz), 18), MAXVALUE(0, pstepz - 160 * dt));
 
-  -- G_TouchTriggers: triggers and items whose box we are in
+  -- G_TouchTriggers: triggers and items whose box we are in (not in noclip, as in ClientThink)
+  IF (noclip = 0) THEN
+  BEGIN
   FOR SELECT e.id, e.classname FROM ents e
        WHERE e.solid = 1 AND e.id <> :pe
          AND e.x + e.maxx >= :px + :mnx AND e.x + e.minx <= :px + :mxx
@@ -586,6 +653,7 @@ BEGIN
     ELSE IF (tst = 0) THEN UPDATE ents e SET e.nextthink = e.ltime + 1 WHERE e.id = :tid AND e.think = 'plat_go_down';
   END
 
+  END
   UPDATE player p SET p.pitch = :pitch, p.punchangle = MINVALUE(0, p.punchangle + 10 * :dt), p.jump_released = :jr2, p.stepz = :stepz2,
          p.air_finished = COALESCE(:afin2, p.air_finished), p.drown_dmg = COALESCE(:ddmg2, p.drown_dmg) WHERE p.id = 1;
 

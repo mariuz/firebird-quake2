@@ -32,6 +32,7 @@ npm test               # SQL smoke test in Node against the real Firebird WASM e
 npm run test:base2     # the same on the Installation (demo2)
 npm run test:monsters  # every monster of the demo: spawned, it sees the player, attacks, and dies
 npm run test:save      # save, play on, load: the game comes back exactly and keeps running
+# in the page: ` opens the console (god, noclip, notarget, give …, kill, map …, save, load); F1 the help computer
 npm run serve          # http://localhost:8080/ — add -- --coi if your browser blocks service workers
 npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs demo1 --at=x,y,z,yaw)
 npm run bench          # where a tic and a frame spend their time

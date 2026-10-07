@@ -74,6 +74,7 @@ window.addEventListener('keydown', (e) => {
   if (anyKey && !e.repeat) { e.preventDefault(); const go = anyKey; anyKey = null; go(); return; }
   if (!running) return;
   if (e.code === 'F1') { e.preventDefault(); showHelp = !showHelp; if (last) helpSeen = last.HELP_CHANGED ?? 0; }
+  if (e.code === 'Backquote') { e.preventDefault(); openConsole(); return; }
   if (GAME_KEYS.has(e.code)) e.preventDefault();
   keys.add(e.code);
   if (e.code.startsWith('Digit')) impulse = e.code === 'Digit0' ? 10 : Number(e.code.slice(5));
@@ -83,6 +84,46 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'F6') { e.preventDefault(); saveGame(); }
   if (e.code === 'F9') { e.preventDefault(); loadGame(); }
 });
+
+// ── the console: Quake's commands on a line (backquote opens it, Enter runs, Escape closes) ─────────
+const cmdline = $('cmdline');
+function openConsole() {
+  document.exitPointerLock?.();
+  keys.clear();
+  cmdline.hidden = false;
+  cmdline.value = '';
+  cmdline.focus();
+}
+function closeConsole() {
+  cmdline.hidden = true;
+  canvas.focus();
+}
+cmdline.addEventListener('keydown', async (e) => {
+  if (e.key === 'Escape' || e.code === 'Backquote') { e.preventDefault(); closeConsole(); return; }
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const line = cmdline.value.trim();
+  closeConsole();
+  if (line) await runCommand(line);
+});
+async function runCommand(line) {
+  const [cmd, ...rest] = line.split(/\s+/);
+  const arg = rest.join(' ');
+  switch (cmd.toLowerCase()) {
+    case 'map': {
+      const name = arg.toLowerCase();
+      if (!pak.has(`maps/${name}.bsp`)) { setStatus(`no map "${name}" in this pak`, true); setTimeout(() => setStatus(''), 2500); return; }
+      await startMap(name, true);
+      return;
+    }
+    case 'save': return saveGame();
+    case 'load': return loadGame();
+    default:
+      if (!running) return;
+      try { await db.query('SELECT msg FROM player_command(?, ?)', [cmd, arg]); }
+      catch (err) { console.error(err); setStatus(`${cmd}: ${err.message}`, true); }
+  }
+}
 
 // ── saved games: the four game tables as JSON in localStorage (F6 saves, F9 loads) ─────────
 const SAVE_KEY = 'firebird-quake2:save:quick';

@@ -1627,8 +1627,10 @@ BEGIN
       UPDATE game g SET g.level_msg = :msg, g.sky = COALESCE(:sky, 'unit1_'), g.cd_track = COALESCE(:snds, 0), g.gravity = COALESCE(NULLIF(:grav, 0), 800) WHERE g.id = 1;
       CONTINUE;
     END
+    -- SpawnEntities: 256/512/1024 keep an entity out of easy/medium/hard (all three: deathmatch only);
+    -- 4096 (NOT_COOP) is ignored in single player, and the five filter bits are cleared once read
     IF (BIN_AND(sf, skillbit) <> 0) THEN CONTINUE;                 -- not on this skill
-    IF (BIN_AND(sf, 4096) <> 0) THEN CONTINUE;                     -- coop only
+    sf = BIN_AND(sf, BIN_NOT(7936));
     -- "angles" overrides "angle"
     IF (ay IS NOT NULL AND ang IS NULL) THEN ang = ay;
     IF (cls IN ('info_player_deathmatch', 'info_player_coop', 'info_player_intermission', 'func_group', 'point_combat')) THEN CONTINUE;

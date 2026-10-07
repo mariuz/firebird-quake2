@@ -89,6 +89,11 @@ short stories of what changed and what it measured; keep that.
   (`*` in the map string) stops at one. The map string is kept as written in `game.next_map` and
   parsed by `src/levels.js`, never in SQL.
 - Skill numbers are Quake's: 0 easy, 1 medium, 2 hard. The scripts load maps at skill 2 (hard).
+- Spawnflags 256/512/1024 keep an entity out of easy/medium/hard; an entity with all three (1792) is
+  deathmatch-only, and the demo maps have many (weapons, ammo, demo3's teleporter). Before calling
+  an entity "missing", check its spawnflags.
+- `IIF`/`CASE` over string literals of different lengths pads the shorter one with spaces: `TRIM`
+  the result when it is compared or shown.
 
 ## Browser testing
 
@@ -111,5 +116,5 @@ short stories of what changed and what it measured; keep that.
   save format (bump `SAVE_VERSION` if old saves must not load).
 - README and docs are updated in the same commit as the change they describe; the docs
   screenshots are regenerated with `npm run screenshots` when the painter changes visibly.
-- Attribution: end commit messages with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`
-  when an agent wrote them.
+- Attribution: when an agent wrote a commit, end its message with a `Co-Authored-By:` line naming
+  the model that wrote it (the session tells the agent which).

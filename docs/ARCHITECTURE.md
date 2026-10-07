@@ -149,7 +149,8 @@ level counts, water, powerups, the eye's leaf and cluster. Each tic:
    `trigger_hurt` and `trigger_monsterjump` on maps that have any.
 
 The rest of g_*.c lives here too: `spawn_map_ents(skill, spawnpoint)` is `SpawnEntities` with the
-skill and coop spawnflag filters and Quake's spawn-point selection (`info_player_start` with the
+skill spawnflag filter (256/512/1024 keep an entity out of easy/medium/hard; all three mark a deathmatch-only
+entity; 4096, not-in-coop, is ignored in single player) and Quake's spawn-point selection (`info_player_start` with the
 matching or absent targetname); triggers (once, multiple, relay, always, counter, key, push,
 hurt); `use_targets` is the big dispatcher for targets (speaker, explosion, splash, secret, goal,
 help, laser, lightramp, changelevel, and the unit's cross-level flags on
@@ -272,6 +273,11 @@ string the way `SV_Map` did (`src/levels.js`: `map$spawnpoint`, a leading `*`, `
 pictures shown in their own palette, `.cin` cinematics skipped) and loads the next map behind the
 loading plaque. `F1` toggles the help computer (`HelpComputer`): skill, level name, the two
 `target_help` messages and the counts; it is also drawn at the intermission.
+
+The console: the backquote opens a command line over the view. `map <name>`, `save` and `load` are
+the page's; the rest go to `player_command(cmd, arg)` (g_cmds.c: `god`, `notarget`, `noclip`, `give`,
+`kill`), which answers on the top-left message line. Noclip is movetype 2: `player_think` moves the
+player where the view points without tracing and skips the touches, as `ClientThink` did.
 
 Saved games (`src/savegame.js`): `F6` reads the four game tables (`game`, `player`, `ents`,
 `lightstyles`) as rows, with the column names from the result's field list and the model ids' names,
