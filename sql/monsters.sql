@@ -774,6 +774,7 @@ BEGIN
   ELSE IF (think = 'always_fire') THEN EXECUTE PROCEDURE always_fire(eid);
   ELSE IF (think = 'multi_wait') THEN EXECUTE PROCEDURE multi_wait(eid);
   ELSE IF (think = 'delayed_use') THEN EXECUTE PROCEDURE delayed_use(eid);
+  ELSE IF (think = 'crosslevel_think') THEN EXECUTE PROCEDURE crosslevel_think(eid);
   ELSE IF (think = 'grenade_explode') THEN EXECUTE PROCEDURE grenade_explode(eid);
   ELSE IF (think = 'bfg_think') THEN EXECUTE PROCEDURE bfg_think(eid);
   ELSE IF (think = 'laser_think') THEN EXECUTE PROCEDURE laser_think(eid);
@@ -900,10 +901,13 @@ BEGIN
   WHILE (i < 63) DO BEGIN INSERT INTO lightstyles (style, pattern) VALUES (:i, 'm'); i = i + 1; END
   INSERT INTO lightstyles (style, pattern) VALUES (63, 'a');
   IF (new_game = 1) THEN
+  BEGIN
+    UPDATE game g SET g.serverflags = 0 WHERE g.id = 1;     -- the unit starts over
     UPDATE player p SET p.armor = 0, p.armor_type = 0, p.power_armor = 0, p.bullets = 0, p.shells = 0, p.rockets = 0, p.grenades = 0, p.cells = 0, p.slugs = 0,
            p.max_bullets = 200, p.max_shells = 100, p.max_rockets = 50, p.max_grenades = 50, p.max_cells = 200, p.max_slugs = 50,
            p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
            p.silencer_shots = 0, p.kills = 0 WHERE p.id = 1;
+  END
   UPDATE player p SET p.weaponframe = 0, p.attack_finished = 0, p.attack_start = 0, p.pain_finished = 0, p.punchangle = 0, p.view_ofs = 22, p.dmg_take = 0, p.dmg_save = 0,
          p.dmg_time = -10, p.bonus_time = -10, p.msg = NULL, p.msg_time = 0, p.cprint = NULL, p.cprint_time = 0, p.dead_time = 0, p.pitch = 0, p.stepz = 0,
          p.jump_released = 1, p.air_finished = 12, p.dmg_lava_time = 0, p.next_drown_time = 0, p.drown_dmg = 2, p.weapon_sound = 0, p.machinegun_shots = 0,

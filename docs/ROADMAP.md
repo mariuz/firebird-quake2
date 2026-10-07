@@ -12,9 +12,12 @@ them.
   map, saving across a level change (the save is one map's tables; the unit's cross-level flags are
   below), and a save format version bump whenever `ents` or `player` gain columns (the format is the
   schema's column list, so old saves simply fail to load).
-- **Cross-level state.** `target_crosslevel_trigger` / `target_crosslevel_target` are recognised
-  at spawn but do nothing (`game.sql`). The demo's unit uses them for the second map's goals.
-  Needs a `cross_flags` column on `game` surviving `init_map`.
+- **Cross-level state**: done. `game.serverflags` holds the unit's eight flags across maps (a new
+  game clears them); a used `target_crosslevel_trigger` sets its spawnflags there and is spent; a
+  `target_crosslevel_target` looks once, after its delay, and fires its targets when every flag it
+  asks for is set (`crosslevel_think`). The smoke test exercises the pair and the level change. Left:
+  per-level state when returning to a map (Quake 2 keeps each level's entities in the unit's save;
+  here a revisited map spawns fresh, so the Installation's exit opens but its monsters are back).
 - **Area portals.** `func_areaportal` is ignored, so a closed door does not block visibility
   behind it (the PVS alone decides). Quake 2 keeps an area-connection matrix updated by doors;
   here it would be an `areas` table and an extra test in `mark_faces` and the entity pass.

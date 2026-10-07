@@ -99,7 +99,8 @@ and the pushed entities live in global temporary tables because PSQL has no arra
 the pushers (doors and their teams, rotating doors, plats, buttons, trains with path corners, rotating
 fans, timers), the thinks that are due, and the physics of everything that flies, bounces or falls.
 Triggers (once, multiple, relay, always, counter, key, push, hurt) and targets (speaker, explosion,
-splash, secret, goal, help, laser, changelevel with its `map$spawnpoint`) are g_trigger.c and g_target.c.
+splash, secret, goal, help, laser, changelevel with its `map$spawnpoint`, the unit's cross-level flags) are
+g_trigger.c and g_target.c.
 Items from stimpacks to the power shield, the ammo boxes, the keys and the timed powerups are
 g_items.c; the blaster, shotgun, super shotgun, machinegun, chaingun, hand grenades, grenade and rocket
 launchers, hyperblaster, railgun and BFG10K are p_weapon.c and g_weapon.c; armour, knockback, radius

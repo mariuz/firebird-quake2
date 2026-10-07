@@ -665,8 +665,29 @@ BEGIN
       IF (st = 1) THEN BEGIN UPDATE ents e SET e.mv_state = 2, e.alpha = 0 WHERE e.id = :t; EXECUTE PROCEDURE train_next(t); END
     END
     ELSE IF (tcls LIKE 'monster_%') THEN EXECUTE PROCEDURE monster_wake(t, activator);
-    ELSE IF (tcls IN ('info_null', 'info_notnull', 'path_corner', 'point_combat', 'func_areaportal', 'target_crosslevel_trigger', 'target_crosslevel_target')) THEN BEGIN END
+    ELSE IF (tcls = 'target_crosslevel_trigger') THEN
+    BEGIN
+      -- trigger_crosslevel_trigger_use: the flag is set for the rest of the unit; the trigger is spent
+      UPDATE game g SET g.serverflags = BIN_OR(g.serverflags, BIN_AND((SELECT e.spawnflags FROM ents e WHERE e.id = :t), 255)) WHERE g.id = 1;
+      DELETE FROM ents e WHERE e.id = :t;
+    END
+    ELSE IF (tcls IN ('info_null', 'info_notnull', 'path_corner', 'point_combat', 'func_areaportal', 'target_crosslevel_target')) THEN BEGIN END
     ELSE EXECUTE PROCEDURE use_targets(t, activator);               -- anything with a target of its own
+  END
+END^
+
+-- target_crosslevel_target_think: when every flag it asks for is set in the unit, fire its targets and go
+CREATE OR ALTER PROCEDURE crosslevel_think (eid INTEGER)
+AS
+DECLARE sf INTEGER; DECLARE flags INTEGER;
+BEGIN
+  SELECT BIN_AND(e.spawnflags, 255) FROM ents e WHERE e.id = :eid INTO sf;
+  IF (sf IS NULL) THEN EXIT;
+  SELECT g.serverflags FROM game g WHERE g.id = 1 INTO flags;
+  IF (BIN_AND(flags, sf) = sf) THEN
+  BEGIN
+    EXECUTE PROCEDURE use_targets(eid, eid);
+    DELETE FROM ents e WHERE e.id = :eid;
   END
 END^
 
@@ -1510,7 +1531,7 @@ BEGIN
     IF (BIN_AND(sf, 4096) <> 0) THEN CONTINUE;                     -- coop only
     -- "angles" overrides "angle"
     IF (ay IS NOT NULL AND ang IS NULL) THEN ang = ay;
-    IF (cls IN ('info_player_deathmatch', 'info_player_coop', 'info_player_intermission', 'func_group', 'func_areaportal', 'target_crosslevel_trigger', 'target_crosslevel_target', 'point_combat')) THEN CONTINUE;
+    IF (cls IN ('info_player_deathmatch', 'info_player_coop', 'info_player_intermission', 'func_group', 'func_areaportal', 'point_combat')) THEN CONTINUE;
     IF (cls = 'light') THEN
     BEGIN
       IF (tn IS NOT NULL AND tn <> '' AND sty IS NOT NULL AND sty >= 32) THEN
@@ -1708,6 +1729,12 @@ BEGIN
       UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.speed = IIF(COALESCE(:vol, 0) = 0, 1, :vol), e.height = COALESCE(:attn, 1),
              e.sounds = IIF(BIN_AND(:sf, 1) <> 0, 1, 0), e.noise1 = IIF(POSITION('.', :noise) = 0, :noise || '.wav', :noise) WHERE e.id = :eid;
     END
+    ELSE IF (cls = 'target_crosslevel_trigger') THEN
+      -- used, it sets its spawnflags (SFL_CROSS_TRIGGER_1..8) in the unit's flags
+      UPDATE ents e SET e.solid = 0, e.model_id = NULL WHERE e.id = :eid;
+    ELSE IF (cls = 'target_crosslevel_target') THEN
+      -- looks at the unit's flags once, after its delay (a second by default)
+      UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.think = 'crosslevel_think', e.nextthink = IIF(COALESCE(:dl, 0) = 0, 1, :dl) WHERE e.id = :eid;
     ELSE IF (cls IN ('target_explosion', 'target_splash', 'target_secret', 'target_goal', 'target_help', 'target_lightramp', 'target_temp_entity', 'target_blaster', 'target_spawner')) THEN
     BEGIN
       UPDATE ents e SET e.solid = 0, e.model_id = NULL WHERE e.id = :eid;

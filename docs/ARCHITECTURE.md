@@ -150,7 +150,9 @@ The rest of g_*.c lives here too: `spawn_map_ents(skill, spawnpoint)` is `SpawnE
 skill and coop spawnflag filters and Quake's spawn-point selection (`info_player_start` with the
 matching or absent targetname); triggers (once, multiple, relay, always, counter, key, push,
 hurt); `use_targets` is the big dispatcher for targets (speaker, explosion, splash, secret, goal,
-help, laser, lightramp, changelevel with `map$spawnpoint`); items from stimpacks to the power
+help, laser, lightramp, changelevel with `map$spawnpoint`, and the unit's cross-level flags on
+`game.serverflags`: `target_crosslevel_trigger` sets them, `target_crosslevel_target` fires when they
+are set); items from stimpacks to the power
 shield, ammo, keys, timed powerups (g_items.c); the ten weapons (p_weapon.c, g_weapon.c:
 bullets with the 8192-unit spread, rail, blaster bolts, grenades with the held-grenade timing,
 rockets, hyperblaster, BFG with its think); `t_damage`, `t_radius_damage`, armour

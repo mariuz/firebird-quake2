@@ -130,6 +130,34 @@ const refs = [...new Set([...Object.values(sql).join('\n').matchAll(/'([a-z0-9_\
 const missing2 = refs.filter((n) => !pak.has('sound/' + n));
 assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing2.join(', ') || 'none missing'})`);
 
+// cross-level flags: a target waits for a flag, a trigger sets it, the flag survives a level change and not a new game
+{
+  const secrets0 = (await db.query('SELECT found_secrets s FROM game')).rows[0].S;
+  await db.query(`EXECUTE BLOCK AS DECLARE a INTEGER; DECLARE b INTEGER; DECLARE c INTEGER; DECLARE r INTEGER; BEGIN
+    EXECUTE PROCEDURE spawn_ent('target_secret', 0, 0, 0) RETURNING_VALUES c;
+    UPDATE ents e SET e.solid = 0, e.targetname = 'xl_fire' WHERE e.id = :c;
+    EXECUTE PROCEDURE spawn_ent('target_crosslevel_target', 0, 0, 0) RETURNING_VALUES b;
+    UPDATE ents e SET e.solid = 0, e.spawnflags = 2, e.target = 'xl_fire', e.targetname = 'xl_target', e.think = 'crosslevel_think', e.nextthink = now_() + 0.2e0 WHERE e.id = :b;
+    EXECUTE PROCEDURE spawn_ent('target_crosslevel_trigger', 0, 0, 0) RETURNING_VALUES a;
+    UPDATE ents e SET e.solid = 0, e.spawnflags = 2, e.targetname = 'xl_set' WHERE e.id = :a;
+    EXECUTE PROCEDURE spawn_ent('trigger_relay', 0, 0, 0) RETURNING_VALUES r;
+    UPDATE ents e SET e.solid = 0, e.target = 'xl_set', e.targetname = 'xl_relay' WHERE e.id = :r;
+  END`);
+  for (let i = 0; i < 8; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  assert((await db.query('SELECT found_secrets s FROM game')).rows[0].S === secrets0, 'a crosslevel target waits while its flag is unset');
+  assert((await db.query("SELECT COUNT(*) n FROM ents WHERE targetname = 'xl_target'")).rows[0].N === 1, '... and stays');
+  await db.query("EXECUTE BLOCK AS DECLARE r INTEGER; BEGIN SELECT e.id FROM ents e WHERE e.targetname = 'xl_relay' INTO r; EXECUTE PROCEDURE use_targets(r, player_ent()); END");
+  assert((await db.query('SELECT serverflags f FROM game')).rows[0].F === 2, 'using a crosslevel trigger sets its flag in the unit');
+  assert((await db.query("SELECT COUNT(*) n FROM ents WHERE classname = 'target_crosslevel_trigger'")).rows[0].N === 0, '... and the trigger is spent');
+  await db.query("EXECUTE BLOCK AS DECLARE b INTEGER; BEGIN SELECT e.id FROM ents e WHERE e.targetname = 'xl_target' INTO b; UPDATE ents e SET e.think = 'crosslevel_think', e.nextthink = now_() + 0.1e0 WHERE e.id = :b; END");
+  for (let i = 0; i < 4; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  assert((await db.query('SELECT found_secrets s FROM game')).rows[0].S === secrets0 + 1, 'with the flag set, the target fires its targets');
+  await loadMap(db, pak, res, mapName, { skill: 2, newGame: false });
+  assert((await db.query('SELECT serverflags f FROM game')).rows[0].F === 2, 'the flag survives a level change');
+  await loadMap(db, pak, res, mapName, { skill: 2, newGame: true });
+  assert((await db.query('SELECT serverflags f FROM game')).rows[0].F === 0, 'a new game clears the unit');
+}
+
 await db.close();
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);
