@@ -560,7 +560,7 @@ DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PREC
 DECLARE mnx DOUBLE PRECISION; DECLARE mny DOUBLE PRECISION; DECLARE mnz DOUBLE PRECISION;
 DECLARE mxx DOUBLE PRECISION; DECLARE mxy DOUBLE PRECISION; DECLARE mxz DOUBLE PRECISION;
 DECLARE lf INTEGER; DECLARE cl INTEGER; DECLARE c2 INTEGER; DECLARE lf2 INTEGER; DECLARE oldleaf INTEGER;
-DECLARE lst VARCHAR(200) CHARACTER SET ASCII;
+DECLARE ca INTEGER; DECLARE cb INTEGER;
 DECLARE i INTEGER;
 BEGIN
   SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz, e.leaf FROM ents e WHERE e.id = :eid
@@ -582,19 +582,18 @@ BEGIN
   ELSE
     SELECT l.cluster FROM leaves l WHERE l.id = :lf INTO cl;
   cl = COALESCE(cl, -1);
-  lst = ',' || IIF(cl >= 0, cl || ',', '');
   -- two opposite corners of the box (enough for the PVS test; Quake walks the tree)
+  ca = NULL; cb = NULL;
   i = 0;
   WHILE (i < 4) DO
   BEGIN
     c2 = NULL;
     lf2 = point_leaf(px + IIF(i = 0, mnx, mxx), py + IIF(i = 0, mny, mxy), pz + IIF(i = 0, mnz, mxz));
     SELECT l.cluster FROM leaves l WHERE l.id = :lf2 INTO c2;
-    IF (c2 >= 0 AND POSITION(',' || c2 || ',', lst) = 0 AND CHAR_LENGTH(lst) < 180) THEN lst = lst || c2 || ',';
+    IF (c2 >= 0 AND c2 <> cl AND c2 IS DISTINCT FROM ca) THEN BEGIN IF (ca IS NULL) THEN ca = c2; ELSE cb = c2; END
     i = i + 3;
   END
-  IF (lst = ',') THEN lst = NULL;
-  UPDATE ents e SET e.leaf = :lf, e.cluster = :cl, e.clusters = :lst, e.lx = :px, e.ly = :py, e.lz = :pz, e.vis_cl = NULL WHERE e.id = :eid;
+  UPDATE ents e SET e.leaf = :lf, e.cluster = :cl, e.cl2 = :ca, e.cl3 = :cb, e.lx = :px, e.ly = :py, e.lz = :pz, e.vis_cl = NULL WHERE e.id = :eid;
 END^
 
 -- SV_LinkEdict: relink an entity that moved since its last link

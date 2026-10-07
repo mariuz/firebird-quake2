@@ -48,6 +48,7 @@ CREATE TABLE viewcfg (
   lv_fx DOUBLE PRECISION, lv_fy DOUBLE PRECISION, lv_fz DOUBLE PRECISION,
   lv_ux DOUBLE PRECISION, lv_uy DOUBLE PRECISION, lv_uz DOUBLE PRECISION,
   lv_leaf INTEGER,                     -- the eye's leaf at lv_ex/ey/ez (no tree walk while the eye stands)
+  view_stamp INTEGER DEFAULT 0 NOT NULL, -- counts the frames on which the view changed
   world_lst BLOB SUB_TYPE TEXT CHARACTER SET ASCII
 );
 
@@ -79,7 +80,8 @@ CREATE TABLE anims (
 
 CREATE TABLE lightstyles (
   style   INTEGER NOT NULL PRIMARY KEY,
-  pattern VARCHAR(64) NOT NULL          -- 'a' dark … 'm' normal … 'z' double
+  pattern VARCHAR(64) NOT NULL,         -- 'a' dark … 'm' normal … 'z' double
+  base_pattern VARCHAR(64)              -- the pattern at map start (the page holds those; the frame lists what differs)
 );
 
 -- ── map geometry ─────────────────────────────────────────────────────────
@@ -304,12 +306,15 @@ CREATE TABLE ents (
   -- placement
   leaf       INTEGER,                      -- leaf of the origin
   cluster    INTEGER,
-  clusters   VARCHAR(200) CHARACTER SET ASCII,   -- ',' separated clusters the box touches
+  cl2        INTEGER, cl3 INTEGER,           -- further clusters the box touches (its corners), if any
   lx DOUBLE PRECISION, ly DOUBLE PRECISION, lz DOUBLE PRECISION,   -- where it was last linked
   mkind      CHAR(1),                      -- the model's kind (B bsp, M md2, S sp2), copied in by set_model
   mradius    DOUBLE PRECISION DEFAULT 0 NOT NULL,   -- ... and its bounding radius
   vis_cl     INTEGER,                      -- brush models: the view cluster VIS was decided for
   vis        SMALLINT,                     -- ... and whether the model is in that cluster's PVS
+  fl_stamp   INTEGER,                      -- brush models: the view stamp and pose FACES_LST was made for ...
+  fl_x DOUBLE PRECISION, fl_y DOUBLE PRECISION, fl_z DOUBLE PRECISION, fl_p DOUBLE PRECISION, fl_yaw DOUBLE PRECISION, fl_r DOUBLE PRECISION,
+  faces_lst  BLOB SUB_TYPE TEXT CHARACTER SET ASCII,   -- ... and the model's visible faces for them
   waterlevel SMALLINT DEFAULT 0 NOT NULL,
   watertype  INTEGER DEFAULT 0 NOT NULL,
   ltime      DOUBLE PRECISION DEFAULT 0 NOT NULL,

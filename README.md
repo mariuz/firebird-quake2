@@ -163,8 +163,11 @@ text). New here:
   while only the view turns. The frustum tests themselves lost a third of their arithmetic: (c − e)·f is
   c·f − e·f, and e·f is a constant of the frame, not of the row. The entity row carries its model's kind
   and radius so the frame never joins `models`; the light-style list names only the styles that animate
-  or that the map switches, the page holds the resting values. Frame query, view held: 6.3 → 3.6 ms;
-  turning: 3.5 → 2.6 ms.
+  or that the map switches, the page holds the resting values. A brush model is tested against the frustum
+  as a whole before its faces are, and its face list is kept on its row while the view holds and it does
+  not move. An entity's clusters are three integer columns rather than a string, so the alias entities'
+  PVS test is an expression of the cursor on the eye's leaf row, like the frustum tests: only the
+  entities drawn reach PSQL at all. Frame query, view held: 6.3 → 1.6 ms; turning: 3.5 → 2.3 ms.
 - **Count the calls before timing the bodies.** A tic was making 43 tree descents, three per leaf
   lookup: a function in a `WHERE` clause (`WHERE l.id = point_leaf(…)`) is evaluated three times, for the
   index probe, the predicate and the fetch. Assigning it to a variable first made it one. And six
@@ -202,7 +205,7 @@ text). New here:
 
 With all that, an idle tic on the Outer Base at medium skill (31 monsters, 14 of them patrolling) costs
 about 3 ms in Node (about 5.5 with the player walking), down from 40 at first and 20 after the first round;
-the frame's query 2.6 ms turning and 3.6 ms with the view held, down from about 18 for the six queries it began as.
+the frame's query 2.3 ms turning and 1.6 ms with the view held, down from about 18 for the six queries it began as.
 
 ## Licence
 

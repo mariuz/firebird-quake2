@@ -84,24 +84,16 @@ CREATE GLOBAL TEMPORARY TABLE sel_faces (
 
 SET TERM ^ ;
 
--- Is any cluster of a ',' separated list in the PVS?
-CREATE OR ALTER FUNCTION clusters_visible (pvs VARCHAR(2048) CHARACTER SET ASCII, clusters VARCHAR(200) CHARACTER SET ASCII, cluster INTEGER)
+-- Is any of an entity's clusters in the PVS? (none at all, e.g. a fan whose probes fell in solid: yes)
+CREATE OR ALTER FUNCTION clusters_visible (pvs VARCHAR(2048) CHARACTER SET ASCII, c1 INTEGER, c2 INTEGER, c3 INTEGER)
 RETURNS SMALLINT
 AS
-DECLARE p INTEGER; DECLARE q INTEGER; DECLARE c INTEGER;
 BEGIN
   IF (pvs IS NULL OR pvs = '') THEN RETURN 1;
-  IF (clusters IS NULL) THEN RETURN IIF(cluster IS NULL OR cluster < 0, 1, pvs_visible(pvs, cluster));
-  IF (POSITION(',', clusters, 2) = CHAR_LENGTH(clusters)) THEN RETURN pvs_visible(pvs, CAST(SUBSTRING(clusters FROM 2 FOR CHAR_LENGTH(clusters) - 2) AS INTEGER));   -- one cluster
-  p = 2;
-  WHILE (p <= CHAR_LENGTH(clusters)) DO
-  BEGIN
-    q = POSITION(',', clusters, p);
-    IF (q = 0) THEN LEAVE;
-    c = CAST(SUBSTRING(clusters FROM p FOR q - p) AS INTEGER);
-    IF (pvs_visible(pvs, c) = 1) THEN RETURN 1;
-    p = q + 1;
-  END
+  IF ((c1 IS NULL OR c1 < 0) AND c2 IS NULL AND c3 IS NULL) THEN RETURN 1;
+  IF (pvs_visible(pvs, c1) = 1) THEN RETURN 1;
+  IF (c2 IS NOT NULL AND pvs_visible(pvs, c2) = 1) THEN RETURN 1;
+  IF (c3 IS NOT NULL AND pvs_visible(pvs, c3) = 1) THEN RETURN 1;
   RETURN 0;
 END^
 
@@ -141,7 +133,7 @@ DECLARE kx DOUBLE PRECISION; DECLARE ky DOUBLE PRECISION; DECLARE pvs VARCHAR(20
 DECLARE hw DOUBLE PRECISION; DECLARE hh DOUBLE PRECISION; DECLARE qx DOUBLE PRECISION; DECLARE qy DOUBLE PRECISION; DECLARE world INTEGER;
 DECLARE vseq INTEGER; DECLARE eid INTEGER; DECLARE fid INTEGER; DECLARE cur INTEGER; DECLARE curent INTEGER;
 DECLARE emid INTEGER; DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
-DECLARE cls VARCHAR(200) CHARACTER SET ASCII; DECLARE cl INTEGER; DECLARE ep DOUBLE PRECISION; DECLARE eyaw DOUBLE PRECISION; DECLARE er DOUBLE PRECISION;
+DECLARE c2 INTEGER; DECLARE c3 INTEGER; DECLARE cl INTEGER; DECLARE ep DOUBLE PRECISION; DECLARE eyaw DOUBLE PRECISION; DECLARE er DOUBLE PRECISION;
 DECLARE m00 DOUBLE PRECISION; DECLARE m01 DOUBLE PRECISION; DECLARE m02 DOUBLE PRECISION;
 DECLARE m10 DOUBLE PRECISION; DECLARE m11 DOUBLE PRECISION; DECLARE m12 DOUBLE PRECISION;
 DECLARE m20 DOUBLE PRECISION; DECLARE m21 DOUBLE PRECISION; DECLARE m22 DOUBLE PRECISION;
@@ -163,13 +155,13 @@ BEGIN
      AND ABS((v.cx - :ex) * :ux + (v.cy - :ey) * :uy + (v.cz - :ez) * :uz)
          <= ((v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz) * :ky + v.radius * :qy;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
-  FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.clusters, e.cluster, e.pitch, e.yaw, e.roll
-        FROM ents e JOIN models m ON m.id = e.model_id
-       WHERE m.kind = 'B' AND e.model_id <> :world AND e.solid <> 1
-        INTO eid, emid, ox, oy, oz, cls, cl, ep, eyaw, er
+  FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.cluster, e.cl2, e.cl3, e.pitch, e.yaw, e.roll
+        FROM ents e
+       WHERE e.mkind = 'B' AND e.model_id <> :world AND e.solid <> 1
+        INTO eid, emid, ox, oy, oz, cl, c2, c3, ep, eyaw, er
   DO
   BEGIN
-    IF (clusters_visible(pvs, cls, cl) = 0) THEN CONTINUE;
+    IF (clusters_visible(pvs, cl, c2, c3) = 0) THEN CONTINUE;
     IF (ep = 0 AND eyaw = 0 AND er = 0) THEN
       INSERT INTO sel_faces (face, ent_id, ox, oy, oz)
       SELECT f.id, :eid, :ox, :oy, :oz FROM faces f
@@ -241,7 +233,7 @@ SET TERM ^ ;
 --   1 faces (i2 ent, d1..3 origin, lst the face ids)
 --   8 projected vertex, mode 1 only (i1 face, i2 seq, i3 ent, d1..7 vf vr vu sx sy s t)
 --   2 alias model or sprite (i1 id, i2 model, i3 frame, i4 skin, i5 effects, d1..6 pose, d7 alpha, d8 renderfx, s kind)
---   3 light styles that animate or that the map switches (lst as style:value pairs; the rest never change)
+--   3 light styles that animate or that the map has switched (lst as style:letter pairs; the rest hold their resting letter)
 --   4 sound after last_sound (i1 id, i2 ent, i3 chan, d1 vol, d2 attn, d3..5 at, s name)
 --   5 effect after last_fx (i1 id, i2 kind, i3 n, d1..6 at/to)
 --   6 brush-model pose (i1 ent, i2 frame, d1..3 angles)
@@ -259,10 +251,12 @@ DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PREC
 DECLARE w INTEGER; DECLARE h INTEGER; DECLARE sc DOUBLE PRECISION; DECLARE nearz DOUBLE PRECISION;
 DECLARE kx DOUBLE PRECISION; DECLARE ky DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE vcl INTEGER; DECLARE vleaf INTEGER;
 DECLARE qx DOUBLE PRECISION; DECLARE qy DOUBLE PRECISION; DECLARE world INTEGER; DECLARE pe INTEGER;
-DECLARE eid INTEGER; DECLARE emid INTEGER; DECLARE cls VARCHAR(200) CHARACTER SET ASCII; DECLARE cl INTEGER; DECLARE rot SMALLINT;
+DECLARE eid INTEGER; DECLARE emid INTEGER; DECLARE cl INTEGER; DECLARE c2 INTEGER; DECLARE c3 INTEGER; DECLARE rot SMALLINT;
 DECLARE vis SMALLINT; DECLARE vis_cl INTEGER;
 DECLARE alpha SMALLINT; DECLARE k CHAR(1); DECLARE rfx INTEGER;
 DECLARE ef DOUBLE PRECISION; DECLARE er DOUBLE PRECISION; DECLARE eu DOUBLE PRECISION;
+DECLARE stamp INTEGER; DECLARE held SMALLINT; DECLARE fl_stamp INTEGER; DECLARE pose_ok SMALLINT;
+DECLARE bcx DOUBLE PRECISION; DECLARE bcy DOUBLE PRECISION; DECLARE bcz DOUBLE PRECISION; DECLARE brad DOUBLE PRECISION; DECLARE bcf DOUBLE PRECISION;
 BEGIN
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
   pe = player_ent();
@@ -281,10 +275,13 @@ BEGIN
     EXECUTE PROCEDURE mark_faces(pvs, vcl);
     kind = 1; i2 = 0; d1 = 0; d2 = 0; d3 = 0;
     -- the world's list holds while the eye holds still: the last one is kept on viewcfg
-    SELECT c.world_lst FROM viewcfg c WHERE c.id = 1 AND c.lv_ex = :ex AND c.lv_ey = :ey AND c.lv_ez = :ez
-       AND c.lv_fx = :fx AND c.lv_fy = :fy AND c.lv_fz = :fz AND c.lv_ux = :ux AND c.lv_uy = :uy AND c.lv_uz = :uz INTO lst;
+    SELECT c.view_stamp, IIF(c.lv_ex = :ex AND c.lv_ey = :ey AND c.lv_ez = :ez
+       AND c.lv_fx = :fx AND c.lv_fy = :fy AND c.lv_fz = :fz AND c.lv_ux = :ux AND c.lv_uy = :uy AND c.lv_uz = :uz, c.world_lst, NULL)
+      FROM viewcfg c WHERE c.id = 1 INTO stamp, lst;
+    held = IIF(lst IS NULL, 0, 1);
     IF (lst IS NULL) THEN
     BEGIN
+      stamp = stamp + 1;
       SELECT LIST(v.face, ',')
         FROM vis_faces v
        WHERE v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
@@ -292,25 +289,39 @@ BEGIN
          AND ABS(v.cx * :ux + v.cy * :uy + v.cz * :uz - :eu) <= (v.cx * :fx + v.cy * :fy + v.cz * :fz - :ef) * :ky + v.radius * :qy
          AND v.cx * :fx + v.cy * :fy + v.cz * :fz - :ef + v.radius >= :nearz
         INTO lst;
-      UPDATE viewcfg c SET c.lv_ex = :ex, c.lv_ey = :ey, c.lv_ez = :ez, c.lv_fx = :fx, c.lv_fy = :fy, c.lv_fz = :fz, c.lv_ux = :ux, c.lv_uy = :uy, c.lv_uz = :uz, c.lv_leaf = :vleaf, c.world_lst = :lst WHERE c.id = 1;
+      UPDATE viewcfg c SET c.lv_ex = :ex, c.lv_ey = :ey, c.lv_ez = :ez, c.lv_fx = :fx, c.lv_fy = :fy, c.lv_fz = :fz, c.lv_ux = :ux, c.lv_uy = :uy, c.lv_uz = :uz, c.lv_leaf = :vleaf, c.world_lst = :lst, c.view_stamp = :stamp WHERE c.id = 1;
     END
     IF (lst IS NOT NULL) THEN SUSPEND;
 
     -- the brush-model entities in the PVS. Whether a model's clusters are in the PVS is decided
     -- once per view cluster and kept on the row until the model is relinked.
-    FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.clusters, e.cluster, IIF(e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0, 1, 0), e.vis_cl, e.vis
+    FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.cluster, e.cl2, e.cl3, IIF(e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0, 1, 0), e.vis_cl, e.vis,
+               IIF(e.fl_stamp = :stamp AND e.fl_x = e.x AND e.fl_y = e.y AND e.fl_z = e.z AND e.fl_p = e.pitch AND e.fl_yaw = e.yaw AND e.fl_r = e.roll, 1, 0), e.faces_lst,
+               e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2, (e.maxx - e.minx + e.maxy - e.miny + e.maxz - e.minz) / 2
           FROM ents e
          WHERE e.mkind = 'B' AND e.model_id <> :world AND e.solid <> 1
-          INTO eid, emid, d1, d2, d3, cls, cl, rot, vis_cl, vis
+          INTO eid, emid, d1, d2, d3, cl, c2, c3, rot, vis_cl, vis, pose_ok, lst, bcx, bcy, bcz, brad
     DO
     BEGIN
       IF (vis_cl IS DISTINCT FROM vcl OR vis IS NULL) THEN
       BEGIN
-        vis = clusters_visible(pvs, cls, cl);
+        vis = clusters_visible(pvs, cl, c2, c3);
         UPDATE ents e SET e.vis_cl = :vcl, e.vis = :vis WHERE e.id = :eid;
       END
       IF (vis = 0) THEN CONTINUE;
       i2 = eid;
+      -- the list made for this view and this pose (the view held, the model did not move): reuse it
+      IF (pose_ok = 1) THEN
+      BEGIN
+        IF (lst IS NOT NULL) THEN SUSPEND;
+        CONTINUE;
+      END
+      -- the whole model against the frustum first (a rotated one: a sphere about its origin wide enough for any angle)
+      IF (rot = 1) THEN BEGIN brad = brad + ABS(bcx - d1) + ABS(bcy - d2) + ABS(bcz - d3); bcx = d1; bcy = d2; bcz = d3; END
+      bcf = bcx * fx + bcy * fy + bcz * fz - ef;
+      IF (bcf + brad < nearz OR ABS(bcx * rx + bcy * ry + bcz * rz - er) > bcf * kx + brad * qx OR ABS(bcx * ux + bcy * uy + bcz * uz - eu) > bcf * ky + brad * qy) THEN lst = NULL;
+      ELSE
+      BEGIN
       -- the eye in the model's space: e - o
       d4 = (ex - d1) * fx + (ey - d2) * fy + (ez - d3) * fz; d5 = (ex - d1) * rx + (ey - d2) * ry + (ez - d3) * rz; d6 = (ex - d1) * ux + (ey - d2) * uy + (ez - d3) * uz;
       SELECT LIST(f.id, ',')
@@ -323,31 +334,41 @@ BEGIN
          AND f.cx * :fx + f.cy * :fy + f.cz * :fz - :d4 + f.radius >= :nearz))
         INTO lst;
       d4 = NULL; d5 = NULL; d6 = NULL;
+      END
+      -- a held view will ask for the same list next frame: keep it (a turning view would only pay for the write)
+      IF (held = 1) THEN
+        UPDATE ents e SET e.faces_lst = :lst, e.fl_stamp = :stamp, e.fl_x = e.x, e.fl_y = e.y, e.fl_z = e.z, e.fl_p = e.pitch, e.fl_yaw = e.yaw, e.fl_r = e.roll WHERE e.id = :eid;
       IF (lst IS NOT NULL) THEN SUSPEND;
     END
     lst = NULL;
   END
 
-  -- the alias models and sprites in the frustum and the PVS, with their pose. The frustum test
-  -- is in the WHERE clause so only the entities in view reach the PVS test; the sphere is the
-  -- model's radius plus a margin that covers any monster's box.
+  -- the alias models and sprites in the frustum and the PVS, with their pose. Both tests are
+  -- expressions of the cursor (the PVS one on the eye's leaf row, joined in), so only the
+  -- entities drawn reach PSQL; the sphere is the model's radius plus a margin for any monster's box.
   kind = 2;
-  FOR SELECT e.id, e.model_id, e.frame, e.skin, e.effects, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.alpha, e.renderfx, e.mkind, e.cluster, e.clusters
-        FROM ents e
-       WHERE e.mkind IN ('M', 'S') AND e.id <> :pe
+  FOR SELECT e.id, e.model_id, e.frame, e.skin, e.effects, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.alpha, e.renderfx, e.mkind
+        FROM ents e CROSS JOIN leaves l
+       WHERE l.id = :vleaf AND e.mkind IN ('M', 'S') AND e.id <> :pe
          AND e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64 >= :nearz
          AND ABS(e.x * :rx + e.y * :ry + e.z * :rz - :er) <= (e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64) * :kx + e.mradius + 64
-        INTO i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, alpha, rfx, k, cl, cls
+         AND ABS(e.x * :ux + e.y * :uy + e.z * :uz - :eu) <= (e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64) * :ky + e.mradius + 64
+         AND (l.pvs = ''
+              OR ((e.cluster IS NULL OR e.cluster < 0) AND e.cl2 IS NULL AND e.cl3 IS NULL)
+              OR (e.cluster >= 0 AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cluster, 3))) <> 0)
+              OR (e.cl2 IS NOT NULL AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cl2, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cl2, 3))) <> 0)
+              OR (e.cl3 IS NOT NULL AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cl3, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cl3, 3))) <> 0))
+        INTO i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, alpha, rfx, k
   DO
   BEGIN
-    IF (clusters_visible(pvs, cls, COALESCE(cl, (SELECT l.cluster FROM leaves l WHERE l.id = point_leaf(:d1, :d2, :d3)))) = 0) THEN CONTINUE;
     d7 = alpha; d8 = rfx; s = k;
     SUSPEND;
   END
   kind = 3; i1 = NULL; i2 = NULL; i3 = NULL; i4 = NULL; i5 = NULL; d1 = NULL; d2 = NULL; d3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL; d7 = NULL; d8 = NULL; s = NULL;
-  -- only the styles that move or that the map switches; the page holds the constant ones
-  SELECT LIST(s.style || ':' || ((ASCII_VAL(SUBSTRING(s.pattern FROM 1 + MOD(CAST(FLOOR(g.time_ * 10) AS INTEGER), CHAR_LENGTH(s.pattern)) FOR 1)) - 97) / 12.5e0), ',')
-    FROM lightstyles s CROSS JOIN game g WHERE g.id = 1 AND (CHAR_LENGTH(s.pattern) > 1 OR s.style >= 32) INTO lst;
+  -- only the styles that animate or that the map has switched since it started (the page holds the resting
+  -- letters): style:letter pairs, 'a' dark … 'm' normal … 'z' double
+  SELECT LIST(s.style || ':' || SUBSTRING(s.pattern FROM 1 + MOD(CAST(FLOOR(g.time_ * 10) AS INTEGER), CHAR_LENGTH(s.pattern)) FOR 1), ',')
+    FROM lightstyles s CROSS JOIN game g WHERE g.id = 1 AND (CHAR_LENGTH(s.pattern) > 1 OR s.pattern IS DISTINCT FROM s.base_pattern) INTO lst;
   SUSPEND;
   lst = NULL;
   kind = 4;
