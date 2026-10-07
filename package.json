@@ -20,7 +20,8 @@
     "bench:calls": "node scripts/call-counts.mjs",
     "bench:ab": "node scripts/ab-bench.mjs",
     "test:save": "node scripts/save-test.mjs",
-    "test:base3": "node scripts/sql-smoke.mjs demo3"
+    "test:base3": "node scripts/sql-smoke.mjs demo3",
+    "test:menu": "node scripts/menu-test.mjs"
   },
   "license": "MIT",
   "dependencies": {

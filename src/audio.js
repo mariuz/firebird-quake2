@@ -74,6 +74,9 @@ export class Q2Audio {
     return { gain, pan };
   }
 
+  /** S_StartLocalSound: a sound at full volume from nowhere in the world (the menus' clicks). */
+  playLocal(name) { this.playEvents([[0, 0, null, 0, name, 1, 0, null, null, null]], this.listener); }
+
   async playEvents(rows, listener) {
     this.listener = listener;
     if (!this.ctx) return;

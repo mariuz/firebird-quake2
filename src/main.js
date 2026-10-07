@@ -17,6 +17,7 @@ import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMap, setView } from './loader.js';
 import { Renderer, lightPoint } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
+import { Menu, saveComment } from './menu.js';
 import { exportSave, importSave } from './savegame.js';
 import { parseChangeMap } from './levels.js';
 import { Q2Audio } from './audio.js';
@@ -39,7 +40,8 @@ let lastFxId = 0;
 let frameNo = 0;
 let beams = [];          // [{ a, b, color, until }]
 let explosions = [];     // [{ x, y, z, t0, spr }]
-const settings = { map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90, renderer: 'fast', brightness: 1.4, alwaysRun: true };
+const settings = { map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90, renderer: 'fast', brightness: 1.4, alwaysRun: true,
+  sensitivity: 7, invertMouse: false, crosshair: 1 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('firebird-quake2:settings') || '{}')); } catch { /* defaults */ }
 const saveSettings = () => { try { localStorage.setItem('firebird-quake2:settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 const viewWidth = () => (settings.detail === 'high' ? 320 : 160);
@@ -75,7 +77,14 @@ let helpSeen = 0;       // the help_changed count the player has looked at
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (anyKey && !e.repeat) { e.preventDefault(); const go = anyKey; anyKey = null; go(); return; }
+  if (menu.active) { e.preventDefault(); menu.key(e.code); return; }
+  // default.cfg: F2 the save menu, F3 the load menu, F10 quit; Escape puts the help computer or the
+  // inventory away (cmd putaway), else brings up the main menu
+  if (e.code === 'F3') { e.preventDefault(); openMenu(() => menu.loadMenu()); return; }
   if (!running) return;
+  if (e.code === 'F2') { e.preventDefault(); openMenu(() => menu.saveMenu()); return; }
+  if (e.code === 'F10') { e.preventDefault(); openMenu(() => menu.quitMenu()); return; }
+  if (e.code === 'Escape') { e.preventDefault(); escape(); return; }
   if (e.code === 'F1') { e.preventDefault(); showHelp = !showHelp; showInv = false; if (last) helpSeen = last.HELP_CHANGED ?? 0; }
   if (e.code === 'Tab') { e.preventDefault(); showInv = !showInv; showHelp = false; }         // inven
   if (e.code === 'Backquote') { e.preventDefault(); openConsole(); return; }
@@ -95,10 +104,72 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'F9') { e.preventDefault(); loadGame(); }
 });
 
+// ── the menus (src/menu.js): up, the game is paused (M_PushMenu sets "paused" in single player) ──────
+let quietUnlock = false;   // the page let the pointer go itself: no menu for that
+function openMenu(push) {
+  keys.clear();
+  push();
+  if (menu.active && document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
+}
+function escape() {
+  if (showHelp || showInv) { showHelp = false; showInv = false; return; }
+  openMenu(() => menu.main());
+}
+// the browser takes Escape to free the mouse, so the page sees the pointer go instead
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement) return;
+  if (quietUnlock) { quietUnlock = false; return; }
+  if (running && !menu.active && !anyKey && cmdline.hidden) escape();
+});
+const SLOT_KEY = (i) => `firebird-quake2:save:save${i}`;
+const menu = new Menu({
+  get hud() { return hud; },
+  playing: () => running && !!map,
+  newGame: (skill) => {
+    settings.skill = skill; $('skill').value = String(skill); saveSettings();
+    startMap(pak.has('maps/demo1.bsp') ? 'demo1' : 'base1', true).catch((err) => setStatus(err.message, true));
+  },
+  slots: () => Array.from({ length: 15 }, (_, i) => {
+    try {
+      const s = JSON.parse(localStorage.getItem(SLOT_KEY(i)) ?? 'null');
+      return s ? { valid: true, name: s.comment ?? s.map } : { valid: false };
+    } catch { return { valid: false }; }
+  }),
+  loadSlot: (i) => loadGame(SLOT_KEY(i)),
+  saveSlot: (i) => saveGame(SLOT_KEY(i)),
+  get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : settings[k]),
+  set: (k, v) => setSetting(k, v),
+  resetDefaults: () => { for (const [k, v] of Object.entries({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1 })) setSetting(k, v); },
+  resetVideo: () => { for (const [k, v] of Object.entries({ renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false })) setSetting(k, v); },
+  console: () => openConsole(),
+  quit: () => quitGame(),
+  sound: (name) => audio.playLocal(name),
+});
+/** A setting changed from a menu: through the page's own control where there is one, so both agree. */
+function setSetting(k, v) {
+  const control = { sfx: ['sfxvol', 'input'], musicMode: ['music', 'change'], alwaysRun: ['run', 'change'], renderer: ['renderer', 'change'],
+    detail: ['detail', 'change'], brightness: ['brightness', 'change'] }[k];
+  if (control) {
+    const el = $(control[0]);
+    el.value = k === 'alwaysRun' ? (v ? '1' : '0') : String(v);
+    el.dispatchEvent(new Event(control[1]));
+  } else if (k === 'fullscreen') {
+    if (v && !document.fullscreenElement) canvas.requestFullscreen?.().catch(() => {});
+    else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  } else { settings[k] = v; saveSettings(); }
+}
+/** Quit: the game stops; a key or a click starts a new one. */
+function quitGame() {
+  running = false;
+  audio.stopSpeakers?.();
+  setStatus('Quit. Press a key or click the view for a new game.');
+  anyKey = () => { setStatus(''); endGame(); };
+}
+
 // ── the console: Quake's commands on a line (backquote opens it, Enter runs, Escape closes) ─────────
 const cmdline = $('cmdline');
 function openConsole() {
-  document.exitPointerLock?.();
+  if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
   keys.clear();
   cmdline.hidden = false;
   cmdline.value = '';
@@ -138,23 +209,35 @@ async function runCommand(line) {
 
 // ── saved games: the four game tables as JSON in localStorage (F6 saves, F9 loads) ─────────
 const SAVE_KEY = 'firebird-quake2:save:quick';
-async function saveGame() {
+/** The save's comment: the level's name (the worldspawn message) after "ENTERING " or the time. */
+async function levelName() {
+  const g = (await db.query('SELECT level_msg FROM game')).rows[0];
+  return (g?.LEVEL_MSG ?? '').trim() || map.name;
+}
+async function writeSave(key, autosave) {
+  const save = await exportSave(db, map.name);
+  save.comment = saveComment(await levelName(), autosave);
+  const json = JSON.stringify(save);
+  localStorage.setItem(key, json);
+  return json.length;
+}
+async function saveGame(key = SAVE_KEY) {
   if (!running || !map) return;
+  if (last?.DEAD) { setStatus("Can't savegame while dead!", true); setTimeout(() => setStatus(''), 2000); return; }
   try {
-    const save = await exportSave(db, map.name);
-    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
-    setStatus(`Game saved (${map.name}, ${(JSON.stringify(save).length / 1024).toFixed(0)} KB)`);
+    const size = await writeSave(key, false);
+    setStatus(`Game saved (${map.name}, ${(size / 1024).toFixed(0)} KB)`);
     setTimeout(() => { if (statusEl.textContent.startsWith('Game saved')) setStatus(''); }, 2000);
   } catch (err) { console.error(err); setStatus(`Save failed: ${err.message}`, true); }
 }
-async function loadGame() {
+async function loadGame(key = SAVE_KEY) {
   let save;
-  try { save = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null'); } catch { save = null; }
+  try { save = JSON.parse(localStorage.getItem(key) ?? 'null'); } catch { save = null; }
   if (!save) { setStatus('No saved game', true); setTimeout(() => setStatus(''), 2000); return; }
   if (!pak.has(`maps/${save.map}.bsp`)) { setStatus(`The saved game is on ${save.map}, which is not in this pak`, true); return; }
   running = false;
   try {
-    await startMap(save.map, false);          // the map's geometry and models afresh, then the saved rows
+    await startMap(save.map, false, null, false);   // the map's geometry and models afresh, then the saved rows
     running = false;
     setStatus('Loading the saved game…');
     await importSave(db, save);
@@ -172,14 +255,14 @@ window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
 canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } });
 canvas.addEventListener('click', () => {
-  if (running && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});
+  if (running && !menu.active && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});
 });
 canvas.addEventListener('mousedown', (e) => { if (document.pointerLockElement === canvas && e.button === 0) fireClick = true; });
 window.addEventListener('mouseup', () => { fireClick = false; });
 window.addEventListener('mousemove', (e) => {
   if (document.pointerLockElement === canvas) {
-    mouseYaw -= e.movementX * 0.15;
-    mousePitch += e.movementY * 0.15;
+    mouseYaw -= e.movementX * 0.022 * settings.sensitivity;
+    mousePitch += e.movementY * 0.022 * settings.sensitivity * (settings.invertMouse ? -1 : 1);
   }
 });
 window.addEventListener('wheel', () => { if (document.pointerLockElement === canvas) impulse = 12; });
@@ -241,8 +324,9 @@ function readInput(tics) {
 }
 
 // ── maps ─────────────────────────────────────────────────────────────────
-async function startMap(name, newGame, spawnpoint = null) {
+async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   running = false;
+  menu.off();
   showHelp = false;
   showInv = false;
   if (newGame) helpSeen = 0;
@@ -266,6 +350,9 @@ async function startMap(name, newGame, spawnpoint = null) {
   setStatus('');
   $('mapname').textContent = name;
   $('map').value = name;
+  if (autosave) {
+    try { await writeSave(SLOT_KEY(0), true); } catch (err) { console.warn('autosave:', err.message); }
+  }
   lastTic = performance.now();
   running = true;
 }
@@ -289,9 +376,10 @@ async function loadStyleBase() {
 const brushAngles = new Map();
 
 async function frame() {
-  if (!running || paused || document.hidden) {
+  if (!running || paused || document.hidden || menu.active) {
     lastTic = performance.now();
-    if (paused && renderer && last) { drawFrame(null, [], new Float32Array(64), last.TIME_); hud.drawCenter(renderer, 'paused', 80); renderer.present(); }
+    if (menu.active && renderer && last && !document.hidden) { drawFrame(null, [], new Float32Array(64), last.TIME_); menu.draw(renderer, performance.now()); renderer.present(); }
+    else if (paused && renderer && last) { drawFrame(null, [], new Float32Array(64), last.TIME_); hud.drawCenter(renderer, 'paused', 80); renderer.present(); }
     nextFrame();
     return;
   }
@@ -312,9 +400,8 @@ async function frame() {
       return;
     }
     if (last.EXIT_KIND === 3) {
-      await startMap(map.name, true);
-      nextFrame();
-      return;
+      await db.exec('UPDATE game SET exit_kind = 0 WHERE id = 1');
+      openMenu(() => menu.loadMenu());
     }
 
     t = performance.now();
@@ -481,12 +568,13 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   // help computer itself on F1 and at the intermission
   last.HELP_ICON = (last.HELP_CHANGED ?? 0) > helpSeen && Math.floor(time * 10) & 8;
   last.FOV = settings.fov;
+  last.CROSSHAIR = settings.crosshair;
   if (!last.INTERMISSION) hud.draw(r, last, time);
   if (showHelp || last.INTERMISSION) hud.drawHelp(r, last);
   else if (showInv && !last.DEAD) hud.drawInventory(r, invItems, last.INV_SEL, performance.now() / 1000);
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
   if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
-  if (last.DEAD) hud.drawCenter(r, 'You died\n\npress fire to restart', 60);
+  if (last.DEAD) hud.drawCenter(r, 'You died\n\npress fire', 60);
   // the palette blend: damage, bonus, powerups, water
   let tint = null;
   const since = time - last.DMG_TIME;
@@ -580,7 +668,7 @@ async function usePak(buffer, label) {
 async function boot() {
   try {
     db = await openDatabase();
-    window.quake2 = { db, audio, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
+    window.quake2 = { db, audio, menu, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));
     if (!resp.ok) throw new Error(`could not fetch pak0.pak (${resp.status}); pick a PAK file instead`);

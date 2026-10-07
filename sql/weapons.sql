@@ -546,9 +546,9 @@ BEGIN
 
   IF (dead = 1) THEN
   BEGIN
-    -- the body falls; the level restarts on fire or jump after a moment
+    -- the body falls; fire a second after dying is respawn(), which in single player brings up the load menu
     EXECUTE PROCEDURE toss_move(pe, dt);
-    IF (t > deadt + 1.5e0 AND (fire = 1 OR jump = 1)) THEN
+    IF (t > deadt + 1 AND fire = 1) THEN
       UPDATE game g SET g.exit_kind = 3 WHERE g.id = 1;
     UPDATE player p SET p.bobtime = 0, p.bob_z = 0, p.bob_pitch = 0, p.bob_roll = 0, p.ducked = 0 WHERE p.id = 1 AND (p.bob_z <> 0 OR p.bob_pitch <> 0 OR p.bob_roll <> 0 OR p.ducked <> 0);
     EXIT;

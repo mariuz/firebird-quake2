@@ -59,6 +59,10 @@ jobs:
       - name: Saved games
         run: npm run test:save
 
+      # The menus: keys, slots, settings, pictures
+      - name: The menus
+        run: npm run test:menu
+
       - name: Headless screenshots
         run: npm run screenshots
 

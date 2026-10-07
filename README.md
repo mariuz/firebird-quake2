@@ -144,7 +144,8 @@ are drawn with the lightmap value under the entity and Gouraud light from the ve
 against the near plane triangle by triangle; sprites are billboards; explosions, blood, blaster sparks
 and the rail trail are particles. The status bar comes from `pics/`.
 
-Saved games: `F6` saves and `F9` loads. A save is the four game tables (`game`, `player`, `ents`,
+Saved games: Escape brings up Quake 2's menus (`F2` save, `F3` load, `F10` quit), with fifteen slots and
+an autosave as each map starts; `F6` quick-saves and `F9` quick-loads. A save is the four game tables (`game`, `player`, `ents`,
 `lightstyles`) read out as rows and kept as JSON in the browser's `localStorage` (about 140 KB); a load
 reloads the map's geometry and puts the rows back, remapping model ids by name and restarting the entity
 id sequence above the highest saved id (`src/savegame.js`). It takes about a fifth of a second.

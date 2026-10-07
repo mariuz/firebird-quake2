@@ -15,7 +15,6 @@ export class Hud {
     this.anums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => pic(pak, `anum_${i}`));
     this.numMinus = pic(pak, 'num_minus');
     this.anumMinus = pic(pak, 'anum_minus');
-    this.crosshair = pic(pak, 'ch1');
   }
 
   pic(name) {
@@ -79,8 +78,9 @@ export class Hud {
     // STAT_HELPICON: news on the help computer, else the weapon in hand when the view's fov hides the gun
     if (hud.HELP_ICON) r.drawPic(this.pic('i_help'), x0 + 148, y2);
     else if (wp && hud.FOV > 91) r.drawPic(this.pic(wp.icon), x0 + 148, y2);
-    // crosshair
-    if (!hud.DEAD && this.crosshair) r.drawPic(this.crosshair, (w >> 1) - 4, ((h) >> 1) - 4);
+    // SCR_DrawCrosshair: ch1-ch3 by the crosshair setting, centred
+    const ch = hud.CROSSHAIR ? this.pic(`ch${hud.CROSSHAIR}`) : null;
+    if (!hud.DEAD && ch) r.drawPic(ch, (w - ch.w) >> 1, (h - ch.h) >> 1);
   }
 
   /**

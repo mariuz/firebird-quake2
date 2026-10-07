@@ -7,11 +7,13 @@ them.
 
 ## Playing the demo
 
-- **Save and load**: done as one quick slot (`F6` / `F9`, `src/savegame.js`, tested by
-  `scripts/save-test.mjs`). Left: several named slots and a load/save menu, autosave on entering a
-  map, saving across a level change (the save is one map's tables; the unit's cross-level flags are
-  below), and a save format version bump whenever `ents` or `player` gain columns (the format is the
-  schema's column list, so old saves simply fail to load).
+- **Save and load**: done as Quake 2 had them in single player: fifteen slots in the load and save menus
+  (`F3`, `F2`), save0 the autosave written as each map starts ("ENTERING Outer Base", as
+  `SV_GameMap_f` copied it), the others named with the time and the level as `SV_WriteServerFile` did,
+  plus the quick slot (`F6` / `F9`). Dying and pressing fire brings up the load menu (`respawn` in single
+  player). `src/savegame.js`, tested by `scripts/save-test.mjs`. Left: a save holds one map's tables, so
+  returning to a map spawns it fresh (below); a save made by an older schema loads with the new columns'
+  defaults, and one whose columns are gone fails (bump `SAVE_VERSION` when that matters).
 - **Cross-level state**: done. `game.serverflags` holds the unit's eight flags across maps (a new
   game clears them); a used `target_crosslevel_trigger` sets its spawnflags there and is spent; a
   `target_crosslevel_target` looks once, after its delay, and fires its targets when every flag it
@@ -119,8 +121,15 @@ them.
   selection, and an item's targets fire the first time it is touched even when it stays. Left: the
   silencer and the power shield have no key of their own here (`s` and `p` are the page's back and
   pause): the inventory or `use` reach them.
-- **HUD.** The status bar, centre prints, the help computer (`F1`) and the inventory (`TAB`) are in;
-  the score board and the menu system are not.
+- **HUD and menus**: done. The status bar, centre prints, the help computer (`F1`), the inventory
+  (`TAB`) and the menus (`src/menu.js`, from menu.c, qmenu.c and vid_menu.c): Escape (or the mouse let
+  go) brings up the main menu over the game, which pauses as single player did, faded by ref_soft's
+  stipple; the game menu starts a new game at a skill or opens the load and save menus; options and
+  video set the page's settings (effects volume, CD music, mouse speed, always run, invert mouse,
+  crosshair; driver = the renderer mode, video mode = the detail, brightness, fullscreen); quit shows the
+  quit picture. The score board is a deathmatch and coop screen (`Cmd_Score_f` returns in single player).
+  Left out: the credits (id's text), multiplayer (drawn greyed: there is no network), and the options
+  that mean nothing here (sound quality, lookspring, lookstrafe, free look, joystick, the key bindings).
 
 ## Rendering
 

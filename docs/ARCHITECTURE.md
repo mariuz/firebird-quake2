@@ -301,6 +301,15 @@ the page's; the rest go to `player_command(cmd, arg)` (g_cmds.c: `god`, `notarge
 `kill`), which answers on the top-left message line. Noclip is movetype 2: `player_think` moves the
 player where the view points without tracing and skips the touches, as `ClientThink` did.
 
+The menus (`src/menu.js`) are menu.c on qmenu.c: a stack of menus, each a draw and a key function; list
+menus are frameworks of actions, sliders, spin controls and separators laid out as qmenu laid them out
+(labels right-aligned before the column, values after it, the blinking cursor between), drawn into the
+frame after ref_soft's stippled fade. While one is up `frame()` repaints the last view under it and runs
+no tics. The page's `host` object gives the menus what they act on: new games, the save slots
+(`firebird-quake2:save:save0` … `save14` in `localStorage`, each with Quake 2's comment), and the
+settings, which go through the page's own controls so both agree. `scripts/menu-test.mjs` drives it
+headless.
+
 Saved games (`src/savegame.js`): `F6` reads the four game tables (`game`, `player`, `ents`,
 `lightstyles`) as rows, with the column names from the result's field list and the model ids' names,
 and keeps them as JSON in `localStorage`; `F9` reloads the map, empties the four tables, inserts the

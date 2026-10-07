@@ -24,12 +24,13 @@ node scripts/sql-check.mjs            # compile the SQL (run after every SQL edi
 npm test && npm run test:base2 && npm run test:base3   # smoke tests, demo1, demo2 and demo3 (~1 min each)
 npm run test:monsters                 # every monster: sees, attacks, dies
 npm run test:save                     # save, play on, load: the game comes back exactly
+npm run test:menu                     # the menus, headless: keys, slots, settings, pictures
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
 ```
 
-A change is done when: `sql-check` passes, the three smoke tests, the monsters test and the save test say `all good`,
+A change is done when: `sql-check` passes, the three smoke tests, the monsters, save and menu tests say `all good`,
 `screenshot.mjs --compare` reports `differ in 0 of 76800 pixels` on demo1 and demo2 (and the
 viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), the page runs
 in a real browser without console errors, and CI is green. Commit messages here are written as
@@ -120,6 +121,10 @@ short stories of what changed and what it measured; keep that.
   meaningless there. Read the tic / frame query / raster costs instead, or bring the tab to the
   front.
 - Nothing in the page needs sign-in or personal data; the only inputs are the pak and music files.
+- The dev server's bundle can be served from the browser's HTTP cache after a rebuild; reload with the
+  cache bypassed (or clear it) before believing a test of new page code. A hidden tab
+  (`document.visibilityState`) is throttled so hard that a load takes tens of seconds and screenshots
+  time out: judge timings in Node, check the page's state with JS.
 
 ## Conventions
 
