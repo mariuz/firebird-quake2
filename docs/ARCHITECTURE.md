@@ -161,7 +161,12 @@ hurt); `use_targets` is the big dispatcher for targets (speaker, explosion, spla
 help, laser, lightramp, changelevel, and the unit's cross-level flags on
 `game.serverflags`: `target_crosslevel_trigger` sets them, `target_crosslevel_target` fires when they
 are set); items from stimpacks to the power
-shield, ammo, keys, timed powerups (g_items.c); the ten weapons (p_weapon.c, g_weapon.c:
+shield, ammo, keys, timed powerups (g_items.c: `item_pickup` is the pickup functions, `item_touch` is
+`Touch_Item`); the inventory by itemlist index (`inv_count` reads a count from wherever the game keeps it:
+weapon bits, ammo, armour, key bits, the `inv_*` columns for powerups and power armour; `inv_select` and
+`inv_validate` move `inv_sel`; `use_item` is `Cmd_Use_f` with the use functions; `inv_impulse` takes
+impulses 13–21: invuse, invnext, invprev and the item keys; `inventory_list` is the inventory screen's rows);
+the ten weapons (p_weapon.c, g_weapon.c:
 bullets with the 8192-unit spread, rail, blaster bolts, grenades with the held-grenade timing,
 rockets, hyperblaster, BFG with its think); `t_damage`, `t_radius_damage` (to `findradius`'s radius, with `can_damage`'s five lines of sight), armour
 (`CheckArmor`, with energy damage less well stopped, power armour), knockback, gibs (g_combat.c,
@@ -256,8 +261,10 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   by sprites too. The view weapon is drawn after clearing the z-buffer, with a closer near plane.
 - **Particles and beams** are cl_fx.c's: explosions, blood, blaster sparks, the rail spiral,
   teleport fog, laser beams as particle lines.
-- **2D** (`src/hud.js`): the Quake 2 status bar layout from `pics/`, numbers, icons, the
-  crosshair, centre prints and the console font.
+- **2D** (`src/hud.js`): `single_statusbar` from `pics/` (health, ammo, armour flashing with power
+  armour, the selected item; the pickup's icon and name, the powerup timer, the help icon), the
+  crosshair, centre prints, the help computer and the inventory screen (`CL_DrawInventory`), with
+  `ITEMS`, `ITEM_KEYS` and `TIMER_ICONS` from `src/gamedata.js`.
 
 `scripts/raster-bench.mjs` times the painter per stage; `--cold` rebuilds every surface each frame.
 

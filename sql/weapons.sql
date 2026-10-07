@@ -320,7 +320,8 @@ BEGIN
   IF (imp = 99) THEN                                                     -- give all
   BEGIN
     UPDATE player p SET p.weapons = 2047, p.bullets = p.max_bullets, p.shells = p.max_shells, p.rockets = p.max_rockets, p.grenades = p.max_grenades,
-           p.cells = p.max_cells, p.slugs = p.max_slugs, p.armor = 200, p.armor_type = 3, p.keys = 511 WHERE p.id = 1;
+           p.cells = p.max_cells, p.slugs = p.max_slugs, p.armor = 200, p.armor_type = 3, p.keys = 511,
+           p.inv_shield = p.inv_shield + 1, p.inv_sel = 6, p.inv_quad = 1, p.inv_invuln = 1, p.inv_silencer = 1, p.inv_breather = 1, p.inv_enviro = 1 WHERE p.id = 1;
     UPDATE ents e SET e.health = e.max_health WHERE e.id = player_ent();
     EXECUTE PROCEDURE sprint('Very impressive');
     EXIT;
@@ -356,7 +357,7 @@ BEGIN
                  WHEN 64 THEN 'Grenade Launcher' WHEN 128 THEN 'Rocket Launcher' WHEN 256 THEN 'HyperBlaster' WHEN 512 THEN 'Railgun' ELSE 'BFG10K' END);
     IF (BIN_AND(have, w) = 0) THEN
     BEGIN
-      EXECUTE PROCEDURE sprint('Out of item: ' || wname);
+      EXECUTE PROCEDURE sprint('Out of item: ' || IIF(w = 32, 'grenades', wname));
       EXIT;
     END
     IF (w = cur) THEN EXIT;
@@ -370,6 +371,76 @@ BEGIN
     END
   END
   UPDATE player p SET p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0, p.attack_finished = MAXVALUE(p.attack_finished, now_() + 0.3e0) WHERE p.id = 1;
+END^
+
+-- Cmd_Use_f for one item (idx, the itemlist index; typed, the name as asked for), then the item's use function
+CREATE OR ALTER PROCEDURE use_item (idx SMALLINT, typed VARCHAR(40))
+AS
+DECLARE n INTEGER; DECLARE pa SMALLINT; DECLARE ce INTEGER; DECLARE pe INTEGER; DECLARE t DOUBLE PRECISION; DECLARE u SMALLINT;
+BEGIN
+  IF (idx IS NULL OR idx <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('unknown item: ' || typed); EXIT; END
+  u = item_usable(idx);
+  IF (u = 0) THEN BEGIN EXECUTE PROCEDURE sprint('Item is not usable.'); EXIT; END
+  n = inv_count(idx);
+  IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('Out of item: ' || typed); EXIT; END
+  t = now_(); pe = player_ent();
+  IF (idx BETWEEN 7 AND 17) THEN EXECUTE PROCEDURE player_impulse(idx - 6);       -- Use_Weapon
+  ELSE IF (idx IN (5, 6)) THEN
+  BEGIN
+    -- Use_PowerArmor: on and off; on only with cells
+    SELECT p.power_armor, p.cells FROM player p WHERE p.id = 1 INTO pa, ce;
+    IF (pa = 1) THEN
+    BEGIN
+      UPDATE player p SET p.power_armor = 0 WHERE p.id = 1;
+      EXECUTE PROCEDURE snd(pe, 0, 'misc/power2.wav', 1, 1);
+    END
+    ELSE IF (ce <= 0) THEN EXECUTE PROCEDURE sprint('No cells for power armor.');
+    ELSE
+    BEGIN
+      UPDATE player p SET p.power_armor = 1 WHERE p.id = 1;
+      EXECUTE PROCEDURE snd(pe, 0, 'misc/power1.wav', 1, 1);
+    END
+  END
+  ELSE
+  BEGIN
+    -- Use_Quad, Use_Invulnerability, Use_Silencer, Use_Breather, Use_Envirosuit: one less in the inventory, thirty
+    -- seconds more (or thirty silenced shots)
+    UPDATE player p SET
+      p.inv_quad = p.inv_quad - IIF(:idx = 23, 1, 0), p.inv_invuln = p.inv_invuln - IIF(:idx = 24, 1, 0),
+      p.inv_silencer = p.inv_silencer - IIF(:idx = 25, 1, 0), p.inv_breather = p.inv_breather - IIF(:idx = 26, 1, 0),
+      p.inv_enviro = p.inv_enviro - IIF(:idx = 27, 1, 0),
+      p.quad_finished = IIF(:idx = 23, IIF(p.quad_finished > :t, p.quad_finished, :t) + 30, p.quad_finished),
+      p.invincible_finished = IIF(:idx = 24, IIF(p.invincible_finished > :t, p.invincible_finished, :t) + 30, p.invincible_finished),
+      p.silencer_shots = p.silencer_shots + IIF(:idx = 25, 30, 0),
+      p.breather_finished = IIF(:idx = 26, IIF(p.breather_finished > :t, p.breather_finished, :t) + 30, p.breather_finished),
+      p.enviro_finished = IIF(:idx = 27, IIF(p.enviro_finished > :t, p.enviro_finished, :t) + 30, p.enviro_finished)
+     WHERE p.id = 1;
+    EXECUTE PROCEDURE inv_validate;
+    IF (idx = 23) THEN EXECUTE PROCEDURE snd(pe, 3, 'items/damage.wav', 1, 1);
+    IF (idx = 24) THEN EXECUTE PROCEDURE snd(pe, 3, 'items/protect.wav', 1, 1);
+  END
+END^
+
+-- the inventory's impulses: 13 invuse, 14 invnext, 15 invprev, and default.cfg's item keys: 16 "use quad damage",
+-- 17 "use invulnerability", 18 "use silencer", 19 "use rebreather", 20 "use environment suit", 21 "use power shield"
+CREATE OR ALTER PROCEDURE inv_impulse (imp SMALLINT)
+AS
+DECLARE sel SMALLINT;
+BEGIN
+  IF (imp = 13) THEN
+  BEGIN
+    -- Cmd_InvUse_f
+    EXECUTE PROCEDURE inv_validate;
+    SELECT p.inv_sel FROM player p WHERE p.id = 1 INTO sel;
+    IF (sel < 0) THEN EXECUTE PROCEDURE sprint('No item to use.');
+    ELSE EXECUTE PROCEDURE use_item(sel, item_name(sel));
+  END
+  ELSE IF (imp = 14) THEN EXECUTE PROCEDURE inv_select(1);
+  ELSE IF (imp = 15) THEN EXECUTE PROCEDURE inv_select(-1);
+  ELSE IF (imp BETWEEN 16 AND 21) THEN
+    EXECUTE PROCEDURE use_item(CASE imp WHEN 16 THEN 23 WHEN 17 THEN 24 WHEN 18 THEN 25 WHEN 19 THEN 26 WHEN 20 THEN 27 ELSE 6 END,
+      TRIM(CASE imp WHEN 16 THEN 'quad damage' WHEN 17 THEN 'invulnerability' WHEN 18 THEN 'silencer' WHEN 19 THEN 'rebreather'
+                    WHEN 20 THEN 'environment suit' ELSE 'power shield' END));
 END^
 
 -- ClientThink + Pmove + ClientEndServerFrame for one tic
@@ -421,8 +492,15 @@ BEGIN
              p.grenades = p.max_grenades, p.cells = p.max_cells, p.slugs = p.max_slugs WHERE p.id = 1;
       IF (arg IN ('all', 'armor')) THEN UPDATE player p SET p.armor = 200, p.armor_type = 3 WHERE p.id = 1;     -- body armor, full
       IF (arg IN ('all', 'keys')) THEN UPDATE player p SET p.keys = 511 WHERE p.id = 1;
+      IF (arg = 'all') THEN
+        UPDATE player p SET p.inv_shield = p.inv_shield + 1, p.inv_sel = 6, p.inv_quad = 1, p.inv_invuln = 1, p.inv_silencer = 1,
+               p.inv_breather = 1, p.inv_enviro = 1 WHERE p.id = 1;
     END
   END
+  ELSE IF (cmd = 'use') THEN EXECUTE PROCEDURE use_item(item_index(arg), arg);
+  ELSE IF (cmd = 'invuse') THEN EXECUTE PROCEDURE inv_impulse(13);
+  ELSE IF (cmd = 'invnext') THEN EXECUTE PROCEDURE inv_impulse(14);
+  ELSE IF (cmd = 'invprev') THEN EXECUTE PROCEDURE inv_impulse(15);
   ELSE msg = 'unknown command "' || cmd || '"';
   IF (msg <> '') THEN EXECUTE PROCEDURE sprint(msg);
   SUSPEND;
@@ -479,7 +557,8 @@ BEGIN
   -- view angles
   yaw = anglemod(yaw + yaw_d);
   pitch = MAXVALUE(-89, MINVALUE(89, ppitch + pitch_d));
-  IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(imp);
+  IF (imp BETWEEN 13 AND 21) THEN EXECUTE PROCEDURE inv_impulse(imp);
+  ELSE IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(imp);
 
   -- P_WorldEffects: water, slime, lava, drowning
   IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :pe AND e.lx = e.x AND e.ly = e.y AND e.lz = e.z)) THEN wl = owl;   -- not moved since the last check

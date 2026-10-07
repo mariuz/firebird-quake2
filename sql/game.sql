@@ -1039,21 +1039,147 @@ BEGIN
   RETURN 1;
 END^
 
-CREATE OR ALTER PROCEDURE item_touch (item INTEGER, other INTEGER)
+-- ── the inventory (g_items.c's itemlist, g_cmds.c) ──────────────────────
+-- Items by their itemlist index: 1 body, 2 combat, 3 jacket armour, 4 shard, 5 power screen, 6 power shield,
+-- 7-17 the weapons (12 the hand grenades, which are the Grenades ammo), 18 shells, 19 bullets, 20 cells,
+-- 21 rockets, 22 slugs, 23 quad damage, 24 invulnerability, 25 silencer, 26 rebreather, 27 environment suit,
+-- 28-31 the instant ones (ancient head, adrenaline, bandolier, ammo pack), 32-40 the keys, 41 health.
+-- The counts live where the game keeps them (the weapon bits, the ammo, the armour, the key bits) and in inv_*.
+CREATE OR ALTER FUNCTION inv_count (idx SMALLINT) RETURNS INTEGER
 AS
-DECLARE cls VARCHAR(40); DECLARE hp INTEGER; DECLARE mhp INTEGER; DECLARE snd_ VARCHAR(64); DECLARE msg VARCHAR(200);
-DECLARE t DOUBLE PRECISION; DECLARE w INTEGER; DECLARE have INTEGER; DECLARE n INTEGER; DECLARE taken SMALLINT = 1;
-DECLARE av INTEGER; DECLARE atype SMALLINT; DECLARE newtype SMALLINT; DECLARE base INTEGER; DECLARE mx INTEGER; DECLARE kbit INTEGER;
-DECLARE cnt INTEGER; DECLARE ak SMALLINT;
+DECLARE n INTEGER;
 BEGIN
-  IF (other <> player_ent()) THEN EXIT;
+  SELECT CASE
+    WHEN :idx BETWEEN 1 AND 3 THEN IIF(p.armor_type = 4 - :idx, p.armor, 0)
+    WHEN :idx = 5 THEN p.inv_screen WHEN :idx = 6 THEN p.inv_shield
+    WHEN :idx = 12 THEN p.grenades
+    WHEN :idx BETWEEN 7 AND 17 THEN IIF(BIN_AND(p.weapons, BIN_SHL(1, :idx - 7)) <> 0, 1, 0)
+    WHEN :idx = 18 THEN p.shells WHEN :idx = 19 THEN p.bullets WHEN :idx = 20 THEN p.cells WHEN :idx = 21 THEN p.rockets WHEN :idx = 22 THEN p.slugs
+    WHEN :idx = 23 THEN p.inv_quad WHEN :idx = 24 THEN p.inv_invuln WHEN :idx = 25 THEN p.inv_silencer
+    WHEN :idx = 26 THEN p.inv_breather WHEN :idx = 27 THEN p.inv_enviro
+    WHEN :idx = 33 THEN IIF(BIN_AND(p.keys, 8) <> 0, MAXVALUE(p.power_cubes, 1), 0)
+    WHEN :idx BETWEEN 32 AND 40 THEN IIF(BIN_AND(p.keys, CASE :idx WHEN 32 THEN 4 WHEN 34 THEN 16 WHEN 35 THEN 32 WHEN 36 THEN 64
+                                                         WHEN 37 THEN 1 WHEN 38 THEN 2 WHEN 39 THEN 128 ELSE 256 END) <> 0, 1, 0)
+    ELSE 0 END
+    FROM player p WHERE p.id = 1 INTO n;
+  RETURN COALESCE(n, 0);
+END^
+
+-- the items with a use function: the power armour, the weapons and the powerups
+CREATE OR ALTER FUNCTION item_usable (idx SMALLINT) RETURNS SMALLINT
+AS
+BEGIN
+  RETURN IIF(idx IN (5, 6) OR idx BETWEEN 7 AND 17 OR idx BETWEEN 23 AND 27, 1, 0);
+END^
+
+CREATE OR ALTER FUNCTION item_name (idx SMALLINT) RETURNS VARCHAR(20)
+AS
+BEGIN
+  RETURN TRIM(CASE idx WHEN 1 THEN 'Body Armor' WHEN 2 THEN 'Combat Armor' WHEN 3 THEN 'Jacket Armor' WHEN 4 THEN 'Armor Shard'
+    WHEN 5 THEN 'Power Screen' WHEN 6 THEN 'Power Shield' WHEN 7 THEN 'Blaster' WHEN 8 THEN 'Shotgun' WHEN 9 THEN 'Super Shotgun'
+    WHEN 10 THEN 'Machinegun' WHEN 11 THEN 'Chaingun' WHEN 12 THEN 'Grenades' WHEN 13 THEN 'Grenade Launcher' WHEN 14 THEN 'Rocket Launcher'
+    WHEN 15 THEN 'HyperBlaster' WHEN 16 THEN 'Railgun' WHEN 17 THEN 'BFG10K' WHEN 18 THEN 'Shells' WHEN 19 THEN 'Bullets' WHEN 20 THEN 'Cells'
+    WHEN 21 THEN 'Rockets' WHEN 22 THEN 'Slugs' WHEN 23 THEN 'Quad Damage' WHEN 24 THEN 'Invulnerability' WHEN 25 THEN 'Silencer'
+    WHEN 26 THEN 'Rebreather' WHEN 27 THEN 'Environment Suit' WHEN 28 THEN 'Ancient Head' WHEN 29 THEN 'Adrenaline' WHEN 30 THEN 'Bandolier'
+    WHEN 31 THEN 'Ammo Pack' WHEN 32 THEN 'Data CD' WHEN 33 THEN 'Power Cube' WHEN 34 THEN 'Pyramid Key' WHEN 35 THEN 'Data Spinner'
+    WHEN 36 THEN 'Security Pass' WHEN 37 THEN 'Blue Key' WHEN 38 THEN 'Red Key' WHEN 39 THEN 'Commander''s Head' WHEN 40 THEN 'Airstrike Marker'
+    WHEN 41 THEN 'Health' ELSE '' END);
+END^
+
+-- FindItem: an item by its pickup name, any case (0 when there is none)
+CREATE OR ALTER FUNCTION item_index (name VARCHAR(40)) RETURNS SMALLINT
+AS
+DECLARE i SMALLINT = 1;
+BEGIN
+  name = LOWER(TRIM(name));
+  WHILE (i <= 41) DO
+  BEGIN
+    IF (LOWER(item_name(i)) = name) THEN RETURN i;
+    i = i + 1;
+  END
+  RETURN 0;
+END^
+
+-- an item's index by the classname it spawns from (the healths are all "Health")
+CREATE OR ALTER FUNCTION item_class_index (cls VARCHAR(40)) RETURNS SMALLINT
+AS
+BEGIN
+  RETURN CASE cls WHEN 'item_armor_body' THEN 1 WHEN 'item_armor_combat' THEN 2 WHEN 'item_armor_jacket' THEN 3 WHEN 'item_armor_shard' THEN 4
+    WHEN 'item_power_screen' THEN 5 WHEN 'item_power_shield' THEN 6 WHEN 'weapon_blaster' THEN 7 WHEN 'weapon_shotgun' THEN 8
+    WHEN 'weapon_supershotgun' THEN 9 WHEN 'weapon_machinegun' THEN 10 WHEN 'weapon_chaingun' THEN 11 WHEN 'ammo_grenades' THEN 12
+    WHEN 'weapon_grenadelauncher' THEN 13 WHEN 'weapon_rocketlauncher' THEN 14 WHEN 'weapon_hyperblaster' THEN 15 WHEN 'weapon_railgun' THEN 16
+    WHEN 'weapon_bfg' THEN 17 WHEN 'ammo_shells' THEN 18 WHEN 'ammo_bullets' THEN 19 WHEN 'ammo_cells' THEN 20 WHEN 'ammo_rockets' THEN 21
+    WHEN 'ammo_slugs' THEN 22 WHEN 'item_quad' THEN 23 WHEN 'item_invulnerability' THEN 24 WHEN 'item_silencer' THEN 25
+    WHEN 'item_breather' THEN 26 WHEN 'item_enviro' THEN 27 WHEN 'item_ancient_head' THEN 28 WHEN 'item_adrenaline' THEN 29
+    WHEN 'item_bandolier' THEN 30 WHEN 'item_pack' THEN 31 WHEN 'key_data_cd' THEN 32 WHEN 'key_power_cube' THEN 33 WHEN 'key_pyramid' THEN 34
+    WHEN 'key_data_spinner' THEN 35 WHEN 'key_pass' THEN 36 WHEN 'key_blue_key' THEN 37 WHEN 'key_red_key' THEN 38
+    WHEN 'key_commander_head' THEN 39 WHEN 'key_airstrike_target' THEN 40 ELSE 41 END;
+END^
+
+-- SelectNextItem / SelectPrevItem (dir 1 / -1): the next usable item held, round the itemlist; -1 when none
+CREATE OR ALTER PROCEDURE inv_select (dir SMALLINT)
+AS
+DECLARE cur SMALLINT; DECLARE i SMALLINT = 1; DECLARE idx SMALLINT; DECLARE u SMALLINT; DECLARE n INTEGER;
+BEGIN
+  SELECT p.inv_sel FROM player p WHERE p.id = 1 INTO cur;
+  WHILE (i <= 41) DO
+  BEGIN
+    idx = MOD(cur + dir * i + 82, 41);
+    u = item_usable(idx);
+    IF (u = 1) THEN
+    BEGIN
+      n = inv_count(idx);
+      IF (n > 0) THEN
+      BEGIN
+        UPDATE player p SET p.inv_sel = :idx WHERE p.id = 1;
+        EXIT;
+      END
+    END
+    i = i + 1;
+  END
+  UPDATE player p SET p.inv_sel = -1 WHERE p.id = 1;
+END^
+
+-- the inventory screen's rows (svc_inventory): every item held, with its count, in itemlist order
+CREATE OR ALTER PROCEDURE inventory_list
+RETURNS (idx SMALLINT, cnt INTEGER)
+AS
+BEGIN
+  idx = 1;
+  WHILE (idx <= 40) DO
+  BEGIN
+    cnt = inv_count(idx);
+    IF (cnt > 0) THEN SUSPEND;
+    idx = idx + 1;
+  END
+END^
+
+-- ValidateSelectedItem: an item used up moves the selection on
+CREATE OR ALTER PROCEDURE inv_validate
+AS
+DECLARE cur SMALLINT; DECLARE n INTEGER;
+BEGIN
+  SELECT p.inv_sel FROM player p WHERE p.id = 1 INTO cur;
+  n = IIF(cur > 0, inv_count(cur), 0);
+  IF (n <= 0) THEN EXECUTE PROCEDURE inv_select(1);
+END^
+
+-- the pickup functions of g_items.c: taken says whether the item was taken, idx is its itemlist index
+CREATE OR ALTER PROCEDURE item_pickup (item INTEGER, other INTEGER)
+RETURNS (taken SMALLINT, snd_ VARCHAR(64), idx SMALLINT)
+AS
+DECLARE cls VARCHAR(40); DECLARE hp INTEGER; DECLARE mhp INTEGER;
+DECLARE t DOUBLE PRECISION; DECLARE w INTEGER; DECLARE have INTEGER; DECLARE n INTEGER; DECLARE sk SMALLINT;
+DECLARE av INTEGER; DECLARE atype SMALLINT; DECLARE newtype SMALLINT; DECLARE base INTEGER; DECLARE mx INTEGER; DECLARE kbit INTEGER;
+DECLARE cnt INTEGER; DECLARE ak SMALLINT; DECLARE oldcount INTEGER;
+BEGIN
+  taken = 0;
   SELECT e.classname, e.count_ FROM ents e WHERE e.id = :item INTO cls, cnt;
   SELECT e.health, e.max_health FROM ents e WHERE e.id = :other INTO hp, mhp;
-  IF (hp <= 0) THEN EXIT;
   SELECT p.weapons, p.armor, p.armor_type FROM player p WHERE p.id = 1 INTO have, av, atype;
+  idx = item_class_index(cls);
   t = now_();
   snd_ = 'items/pkup.wav';
-  msg = NULL;
 
   -- health
   IF (cls = 'item_health_small') THEN
@@ -1104,7 +1230,8 @@ BEGIN
   END
   ELSE IF (cls IN ('item_power_shield', 'item_power_screen')) THEN
   BEGIN
-    UPDATE player p SET p.power_armor = IIF(:cls = 'item_power_shield', 2, 1) WHERE p.id = 1;
+    -- Pickup_PowerArmor: into the inventory; single player switches it on only when it is used
+    UPDATE player p SET p.inv_shield = p.inv_shield + IIF(:idx = 6, 1, 0), p.inv_screen = p.inv_screen + IIF(:idx = 5, 1, 0) WHERE p.id = 1;
     snd_ = 'misc/ar3_pkup.wav';
   END
   -- ammo (Pickup_Ammo)
@@ -1112,13 +1239,13 @@ BEGIN
   BEGIN
     ak = CASE cls WHEN 'ammo_shells' THEN 1 WHEN 'ammo_bullets' THEN 2 WHEN 'ammo_grenades' THEN 3 WHEN 'ammo_rockets' THEN 4 WHEN 'ammo_cells' THEN 5 WHEN 'ammo_slugs' THEN 6 ELSE 0 END;
     n = IIF(cnt > 0, cnt, CASE ak WHEN 1 THEN 10 WHEN 2 THEN 50 WHEN 3 THEN 5 WHEN 4 THEN 5 WHEN 5 THEN 50 WHEN 6 THEN 10 ELSE 0 END);
+    oldcount = ammo_count(ak);
     IF (add_ammo(ak, n) = 0) THEN EXIT;
-    -- a box of grenades is the hand grenade weapon too
-    IF (ak = 3 AND BIN_AND(have, 32) = 0) THEN
-    BEGIN
-      UPDATE player p SET p.weapons = BIN_OR(p.weapons, 32) WHERE p.id = 1;
-      IF ((SELECT p.weapon FROM player p WHERE p.id = 1) = 1) THEN UPDATE player p SET p.weapon = 32 WHERE p.id = 1;
-    END
+    -- a box of grenades is the hand grenade weapon too; the first one raises it (Pickup_Ammo, single player)
+    IF (ak = 3 AND BIN_AND(have, 32) = 0) THEN UPDATE player p SET p.weapons = BIN_OR(p.weapons, 32) WHERE p.id = 1;
+    IF (ak = 3 AND oldcount = 0) THEN
+      UPDATE player p SET p.weapon = 32, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
+             p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.id = 1 AND p.weapon <> 32;
     snd_ = 'misc/am_pkup.wav';
   END
   -- weapons (Pickup_Weapon)
@@ -1128,16 +1255,14 @@ BEGIN
                  WHEN 'weapon_grenadelauncher' THEN 64 WHEN 'weapon_rocketlauncher' THEN 128 WHEN 'weapon_hyperblaster' THEN 256 WHEN 'weapon_railgun' THEN 512
                  WHEN 'weapon_bfg' THEN 1024 ELSE 0 END;
     IF (w = 0) THEN EXIT;
+    -- Pickup_Weapon in single player: always taken, with its ammo (as much as fits); the first one of its kind is
+    -- raised at once, whatever is in hand
     ak = weapon_ammo(w);
     n = CASE ak WHEN 1 THEN 10 WHEN 2 THEN 50 WHEN 3 THEN 5 WHEN 4 THEN 5 WHEN 5 THEN 50 WHEN 6 THEN 10 ELSE 0 END;
-    IF (BIN_AND(have, w) <> 0 AND add_ammo(ak, n) = 0) THEN EXIT;      -- have it and full: leave it
+    n = add_ammo(ak, n);
     IF (BIN_AND(have, w) = 0) THEN
-    BEGIN
-      taken = add_ammo(ak, n);
-      -- switch to the new weapon when we are holding the blaster or something out of ammo
-      UPDATE player p SET p.weapons = BIN_OR(p.weapons, :w) WHERE p.id = 1;
-      UPDATE player p SET p.weapon = :w WHERE p.id = 1 AND (p.weapon = 1 OR p.weapon = 32 OR ammo_count(weapon_ammo(p.weapon)) = 0);
-    END
+      UPDATE player p SET p.weapons = BIN_OR(p.weapons, :w), p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
+             p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.id = 1;
     snd_ = 'misc/w_pkup.wav';
   END
   -- keys
@@ -1148,23 +1273,17 @@ BEGIN
     UPDATE player p SET p.keys = BIN_OR(p.keys, :kbit), p.power_cubes = p.power_cubes + IIF(:kbit = 8, 1, 0) WHERE p.id = 1;
     snd_ = 'items/pkup.wav';
   END
-  -- powerups (used at once)
-  ELSE IF (cls = 'item_quad') THEN
+  -- powerups (Pickup_Powerup): into the inventory, to be used with their key or invuse; hard holds one of each,
+  -- medium two, easy any number
+  ELSE IF (idx BETWEEN 23 AND 27) THEN
   BEGIN
-    UPDATE player p SET p.quad_finished = MAXVALUE(p.quad_finished, :t) + 30 WHERE p.id = 1;
-    EXECUTE PROCEDURE snd(other, 3, 'items/damage.wav', 1, 1);
+    SELECT g.skill FROM game g WHERE g.id = 1 INTO sk;
+    n = inv_count(idx);
+    IF ((sk = 1 AND n >= 2) OR (sk >= 2 AND n >= 1)) THEN EXIT;
+    UPDATE player p SET p.inv_quad = p.inv_quad + IIF(:idx = 23, 1, 0), p.inv_invuln = p.inv_invuln + IIF(:idx = 24, 1, 0),
+           p.inv_silencer = p.inv_silencer + IIF(:idx = 25, 1, 0), p.inv_breather = p.inv_breather + IIF(:idx = 26, 1, 0),
+           p.inv_enviro = p.inv_enviro + IIF(:idx = 27, 1, 0) WHERE p.id = 1;
   END
-  ELSE IF (cls = 'item_invulnerability') THEN
-  BEGIN
-    UPDATE player p SET p.invincible_finished = MAXVALUE(p.invincible_finished, :t) + 30 WHERE p.id = 1;
-    EXECUTE PROCEDURE snd(other, 3, 'items/protect.wav', 1, 1);
-  END
-  ELSE IF (cls = 'item_breather') THEN
-    UPDATE player p SET p.breather_finished = MAXVALUE(p.breather_finished, :t) + 30 WHERE p.id = 1;
-  ELSE IF (cls = 'item_enviro') THEN
-    UPDATE player p SET p.enviro_finished = MAXVALUE(p.enviro_finished, :t) + 30 WHERE p.id = 1;
-  ELSE IF (cls = 'item_silencer') THEN
-    UPDATE player p SET p.silencer_shots = p.silencer_shots + 30 WHERE p.id = 1;
   ELSE IF (cls = 'item_adrenaline') THEN
   BEGIN
     UPDATE ents e SET e.max_health = e.max_health + 1, e.health = MAXVALUE(e.health, e.max_health + 1) WHERE e.id = :other;
@@ -1181,24 +1300,36 @@ BEGIN
     n = add_ammo(2, 50); n = add_ammo(1, 10); n = add_ammo(5, 50); n = add_ammo(3, 5); n = add_ammo(4, 5); n = add_ammo(6, 10);
   END
   ELSE EXIT;
+  taken = 1;
+END^
 
-  IF (taken = 0) THEN EXIT;
-  -- "You got the Shotgun" style pickup message: the item's name
-  msg = CASE cls WHEN 'item_health_small' THEN 'Stimpack' WHEN 'item_health' THEN 'Medium Health' WHEN 'item_health_large' THEN 'Large Health' WHEN 'item_health_mega' THEN 'Mega Health'
-    WHEN 'item_armor_shard' THEN 'Armor Shard' WHEN 'item_armor_jacket' THEN 'Jacket Armor' WHEN 'item_armor_combat' THEN 'Combat Armor' WHEN 'item_armor_body' THEN 'Body Armor'
-    WHEN 'item_power_shield' THEN 'Power Shield' WHEN 'item_power_screen' THEN 'Power Screen'
-    WHEN 'ammo_shells' THEN 'Shells' WHEN 'ammo_bullets' THEN 'Bullets' WHEN 'ammo_grenades' THEN 'Grenades' WHEN 'ammo_rockets' THEN 'Rockets' WHEN 'ammo_cells' THEN 'Cells' WHEN 'ammo_slugs' THEN 'Slugs'
-    WHEN 'weapon_shotgun' THEN 'Shotgun' WHEN 'weapon_supershotgun' THEN 'Super Shotgun' WHEN 'weapon_machinegun' THEN 'Machinegun' WHEN 'weapon_chaingun' THEN 'Chaingun'
-    WHEN 'weapon_grenadelauncher' THEN 'Grenade Launcher' WHEN 'weapon_rocketlauncher' THEN 'Rocket Launcher' WHEN 'weapon_hyperblaster' THEN 'HyperBlaster' WHEN 'weapon_railgun' THEN 'Railgun' WHEN 'weapon_bfg' THEN 'BFG10K'
-    WHEN 'key_blue_key' THEN 'Blue Key' WHEN 'key_red_key' THEN 'Red Key' WHEN 'key_data_cd' THEN 'Data CD' WHEN 'key_power_cube' THEN 'Power Cube' WHEN 'key_pyramid' THEN 'Pyramid Key'
-    WHEN 'key_data_spinner' THEN 'Data Spinner' WHEN 'key_pass' THEN 'Security Pass' WHEN 'key_commander_head' THEN 'Commander''s Head' WHEN 'key_airstrike_target' THEN 'Airstrike Marker'
-    WHEN 'item_quad' THEN 'Quad Damage' WHEN 'item_invulnerability' THEN 'Invulnerability' WHEN 'item_breather' THEN 'Rebreather' WHEN 'item_enviro' THEN 'Environment Suit'
-    WHEN 'item_silencer' THEN 'Silencer' WHEN 'item_adrenaline' THEN 'Adrenaline' WHEN 'item_bandolier' THEN 'Bandolier' WHEN 'item_pack' THEN 'Ammo Pack' ELSE cls END;
-  EXECUTE PROCEDURE sprint(msg);
-  EXECUTE PROCEDURE snd(other, 3, snd_, 1, 1);
-  UPDATE player p SET p.bonus_time = :t WHERE p.id = 1;
-  EXECUTE PROCEDURE use_targets(item, other);
-  DELETE FROM ents e WHERE e.id = :item;
+-- Touch_Item: what was taken flashes the screen, shows its icon and name on the status bar for three seconds,
+-- becomes the selected item if it can be used, and goes; the item's targets fire the first time it is touched,
+-- taken or not (ITEM_TARGETS_USED, spawnflags 0x40000)
+CREATE OR ALTER PROCEDURE item_touch (item INTEGER, other INTEGER)
+AS
+DECLARE taken SMALLINT; DECLARE snd_ VARCHAR(64); DECLARE idx SMALLINT; DECLARE hp INTEGER; DECLARE sf INTEGER;
+DECLARE t DOUBLE PRECISION; DECLARE u SMALLINT;
+BEGIN
+  IF (other <> player_ent()) THEN EXIT;
+  SELECT e.health FROM ents e WHERE e.id = :other INTO hp;
+  IF (hp <= 0) THEN EXIT;                                 -- dead people can't pick up
+  EXECUTE PROCEDURE item_pickup(item, other) RETURNING_VALUES taken, snd_, idx;
+  IF (taken = 1) THEN
+  BEGIN
+    t = now_();
+    u = item_usable(idx);
+    UPDATE player p SET p.bonus_time = :t, p.pickup_item = :idx, p.pickup_time = :t + 3,
+           p.inv_sel = IIF(:u = 1, :idx, p.inv_sel) WHERE p.id = 1;
+    EXECUTE PROCEDURE snd(other, 3, snd_, 1, 1);
+  END
+  SELECT e.spawnflags FROM ents e WHERE e.id = :item INTO sf;
+  IF (sf IS NOT NULL AND BIN_AND(sf, 262144) = 0) THEN
+  BEGIN
+    UPDATE ents e SET e.spawnflags = BIN_OR(e.spawnflags, 262144) WHERE e.id = :item;
+    EXECUTE PROCEDURE use_targets(item, other);
+  END
+  IF (taken = 1) THEN DELETE FROM ents e WHERE e.id = :item;
 END^
 
 -- ── damage (g_combat.c) ──────────────────────────────────────────────────
@@ -1327,6 +1458,9 @@ DECLARE td SMALLINT; DECLARE cls VARCHAR(40); DECLARE flags INTEGER; DECLARE hp 
 DECLARE save INTEGER; DECLARE take INTEGER; DECLARE av INTEGER; DECLARE atype SMALLINT; DECLARE inv DOUBLE PRECISION; DECLARE prot DOUBLE PRECISION;
 DECLARE dx DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; DECLARE dz DOUBLE PRECISION; DECLARE dl DOUBLE PRECISION; DECLARE kv DOUBLE PRECISION;
 DECLARE pe INTEGER; DECLARE qf DOUBLE PRECISION; DECLARE pf DOUBLE PRECISION; DECLARE pa SMALLINT; DECLARE ce INTEGER;
+DECLARE isc SMALLINT; DECLARE ish SMALLINT; DECLARE pdmg INTEGER; DECLARE dpc SMALLINT; DECLARE front SMALLINT;
+DECLARE fx_ DOUBLE PRECISION; DECLARE fy_ DOUBLE PRECISION; DECLARE ix DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE iz DOUBLE PRECISION;
+DECLARE tx DOUBLE PRECISION; DECLARE ty DOUBLE PRECISION; DECLARE tz DOUBLE PRECISION; DECLARE tyaw DOUBLE PRECISION;
 BEGIN
   SELECT e.takedamage, e.classname, e.flags, e.health, e.movetype, e.mass FROM ents e WHERE e.id = :targ INTO td, cls, flags, hp, mt, mass;
   IF (td IS NULL OR td = 0) THEN EXIT;
@@ -1358,7 +1492,9 @@ BEGIN
   IF (cls = 'player') THEN
   BEGIN
     IF (BIN_AND(flags, 16) <> 0) THEN EXIT;                               -- god mode
-    SELECT p.armor, p.armor_type, p.invincible_finished, p.pain_finished, p.power_armor, p.cells FROM player p WHERE p.id = 1 INTO av, atype, inv, pf, pa, ce;
+    SELECT p.armor, p.armor_type, p.invincible_finished, p.pain_finished, p.power_armor, p.cells, p.inv_screen, p.inv_shield FROM player p WHERE p.id = 1
+      INTO av, atype, inv, pf, pa, ce, isc, ish;
+    pa = IIF(pa = 1, IIF(ish > 0, 2, IIF(isc > 0, 1, 0)), 0);           -- PowerArmorType
     IF (inv > now_() AND BIN_AND(dflags, 32) = 0) THEN
     BEGIN
       IF (pf < now_()) THEN
@@ -1368,15 +1504,39 @@ BEGIN
       END
       EXIT;
     END
-    -- CheckPowerArmor: the shield eats cells, 2 points of damage per cell
+    -- CheckPowerArmor: the screen stops a third of a blow from in front of it (within about 73 degrees of the
+    -- view), a cell a point; the shield two thirds from anywhere, a cell for two points. Its sparks are
+    -- TE_SCREEN_SPARKS (green) or TE_SHIELD_SPARKS (blue), with weapons/lashit.wav.
     IF (pa > 0 AND ce > 0 AND BIN_AND(dflags, 2) = 0) THEN
     BEGIN
-      save = IIF(pa = 2, damage, CEILING(damage / 3e0));
-      IF (save > ce * 2) THEN save = ce * 2;
-      UPDATE player p SET p.cells = p.cells - CEILING(:save / 2e0), p.dmg_save = p.dmg_save + :save WHERE p.id = 1;
-      damage = damage - save;
-      EXECUTE PROCEDURE snd(targ, 3, 'misc/power2.wav', 1, 1);
-      save = 0;
+      SELECT e.x, e.y, e.z + (e.minz + e.maxz) / 2, e.yaw FROM ents e WHERE e.id = :targ INTO tx, ty, tz, tyaw;
+      ix = NULL;
+      SELECT e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2 FROM ents e
+       WHERE e.id = IIF(:inflictor IS NOT NULL AND :inflictor > 0 AND :inflictor <> :targ, :inflictor, :attacker) INTO ix, iy, iz;
+      front = 1;
+      IF (pa = 1) THEN
+      BEGIN
+        fx_ = COS(tyaw * PI() / 180); fy_ = SIN(tyaw * PI() / 180);
+        dl = vlen(COALESCE(ix, tx) - tx, COALESCE(iy, ty) - ty, COALESCE(iz, tz) - tz);
+        IF (dl <= 0 OR ((ix - tx) * fx_ + (iy - ty) * fy_) / dl <= 0.3e0) THEN front = 0;
+      END
+      IF (front = 1) THEN
+      BEGIN
+        dpc = IIF(pa = 2, 2, 1);
+        pdmg = IIF(pa = 2, TRUNC(2 * damage / 3e0), TRUNC(damage / 3e0));
+        save = ce * dpc;
+        IF (save > pdmg) THEN save = pdmg;
+        IF (save > 0) THEN
+        BEGIN
+          UPDATE player p SET p.cells = MAXVALUE(0, p.cells - TRUNC(:save / :dpc)), p.dmg_save = p.dmg_save + :save WHERE p.id = 1;
+          damage = damage - save;
+          dl = vlen(COALESCE(ix, tx) - tx, COALESCE(iy, ty) - ty, COALESCE(iz, tz) - tz);
+          IF (dl > 0) THEN BEGIN ix = (ix - tx) / dl; iy = (iy - ty) / dl; iz = (iz - tz) / dl; END ELSE BEGIN ix = 0; iy = 0; iz = 1; END
+          EXECUTE PROCEDURE fx(7, tx + ix * 16, ty + iy * 16, tz + iz * 16, ix, iy, iz, 40 * 16 + IIF(pa = 2, 2, 4));
+          EXECUTE PROCEDURE snd_at(tx + ix * 16, ty + iy * 16, tz + iz * 16, 'weapons/lashit.wav', 1, 1);
+        END
+        save = 0;
+      END
     END
     -- CheckArmor
     IF (av > 0 AND atype > 0 AND BIN_AND(dflags, 2) = 0) THEN

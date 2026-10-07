@@ -964,7 +964,8 @@ RETURNS (
   found_secrets INTEGER, total_secrets INTEGER, found_goals INTEGER, total_goals INTEGER, waterlevel SMALLINT, watertype INTEGER, map_name VARCHAR(32),
   level_msg VARCHAR(200), quad SMALLINT, invincible SMALLINT, breather SMALLINT, enviro SMALLINT, leaf INTEGER, cluster INTEGER, help_msg VARCHAR(400),
   help_msg2 VARCHAR(400), help_changed INTEGER, skill SMALLINT, intermission SMALLINT,
-  roll DOUBLE PRECISION, bobtime DOUBLE PRECISION, xyspeed DOUBLE PRECISION, ducked SMALLINT)
+  roll DOUBLE PRECISION, bobtime DOUBLE PRECISION, xyspeed DOUBLE PRECISION, ducked SMALLINT,
+  inv_sel SMALLINT, pickup_item SMALLINT, timer_icon SMALLINT, timer INTEGER)
 AS
 DECLARE i INTEGER = 0; DECLARE itime DOUBLE PRECISION;
 BEGIN
@@ -986,7 +987,10 @@ BEGIN
     EXECUTE PROCEDURE run_physics(0.05e0);
     i = i + 1;
   END
-  SELECT g.tic, g.time_, e.health, e.max_health, p.armor, p.armor_type, p.power_armor, p.bullets, p.shells, p.rockets, p.grenades, p.cells, p.slugs,
+  -- G_SetStats: power armour with no cells left switches itself off
+  UPDATE player p SET p.power_armor = 0 WHERE p.id = 1 AND p.power_armor = 1 AND p.cells <= 0 AND (p.inv_screen > 0 OR p.inv_shield > 0);
+  IF (ROW_COUNT > 0) THEN EXECUTE PROCEDURE snd(player_ent(), 3, 'misc/power2.wav', 1, 1);
+  SELECT g.tic, g.time_, e.health, e.max_health, p.armor, p.armor_type, IIF(p.power_armor = 1, IIF(p.inv_shield > 0, 2, IIF(p.inv_screen > 0, 1, 0)), 0), p.bullets, p.shells, p.rockets, p.grenades, p.cells, p.slugs,
          p.weapons, p.keys, p.weapon, p.attack_start, p.attack_finished, p.grenade_time,
          e.x, e.y, e.z, e.yaw, p.pitch + p.punchangle + p.bob_pitch, e.z + p.view_ofs - p.stepz + p.bob_z, p.punchangle,
          IIF(p.msg_time > g.time_, p.msg, NULL), IIF(p.cprint_time > g.time_, p.cprint, NULL),
@@ -994,13 +998,19 @@ BEGIN
          g.found_secrets, g.total_secrets, g.found_goals, g.total_goals, e.waterlevel, e.watertype, g.map_name, g.level_msg,
          IIF(p.quad_finished > g.time_, 1, 0), IIF(p.invincible_finished > g.time_, 1, 0), IIF(p.breather_finished > g.time_, 1, 0), IIF(p.enviro_finished > g.time_, 1, 0),
          e.leaf, e.cluster, g.help_msg, g.help_msg2, g.help_changed, g.skill, IIF(g.intermission_time IS NULL, 0, 1),
-         IIF(e.deadflag = 1, 40, p.bob_roll), p.bobtime, SQRT(e.vx * e.vx + e.vy * e.vy), p.ducked
+         IIF(e.deadflag = 1, 40, p.bob_roll), p.bobtime, SQRT(e.vx * e.vx + e.vy * e.vy), p.ducked,
+         p.inv_sel, IIF(p.pickup_time > g.time_, p.pickup_item, 0),
+         -- the timer: quad, else invulnerability, else the suit, else the rebreather, in whole seconds left
+         CASE WHEN p.quad_finished > g.time_ THEN 1 WHEN p.invincible_finished > g.time_ THEN 2 WHEN p.enviro_finished > g.time_ THEN 3
+              WHEN p.breather_finished > g.time_ THEN 4 ELSE 0 END,
+         CAST(FLOOR(CASE WHEN p.quad_finished > g.time_ THEN p.quad_finished WHEN p.invincible_finished > g.time_ THEN p.invincible_finished
+              WHEN p.enviro_finished > g.time_ THEN p.enviro_finished WHEN p.breather_finished > g.time_ THEN p.breather_finished ELSE g.time_ END - g.time_ + 1e-9) AS INTEGER)
     FROM game g CROSS JOIN player p JOIN ents e ON e.id = p.ent_id
    WHERE g.id = 1 AND p.id = 1
     INTO tic, time_, health, max_health, armor, armor_type, power_armor, bullets, shells, rockets, grenades, cells, slugs, weapons, keys, weapon, attack_start, attack_finished, grenade_time,
          px, py, pz, yaw, pitch, view_z, punch, msg, cprint, dmg_take, dmg_save, dmg_time, bonus_time, dead, exit_kind, next_map,
          killed, total_monsters, found_secrets, total_secrets, found_goals, total_goals, waterlevel, watertype, map_name, level_msg, quad, invincible, breather, enviro, leaf, cluster, help_msg,
-         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked;
+         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked, inv_sel, pickup_item, timer_icon, timer;
   UPDATE player p SET p.dmg_take = 0, p.dmg_save = 0 WHERE p.id = 1 AND p.dmg_time < :time_ - 0.05e0;
   SUSPEND;
 END^
@@ -1024,10 +1034,11 @@ BEGIN
     UPDATE player p SET p.armor = 0, p.armor_type = 0, p.power_armor = 0, p.bullets = 0, p.shells = 0, p.rockets = 0, p.grenades = 0, p.cells = 0, p.slugs = 0,
            p.max_bullets = 200, p.max_shells = 100, p.max_rockets = 50, p.max_grenades = 50, p.max_cells = 200, p.max_slugs = 50,
            p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
-           p.silencer_shots = 0, p.kills = 0 WHERE p.id = 1;
+           p.silencer_shots = 0, p.kills = 0, p.inv_quad = 0, p.inv_invuln = 0, p.inv_silencer = 0, p.inv_breather = 0, p.inv_enviro = 0,
+           p.inv_screen = 0, p.inv_shield = 0, p.inv_sel = 7 WHERE p.id = 1;
   END
   UPDATE player p SET p.weaponframe = 0, p.attack_finished = 0, p.attack_start = 0, p.pain_finished = 0, p.punchangle = 0, p.view_ofs = 22, p.dmg_take = 0, p.dmg_save = 0,
-         p.dmg_time = -10, p.bonus_time = -10, p.msg = NULL, p.msg_time = 0, p.cprint = NULL, p.cprint_time = 0, p.dead_time = 0, p.pitch = 0, p.stepz = 0,
+         p.dmg_time = -10, p.bonus_time = -10, p.pickup_item = 0, p.pickup_time = 0, p.msg = NULL, p.msg_time = 0, p.cprint = NULL, p.cprint_time = 0, p.dead_time = 0, p.pitch = 0, p.stepz = 0,
          p.jump_released = 1, p.air_finished = 12, p.dmg_lava_time = 0, p.next_drown_time = 0, p.drown_dmg = 2, p.weapon_sound = 0, p.machinegun_shots = 0,
          p.chaingun_spin = 0, p.grenade_time = 0, p.mega_time = 0, p.keys = 0 WHERE p.id = 1;
   -- keys don't carry over; neither do dead weapons

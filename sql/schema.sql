@@ -367,7 +367,7 @@ CREATE TABLE player (
   ent_id          INTEGER,
   armor           INTEGER DEFAULT 0 NOT NULL,
   armor_type      SMALLINT DEFAULT 0 NOT NULL,            -- 0 none 1 jacket 2 combat 3 body
-  power_armor     SMALLINT DEFAULT 0 NOT NULL,            -- 0 none 1 screen 2 shield
+  power_armor     SMALLINT DEFAULT 0 NOT NULL,            -- FL_POWER_ARMOR: 1 while the screen or shield held is switched on
   bullets         INTEGER DEFAULT 0 NOT NULL,
   shells          INTEGER DEFAULT 0 NOT NULL,
   rockets         INTEGER DEFAULT 0 NOT NULL,
@@ -400,6 +400,16 @@ CREATE TABLE player (
   breather_finished   DOUBLE PRECISION DEFAULT 0 NOT NULL,
   enviro_finished     DOUBLE PRECISION DEFAULT 0 NOT NULL,
   silencer_shots  INTEGER DEFAULT 0 NOT NULL,
+  inv_quad        SMALLINT DEFAULT 0 NOT NULL,            -- pers.inventory of the items that wait there to be used:
+  inv_invuln      SMALLINT DEFAULT 0 NOT NULL,            --   the powerups (single player keeps them for their key or invuse)
+  inv_silencer    SMALLINT DEFAULT 0 NOT NULL,
+  inv_breather    SMALLINT DEFAULT 0 NOT NULL,
+  inv_enviro      SMALLINT DEFAULT 0 NOT NULL,
+  inv_screen      SMALLINT DEFAULT 0 NOT NULL,            --   and the power armour (power_armor says whether it is on)
+  inv_shield      SMALLINT DEFAULT 0 NOT NULL,
+  inv_sel         SMALLINT DEFAULT 7 NOT NULL,            -- pers.selected_item: an itemlist index (7 the blaster), -1 none
+  pickup_item     SMALLINT DEFAULT 0 NOT NULL,            -- STAT_PICKUP_ICON/STRING: the itemlist index last picked up (41 health)
+  pickup_time     DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- ... shown until then
   jump_released   SMALLINT DEFAULT 1 NOT NULL,
   fly_sound_time  DOUBLE PRECISION DEFAULT 0 NOT NULL,
   swim_time       DOUBLE PRECISION DEFAULT 0 NOT NULL,

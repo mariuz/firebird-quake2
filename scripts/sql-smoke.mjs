@@ -422,6 +422,100 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   await db.exec(`UPDATE player SET weapons = ${keep.WEAPONS}, weapon = ${keep.WEAPON}, shells = ${keep.SHELLS}, bullets = ${keep.BULLETS}, cells = ${keep.CELLS}, msg = NULL WHERE id = 1`);
 }
 
+// the inventory: powerups wait there for their key (Pickup_Powerup, Use_Quad), power armour is switched on
+// (Use_PowerArmor) and spends cells as CheckPowerArmor did, the pickup shows on the status bar, the selection moves
+{
+  const one = async (q) => (await db.query(q)).rows[0];
+  const pe = (await one('SELECT ent_id e FROM player')).E;
+  const keep = await one('SELECT weapons, weapon, shells, bullets, cells, grenades, armor, armor_type FROM player WHERE id = 1');
+  const hp0 = (await one(`SELECT health h FROM ents WHERE id = ${pe}`)).H;
+  const me = () => one('SELECT p.inv_quad, p.inv_shield, p.inv_screen, p.inv_sel, p.power_armor, p.quad_finished, p.cells, p.weapon, p.msg, g.time_ FROM player p CROSS JOIN game g WHERE p.id = 1');
+  const spawn = async (cls, x = 0, y = 0, z = -4000) => (await db.query(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('${cls}', ${x}, ${y}, ${z}) RETURNING_VALUES id; UPDATE ents e SET e.solid = 0 WHERE e.id = :id; SUSPEND; END`)).rows[0].ID;
+  const touch = (id) => db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE item_touch(${id}, ${pe}); END`);
+  const exists = async (id) => (await one(`SELECT COUNT(*) n FROM ents WHERE id = ${id}`)).N === 1;
+  const cmd = async (c, a = '') => { await db.query('SELECT msg FROM player_command(?, ?)', [c, a]); return (await me()).MSG; };
+  await db.exec('UPDATE player SET inv_quad = 0, inv_invuln = 0, inv_silencer = 0, inv_breather = 0, inv_enviro = 0, inv_screen = 0, inv_shield = 0, quad_finished = 0, invincible_finished = 0, power_armor = 0, inv_sel = 7, weapons = 1, weapon = 1 WHERE id = 1');
+  const q1 = await spawn('item_quad');
+  await touch(q1);
+  let r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  let m = await me();
+  assert(!(await exists(q1)) && m.INV_QUAD === 1 && r.QUAD === 0 && m.INV_SEL === 23 && r.PICKUP_ITEM === 23 && r.INV_SEL === 23,
+    `a quad goes into the inventory unused, selected, and shows on the status bar (pickup ${r.PICKUP_ITEM}, selected ${r.INV_SEL})`);
+  const q2 = await spawn('item_quad');
+  await touch(q2);
+  assert(await exists(q2) && (await me()).INV_QUAD === 1, '... and on hard a second one stays where it lies');
+  await db.exec(`DELETE FROM ents WHERE id = ${q2}`);
+  r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 16]);
+  m = await me();
+  assert(r.QUAD === 1 && r.TIMER_ICON === 1 && r.TIMER >= 29 && r.TIMER <= 30 && m.INV_QUAD === 0 && m.INV_SEL === 7,
+    `Q uses it: thirty seconds of quad on the timer (${r.TIMER}), the selection back on the blaster (${m.INV_SEL})`);
+  r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 16]);
+  assert((await me()).MSG === 'Out of item: quad damage', `... and again: out of item (${(await me()).MSG})`);
+  await db.exec('UPDATE player SET quad_finished = 0 WHERE id = 1');
+  assert(await cmd('use', 'shells') === 'Item is not usable.' && await cmd('use', 'nothing') === 'unknown item: nothing', 'use answers for ammo and for what is no item');
+  // power armour
+  const ps = await spawn('item_power_shield');
+  await touch(ps);
+  await db.exec('UPDATE player SET cells = 0 WHERE id = 1');
+  r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  m = await me();
+  assert(m.INV_SHIELD === 1 && r.POWER_ARMOR === 0 && r.INV_SEL === 6, 'a power shield is held, selected, and off until used');
+  assert(await cmd('use', 'power shield') === 'No cells for power armor.' && (await me()).POWER_ARMOR === 0, '... no cells, no power');
+  await db.exec('UPDATE player SET cells = 50 WHERE id = 1');
+  r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 13]);
+  assert(r.POWER_ARMOR === 2, '... ENTER (invuse) switches the selected shield on');
+  const at = async (ang, dmg) => {
+    const p = await one(`SELECT x, y, z, yaw FROM ents WHERE id = ${pe}`);
+    const a = (p.YAW + ang) * Math.PI / 180;
+    const src = await spawn('info_null', p.X + Math.cos(a) * 100, p.Y + Math.sin(a) * 100, p.Z);
+    await db.exec(`UPDATE ents SET health = 100 WHERE id = ${pe}; UPDATE player SET cells = 50 WHERE id = 1`);
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE t_damage(${pe}, ${src}, ${src}, ${dmg}, 0, 0); END`);
+    await db.exec(`DELETE FROM ents WHERE id = ${src}`);
+    const q = await one(`SELECT e.health h, p.cells c, p.armor a FROM ents e JOIN player p ON p.ent_id = e.id`);
+    return { hurt: 100 - q.H, cells: 50 - q.C };
+  };
+  await db.exec('UPDATE player SET armor = 0, armor_type = 0 WHERE id = 1');
+  let d = await at(180, 30);
+  assert(d.hurt === 10 && d.cells === 10, `the shield takes two thirds of a blow from behind, a cell for two points (hurt ${d.hurt}, cells ${d.cells})`);
+  await db.exec('UPDATE player SET inv_shield = 0, inv_screen = 1 WHERE id = 1');
+  d = await at(180, 30);
+  const back = d;
+  d = await at(0, 30);
+  assert(back.hurt === 30 && back.cells === 0 && d.hurt === 20 && d.cells === 10, `a screen stops nothing from behind (${back.hurt}) and a third from in front, a cell a point (${d.hurt}, ${d.cells})`);
+  await db.exec(`UPDATE player SET cells = 0 WHERE id = 1; UPDATE ents SET health = ${hp0} WHERE id = ${pe}`);
+  r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  assert(r.POWER_ARMOR === 0 && (await me()).POWER_ARMOR === 0, '... and with the cells gone it switches itself off');
+  // the selection, and weapons picked up
+  await db.exec('UPDATE player SET inv_quad = 1, inv_breather = 1, inv_screen = 0, inv_sel = 7, weapons = 1 + 8, weapon = 1, bullets = 50, grenades = 0 WHERE id = 1');
+  await tic([1, 0, 0, 0, 0, 0, 0, 1, 14]);
+  const n1 = (await me()).INV_SEL;
+  await tic([1, 0, 0, 0, 0, 0, 0, 1, 14]);
+  const n2 = (await me()).INV_SEL;
+  await tic([1, 0, 0, 0, 0, 0, 0, 1, 14]);
+  const n3 = (await me()).INV_SEL;
+  await tic([1, 0, 0, 0, 0, 0, 0, 1, 15]);
+  const p1 = (await me()).INV_SEL;
+  assert(n1 === 10 && n2 === 23 && n3 === 26 && p1 === 23, `] steps through the usable items held (${n1} ${n2} ${n3}), [ steps back (${p1})`);
+  const list = (await db.query('SELECT idx, cnt FROM inventory_list', [], { rowMode: 'array' })).rows.map(([i, c]) => `${i}:${c}`).join(' ');
+  assert(list.includes('7:1') && list.includes('10:1') && list.includes('19:50') && list.includes('23:1') && list.includes('26:1'), `the inventory screen lists what is held (${list})`);
+  await db.exec('UPDATE player SET shells = 100 WHERE id = 1');
+  const sg = await spawn('weapon_shotgun');
+  await touch(sg);
+  m = await me();
+  const sg2 = await spawn('weapon_shotgun');
+  await touch(sg2);
+  assert(m.WEAPON === 2 && m.INV_SEL === 8 && !(await exists(sg2)), 'a new weapon is raised at once and selected; one already held is taken for its ammo even when full');
+  await db.exec('UPDATE ents SET health = max_health WHERE id = ' + pe);
+  const hl = await spawn('item_health');
+  await touch(hl);
+  const hsf = (await one(`SELECT spawnflags sf FROM ents WHERE id = ${hl}`)).SF;
+  assert((await exists(hl)) && (hsf & 262144), 'health at full health stays, but its targets have fired (ITEM_TARGETS_USED)');
+  await db.exec(`DELETE FROM ents WHERE id = ${hl}`);
+  await db.exec(`UPDATE player SET weapons = ${keep.WEAPONS}, weapon = ${keep.WEAPON}, shells = ${keep.SHELLS}, bullets = ${keep.BULLETS}, cells = ${keep.CELLS},
+    grenades = ${keep.GRENADES}, armor = ${keep.ARMOR}, armor_type = ${keep.ARMOR_TYPE}, inv_quad = 0, inv_breather = 0, power_armor = 0, inv_sel = 7, msg = NULL WHERE id = 1;
+    UPDATE ents SET health = ${hp0} WHERE id = ${pe}`);
+}
+
 // the console's commands: god, notarget, noclip through a wall, give, kill
 {
   const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;

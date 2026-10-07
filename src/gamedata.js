@@ -127,4 +127,20 @@ export const WEAPONS = {
 };
 export const AMMO_ICONS = { shells: 'a_shells', bullets: 'a_bullets', grenades: 'a_grenades', rockets: 'a_rockets', cells: 'a_cells', slugs: 'a_slugs' };
 export const ARMOR_ICONS = ['', 'i_jacketarmor', 'i_combatarmor', 'i_bodyarmor'];
-export const KEY_ICONS = ['k_bluekey', 'k_redkey', 'k_datacd', 'k_powercube', 'k_pyramid', 'k_dataspin', 'k_security', 'k_comhead', 'i_airstrike'];
+/** g_items.c's itemlist: [pickup name, icon] by index (41 is health, which every health item shares). */
+export const ITEMS = [null,
+  ['Body Armor', 'i_bodyarmor'], ['Combat Armor', 'i_combatarmor'], ['Jacket Armor', 'i_jacketarmor'], ['Armor Shard', 'i_jacketarmor'],
+  ['Power Screen', 'i_powerscreen'], ['Power Shield', 'i_powershield'],
+  ['Blaster', 'w_blaster'], ['Shotgun', 'w_shotgun'], ['Super Shotgun', 'w_sshotgun'], ['Machinegun', 'w_machinegun'], ['Chaingun', 'w_chaingun'],
+  ['Grenades', 'a_grenades'], ['Grenade Launcher', 'w_glauncher'], ['Rocket Launcher', 'w_rlauncher'], ['HyperBlaster', 'w_hyperblaster'],
+  ['Railgun', 'w_railgun'], ['BFG10K', 'w_bfg'],
+  ['Shells', 'a_shells'], ['Bullets', 'a_bullets'], ['Cells', 'a_cells'], ['Rockets', 'a_rockets'], ['Slugs', 'a_slugs'],
+  ['Quad Damage', 'p_quad'], ['Invulnerability', 'p_invulnerability'], ['Silencer', 'p_silencer'], ['Rebreather', 'p_rebreather'],
+  ['Environment Suit', 'p_envirosuit'], ['Ancient Head', 'i_fixme'], ['Adrenaline', 'p_adrenaline'], ['Bandolier', 'p_bandolier'], ['Ammo Pack', 'i_pack'],
+  ['Data CD', 'k_datacd'], ['Power Cube', 'k_powercube'], ['Pyramid Key', 'k_pyramid'], ['Data Spinner', 'k_dataspin'], ['Security Pass', 'k_security'],
+  ['Blue Key', 'k_bluekey'], ['Red Key', 'k_redkey'], ["Commander's Head", 'k_comhead'], ['Airstrike Marker', 'i_airstrike'],
+  ['Health', 'i_health']];
+/** The page's keys bound to "use <item>", as the inventory screen shows them (Key_KeynumToString). */
+export const ITEM_KEYS = { 7: '1', 8: '2', 9: '3', 10: '4', 11: '5', 12: 'g', 13: '6', 14: '7', 15: '8', 16: '9', 17: '0', 23: 'q', 24: 'i', 26: 'b', 27: 'e' };
+/** STAT_TIMER_ICON: quad, invulnerability, environment suit, rebreather. */
+export const TIMER_ICONS = [null, 'p_quad', 'p_invulnerability', 'p_envirosuit', 'p_rebreather'];

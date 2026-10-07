@@ -102,12 +102,25 @@ them.
   give-everything key moved to the console's `give all`). Choosing follows `Cmd_Use_f` and
   `Use_Weapon`: "Out of item: Shotgun", "No Shells for Shotgun.", "Not enough Cells for BFG10K.";
   `/` and the wheel (`weapnext`) pass over weapons without the ammo for a shot.
-- **Powerups in the inventory.** Single-player Quake 2 put a picked-up quad, invulnerability, rebreather,
-  environment suit and silencer in the inventory, used with `default.cfg`'s keys (`q`, `i`, `b`, `e`,
-  `s`) or the inventory (`TAB`, `[` `]`, `ENTER`), at most one held (two on easy and medium); here
-  they take effect on pickup, as deathmatch's instant items did.
-- **HUD.** The status bar and the main numbers, pickup messages, centre prints and the help
-  computer (`F1`) are in; the inventory screen, the score board and the menu system are not.
+- **The inventory**: done, from g_items.c, g_cmds.c and cl_inv.c. Items carry their itemlist index (1 body
+  armor … 7 blaster … 23 quad … 40 airstrike marker, 41 health). Powerups go into the inventory (one each on
+  hard, two on medium, any number on easy) and are used with `default.cfg`'s keys (Q quad damage, I
+  invulnerability, B rebreather, E environment suit; E no longer jumps) or the inventory: TAB shows it (the
+  `inventory` panel, keys and counts, the selected line white with a blinking cursor), `[` `]` move the
+  selection, ENTER uses it. A power screen or shield is held until used, then switched on and off
+  (`Use_PowerArmor`), off by itself when the cells run out; `CheckPowerArmor` as it was: the screen stops a
+  third of a blow and only from in front, a cell a point, the shield two thirds from anywhere, a cell for
+  two, with their green or blue sparks. The console has `use <item>`, `invuse`, `invnext`, `invprev`,
+  `inven`. The status bar is `single_statusbar`: the selected item bottom right, the item just picked up
+  (icon and name, three seconds) in place of a message, one powerup timer with its seconds, the help icon
+  (or the weapon's when the fov hides the gun), the power armour flashing with the armour; keys show in the
+  inventory, as in Quake 2. Pickups as single player had them: a new weapon (or the first grenades) is
+  raised at once, a weapon already held is taken for its ammo, a picked-up usable item becomes the
+  selection, and an item's targets fire the first time it is touched even when it stays. Left: the
+  silencer and the power shield have no key of their own here (`s` and `p` are the page's back and
+  pause): the inventory or `use` reach them.
+- **HUD.** The status bar, centre prints, the help computer (`F1`) and the inventory (`TAB`) are in;
+  the score board and the menu system are not.
 
 ## Rendering
 

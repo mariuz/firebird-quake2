@@ -102,6 +102,9 @@ short stories of what changed and what it measured; keep that.
 - A tic is 0.05 s (20 Hz): 20 tics are a second. The ground flag (512) must hold every tic the player
   stands on a floor; pmove-style code that runs only `IF (onground = 1)` silently halves otherwise. On the ground the
   player's `vz` is 0 (pmove); any path that skips the move must still write the speed it computed.
+- Items are named by their itemlist index (g_items.c's order: 7 blaster, 12 grenades, 23 quad, 41 health):
+  `inv_count`, `inv_sel`, `pickup_item` and the page's `ITEMS` all use it. Usable items (power armour,
+  weapons, powerups) are the ones the selection visits.
 - Skill numbers are Quake's: 0 easy, 1 medium, 2 hard. The scripts load maps at skill 2 (hard).
 - Spawnflags 256/512/1024 keep an entity out of easy/medium/hard; an entity with all three (1792) is
   deathmatch-only, and the demo maps have many (weapons, ammo, demo3's teleporter). Before calling

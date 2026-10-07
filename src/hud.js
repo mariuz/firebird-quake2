@@ -1,9 +1,10 @@
-// hud.js – cl_scrn.c's status bar layout, drawn into the 8-bit frame from
-// the pics/*.pcx pictures: health, the current weapon's ammo and armour
-// along the bottom, keys and timed powerups on the right, the crosshair.
+// hud.js – g_spawn.c's single_statusbar as cl_scrn.c lays it out, drawn into the 8-bit frame from
+// the pics/*.pcx pictures: health, the current weapon's ammo, armour and the selected item along the
+// bottom; the item just picked up, the powerup timer and the help icon above; the crosshair; and the
+// inventory screen (cl_inv.c).
 
 import { pic } from './pak.js';
-import { WEAPONS, AMMO_ICONS, ARMOR_ICONS, KEY_ICONS } from './gamedata.js';
+import { WEAPONS, AMMO_ICONS, ARMOR_ICONS, ITEMS, ITEM_KEYS, TIMER_ICONS } from './gamedata.js';
 
 export class Hud {
   constructor(pak) {
@@ -40,7 +41,8 @@ export class Hud {
   draw(r, hud, time) {
     const w = r.w, h = r.h;
     const x0 = (w - 320) >> 1;
-    const yb = h - 24;
+    const yb = h - 24, y2 = h - 50;
+    const frame = Math.floor(time * 10);
     // health
     const hp = hud.HEALTH;
     this.drawNum(r, x0, yb, hp, 3, hp <= 25 || (hp > 0 && time - hud.DMG_TIME < 0.4 && Math.floor(time * 10) % 2 === 0));
@@ -52,23 +54,31 @@ export class Hud {
       this.drawNum(r, x0 + 100, yb, cnt, 3, cnt <= 5);
       r.drawPic(this.pic(AMMO_ICONS[wp.ammo]), x0 + 150, yb);
     }
-    // armour
-    if (hud.ARMOR > 0 && hud.ARMOR_TYPE > 0) {
+    // armour: power armour that is on, with its cells, flashing with the other armour's count when there is some
+    const armor = hud.ARMOR > 0 && hud.ARMOR_TYPE > 0;
+    if (hud.POWER_ARMOR > 0 && (!armor || (frame & 8))) {
+      this.drawNum(r, x0 + 200, yb, hud.CELLS, 3, false);
+      r.drawPic(this.pic('i_powershield'), x0 + 250, yb);
+    } else if (armor) {
       this.drawNum(r, x0 + 200, yb, hud.ARMOR, 3, false);
       r.drawPic(this.pic(ARMOR_ICONS[hud.ARMOR_TYPE]), x0 + 250, yb);
-    } else if (hud.POWER_ARMOR > 0) {
-      this.drawNum(r, x0 + 200, yb, hud.CELLS, 3, false);
-      r.drawPic(this.pic(hud.POWER_ARMOR === 2 ? 'i_powershield' : 'i_powerscreen'), x0 + 250, yb);
     }
-    // the weapon in hand, the keys and powerups up the right edge
-    let y = yb - 26;
-    if (wp) { r.drawPic(this.pic(wp.icon), x0 + 296, yb); }
-    if (hud.HELP_ICON) r.drawPic(this.pic('i_help'), x0 + 148, yb);   // STAT_HELPICON: news on the help computer
-    for (let i = 0; i < 9; i++) if (hud.KEYS & (1 << i)) { r.drawPic(this.pic(KEY_ICONS[i]), x0 + 296, y); y -= 26; }
-    if (hud.QUAD) { r.drawPic(this.pic('p_quad'), x0 + 296, y); y -= 26; }
-    if (hud.INVINCIBLE) { r.drawPic(this.pic('p_invulnerability'), x0 + 296, y); y -= 26; }
-    if (hud.ENVIRO) { r.drawPic(this.pic('p_envirosuit'), x0 + 296, y); y -= 26; }
-    if (hud.BREATHER) { r.drawPic(this.pic('p_rebreather'), x0 + 296, y); y -= 26; }
+    // the selected item
+    if (hud.INV_SEL > 0 && ITEMS[hud.INV_SEL]) r.drawPic(this.pic(ITEMS[hud.INV_SEL][1]), x0 + 296, yb);
+    // the item just picked up: its icon and name
+    const got = ITEMS[hud.PICKUP_ITEM];
+    if (got) {
+      r.drawPic(this.pic(got[1]), x0, y2);
+      r.drawString(this.conchars, got[0], x0 + 26, h - 42);
+    }
+    // the powerup timer: seconds left and the powerup's icon
+    if (hud.TIMER_ICON > 0) {
+      this.drawNum(r, x0 + 262, y2, hud.TIMER, 2, false);
+      r.drawPic(this.pic(TIMER_ICONS[hud.TIMER_ICON]), x0 + 296, y2);
+    }
+    // STAT_HELPICON: news on the help computer, else the weapon in hand when the view's fov hides the gun
+    if (hud.HELP_ICON) r.drawPic(this.pic('i_help'), x0 + 148, y2);
+    else if (wp && hud.FOV > 91) r.drawPic(this.pic(wp.icon), x0 + 148, y2);
     // crosshair
     if (!hud.DEAD && this.crosshair) r.drawPic(this.crosshair, (w >> 1) - 4, ((h) >> 1) - 4);
   }
@@ -88,6 +98,37 @@ export class Hud {
     const n3 = (n) => String(n ?? 0).padStart(3);
     r.drawString(this.conchars, ' kills     goals    secrets', xv + 50, yv + 164, true);
     r.drawString(this.conchars, `${n3(h.KILLED)}/${n3(h.TOTAL_MONSTERS)}     ${h.FOUND_GOALS ?? 0}/${h.TOTAL_GOALS ?? 0}       ${h.FOUND_SECRETS ?? 0}/${h.TOTAL_SECRETS ?? 0}`, xv + 50, yv + 172, true);
+  }
+
+  /**
+   * CL_DrawInventory: every item held with its key and count, 17 lines scrolled around the selected one,
+   * which is drawn in the plain font with a blinking cursor; the rest in the alternate font.
+   * items: [index, count] rows in itemlist order.
+   */
+  drawInventory(r, items, selected, realtime) {
+    let x = (r.w - 256) >> 1, y = (r.h - 240) >> 1;
+    const panel = this.pic('inventory');
+    if (panel) r.drawPic(panel, x, y + 8);
+    y += 24; x += 24;
+    r.drawString(this.conchars, 'hotkey ### item', x, y);
+    r.drawString(this.conchars, '------ --- ----', x, y + 8);
+    y += 16;
+    const DISPLAY_ITEMS = 17;
+    let selNum = 0;
+    items.forEach(([idx], n) => { if (idx === selected) selNum = n; });
+    let top = selNum - (DISPLAY_ITEMS >> 1);
+    if (items.length - top < DISPLAY_ITEMS) top = items.length - DISPLAY_ITEMS;
+    if (top < 0) top = 0;
+    for (let i = top; i < items.length && i < top + DISPLAY_ITEMS; i++) {
+      const [idx, cnt] = items[i];
+      const line = `${(ITEM_KEYS[idx] ?? '').padStart(6)} ${String(cnt).padStart(3)} ${ITEMS[idx]?.[0] ?? ''}`;
+      if (idx !== selected) r.drawString(this.conchars, line, x, y, true);
+      else {
+        if (Math.floor(realtime * 10) & 1) r.drawChar(this.conchars, 15, x - 8, y);
+        r.drawString(this.conchars, line, x, y);
+      }
+      y += 8;
+    }
   }
 
   /** cstring2: each line centred in the 320 wide virtual screen, in the alternate font. */

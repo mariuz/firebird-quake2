@@ -105,8 +105,8 @@ Triggers (once, multiple, relay, always, counter, key, push, hurt) and targets (
 splash, secret, goal, help, laser, changelevel with its `map$spawnpoint` and the intermission at a unit's end,
 the unit's cross-level flags) are
 g_trigger.c and g_target.c.
-Items from stimpacks to the power shield, the ammo boxes, the keys and the timed powerups are
-g_items.c; the blaster, shotgun, super shotgun, machinegun, chaingun, hand grenades, grenade and rocket
+Items from stimpacks to the power shield, the ammo boxes, the keys and the timed powerups, with the
+inventory they wait in (TAB, `[` `]`, ENTER, and Q, I, B, E for the powerups), are g_items.c and g_cmds.c; the blaster, shotgun, super shotgun, machinegun, chaingun, hand grenades, grenade and rocket
 launchers, hyperblaster, railgun and BFG10K are p_weapon.c and g_weapon.c; armour, knockback, radius
 damage and gibs are g_combat.c. The monsters run g_ai.c's state machine — `FIND_TARGET`,
 `MOVE_TO_GOAL`, `NEW_CHASE_DIR`, `CHECK_ATTACK` — with the light, shotgun and machinegun guards, the

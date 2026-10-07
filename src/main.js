@@ -63,17 +63,21 @@ const keys = new Set();
 let mouseYaw = 0, mousePitch = 0;
 let fireClick = false;
 let impulse = 0;
-const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE',
+const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
+  'BracketLeft', 'BracketRight', 'Enter',
   'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
   'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
 let anyKey = null;      // a picture screen waiting for a key or a click
 let showHelp = false;   // the help computer (F1)
+let showInv = false;    // the inventory screen (TAB)
+let invItems = [];      // its rows: [itemlist index, count]
 let helpSeen = 0;       // the help_changed count the player has looked at
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (anyKey && !e.repeat) { e.preventDefault(); const go = anyKey; anyKey = null; go(); return; }
   if (!running) return;
-  if (e.code === 'F1') { e.preventDefault(); showHelp = !showHelp; if (last) helpSeen = last.HELP_CHANGED ?? 0; }
+  if (e.code === 'F1') { e.preventDefault(); showHelp = !showHelp; showInv = false; if (last) helpSeen = last.HELP_CHANGED ?? 0; }
+  if (e.code === 'Tab') { e.preventDefault(); showInv = !showInv; showHelp = false; }         // inven
   if (e.code === 'Backquote') { e.preventDefault(); openConsole(); return; }
   if (GAME_KEYS.has(e.code)) e.preventDefault();
   keys.add(e.code);
@@ -82,6 +86,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code.startsWith('Digit')) impulse = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5, Digit6: 7, Digit7: 8, Digit8: 9, Digit9: 10, Digit0: 11 }[e.code];
   if (e.code === 'KeyG') impulse = 6;
   if (e.code === 'Slash') impulse = 12;
+  // the inventory (invuse, invnext, invprev) and default.cfg's item keys: q quad damage, i invulnerability,
+  // b rebreather, e environment suit (s, the silencer, and p, the power shield, are the page's back and pause)
+  const inv = { Enter: 13, BracketRight: 14, BracketLeft: 15, KeyQ: 16, KeyI: 17, KeyB: 19, KeyE: 20 }[e.code];
+  if (inv) impulse = inv;
   if (e.code === 'KeyP' || e.code === 'Pause') paused = !paused;
   if (e.code === 'F6') { e.preventDefault(); saveGame(); }
   if (e.code === 'F9') { e.preventDefault(); loadGame(); }
@@ -118,6 +126,7 @@ async function runCommand(line) {
       await startMap(name, true);
       return;
     }
+    case 'inven': showInv = !showInv; showHelp = false; return;
     case 'save': return saveGame();
     case 'load': return loadGame();
     default:
@@ -224,7 +233,7 @@ function readInput(tics) {
   const fire = k('ControlLeft') || k('ControlRight') || k('KeyF') || fireClick ? 1 : 0;
   if (fireClick === 'tap') fireClick = false;
   // Quake's upmove: jump up, crouch (C) down, both nothing
-  const jump = (k('Space') || k('KeyE') || k('TapJump') ? 1 : 0) - (k('KeyC') ? 1 : 0);
+  const jump = (k('Space') || k('TapJump') ? 1 : 0) - (k('KeyC') ? 1 : 0);
   keys.delete('TapJump');
   const imp = impulse;
   impulse = 0;
@@ -235,6 +244,7 @@ function readInput(tics) {
 async function startMap(name, newGame, spawnpoint = null) {
   running = false;
   showHelp = false;
+  showInv = false;
   if (newGame) helpSeen = 0;
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
@@ -293,6 +303,7 @@ async function frame() {
 
     let t = performance.now();
     last = (await db.query('SELECT * FROM q2_tic(?, ?, ?, ?, ?, ?, ?, ?, ?)', readInput(tics), { rowMode: 'object' })).rows[0];
+    if (showInv) invItems = (await db.query('SELECT idx, cnt FROM inventory_list', [], { rowMode: 'array' })).rows;
     perf.tic = performance.now() - t;
 
     if (last.EXIT_KIND === 1 && last.NEXT_MAP) {
@@ -469,8 +480,10 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   // 2D: the status bar (with the help icon blinking while there is news on the help computer), and the
   // help computer itself on F1 and at the intermission
   last.HELP_ICON = (last.HELP_CHANGED ?? 0) > helpSeen && Math.floor(time * 10) & 8;
+  last.FOV = settings.fov;
   if (!last.INTERMISSION) hud.draw(r, last, time);
   if (showHelp || last.INTERMISSION) hud.drawHelp(r, last);
+  else if (showInv && !last.DEAD) hud.drawInventory(r, invItems, last.INV_SEL, performance.now() / 1000);
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
   if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
   if (last.DEAD) hud.drawCenter(r, 'You died\n\npress fire to restart', 60);
