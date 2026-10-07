@@ -167,7 +167,13 @@ text). New here:
   as a whole before its faces are, and its face list is kept on its row while the view holds and it does
   not move. An entity's clusters are three integer columns rather than a string, so the alias entities'
   PVS test is an expression of the cursor on the eye's leaf row, like the frustum tests: only the
-  entities drawn reach PSQL at all. Frame query, view held: 6.3 → 1.6 ms; turning: 3.5 → 2.3 ms.
+  entities drawn reach PSQL at all. The frustum is four world-space planes, each a one-sided test that
+  fails at the first plane a sphere is outside, instead of two `ABS` tests that each recomputed the depth;
+  and a face whose plane has the eye's whole cluster behind it is left out when the cluster is marked,
+  since no eye in the cluster can ever face it. Frame query, view held: 6.3 → 1.6 ms; turning: 3.5 → 1.9 ms.
+  What is left of a turning frame is the scan of the cluster's front-facing faces, about 1.3 ms, which
+  is the expression evaluator's floor: a leaf-level cull first would cost more in row fetches than it
+  saves, in this engine.
 - **Count the calls before timing the bodies.** A tic was making 43 tree descents, three per leaf
   lookup: a function in a `WHERE` clause (`WHERE l.id = point_leaf(…)`) is evaluated three times, for the
   index probe, the predicate and the fetch. Assigning it to a variable first made it one. And six
@@ -205,7 +211,7 @@ text). New here:
 
 With all that, an idle tic on the Outer Base at medium skill (31 monsters, 14 of them patrolling) costs
 about 3 ms in Node (about 5.5 with the player walking), down from 40 at first and 20 after the first round;
-the frame's query 2.3 ms turning and 1.6 ms with the view held, down from about 18 for the six queries it began as.
+the frame's query 1.9 ms turning and 1.6 ms with the view held, down from about 18 for the six queries it began as.
 
 ## Licence
 

@@ -102,15 +102,22 @@ END^
 CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER)
 AS
 DECLARE cur INTEGER; DECLARE world INTEGER;
+DECLARE bminx DOUBLE PRECISION; DECLARE bminy DOUBLE PRECISION; DECLARE bminz DOUBLE PRECISION;
+DECLARE bmaxx DOUBLE PRECISION; DECLARE bmaxy DOUBLE PRECISION; DECLARE bmaxz DOUBLE PRECISION;
 BEGIN
   SELECT c.vis_cluster FROM viewcfg c WHERE c.id = 1 INTO cur;
   IF (cur IS NOT DISTINCT FROM vcluster) THEN EXIT;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
+  -- the cluster's box: a face with all of it behind its plane cannot face an eye anywhere in it
+  SELECT MIN(l.minx), MIN(l.miny), MIN(l.minz), MAX(l.maxx), MAX(l.maxy), MAX(l.maxz) FROM leaves l WHERE l.cluster = :vcluster
+    INTO bminx, bminy, bminz, bmaxx, bmaxy, bmaxz;
+  IF (bminx IS NULL) THEN BEGIN bminx = -1e9; bminy = -1e9; bminz = -1e9; bmaxx = 1e9; bmaxy = 1e9; bmaxz = 1e9; END
   DELETE FROM vis_faces;
   INSERT INTO vis_faces (face, nx, ny, nz, dist, cx, cy, cz, radius)
   SELECT f.id, f.nx, f.ny, f.nz, f.dist, f.cx, f.cy, f.cz, f.radius
     FROM faces f
    WHERE f.model_id = :world AND BIN_AND(f.flags, 128) = 0
+     AND IIF(f.nx > 0, f.nx * :bmaxx, f.nx * :bminx) + IIF(f.ny > 0, f.ny * :bmaxy, f.ny * :bminy) + IIF(f.nz > 0, f.nz * :bmaxz, f.nz * :bminz) - f.dist > 0
      AND f.id IN (SELECT lf.face
                     FROM leaves l
                     JOIN leaffaces lf ON lf.id >= l.first_lf AND lf.id < l.first_lf + l.num_lf
@@ -255,6 +262,10 @@ DECLARE eid INTEGER; DECLARE emid INTEGER; DECLARE cl INTEGER; DECLARE c2 INTEGE
 DECLARE vis SMALLINT; DECLARE vis_cl INTEGER;
 DECLARE alpha SMALLINT; DECLARE k CHAR(1); DECLARE rfx INTEGER;
 DECLARE ef DOUBLE PRECISION; DECLARE er DOUBLE PRECISION; DECLARE eu DOUBLE PRECISION;
+DECLARE nrx DOUBLE PRECISION; DECLARE nry DOUBLE PRECISION; DECLARE nrz DOUBLE PRECISION; DECLARE enr DOUBLE PRECISION;
+DECLARE nlx DOUBLE PRECISION; DECLARE nly DOUBLE PRECISION; DECLARE nlz DOUBLE PRECISION; DECLARE enl DOUBLE PRECISION;
+DECLARE ntx DOUBLE PRECISION; DECLARE nty DOUBLE PRECISION; DECLARE ntz DOUBLE PRECISION; DECLARE ent DOUBLE PRECISION;
+DECLARE nbx DOUBLE PRECISION; DECLARE nby DOUBLE PRECISION; DECLARE nbz DOUBLE PRECISION; DECLARE enb DOUBLE PRECISION;
 DECLARE stamp INTEGER; DECLARE held SMALLINT; DECLARE fl_stamp INTEGER; DECLARE pose_ok SMALLINT;
 DECLARE bcx DOUBLE PRECISION; DECLARE bcy DOUBLE PRECISION; DECLARE bcz DOUBLE PRECISION; DECLARE brad DOUBLE PRECISION; DECLARE bcf DOUBLE PRECISION;
 BEGIN
@@ -264,6 +275,12 @@ BEGIN
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
   -- (c - e)·f = c·f - e·f: the eye's part is a constant of the frame, not of the row
   ef = ex * fx + ey * fy + ez * fz; er = ex * rx + ey * ry + ez * rz; eu = ex * ux + ey * uy + ez * uz;
+  -- the frustum's side planes (unnormalised: kx·f ∓ r, ky·f ∓ u; a sphere is in when c·n - e·n + R·|n| >= 0
+  -- with |n| = qx or qy), one-sided tests that fail at the first plane the sphere is outside
+  nrx = kx * fx - rx; nry = kx * fy - ry; nrz = kx * fz - rz; enr = ex * nrx + ey * nry + ez * nrz;
+  nlx = kx * fx + rx; nly = kx * fy + ry; nlz = kx * fz + rz; enl = ex * nlx + ey * nly + ez * nlz;
+  ntx = ky * fx - ux; nty = ky * fy - uy; ntz = ky * fz - uz; ent = ex * ntx + ey * nty + ez * ntz;
+  nbx = ky * fx + ux; nby = ky * fy + uy; nbz = ky * fz + uz; enb = ex * nbx + ey * nby + ez * nbz;
   IF (mode = 1) THEN
   BEGIN
     kind = 8;
@@ -285,8 +302,10 @@ BEGIN
       SELECT LIST(v.face, ',')
         FROM vis_faces v
        WHERE v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
-         AND ABS(v.cx * :rx + v.cy * :ry + v.cz * :rz - :er) <= (v.cx * :fx + v.cy * :fy + v.cz * :fz - :ef) * :kx + v.radius * :qx
-         AND ABS(v.cx * :ux + v.cy * :uy + v.cz * :uz - :eu) <= (v.cx * :fx + v.cy * :fy + v.cz * :fz - :ef) * :ky + v.radius * :qy
+         AND v.cx * :nrx + v.cy * :nry + v.cz * :nrz - :enr + v.radius * :qx >= 0
+         AND v.cx * :nlx + v.cy * :nly + v.cz * :nlz - :enl + v.radius * :qx >= 0
+         AND v.cx * :ntx + v.cy * :nty + v.cz * :ntz - :ent + v.radius * :qy >= 0
+         AND v.cx * :nbx + v.cy * :nby + v.cz * :nbz - :enb + v.radius * :qy >= 0
          AND v.cx * :fx + v.cy * :fy + v.cz * :fz - :ef + v.radius >= :nearz
         INTO lst;
       UPDATE viewcfg c SET c.lv_ex = :ex, c.lv_ey = :ey, c.lv_ez = :ez, c.lv_fx = :fx, c.lv_fy = :fy, c.lv_fz = :fz, c.lv_ux = :ux, c.lv_uy = :uy, c.lv_uz = :uz, c.lv_leaf = :vleaf, c.world_lst = :lst, c.view_stamp = :stamp WHERE c.id = 1;
@@ -319,21 +338,26 @@ BEGIN
       -- the whole model against the frustum first (a rotated one: a sphere about its origin wide enough for any angle)
       IF (rot = 1) THEN BEGIN brad = brad + ABS(bcx - d1) + ABS(bcy - d2) + ABS(bcz - d3); bcx = d1; bcy = d2; bcz = d3; END
       bcf = bcx * fx + bcy * fy + bcz * fz - ef;
-      IF (bcf + brad < nearz OR ABS(bcx * rx + bcy * ry + bcz * rz - er) > bcf * kx + brad * qx OR ABS(bcx * ux + bcy * uy + bcz * uz - eu) > bcf * ky + brad * qy) THEN lst = NULL;
+      IF (bcf + brad < nearz OR bcx * nrx + bcy * nry + bcz * nrz - enr + brad * qx < 0 OR bcx * nlx + bcy * nly + bcz * nlz - enl + brad * qx < 0
+          OR bcx * ntx + bcy * nty + bcz * ntz - ent + brad * qy < 0 OR bcx * nbx + bcy * nby + bcz * nbz - enb + brad * qy < 0) THEN lst = NULL;
       ELSE
       BEGIN
-      -- the eye in the model's space: e - o
-      d4 = (ex - d1) * fx + (ey - d2) * fy + (ez - d3) * fz; d5 = (ex - d1) * rx + (ey - d2) * ry + (ez - d3) * rz; d6 = (ex - d1) * ux + (ey - d2) * uy + (ez - d3) * uz;
+      -- the eye in the model's space (e - o) against the frame's planes
+      d4 = (ex - d1) * fx + (ey - d2) * fy + (ez - d3) * fz;
+      d5 = (ex - d1) * nrx + (ey - d2) * nry + (ez - d3) * nrz; d6 = (ex - d1) * nlx + (ey - d2) * nly + (ez - d3) * nlz;
+      d7 = (ex - d1) * ntx + (ey - d2) * nty + (ez - d3) * ntz; d8 = (ex - d1) * nbx + (ey - d2) * nby + (ez - d3) * nbz;
       SELECT LIST(f.id, ',')
         FROM faces f
        WHERE f.model_id = :emid AND BIN_AND(f.flags, 128) = 0
          AND (:rot = 1 OR (
              f.nx * (:ex - :d1) + f.ny * (:ey - :d2) + f.nz * (:ez - :d3) - f.dist > 0
-         AND ABS(f.cx * :rx + f.cy * :ry + f.cz * :rz - :d5) <= (f.cx * :fx + f.cy * :fy + f.cz * :fz - :d4) * :kx + f.radius * :qx
-         AND ABS(f.cx * :ux + f.cy * :uy + f.cz * :uz - :d6) <= (f.cx * :fx + f.cy * :fy + f.cz * :fz - :d4) * :ky + f.radius * :qy
+         AND f.cx * :nrx + f.cy * :nry + f.cz * :nrz - :d5 + f.radius * :qx >= 0
+         AND f.cx * :nlx + f.cy * :nly + f.cz * :nlz - :d6 + f.radius * :qx >= 0
+         AND f.cx * :ntx + f.cy * :nty + f.cz * :ntz - :d7 + f.radius * :qy >= 0
+         AND f.cx * :nbx + f.cy * :nby + f.cz * :nbz - :d8 + f.radius * :qy >= 0
          AND f.cx * :fx + f.cy * :fy + f.cz * :fz - :d4 + f.radius >= :nearz))
         INTO lst;
-      d4 = NULL; d5 = NULL; d6 = NULL;
+      d4 = NULL; d5 = NULL; d6 = NULL; d7 = NULL; d8 = NULL;
       END
       -- a held view will ask for the same list next frame: keep it (a turning view would only pay for the write)
       IF (held = 1) THEN
@@ -351,8 +375,10 @@ BEGIN
         FROM ents e CROSS JOIN leaves l
        WHERE l.id = :vleaf AND e.mkind IN ('M', 'S') AND e.id <> :pe
          AND e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64 >= :nearz
-         AND ABS(e.x * :rx + e.y * :ry + e.z * :rz - :er) <= (e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64) * :kx + e.mradius + 64
-         AND ABS(e.x * :ux + e.y * :uy + e.z * :uz - :eu) <= (e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64) * :ky + e.mradius + 64
+         AND e.x * :nrx + e.y * :nry + e.z * :nrz - :enr + (e.mradius + 64) * :qx >= 0
+         AND e.x * :nlx + e.y * :nly + e.z * :nlz - :enl + (e.mradius + 64) * :qx >= 0
+         AND e.x * :ntx + e.y * :nty + e.z * :ntz - :ent + (e.mradius + 64) * :qy >= 0
+         AND e.x * :nbx + e.y * :nby + e.z * :nbz - :enb + (e.mradius + 64) * :qy >= 0
          AND (l.pvs = ''
               OR ((e.cluster IS NULL OR e.cluster < 0) AND e.cl2 IS NULL AND e.cl3 IS NULL)
               OR (e.cluster >= 0 AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cluster, 3))) <> 0)
