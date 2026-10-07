@@ -1,6 +1,6 @@
 // ab-bench.mjs – A/B two SQL trees on the same machine at the same time: tics alternate between
 // two databases, one loaded from each, so load noise hits both alike.
-//   node scripts/ab-bench.mjs <other-sql-dir> [map] [--tics=N] [--walk]
+//   node scripts/ab-bench.mjs <other-sql-dir> [map] [--tics=N] [--walk] [--frame [--turn]]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,8 @@ const other = args[0];
 const map = args[1] ?? 'demo1';
 const N = Number(process.argv.find((a) => a.startsWith('--tics='))?.slice(7) ?? 200);
 const walk = process.argv.includes('--walk') ? 1 : 0;
+const frame = process.argv.includes('--frame');   // time frame_all instead of the tic
+const turn = process.argv.includes('--turn');     // ... with the view turning a little each frame
 const pak = new Pak(fs.readFileSync(path.join(root, 'public/pak/pak0.pak')).buffer);
 async function open(dir, name) {
   const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(dir, `${n}.sql`), 'utf8')]));
@@ -23,10 +25,12 @@ async function open(dir, name) {
   return db;
 }
 const A = await open(other, 'a'), B = await open(path.join(root, 'sql'), 'b');
-const q = `SELECT * FROM q2_tic(1, ${walk}, 0, ${walk ? 3 : 0}, 0, 0, 0, 1, 0)`;
+const q = frame ? 'SELECT * FROM frame_all(0, 0, 0, 0)' : `SELECT * FROM q2_tic(1, ${walk}, 0, ${walk ? 3 : 0}, 0, 0, 0, 1, 0)`;
+const pre = turn ? 'UPDATE ents SET yaw = yaw + 0.7 WHERE id = (SELECT ent_id FROM player)' : null;
 for (let i = 0; i < 20; i++) { await A.query(q); await B.query(q); }
 const ta = [], tb = [];
 for (let i = 0; i < N; i++) {
+  if (pre) { await A.query(pre); await B.query(pre); }
   let t0 = performance.now(); await A.query(q); ta.push(performance.now() - t0);
   t0 = performance.now(); await B.query(q); tb.push(performance.now() - t0);
 }

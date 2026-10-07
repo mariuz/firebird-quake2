@@ -155,6 +155,9 @@ async function startMap(name, newGame, spawnpoint = null) {
   beams = []; explosions = [];
   const g = (await db.query('SELECT sky, cd_track FROM game')).rows[0];
   renderer.setSky(g.SKY);
+  // the light styles' resting values: the frame lists only the ones that animate or that the map switches
+  styleBase.fill(0);
+  for (const [s, p] of (await db.query('SELECT style, pattern FROM lightstyles', [], arr)).rows) if (s < 64 && p) styleBase[s] = (p.charCodeAt(0) - 97) / 12.5;
   const speakers = (await db.query("SELECT id, x, y, z, noise1, speed, height, sounds FROM ents WHERE classname = 'target_speaker' AND BIN_AND(spawnflags, 3) <> 0 AND noise1 IS NOT NULL", [], arr)).rows;
   audio.setSpeakers(speakers);
   audio.playMusic(Number(g.CD_TRACK ?? 0));
@@ -179,6 +182,7 @@ function nextFrame() {
 
 const arr = { rowMode: 'array' };
 const brushFrames = new Map();
+const styleBase = new Float32Array(64);
 const brushAngles = new Map();
 
 async function frame() {
@@ -220,7 +224,7 @@ async function frame() {
     const wantSpeakers = ++frameNo % 10 === 0;
     const rows = (await db.query(`SELECT * FROM frame_all(${settings.renderer === 'sql' ? 1 : 0}, ${lastSoundId}, ${lastFxId}, ${wantSpeakers ? 1 : 0})`, [], arr)).rows;
     const faces = [], ents = [], sounds = [], fx = [];
-    const styleMap = new Float32Array(64);
+    const styleMap = styleBase.slice();
     let speakers = null;
     brushFrames.clear(); brushAngles.clear();
     for (const r of rows) {

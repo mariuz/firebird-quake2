@@ -34,7 +34,7 @@ npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs d
 npm run bench          # where a tic and a frame spend their time
 npm run bench:tic      # the cost of a tic over 200 tics of play (median, p90); add --walk for a moving player
 npm run bench:calls    # how many traces, leaf lookups and links a tic makes
-npm run bench:ab -- <dir>  # A/B the SQL against another copy of sql/, tics alternating between two databases
+npm run bench:ab -- <dir>  # A/B the SQL against another copy of sql/, tics alternating between two databases (--frame [--turn] for the frame)
 npm run bench:raster   # where the painter spends its time (add --cold to rebuild every surface each frame)
 npm run inspect        # what is in the pak (maps, models and their frame runs, sounds)
 ```
@@ -156,6 +156,13 @@ text). New here:
   PVS test; an entity that did not move is not relinked, and three point lookups serve instead of ten.
 - **Idle rows should cost nothing.** Pushers that are not moving and have no think pending are skipped
   entirely; patrolling monsters out of the player's PVS think at 3 Hz and stride three times as far.
+- **A frame whose view holds still is the last frame.** The world's visible-face list is kept on `viewcfg`
+  with the eye position and view axes it was made for and reused while they hold, and so is the eye's leaf
+  while only the view turns. The frustum tests themselves lost a third of their arithmetic: (c − e)·f is
+  c·f − e·f, and e·f is a constant of the frame, not of the row. The entity row carries its model's kind
+  and radius so the frame never joins `models`; the light-style list names only the styles that animate
+  or that the map switches, the page holds the resting values. Frame query, view held: 6.3 → 3.6 ms;
+  turning: 3.5 → 2.6 ms.
 - **Count the calls before timing the bodies.** A tic was making 43 tree descents, three per leaf
   lookup: a function in a `WHERE` clause (`WHERE l.id = point_leaf(…)`) is evaluated three times, for the
   index probe, the predicate and the fetch. Assigning it to a variable first made it one. And six
@@ -193,7 +200,7 @@ text). New here:
 
 With all that, an idle tic on the Outer Base at medium skill (31 monsters, 14 of them patrolling) costs
 about 3 ms in Node (about 5.5 with the player walking), down from 40 at first and 20 after the first round;
-the frame's queries 5 to 8 ms, down from about 18.
+the frame's query 2.6 ms turning and 3.6 ms with the view held, down from about 18 for the six queries it began as.
 
 ## Licence
 

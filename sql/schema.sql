@@ -42,7 +42,13 @@ CREATE TABLE viewcfg (
   h      INTEGER NOT NULL,
   fov    DOUBLE PRECISION NOT NULL,     -- horizontal, degrees
   near_z DOUBLE PRECISION NOT NULL,
-  vis_cluster INTEGER                  -- the cluster VIS_FACES was marked for
+  vis_cluster INTEGER,                 -- the cluster VIS_FACES was marked for
+  -- the view the world's face list was last made for, and that list (reused while the view holds still)
+  lv_ex DOUBLE PRECISION, lv_ey DOUBLE PRECISION, lv_ez DOUBLE PRECISION,
+  lv_fx DOUBLE PRECISION, lv_fy DOUBLE PRECISION, lv_fz DOUBLE PRECISION,
+  lv_ux DOUBLE PRECISION, lv_uy DOUBLE PRECISION, lv_uz DOUBLE PRECISION,
+  lv_leaf INTEGER,                     -- the eye's leaf at lv_ex/ey/ez (no tree walk while the eye stands)
+  world_lst BLOB SUB_TYPE TEXT CHARACTER SET ASCII
 );
 
 -- ── resources ───────────────────────────────────────────────────────────
@@ -300,6 +306,8 @@ CREATE TABLE ents (
   cluster    INTEGER,
   clusters   VARCHAR(200) CHARACTER SET ASCII,   -- ',' separated clusters the box touches
   lx DOUBLE PRECISION, ly DOUBLE PRECISION, lz DOUBLE PRECISION,   -- where it was last linked
+  mkind      CHAR(1),                      -- the model's kind (B bsp, M md2, S sp2), copied in by set_model
+  mradius    DOUBLE PRECISION DEFAULT 0 NOT NULL,   -- ... and its bounding radius
   vis_cl     INTEGER,                      -- brush models: the view cluster VIS was decided for
   vis        SMALLINT,                     -- ... and whether the model is in that cluster's PVS
   waterlevel SMALLINT DEFAULT 0 NOT NULL,
@@ -318,6 +326,7 @@ CREATE INDEX ents_solid ON ents (solid);
 CREATE INDEX ents_think ON ents (nextthink);
 CREATE INDEX ents_model ON ents (model_id);
 CREATE INDEX ents_movetype ON ents (movetype);
+CREATE INDEX ents_mkind ON ents (mkind);
 CREATE INDEX ents_team ON ents (team);
 
 -- The one client.

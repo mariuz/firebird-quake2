@@ -911,6 +911,7 @@ BEGIN
   -- keys don't carry over; neither do dead weapons
   UPDATE player p SET p.weapon = best_weapon() WHERE p.id = 1 AND (BIN_AND(p.weapons, p.weapon) = 0 OR p.weapon = 0);
   UPDATE game g SET g.has_water = IIF(EXISTS (SELECT 1 FROM leaves l WHERE BIN_AND(l.contents, 56) <> 0), 1, 0) WHERE g.id = 1;
+  UPDATE viewcfg c SET c.vis_cluster = NULL, c.lv_ex = NULL, c.lv_leaf = NULL, c.world_lst = NULL WHERE c.id = 1;
   EXECUTE PROCEDURE spawn_map_ents(skill, spawnpoint);
   -- the level name
   UPDATE player p SET p.cprint = (SELECT g.level_msg FROM game g WHERE g.id = 1), p.cprint_time = 3 WHERE p.id = 1;

@@ -49,7 +49,9 @@ BEGIN
   scale_ = (w / 2e0) / TAN(fov * 0.5e0 * 0.0174532925e0);
   kx = (w / 2e0) / scale_;
   ky = (h / 2e0) / scale_;
-  leaf = point_leaf(ex, ey, ez);
+  -- the eye's leaf: the one found for this position last frame, else a walk of the tree
+  SELECT c.lv_leaf FROM viewcfg c WHERE c.id = 1 AND c.lv_ex = :ex AND c.lv_ey = :ey AND c.lv_ez = :ez INTO leaf;
+  IF (leaf IS NULL) THEN leaf = point_leaf(ex, ey, ez);
   SELECT l.pvs, l.cluster FROM leaves l WHERE l.id = :leaf INTO pvs, cluster;
   IF (pvs IS NULL) THEN pvs = '';
   IF (cluster IS NULL) THEN cluster = -1;
@@ -90,6 +92,7 @@ DECLARE p INTEGER; DECLARE q INTEGER; DECLARE c INTEGER;
 BEGIN
   IF (pvs IS NULL OR pvs = '') THEN RETURN 1;
   IF (clusters IS NULL) THEN RETURN IIF(cluster IS NULL OR cluster < 0, 1, pvs_visible(pvs, cluster));
+  IF (POSITION(',', clusters, 2) = CHAR_LENGTH(clusters)) THEN RETURN pvs_visible(pvs, CAST(SUBSTRING(clusters FROM 2 FOR CHAR_LENGTH(clusters) - 2) AS INTEGER));   -- one cluster
   p = 2;
   WHILE (p <= CHAR_LENGTH(clusters)) DO
   BEGIN
@@ -121,7 +124,7 @@ BEGIN
                     JOIN leaffaces lf ON lf.id >= l.first_lf AND lf.id < l.first_lf + l.num_lf
                    WHERE l.cluster >= 0 AND l.num_lf > 0
                      AND (:pvs = '' OR BIN_AND(POSITION(SUBSTRING(:pvs FROM BIN_SHR(l.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(l.cluster, 3))) <> 0));
-  UPDATE viewcfg c SET c.vis_cluster = :vcluster WHERE c.id = 1;
+  UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.world_lst = NULL WHERE c.id = 1;
 END^
 
 -- FRAME_FACES: the same faces, projected vertex by vertex in SQL.
@@ -238,7 +241,7 @@ SET TERM ^ ;
 --   1 faces (i2 ent, d1..3 origin, lst the face ids)
 --   8 projected vertex, mode 1 only (i1 face, i2 seq, i3 ent, d1..7 vf vr vu sx sy s t)
 --   2 alias model or sprite (i1 id, i2 model, i3 frame, i4 skin, i5 effects, d1..6 pose, d7 alpha, d8 renderfx, s kind)
---   3 light styles (lst as style:value pairs)
+--   3 light styles that animate or that the map switches (lst as style:value pairs; the rest never change)
 --   4 sound after last_sound (i1 id, i2 ent, i3 chan, d1 vol, d2 attn, d3..5 at, s name)
 --   5 effect after last_fx (i1 id, i2 kind, i3 n, d1..6 at/to)
 --   6 brush-model pose (i1 ent, i2 frame, d1..3 angles)
@@ -259,11 +262,14 @@ DECLARE qx DOUBLE PRECISION; DECLARE qy DOUBLE PRECISION; DECLARE world INTEGER;
 DECLARE eid INTEGER; DECLARE emid INTEGER; DECLARE cls VARCHAR(200) CHARACTER SET ASCII; DECLARE cl INTEGER; DECLARE rot SMALLINT;
 DECLARE vis SMALLINT; DECLARE vis_cl INTEGER;
 DECLARE alpha SMALLINT; DECLARE k CHAR(1); DECLARE rfx INTEGER;
+DECLARE ef DOUBLE PRECISION; DECLARE er DOUBLE PRECISION; DECLARE eu DOUBLE PRECISION;
 BEGIN
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
   pe = player_ent();
   EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
+  -- (c - e)·f = c·f - e·f: the eye's part is a constant of the frame, not of the row
+  ef = ex * fx + ey * fy + ez * fz; er = ex * rx + ey * ry + ez * rz; eu = ex * ux + ey * uy + ez * uz;
   IF (mode = 1) THEN
   BEGIN
     kind = 8;
@@ -274,22 +280,27 @@ BEGIN
   BEGIN
     EXECUTE PROCEDURE mark_faces(pvs, vcl);
     kind = 1; i2 = 0; d1 = 0; d2 = 0; d3 = 0;
-    SELECT LIST(v.face, ',')
-      FROM vis_faces v
-     WHERE v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
-       AND (v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz + v.radius >= :nearz
-       AND ABS((v.cx - :ex) * :rx + (v.cy - :ey) * :ry + (v.cz - :ez) * :rz)
-           <= ((v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz) * :kx + v.radius * :qx
-       AND ABS((v.cx - :ex) * :ux + (v.cy - :ey) * :uy + (v.cz - :ez) * :uz)
-           <= ((v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz) * :ky + v.radius * :qy
-      INTO lst;
+    -- the world's list holds while the eye holds still: the last one is kept on viewcfg
+    SELECT c.world_lst FROM viewcfg c WHERE c.id = 1 AND c.lv_ex = :ex AND c.lv_ey = :ey AND c.lv_ez = :ez
+       AND c.lv_fx = :fx AND c.lv_fy = :fy AND c.lv_fz = :fz AND c.lv_ux = :ux AND c.lv_uy = :uy AND c.lv_uz = :uz INTO lst;
+    IF (lst IS NULL) THEN
+    BEGIN
+      SELECT LIST(v.face, ',')
+        FROM vis_faces v
+       WHERE v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
+         AND ABS(v.cx * :rx + v.cy * :ry + v.cz * :rz - :er) <= (v.cx * :fx + v.cy * :fy + v.cz * :fz - :ef) * :kx + v.radius * :qx
+         AND ABS(v.cx * :ux + v.cy * :uy + v.cz * :uz - :eu) <= (v.cx * :fx + v.cy * :fy + v.cz * :fz - :ef) * :ky + v.radius * :qy
+         AND v.cx * :fx + v.cy * :fy + v.cz * :fz - :ef + v.radius >= :nearz
+        INTO lst;
+      UPDATE viewcfg c SET c.lv_ex = :ex, c.lv_ey = :ey, c.lv_ez = :ez, c.lv_fx = :fx, c.lv_fy = :fy, c.lv_fz = :fz, c.lv_ux = :ux, c.lv_uy = :uy, c.lv_uz = :uz, c.lv_leaf = :vleaf, c.world_lst = :lst WHERE c.id = 1;
+    END
     IF (lst IS NOT NULL) THEN SUSPEND;
 
     -- the brush-model entities in the PVS. Whether a model's clusters are in the PVS is decided
     -- once per view cluster and kept on the row until the model is relinked.
     FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.clusters, e.cluster, IIF(e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0, 1, 0), e.vis_cl, e.vis
-          FROM ents e JOIN models m ON m.id = e.model_id
-         WHERE m.kind = 'B' AND e.model_id <> :world AND e.solid <> 1
+          FROM ents e
+         WHERE e.mkind = 'B' AND e.model_id <> :world AND e.solid <> 1
           INTO eid, emid, d1, d2, d3, cls, cl, rot, vis_cl, vis
     DO
     BEGIN
@@ -300,17 +311,18 @@ BEGIN
       END
       IF (vis = 0) THEN CONTINUE;
       i2 = eid;
+      -- the eye in the model's space: e - o
+      d4 = (ex - d1) * fx + (ey - d2) * fy + (ez - d3) * fz; d5 = (ex - d1) * rx + (ey - d2) * ry + (ez - d3) * rz; d6 = (ex - d1) * ux + (ey - d2) * uy + (ez - d3) * uz;
       SELECT LIST(f.id, ',')
         FROM faces f
        WHERE f.model_id = :emid AND BIN_AND(f.flags, 128) = 0
          AND (:rot = 1 OR (
              f.nx * (:ex - :d1) + f.ny * (:ey - :d2) + f.nz * (:ez - :d3) - f.dist > 0
-         AND (f.cx + :d1 - :ex) * :fx + (f.cy + :d2 - :ey) * :fy + (f.cz + :d3 - :ez) * :fz + f.radius >= :nearz
-         AND ABS((f.cx + :d1 - :ex) * :rx + (f.cy + :d2 - :ey) * :ry + (f.cz + :d3 - :ez) * :rz)
-             <= ((f.cx + :d1 - :ex) * :fx + (f.cy + :d2 - :ey) * :fy + (f.cz + :d3 - :ez) * :fz) * :kx + f.radius * :qx
-         AND ABS((f.cx + :d1 - :ex) * :ux + (f.cy + :d2 - :ey) * :uy + (f.cz + :d3 - :ez) * :uz)
-             <= ((f.cx + :d1 - :ex) * :fx + (f.cy + :d2 - :ey) * :fy + (f.cz + :d3 - :ez) * :fz) * :ky + f.radius * :qy))
+         AND ABS(f.cx * :rx + f.cy * :ry + f.cz * :rz - :d5) <= (f.cx * :fx + f.cy * :fy + f.cz * :fz - :d4) * :kx + f.radius * :qx
+         AND ABS(f.cx * :ux + f.cy * :uy + f.cz * :uz - :d6) <= (f.cx * :fx + f.cy * :fy + f.cz * :fz - :d4) * :ky + f.radius * :qy
+         AND f.cx * :fx + f.cy * :fy + f.cz * :fz - :d4 + f.radius >= :nearz))
         INTO lst;
+      d4 = NULL; d5 = NULL; d6 = NULL;
       IF (lst IS NOT NULL) THEN SUSPEND;
     END
     lst = NULL;
@@ -320,12 +332,11 @@ BEGIN
   -- is in the WHERE clause so only the entities in view reach the PVS test; the sphere is the
   -- model's radius plus a margin that covers any monster's box.
   kind = 2;
-  FOR SELECT e.id, e.model_id, e.frame, e.skin, e.effects, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.alpha, e.renderfx, m.kind, e.cluster, e.clusters
-        FROM ents e JOIN models m ON m.id = e.model_id
-       WHERE m.kind IN ('M', 'S') AND e.id <> :pe
-         AND (e.x - :ex) * :fx + (e.y - :ey) * :fy + (e.z - :ez) * :fz + m.radius + 64 >= :nearz
-         AND ABS((e.x - :ex) * :rx + (e.y - :ey) * :ry + (e.z - :ez) * :rz)
-             <= ((e.x - :ex) * :fx + (e.y - :ey) * :fy + (e.z - :ez) * :fz + m.radius + 64) * :kx + m.radius + 64
+  FOR SELECT e.id, e.model_id, e.frame, e.skin, e.effects, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.alpha, e.renderfx, e.mkind, e.cluster, e.clusters
+        FROM ents e
+       WHERE e.mkind IN ('M', 'S') AND e.id <> :pe
+         AND e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64 >= :nearz
+         AND ABS(e.x * :rx + e.y * :ry + e.z * :rz - :er) <= (e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64) * :kx + e.mradius + 64
         INTO i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, alpha, rfx, k, cl, cls
   DO
   BEGIN
@@ -334,7 +345,9 @@ BEGIN
     SUSPEND;
   END
   kind = 3; i1 = NULL; i2 = NULL; i3 = NULL; i4 = NULL; i5 = NULL; d1 = NULL; d2 = NULL; d3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL; d7 = NULL; d8 = NULL; s = NULL;
-  SELECT LIST(l.style || ':' || l.value_, ',') FROM frame_lightstyles l INTO lst;
+  -- only the styles that move or that the map switches; the page holds the constant ones
+  SELECT LIST(s.style || ':' || ((ASCII_VAL(SUBSTRING(s.pattern FROM 1 + MOD(CAST(FLOOR(g.time_ * 10) AS INTEGER), CHAR_LENGTH(s.pattern)) FOR 1)) - 97) / 12.5e0), ',')
+    FROM lightstyles s CROSS JOIN game g WHERE g.id = 1 AND (CHAR_LENGTH(s.pattern) > 1 OR s.style >= 32) INTO lst;
   SUSPEND;
   lst = NULL;
   kind = 4;
@@ -344,8 +357,8 @@ BEGIN
   FOR SELECT fe.id, fe.kind, fe.n, fe.x, fe.y, fe.z, fe.x2, fe.y2, fe.z2 FROM fx_events fe WHERE fe.id > :last_fx ORDER BY fe.id
         INTO i1, i2, i3, d1, d2, d3, d4, d5, d6 DO SUSPEND;
   kind = 6; i3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL;
-  FOR SELECT e.id, e.frame, e.pitch, e.yaw, e.roll FROM ents e JOIN models m ON m.id = e.model_id
-       WHERE m.kind = 'B' AND (e.frame <> 0 OR e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0) INTO i1, i2, d1, d2, d3 DO SUSPEND;
+  FOR SELECT e.id, e.frame, e.pitch, e.yaw, e.roll FROM ents e
+       WHERE e.mkind = 'B' AND (e.frame <> 0 OR e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0) INTO i1, i2, d1, d2, d3 DO SUSPEND;
   IF (want_speakers = 1) THEN
   BEGIN
     kind = 7; i1 = NULL; i2 = NULL; d1 = NULL; d2 = NULL; d3 = NULL;

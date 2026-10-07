@@ -180,21 +180,22 @@ END^
 -- setmodel(): for brush models also setsize() from the model's bounds
 CREATE OR ALTER PROCEDURE set_model (eid INTEGER, name VARCHAR(64))
 AS
-DECLARE mid INTEGER; DECLARE kind CHAR(1);
+DECLARE mid INTEGER; DECLARE kind CHAR(1); DECLARE rad DOUBLE PRECISION;
 DECLARE a DOUBLE PRECISION; DECLARE b DOUBLE PRECISION; DECLARE c DOUBLE PRECISION;
 DECLARE d DOUBLE PRECISION; DECLARE e_ DOUBLE PRECISION; DECLARE f DOUBLE PRECISION;
 BEGIN
-  SELECT FIRST 1 m.id, m.kind, m.minx, m.miny, m.minz, m.maxx, m.maxy, m.maxz FROM models m WHERE m.name = :name ORDER BY m.id DESC
-    INTO mid, kind, a, b, c, d, e_, f;
+  SELECT FIRST 1 m.id, m.kind, m.radius, m.minx, m.miny, m.minz, m.maxx, m.maxy, m.maxz FROM models m WHERE m.name = :name ORDER BY m.id DESC
+    INTO mid, kind, rad, a, b, c, d, e_, f;
   IF (mid IS NULL) THEN
   BEGIN
-    UPDATE ents e SET e.model_id = NULL WHERE e.id = :eid;
+    UPDATE ents e SET e.model_id = NULL, e.mkind = NULL WHERE e.id = :eid;
     EXIT;
   END
+  -- (the kind and radius ride on the entity row so the frame never joins models)
   IF (kind = 'B') THEN
-    UPDATE ents e SET e.model_id = :mid, e.minx = :a, e.miny = :b, e.minz = :c, e.maxx = :d, e.maxy = :e_, e.maxz = :f WHERE e.id = :eid;
+    UPDATE ents e SET e.model_id = :mid, e.mkind = :kind, e.mradius = :rad, e.minx = :a, e.miny = :b, e.minz = :c, e.maxx = :d, e.maxy = :e_, e.maxz = :f WHERE e.id = :eid;
   ELSE
-    UPDATE ents e SET e.model_id = :mid WHERE e.id = :eid;
+    UPDATE ents e SET e.model_id = :mid, e.mkind = :kind, e.mradius = :rad WHERE e.id = :eid;
 END^
 
 CREATE OR ALTER PROCEDURE set_size (eid INTEGER, a DOUBLE PRECISION, b DOUBLE PRECISION, c DOUBLE PRECISION,
@@ -1704,7 +1705,7 @@ BEGIN
     ELSE IF (cls = 'target_speaker') THEN
     BEGIN
       -- noise1 holds the sound; speed = volume, height = attenuation; sounds = 1 while a looped speaker plays
-      UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.speed = IIF(COALESCE(:vol, 0) = 0, 1, :vol), e.height = COALESCE(:attn, 1),
+      UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.speed = IIF(COALESCE(:vol, 0) = 0, 1, :vol), e.height = COALESCE(:attn, 1),
              e.sounds = IIF(BIN_AND(:sf, 1) <> 0, 1, 0), e.noise1 = IIF(POSITION('.', :noise) = 0, :noise || '.wav', :noise) WHERE e.id = :eid;
     END
     ELSE IF (cls IN ('target_explosion', 'target_splash', 'target_secret', 'target_goal', 'target_help', 'target_lightramp', 'target_temp_entity', 'target_blaster', 'target_spawner')) THEN
@@ -1718,7 +1719,7 @@ BEGIN
     BEGIN
       -- a beam from its origin along its angles; sounds = 1 while on; dmg per touch
       EXECUTE PROCEDURE movedir(COALESCE(ang, 0)) RETURNING_VALUES dx, dy, dz;
-      UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.p1x = :dx, e.p1y = :dy, e.p1z = :dz, e.sounds = IIF(BIN_AND(:sf, 1) <> 0, 1, 0),
+      UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.p1x = :dx, e.p1y = :dy, e.p1z = :dz, e.sounds = IIF(BIN_AND(:sf, 1) <> 0, 1, 0),
              e.dmg = IIF(COALESCE(:dmg, 0) = 0, 1, :dmg), e.think = 'laser_think', e.nextthink = 0.1e0 WHERE e.id = :eid;
     END
     ELSE IF (cls IN ('misc_teleporter_dest', 'info_null', 'info_notnull')) THEN
