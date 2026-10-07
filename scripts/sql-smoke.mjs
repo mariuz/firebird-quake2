@@ -179,6 +179,52 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert((await db.query('SELECT COUNT(*) n FROM portal_state WHERE open_ = 1')).rows[0].N === 0, 'every area portal starts a map closed');
 }
 
+// leaving a level: the help computer's messages, a plain exit taken at once, a unit's end stopping at the intermission
+{
+  const { parseChangeMap } = await import('../src/levels.js');
+  const pc = parseChangeMap('*demo2$base1');
+  assert(pc.unitEnd && pc.map === 'demo2' && pc.spawn === 'base1' && pc.kind === 'map', 'a unit end with a spawn point parses');
+  assert(parseChangeMap('victory.pcx').kind === 'pic' && parseChangeMap('ntro.cin+base1').then === 'base1', 'pictures and cinematics with a follow-on parse');
+
+  const spawn = async (cls, set) => (await db.query(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('${cls}', 0, 0, 0) RETURNING_VALUES id; UPDATE ents e SET e.solid = 0, ${set} WHERE e.id = :id; SUSPEND; END`)).rows[0].ID;
+  const use = (id) => db.query(`EXECUTE BLOCK AS DECLARE r INTEGER; BEGIN EXECUTE PROCEDURE spawn_ent('trigger_relay', 0, 0, 0) RETURNING_VALUES r;
+    UPDATE ents e SET e.solid = 0, e.target = (SELECT t.targetname FROM ents t WHERE t.id = ${id}) WHERE e.id = :r; EXECUTE PROCEDURE use_targets(r, player_ent()); END`);
+  const game = async () => (await db.query('SELECT exit_kind, next_map, intermission_time, help_msg, help_msg2, help_changed FROM game')).rows[0];
+
+  const h0 = (await game()).HELP_CHANGED;
+  await use(await spawn('target_help', "e.targetname = 'xh1', e.spawnflags = 1, e.message = 'Primary objective'"));
+  await use(await spawn('target_help', "e.targetname = 'xh2', e.spawnflags = 0, e.message = 'Second line'"));
+  let g = await game();
+  assert(g.HELP_MSG === 'Primary objective' && g.HELP_MSG2 === 'Second line' && g.HELP_CHANGED === h0 + 2, 'target_help fills the help computer\'s two messages and counts the news');
+
+  await use(await spawn('target_changelevel', "e.targetname = 'xc1', e.map = 'demo2$base1'"));
+  g = await game();
+  assert(g.EXIT_KIND === 1 && g.NEXT_MAP === 'demo2$base1' && g.INTERMISSION_TIME === null, 'a plain exit is taken at once, the map string kept as written');
+
+  await loadMap(db, pak, res, mapName, { skill: 2, newGame: false });
+  g = await game();
+  assert(g.EXIT_KIND === 0 && g.HELP_MSG === 'Primary objective', 'the next level starts playing, the help computer keeps its messages');
+  const mons = async () => (await db.query('SELECT LIST(CAST(x AS INTEGER) || CAST(y AS INTEGER), \',\') l FROM ents WHERE mtype IS NOT NULL')).rows[0].L;
+  await use(await spawn('target_changelevel', "e.targetname = 'xc2', e.map = '*demo2$base1'"));
+  let r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  assert(r.INTERMISSION === 1 && r.EXIT_KIND === 0, 'a unit end stops at the intermission');
+  const atSpot = (await db.query("SELECT COUNT(*) n FROM map_ents m JOIN ents e ON e.id = player_ent() WHERE m.classname = 'info_player_intermission' AND m.ox = e.x AND m.oy = e.y AND m.oz = e.z AND COALESCE(m.ayaw, m.angle, 0) = e.yaw")).rows[0].N;
+  const spots = (await db.query("SELECT COUNT(*) n FROM map_ents WHERE classname = 'info_player_intermission'")).rows[0].N;
+  assert(spots === 0 || atSpot === 1, `the player watches from an info_player_intermission (${spots} on this map), at its angles`);
+  assert(r.VIEW_Z === r.PZ, 'with the eye at the spot itself (no view height)');
+  const m0 = await mons();
+  for (let i = 0; i < 10; i++) r = await tic([1, 1, 0, 0, 0, 0, 1, 1, 0]);
+  assert((await mons()) === m0, 'the world holds still');
+  assert(r.EXIT_KIND === 0, 'a button before five seconds does not leave');
+  await db.exec('UPDATE game SET time_ = intermission_time + 6');
+  r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  assert(r.EXIT_KIND === 0, 'nor does waiting without one');
+  r = await tic([1, 0, 0, 0, 0, 1, 0, 1, 0]);
+  assert(r.EXIT_KIND === 1 && r.NEXT_MAP === '*demo2$base1', 'fire after five seconds leaves for the next unit');
+  await loadMap(db, pak, res, mapName, { skill: 2, newGame: false });
+  assert((await game()).INTERMISSION_TIME === null, 'the next level starts without the intermission');
+}
+
 await db.close();
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

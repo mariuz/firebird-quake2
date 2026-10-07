@@ -13,11 +13,12 @@ import gameSql from '../sql/game.sql';
 import weaponsSql from '../sql/weapons.sql';
 import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
-import { Pak, loadColormap } from './pak.js';
+import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMap, setView } from './loader.js';
 import { Renderer, lightPoint } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
 import { exportSave, importSave } from './savegame.js';
+import { parseChangeMap } from './levels.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS } from './gamedata.js';
 
@@ -65,9 +66,14 @@ let impulse = 0;
 const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE',
   'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
   'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
+let anyKey = null;      // a picture screen waiting for a key or a click
+let showHelp = false;   // the help computer (F1)
+let helpSeen = 0;       // the help_changed count the player has looked at
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+  if (anyKey && !e.repeat) { e.preventDefault(); const go = anyKey; anyKey = null; go(); return; }
   if (!running) return;
+  if (e.code === 'F1') { e.preventDefault(); showHelp = !showHelp; if (last) helpSeen = last.HELP_CHANGED ?? 0; }
   if (GAME_KEYS.has(e.code)) e.preventDefault();
   keys.add(e.code);
   if (e.code.startsWith('Digit')) impulse = e.code === 'Digit0' ? 10 : Number(e.code.slice(5));
@@ -112,6 +118,7 @@ async function loadGame() {
 }
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 window.addEventListener('blur', () => keys.clear());
+canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } });
 canvas.addEventListener('click', () => {
   if (running && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});
 });
@@ -182,6 +189,8 @@ function readInput(tics) {
 // ── maps ─────────────────────────────────────────────────────────────────
 async function startMap(name, newGame, spawnpoint = null) {
   running = false;
+  showHelp = false;
+  if (newGame) helpSeen = 0;
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
   const bsp = await loadMap(db, pak, res, name, { skill: settings.skill, newGame, spawnpoint });
@@ -242,12 +251,7 @@ async function frame() {
     perf.tic = performance.now() - t;
 
     if (last.EXIT_KIND === 1 && last.NEXT_MAP) {
-      const next = last.NEXT_MAP.toLowerCase();
-      const spawn = (await db.query('SELECT next_spawn s FROM game')).rows[0].S;
-      setStatus(`${map.name} completed — kills ${last.KILLED}/${last.TOTAL_MONSTERS}, goals ${last.FOUND_GOALS}/${last.TOTAL_GOALS}, secrets ${last.FOUND_SECRETS}/${last.TOTAL_SECRETS}`);
-      await new Promise((r) => setTimeout(r, 2500));
-      if (pak.has(`maps/${next}.bsp`)) await startMap(next, false, spawn);
-      else { setStatus(`${next} is not in this pak (the demo ends here)`); await new Promise((r) => setTimeout(r, 2500)); await startMap('demo1', false); }
+      await changeLevel(last.NEXT_MAP);
       nextFrame();
       return;
     }
@@ -302,6 +306,43 @@ async function frame() {
 
 const sprite = (name) => res.models.get(res.byName.get(name))?.spr;
 
+// ── leaving a level: what the server did with the map string (SV_Map; src/levels.js) ─────────
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function changeLevel(target) {
+  const c = parseChangeMap(target);
+  // the unit's cross-level flags last the unit ("within the same unit", g_target.c)
+  if (c.unitEnd) await db.exec('UPDATE game SET serverflags = 0 WHERE id = 1');
+  if (c.kind === 'pic' && pak.has(`pics/${c.map}`)) {
+    await showPicture(`pics/${c.map}`);
+    return c.then ? changeLevel(c.then) : endGame();
+  }
+  if (c.kind !== 'map') return c.then ? changeLevel(c.then) : endGame();   // cinematics and demos are not played
+  if (!pak.has(`maps/${c.map}.bsp`)) {
+    setStatus(`${c.map} is not in this pak`);
+    await sleep(2500);
+    return endGame();
+  }
+  // SCR_DrawLoading: the plaque over the last frame while the next level loads
+  const plaque = hud.pic('loading');
+  if (plaque) { renderer.drawPic(plaque, (renderer.w - plaque.w) >> 1, (renderer.h - plaque.h) >> 1); renderer.present(); }
+  await startMap(c.map, false, c.spawn);
+}
+
+/** A full-screen picture with its own palette (the ss_pic server state), until a key after a second. */
+async function showPicture(file) {
+  running = false;
+  setStatus('');
+  const p = loadPcx(pak.get(file));
+  renderer.drawPicFull(p);
+  renderer.present(null, p.palette);
+  await new Promise((resolve) => setTimeout(() => { anyKey = resolve; }, 1000));
+}
+
+/** The game is over (the demo's last exit): a new game from the first map. */
+async function endGame() {
+  await startMap(pak.has('maps/demo1.bsp') ? 'demo1' : 'base1', true);
+}
+
 function handleFx(rows, time) {
   for (const [, kind, x, y, z, x2, y2, z2, n] of rows) {
     switch (kind) {
@@ -354,9 +395,9 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   for (const x of explosions) if (x.spr) r.drawSprite(x.spr, Math.floor((time - x.t0) * 10), [x.x, x.y, x.z]);
   r.runParticles(dt, time);
   r.drawParticles();
-  // the weapon in hand (depth hack: drawn over everything near)
+  // the weapon in hand (depth hack: drawn over everything near); none at the intermission
   const wp = WEAPONS[last.WEAPON];
-  if (!last.DEAD && wp) {
+  if (!last.DEAD && !last.INTERMISSION && wp) {
     const vm = res.models.get(res.byName.get(wp.view));
     if (vm) {
       const bob = Math.sin(time * 8) * Math.min(1, Math.hypot(last.PX - (prevPos?.x ?? last.PX), last.PY - (prevPos?.y ?? last.PY)) / 8) * 1.5;
@@ -367,8 +408,11 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   }
   prevPos = { x: last.PX, y: last.PY };
 
-  // 2D
-  hud.draw(r, last, time);
+  // 2D: the status bar (with the help icon blinking while there is news on the help computer), and the
+  // help computer itself on F1 and at the intermission
+  last.HELP_ICON = (last.HELP_CHANGED ?? 0) > helpSeen && Math.floor(time * 10) & 8;
+  if (!last.INTERMISSION) hud.draw(r, last, time);
+  if (showHelp || last.INTERMISSION) hud.drawHelp(r, last);
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
   if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
   if (last.DEAD) hud.drawCenter(r, 'You died\n\npress fire to restart', 60);

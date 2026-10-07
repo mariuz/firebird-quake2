@@ -152,7 +152,7 @@ The rest of g_*.c lives here too: `spawn_map_ents(skill, spawnpoint)` is `SpawnE
 skill and coop spawnflag filters and Quake's spawn-point selection (`info_player_start` with the
 matching or absent targetname); triggers (once, multiple, relay, always, counter, key, push,
 hurt); `use_targets` is the big dispatcher for targets (speaker, explosion, splash, secret, goal,
-help, laser, lightramp, changelevel with `map$spawnpoint`, and the unit's cross-level flags on
+help, laser, lightramp, changelevel, and the unit's cross-level flags on
 `game.serverflags`: `target_crosslevel_trigger` sets them, `target_crosslevel_target` fires when they
 are set); items from stimpacks to the power
 shield, ammo, keys, timed powerups (g_items.c); the ten weapons (p_weapon.c, g_weapon.c:
@@ -264,6 +264,15 @@ brightness, renderer mode, sound, music) persist in `localStorage`. Input: WASD/
 under pointer lock, digits for weapons (`impulse` 1–10), `/` or the wheel to cycle (12), `G` gives
 everything (99), `P` pauses; on touch screens the halves of the screen move and look.
 
+Leaving a level: `changelevel` keeps the `target_changelevel`'s map string as written in `game.next_map`.
+A string with `*` (a unit's end) starts the intermission: `begin_intermission` moves the player to an
+`info_player_intermission` with its angles and no view height, and `q2_tic` then holds the world still
+until fire or jump after five seconds; any other string sets `exit_kind` at once. The page reads the
+string the way `SV_Map` did (`src/levels.js`: `map$spawnpoint`, a leading `*`, `a+b` chains, `.pcx`
+pictures shown in their own palette, `.cin` cinematics skipped) and loads the next map behind the
+loading plaque. `F1` toggles the help computer (`HelpComputer`): skill, level name, the two
+`target_help` messages and the counts; it is also drawn at the intermission.
+
 Saved games (`src/savegame.js`): `F6` reads the four game tables (`game`, `player`, `ents`,
 `lightstyles`) as rows, with the column names from the result's field list and the model ids' names,
 and keeps them as JSON in `localStorage`; `F9` reloads the map, empties the four tables, inserts the
@@ -339,7 +348,7 @@ test before the planes (the square root costs more than it saves), an expression
 coarse x sector for the solid-entity scan (no measurable gain), a narrow think-schedule table
 (the wide-row penalty is only ~20 µs).
 
-Where it stands (Node, Outer Base, medium skill, 31 monsters, 14 patrolling):
+Where it stands (Node, Outer Base, hard skill, 31 monsters, 14 patrolling):
 
 | | at the start | now |
 |---|---|---|

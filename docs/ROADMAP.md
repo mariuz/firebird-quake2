@@ -24,8 +24,13 @@ them.
   eye's connected areas, and the entity pass only the entities in them; a change forgets the marked
   view. Left: a door's own faces are still listed from either side (brush models skip the area test,
   which keeps a door visible from both areas), and the re-mark a door causes is the usual hitch.
-- **Intermission and the unit's end.** `target_changelevel` loads the next map after a status
-  line; there is no intermission screen with the level's statistics and no end-of-unit text.
+- **Intermission and the unit's end**: done, as single-player Quake 2 has them. A plain exit is taken
+  at once behind the loading plaque; a unit's end (`*` in the map) parks the player at an
+  `info_player_intermission`, the world frozen, until fire or jump after five seconds; a `.pcx` exit
+  (the demo's `victory.pcx`) shows the picture in its own palette until a key, then a new game; `a+b`
+  chains. The help computer (`F1`) shows the level's counts and the two `target_help` messages, and the
+  status bar blinks its icon while there is news. Left: cinematics (`.cin`) are skipped; Quake 2 single
+  player shows nothing over the intermission view, while here the help computer's counts are drawn on it.
 - **Teleporter in demo3** does not spawn (`misc_teleporter` is handled in `spawn_map_ents`; the
   one in demo3 is skipped, probably by a spawnflag filter: check). The teleport effect and sound
   exist.
@@ -55,8 +60,7 @@ them.
   animation of its own, there is no `cl_run` toggle (shift walks), and crouching is not
   implemented at all (pmove's duck state and the 32-unit box).
 - **HUD.** The status bar and the main numbers, pickup messages, centre prints and the help
-  computer line are in; the inventory screen, the help computer (`F1`), the score board and the
-  menu system are not.
+  computer (`F1`) are in; the inventory screen, the score board and the menu system are not.
 
 ## Rendering
 
@@ -99,7 +103,8 @@ picker). Missing for the rest of the game:
   `misc_easterchick`, `trigger_elevator`, `func_conveyor`, `func_killbox`, `misc_bigviper` flight
   paths, the `misc_strogg_ship` flyby, `target_spawner` (recognised), `func_group` (editor-only,
   correctly ignored).
-- **Cutscenes**: the intro and the unit transitions are cinematics (`.cin`), not supported.
+- **Cutscenes**: the intro and the unit transitions are cinematics (`.cin`); a level exit naming one
+  skips it and goes on to the map after its `+` (`src/levels.js`).
 - **Coop and deathmatch**: `info_player_coop` / `info_player_deathmatch` are recognised and the
   spawnflag filters are applied, but there is one player row and no networking; a second local
   player would mean a second `player` row and a second view, which the SQL could carry.

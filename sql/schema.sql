@@ -17,8 +17,7 @@ CREATE TABLE game (
   tic            INTEGER DEFAULT 0 NOT NULL,
   time_          DOUBLE PRECISION DEFAULT 0 NOT NULL,   -- seconds, tic / 20
   map_name       VARCHAR(32),
-  next_map       VARCHAR(64),                           -- set by target_changelevel
-  next_spawn     VARCHAR(40),                           -- the info_player_start to arrive at ("demo2$base1")
+  next_map       VARCHAR(64),                           -- set by target_changelevel, as written: "demo2$base1", "*base1", "victory.pcx" (src/levels.js reads it)
   exit_kind      SMALLINT DEFAULT 0 NOT NULL,           -- 0 playing, 1 change level, 3 restart (player died)
   skill          SMALLINT DEFAULT 1 NOT NULL,
   world_model    INTEGER DEFAULT 0 NOT NULL,            -- models.id of the world
@@ -29,12 +28,13 @@ CREATE TABLE game (
   total_goals    INTEGER DEFAULT 0 NOT NULL,
   found_goals    INTEGER DEFAULT 0 NOT NULL,
   level_msg      VARCHAR(200),
-  help_msg       VARCHAR(400),                          -- target_help: the computer's mission text
+  help_msg       VARCHAR(400),                          -- target_help with spawnflags 1: the help computer's first message (kept across levels)
   gravity        DOUBLE PRECISION DEFAULT 800 NOT NULL,
   sky            VARCHAR(32),                           -- worldspawn "sky": env/<sky>rt.pcx …
   cd_track       INTEGER DEFAULT 0 NOT NULL,
-  intermission_tics INTEGER DEFAULT 0 NOT NULL,
-  finale         SMALLINT DEFAULT 0 NOT NULL
+  intermission_time DOUBLE PRECISION,                   -- set at a unit's end: the player watches from an info_player_intermission
+  help_msg2      VARCHAR(400),                          -- target_help without spawnflags 1: the second message
+  help_changed   INTEGER DEFAULT 0 NOT NULL             -- counts target_help uses (the page blinks the help icon until F1)
 );
 
 CREATE TABLE viewcfg (

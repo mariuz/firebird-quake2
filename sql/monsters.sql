@@ -855,13 +855,21 @@ RETURNS (
   msg VARCHAR(200), cprint VARCHAR(400), dmg_take INTEGER, dmg_save INTEGER, dmg_time DOUBLE PRECISION, bonus_time DOUBLE PRECISION,
   dead SMALLINT, exit_kind SMALLINT, next_map VARCHAR(64), killed INTEGER, total_monsters INTEGER,
   found_secrets INTEGER, total_secrets INTEGER, found_goals INTEGER, total_goals INTEGER, waterlevel SMALLINT, watertype INTEGER, map_name VARCHAR(32),
-  level_msg VARCHAR(200), quad SMALLINT, invincible SMALLINT, breather SMALLINT, enviro SMALLINT, leaf INTEGER, cluster INTEGER, help_msg VARCHAR(400))
+  level_msg VARCHAR(200), quad SMALLINT, invincible SMALLINT, breather SMALLINT, enviro SMALLINT, leaf INTEGER, cluster INTEGER, help_msg VARCHAR(400),
+  help_msg2 VARCHAR(400), help_changed INTEGER, skill SMALLINT, intermission SMALLINT)
 AS
-DECLARE i INTEGER = 0;
+DECLARE i INTEGER = 0; DECLARE itime DOUBLE PRECISION;
 BEGIN
-  SELECT g.tic FROM game g WHERE g.id = 1 INTO tic;
+  SELECT g.tic, g.intermission_time FROM game g WHERE g.id = 1 INTO tic, itime;
   DELETE FROM sound_events s WHERE s.tic < :tic - 40;
   DELETE FROM fx_events f WHERE f.tic < :tic - 40;
+  IF (itime IS NOT NULL) THEN
+  BEGIN
+    -- the intermission: the world holds still (PM_FREEZE); after five seconds a button leaves
+    UPDATE game g SET g.tic = g.tic + :tics, g.time_ = g.time_ + 0.05e0 * :tics WHERE g.id = 1;
+    UPDATE game g SET g.exit_kind = 1 WHERE g.id = 1 AND g.exit_kind = 0 AND g.time_ > g.intermission_time + 5 AND (:fire = 1 OR :jump = 1);
+    i = tics;
+  END
   WHILE (i < tics) DO
   BEGIN
     UPDATE game g SET g.tic = g.tic + 1, g.time_ = g.time_ + 0.05e0 WHERE g.id = 1;
@@ -877,12 +885,13 @@ BEGIN
          p.dmg_take, p.dmg_save, p.dmg_time, p.bonus_time, e.deadflag, g.exit_kind, g.next_map, g.killed, g.total_monsters,
          g.found_secrets, g.total_secrets, g.found_goals, g.total_goals, e.waterlevel, e.watertype, g.map_name, g.level_msg,
          IIF(p.quad_finished > g.time_, 1, 0), IIF(p.invincible_finished > g.time_, 1, 0), IIF(p.breather_finished > g.time_, 1, 0), IIF(p.enviro_finished > g.time_, 1, 0),
-         e.leaf, e.cluster, g.help_msg
+         e.leaf, e.cluster, g.help_msg, g.help_msg2, g.help_changed, g.skill, IIF(g.intermission_time IS NULL, 0, 1)
     FROM game g CROSS JOIN player p JOIN ents e ON e.id = p.ent_id
    WHERE g.id = 1 AND p.id = 1
     INTO tic, time_, health, max_health, armor, armor_type, power_armor, bullets, shells, rockets, grenades, cells, slugs, weapons, keys, weapon, attack_start, attack_finished, grenade_time,
          px, py, pz, yaw, pitch, view_z, punch, msg, cprint, dmg_take, dmg_save, dmg_time, bonus_time, dead, exit_kind, next_map,
-         killed, total_monsters, found_secrets, total_secrets, found_goals, total_goals, waterlevel, watertype, map_name, level_msg, quad, invincible, breather, enviro, leaf, cluster, help_msg;
+         killed, total_monsters, found_secrets, total_secrets, found_goals, total_goals, waterlevel, watertype, map_name, level_msg, quad, invincible, breather, enviro, leaf, cluster, help_msg,
+         help_msg2, help_changed, skill, intermission;
   UPDATE player p SET p.dmg_take = 0, p.dmg_save = 0 WHERE p.id = 1 AND p.dmg_time < :time_ - 0.05e0;
   SUSPEND;
 END^
@@ -892,9 +901,9 @@ CREATE OR ALTER PROCEDURE init_map (map_name VARCHAR(32), world_model INTEGER, s
 AS
 DECLARE i INTEGER;
 BEGIN
-  UPDATE game g SET g.tic = 0, g.time_ = 0, g.map_name = :map_name, g.next_map = NULL, g.next_spawn = NULL, g.exit_kind = 0, g.skill = :skill, g.world_model = :world_model,
+  UPDATE game g SET g.tic = 0, g.time_ = 0, g.map_name = :map_name, g.next_map = NULL, g.exit_kind = 0, g.skill = :skill, g.world_model = :world_model,
          g.total_monsters = 0, g.killed = 0, g.total_secrets = 0, g.found_secrets = 0, g.total_goals = 0, g.found_goals = 0, g.level_msg = NULL,
-         g.intermission_tics = 0, g.finale = 0, g.gravity = 800, g.help_msg = NULL WHERE g.id = 1;
+         g.intermission_time = NULL, g.gravity = 800 WHERE g.id = 1;
   -- switchable lights back to their patterns
   DELETE FROM lightstyles l WHERE l.style >= 32;
   i = 32;
@@ -902,7 +911,7 @@ BEGIN
   INSERT INTO lightstyles (style, pattern) VALUES (63, 'a');
   IF (new_game = 1) THEN
   BEGIN
-    UPDATE game g SET g.serverflags = 0 WHERE g.id = 1;     -- the unit starts over
+    UPDATE game g SET g.serverflags = 0, g.help_msg = NULL, g.help_msg2 = NULL, g.help_changed = 0 WHERE g.id = 1;     -- the unit starts over (the help computer's messages last a game)
     UPDATE player p SET p.armor = 0, p.armor_type = 0, p.power_armor = 0, p.bullets = 0, p.shells = 0, p.rockets = 0, p.grenades = 0, p.cells = 0, p.slugs = 0,
            p.max_bullets = 200, p.max_shells = 100, p.max_rockets = 50, p.max_grenades = 50, p.max_cells = 200, p.max_slugs = 50,
            p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,

@@ -778,9 +778,22 @@ export class Renderer {
     for (let j = Math.max(0, y); j < Math.min(h, y + rh); j++) for (let i = Math.max(0, x); i < Math.min(w, x + rw); i++) fb[j * w + i] = colormap[(40 << 8) | fb[j * w + i]];
   }
 
-  /** Convert palette indices to pixels, with a colour blend (V_UpdatePalette / the damage flash). */
-  present(tint = null) {
-    const pal = this.palette;
+  /** A picture scaled over the whole framebuffer (nearest texel). */
+  drawPicFull(pic) {
+    const { fb, w, h } = this;
+    for (let y = 0; y < h; y++) {
+      const sy = Math.min(pic.h - 1, Math.floor((y * pic.h) / h)) * pic.w;
+      for (let x = 0; x < w; x++) fb[y * w + x] = pic.data[sy + Math.min(pic.w - 1, Math.floor((x * pic.w) / w))];
+    }
+  }
+
+  /** Convert palette indices to pixels, with a colour blend; `palette24` (768 bytes) overrides the game's palette. */
+  present(tint = null, palette24 = null) {
+    let pal = this.palette;
+    if (palette24) {
+      pal = this.picPal ?? (this.picPal = new Uint32Array(256));
+      for (let i = 0; i < 256; i++) pal[i] = (255 << 24) | (palette24[i * 3 + 2] << 16) | (palette24[i * 3 + 1] << 8) | palette24[i * 3];
+    }
     let p = pal;
     if (tint && tint[3] > 0) {
       p = this.tintPal ?? (this.tintPal = new Uint32Array(256));

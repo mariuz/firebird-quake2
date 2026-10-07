@@ -85,6 +85,10 @@ short stories of what changed and what it measured; keep that.
 - The player's `pitch` lives on `player`, the yaw on `ents`; `view_setup` reads both.
 - Spawn points: `info_player_start` with the targetname the previous level's
   `target_changelevel` asked for (`map$spawnpoint`), else the one without a targetname.
+- Level exits: single-player Quake 2 has no intermission between ordinary levels; only a unit's end
+  (`*` in the map string) stops at one. The map string is kept as written in `game.next_map` and
+  parsed by `src/levels.js`, never in SQL.
+- Skill numbers are Quake's: 0 easy, 1 medium, 2 hard. The scripts load maps at skill 2 (hard).
 
 ## Browser testing
 

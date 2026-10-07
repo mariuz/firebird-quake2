@@ -99,7 +99,8 @@ and the pushed entities live in global temporary tables because PSQL has no arra
 the pushers (doors and their teams, rotating doors, plats, buttons, trains with path corners, rotating
 fans, timers), the thinks that are due, and the physics of everything that flies, bounces or falls.
 Triggers (once, multiple, relay, always, counter, key, push, hurt) and targets (speaker, explosion,
-splash, secret, goal, help, laser, changelevel with its `map$spawnpoint`, the unit's cross-level flags) are
+splash, secret, goal, help, laser, changelevel with its `map$spawnpoint` and the intermission at a unit's end,
+the unit's cross-level flags) are
 g_trigger.c and g_target.c.
 Items from stimpacks to the power shield, the ammo boxes, the keys and the timed powerups are
 g_items.c; the blaster, shotgun, super shotgun, machinegun, chaingun, hand grenades, grenade and rocket
@@ -223,7 +224,7 @@ text). New here:
   plane and sphere, so the scan needs no join, and whether a door's clusters are in the PVS is decided once
   per view cluster rather than parsed from strings every frame.
 
-With all that, an idle tic on the Outer Base at medium skill (31 monsters, 14 of them patrolling) costs
+With all that, an idle tic on the Outer Base at hard skill (31 monsters, 14 of them patrolling) costs
 about 3 ms in Node (about 5.5 with the player walking), down from 40 at first and 20 after the first round;
 the frame's query 1.9 ms turning and 1.6 ms with the view held, down from about 18 for the six queries it began as.
 

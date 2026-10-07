@@ -717,7 +717,10 @@ BEGIN
     END
     ELSE IF (tcls = 'target_help') THEN
     BEGIN
-      UPDATE game g SET g.help_msg = (SELECT e.message FROM ents e WHERE e.id = :t) WHERE g.id = 1;
+      -- Use_Target_Help: spawnflags 1 writes the first message, otherwise the second
+      UPDATE game g SET g.help_msg = IIF(BIN_AND((SELECT e.spawnflags FROM ents e WHERE e.id = :t), 1) <> 0, (SELECT e.message FROM ents e WHERE e.id = :t), g.help_msg),
+             g.help_msg2 = IIF(BIN_AND((SELECT e.spawnflags FROM ents e WHERE e.id = :t), 1) = 0, (SELECT e.message FROM ents e WHERE e.id = :t), g.help_msg2),
+             g.help_changed = g.help_changed + 1 WHERE g.id = 1;
       EXECUTE PROCEDURE cprint((SELECT e.message FROM ents e WHERE e.id = :t));
       EXECUTE PROCEDURE snd(player_ent(), 2, 'misc/pc_up.wav', 1, 0);
     END
@@ -837,21 +840,50 @@ BEGIN
   DELETE FROM ents e WHERE e.id = :eid;
 END^
 
+-- BeginIntermission + MoveClientToIntermission: the player watches the level from an
+-- info_player_intermission (one of the first four at random, else the start) with the view's angles,
+-- frozen, no weapon, no powerups; the tic holds the world still until a button after five seconds.
+CREATE OR ALTER PROCEDURE begin_intermission
+AS
+DECLARE pe INTEGER; DECLARE n INTEGER; DECLARE k INTEGER;
+DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
+DECLARE pitch DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+BEGIN
+  pe = player_ent();
+  SELECT COUNT(*) FROM map_ents m WHERE m.classname = 'info_player_intermission' INTO n;
+  IF (n > 0) THEN
+  BEGIN
+    k = MOD(CAST(FLOOR(RAND() * 4) AS INTEGER), n);
+    SELECT FIRST 1 SKIP (:k) m.ox, m.oy, m.oz, COALESCE(m.apitch, 0), COALESCE(m.ayaw, m.angle, 0)
+      FROM map_ents m WHERE m.classname = 'info_player_intermission' ORDER BY m.id INTO x, y, z, pitch, yaw;
+  END
+  ELSE
+    SELECT FIRST 1 m.ox, m.oy, m.oz, 0, COALESCE(m.ayaw, m.angle, 0)
+      FROM map_ents m WHERE m.classname = 'info_player_start' ORDER BY m.id INTO x, y, z, pitch, yaw;
+  UPDATE game g SET g.intermission_time = g.time_ WHERE g.id = 1;
+  IF (x IS NOT NULL) THEN
+    UPDATE ents e SET e.x = :x, e.y = :y, e.z = :z, e.yaw = :yaw, e.vx = 0, e.vy = 0, e.vz = 0, e.solid = 0, e.effects = 0 WHERE e.id = :pe;
+  UPDATE player p SET p.pitch = COALESCE(:pitch, p.pitch), p.view_ofs = 0, p.stepz = 0, p.punchangle = 0, p.grenade_time = 0,
+         p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
+         p.dmg_take = 0, p.dmg_save = 0, p.cprint = NULL, p.msg = NULL WHERE p.id = 1;
+  EXECUTE PROCEDURE link_ent(pe);
+END^
+
+-- target_changelevel_use: the level's exit. In single player only the end of a unit ("*" in the map)
+-- stops at the intermission (BeginIntermission); any other exit is taken at once. The map string is kept
+-- as written, and the page reads it the way the server did (src/levels.js).
 CREATE OR ALTER PROCEDURE changelevel (eid INTEGER)
 AS
-DECLARE m VARCHAR(64); DECLARE ek SMALLINT;
+DECLARE m VARCHAR(64); DECLARE ek SMALLINT; DECLARE it DOUBLE PRECISION; DECLARE hp INTEGER;
 BEGIN
   SELECT e.map FROM ents e WHERE e.id = :eid INTO m;
-  SELECT g.exit_kind FROM game g WHERE g.id = 1 INTO ek;
-  IF (ek <> 0 OR m IS NULL) THEN EXIT;
-  -- "demo2$base1": the map, then the spot to arrive at
-  UPDATE game g SET g.next_spawn = NULL WHERE g.id = 1;
-  IF (POSITION('$', m) > 0) THEN
-  BEGIN
-    UPDATE game g SET g.next_spawn = SUBSTRING(:m FROM POSITION('$', :m) + 1) WHERE g.id = 1;
-    m = SUBSTRING(m FROM 1 FOR POSITION('$', m) - 1);
-  END
-  UPDATE game g SET g.next_map = :m, g.exit_kind = 1, g.intermission_tics = 0 WHERE g.id = 1;
+  SELECT g.exit_kind, g.intermission_time FROM game g WHERE g.id = 1 INTO ek, it;
+  IF (ek <> 0 OR it IS NOT NULL OR m IS NULL OR m = '') THEN EXIT;      -- already leaving
+  SELECT e.health FROM ents e WHERE e.id = player_ent() INTO hp;
+  IF (hp <= 0) THEN EXIT;                                               -- the dead don't leave
+  UPDATE game g SET g.next_map = :m WHERE g.id = 1;
+  IF (POSITION('*', m) > 0) THEN EXECUTE PROCEDURE begin_intermission;
+  ELSE UPDATE game g SET g.exit_kind = 1 WHERE g.id = 1;
 END^
 
 -- teleport_touch (misc_teleporter): send `other` to the destination

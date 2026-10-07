@@ -63,6 +63,7 @@ export class Hud {
     // the weapon in hand, the keys and powerups up the right edge
     let y = yb - 26;
     if (wp) { r.drawPic(this.pic(wp.icon), x0 + 296, yb); }
+    if (hud.HELP_ICON) r.drawPic(this.pic('i_help'), x0 + 148, yb);   // STAT_HELPICON: news on the help computer
     for (let i = 0; i < 9; i++) if (hud.KEYS & (1 << i)) { r.drawPic(this.pic(KEY_ICONS[i]), x0 + 296, y); y -= 26; }
     if (hud.QUAD) { r.drawPic(this.pic('p_quad'), x0 + 296, y); y -= 26; }
     if (hud.INVINCIBLE) { r.drawPic(this.pic('p_invulnerability'), x0 + 296, y); y -= 26; }
@@ -70,6 +71,31 @@ export class Hud {
     if (hud.BREATHER) { r.drawPic(this.pic('p_rebreather'), x0 + 296, y); y -= 26; }
     // crosshair
     if (!hud.DEAD && this.crosshair) r.drawPic(this.crosshair, (w >> 1) - 4, ((h) >> 1) - 4);
+  }
+
+  /**
+   * The help computer (HelpComputer in p_hud.c): the skill, the level's name, the two messages
+   * target_help left, and the level's counts, laid out on the 320×240 virtual screen.
+   */
+  drawHelp(r, h) {
+    const xv = (r.w >> 1) - 160, yv = (r.h >> 1) - 120;
+    const panel = this.pic('help');
+    if (panel) r.drawPic(panel, xv + 32, yv + 8);
+    r.drawString(this.conchars, ['easy', 'medium', 'hard'][h.SKILL] ?? 'hard+', xv + 202, yv + 12, true);
+    this.cstring(r, h.LEVEL_MSG ?? '', xv, yv + 24);
+    this.cstring(r, h.HELP_MSG ?? '', xv, yv + 54);
+    this.cstring(r, h.HELP_MSG2 ?? '', xv, yv + 110);
+    const n3 = (n) => String(n ?? 0).padStart(3);
+    r.drawString(this.conchars, ' kills     goals    secrets', xv + 50, yv + 164, true);
+    r.drawString(this.conchars, `${n3(h.KILLED)}/${n3(h.TOTAL_MONSTERS)}     ${h.FOUND_GOALS ?? 0}/${h.TOTAL_GOALS ?? 0}       ${h.FOUND_SECRETS ?? 0}/${h.TOTAL_SECRETS ?? 0}`, xv + 50, yv + 172, true);
+  }
+
+  /** cstring2: each line centred in the 320 wide virtual screen, in the alternate font. */
+  cstring(r, s, x, y) {
+    for (const line of String(s).split(/\\n|\n/)) {
+      r.drawString(this.conchars, line, x + ((320 - line.length * 8) >> 1), y, true);
+      y += 8;
+    }
   }
 
   drawCenter(r, msg, y) {

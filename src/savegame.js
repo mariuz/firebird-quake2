@@ -6,7 +6,7 @@
 // sequence above the highest id and forgets the frame's caches. Column names come from the
 // result's field list, so the format follows the schema.
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;   // 2: game lost next_spawn, intermission_tics and finale; gained intermission_time, help_msg2, help_changed
 const TABLES = ['game', 'player', 'ents', 'lightstyles'];
 // per-frame caches on ents that are rebuilt rather than saved
 const SKIP = new Set(['FACES_LST', 'FL_STAMP', 'FL_X', 'FL_Y', 'FL_Z', 'FL_P', 'FL_YAW', 'FL_R', 'VIS_CL', 'VIS']);
