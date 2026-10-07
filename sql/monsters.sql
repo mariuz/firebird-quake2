@@ -18,6 +18,53 @@ BEGIN
 END^
 
 -- M_ChangeYaw: turn toward ideal_yaw by at most yaw_speed
+-- monster_duck_up: the box back to its height after a duck (also on pain and death)
+CREATE OR ALTER PROCEDURE monster_duck_up (eid INTEGER)
+AS
+BEGIN
+  UPDATE ents e SET e.maxz = e.maxz + 32, e.aiflags = BIN_AND(e.aiflags, BIN_NOT(4)) WHERE e.id = :eid AND BIN_AND(e.aiflags, 4) <> 0;
+END^
+
+-- soldier_dodge, infantry_dodge, gunner_dodge: a quarter of the time, duck under the shot (monster_duck_down:
+-- the box 32 units lower until the duck frames end). The other monsters of the demo have no dodge.
+CREATE OR ALTER PROCEDURE monster_dodge (eid INTEGER, attacker INTEGER, eta DOUBLE PRECISION)
+AS
+DECLARE st VARCHAR(12); DECLARE mt VARCHAR(16); DECLARE aif INTEGER; DECLARE hp INTEGER;
+BEGIN
+  SELECT e.st, e.mtype, e.aiflags, e.health FROM ents e WHERE e.id = :eid INTO st, mt, aif, hp;
+  IF (mt IS NULL OR mt NOT IN ('soldier_light', 'soldier', 'soldier_ss', 'infantry', 'gunner')) THEN EXIT;
+  IF (hp <= 0 OR st NOT IN ('stand', 'walk', 'run', 'missile', 'melee') OR BIN_AND(aif, 4) <> 0) THEN EXIT;
+  IF (RAND() > 0.25e0) THEN EXIT;
+  UPDATE ents e SET e.enemy_id = COALESCE(e.enemy_id, :attacker), e.st = 'duck', e.aiflags = BIN_OR(e.aiflags, 4), e.maxz = e.maxz - 32,
+         e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
+  EXECUTE PROCEDURE set_anim(eid, 'duck');
+END^
+
+-- point_combat_touch: a monster reaching the point it ran to. A further point: run on to it. HOLD (spawnflags 1):
+-- stand and fight from here. Either way the enemy is the goal again; the point's pathtarget fires.
+CREATE OR ALTER PROCEDURE point_combat_touch (pt INTEGER, eid INTEGER)
+AS
+DECLARE tgt VARCHAR(40); DECLARE sf INTEGER; DECLARE ptgt VARCHAR(40); DECLARE nxt INTEGER; DECLARE fl INTEGER; DECLARE activator INTEGER;
+BEGIN
+  SELECT p.target, p.spawnflags, p.pathtarget FROM ents p WHERE p.id = :pt INTO tgt, sf, ptgt;
+  SELECT e.flags, e.enemy_id FROM ents e WHERE e.id = :eid INTO fl, activator;
+  IF (tgt IS NOT NULL AND tgt <> '') THEN
+  BEGIN
+    SELECT FIRST 1 n.id FROM ents n WHERE n.targetname = :tgt INTO nxt;
+    UPDATE ents e SET e.goal_id = COALESCE(:nxt, :pt) WHERE e.id = :eid;
+    UPDATE ents p SET p.target = NULL WHERE p.id = :pt;
+  END
+  ELSE IF (BIN_AND(sf, 1) <> 0 AND BIN_AND(fl, 3) = 0) THEN
+    UPDATE ents e SET e.aiflags = BIN_OR(e.aiflags, 1) WHERE e.id = :eid;
+  UPDATE ents e SET e.goal_id = NULL, e.aiflags = BIN_AND(e.aiflags, BIN_NOT(2)) WHERE e.id = :eid AND e.goal_id = :pt;
+  IF (ptgt IS NOT NULL AND ptgt <> '') THEN
+  BEGIN
+    UPDATE ents p SET p.target = :ptgt WHERE p.id = :pt;
+    EXECUTE PROCEDURE use_targets(pt, COALESCE(activator, eid));
+    UPDATE ents p SET p.target = :tgt, p.pathtarget = NULL WHERE p.id = :pt;
+  END
+END^
+
 CREATE OR ALTER PROCEDURE change_yaw (eid INTEGER)
 AS
 DECLARE cur DOUBLE PRECISION; DECLARE ideal DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION; DECLARE mv DOUBLE PRECISION;
@@ -146,17 +193,19 @@ END^
 -- FoundTarget / HuntTarget
 CREATE OR ALTER PROCEDURE found_target (eid INTEGER)
 AS
-DECLARE s VARCHAR(64); DECLARE run_ VARCHAR(16); DECLARE ct VARCHAR(40);
+DECLARE s VARCHAR(64); DECLARE run_ VARCHAR(16); DECLARE ct VARCHAR(40); DECLARE cp INTEGER;
 BEGIN
   SELECT t.sight_snd, t.run_anim, e.combattarget FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO s, run_, ct;
   EXECUTE PROCEDURE snd(eid, 2, s, 1, 1);
   UPDATE ents e SET e.enemy_id = player_ent(), e.goal_id = NULL, e.st = 'run', e.search_time = now_() + 5, e.attack_finished = now_() + 1 WHERE e.id = :eid;
   EXECUTE PROCEDURE set_anim(eid, run_);
-  -- the monster's combattarget fires (an ambush trigger)
+  -- FoundTarget: with a combattarget, run to that point_combat first, ignoring the enemy (a one-shot deal:
+  -- the combattarget is cleared, and the point's targetname too, since that point is ours)
   IF (ct IS NOT NULL AND ct <> '') THEN
   BEGIN
-    UPDATE ents e SET e.target = :ct, e.combattarget = NULL WHERE e.id = :eid;
-    EXECUTE PROCEDURE use_targets(eid, player_ent());
+    SELECT FIRST 1 p.id FROM ents p WHERE p.targetname = :ct INTO cp;
+    UPDATE ents e SET e.combattarget = NULL, e.goal_id = :cp, e.aiflags = IIF(:cp IS NULL, e.aiflags, BIN_OR(e.aiflags, 2)) WHERE e.id = :eid;
+    UPDATE ents p SET p.targetname = NULL WHERE p.id = :cp;
   END
 END^
 
@@ -295,6 +344,7 @@ AS
 DECLARE st VARCHAR(12); DECLARE pf DOUBLE PRECISION; DECLARE pc DOUBLE PRECISION; DECLARE anims VARCHAR(80); DECLARE ps VARCHAR(64); DECLARE n INTEGER; DECLARE pick VARCHAR(16);
 DECLARE p INTEGER; DECLARE q INTEGER; DECLARE i INTEGER; DECLARE mt VARCHAR(16); DECLARE hp INTEGER; DECLARE mhp INTEGER;
 BEGIN
+  EXECUTE PROCEDURE monster_duck_up(eid);
   SELECT e.st, e.pain_finished, t.pain_chance, t.pain_anims, t.pain_snd, e.mtype, e.health, e.max_health FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid
     INTO st, pf, pc, anims, ps, mt, hp, mhp;
   IF (st IN ('die', 'dead', 'asleep')) THEN EXIT;
@@ -321,6 +371,7 @@ DECLARE hp INTEGER; DECLARE gh INTEGER; DECLARE ds VARCHAR(64); DECLARE anims VA
 DECLARE pick VARCHAR(16); DECLARE q INTEGER; DECLARE n INTEGER; DECLARE i INTEGER; DECLARE p INTEGER; DECLARE mt VARCHAR(16); DECLARE st VARCHAR(12); DECLARE bp INTEGER;
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE dt VARCHAR(40); DECLARE mdl VARCHAR(64);
 BEGIN
+  EXECUTE PROCEDURE monster_duck_up(eid);
   SELECT e.health, e.gib_health, t.death_snd, t.death_anims, COALESCE(e.item, t.drop_item), e.mtype, e.st, e.x, e.y, e.z, e.deathtarget
     FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO hp, gh, ds, anims, drop_, mt, st, x, y, z, dt;
   IF (st IN ('die', 'dead')) THEN
@@ -381,13 +432,15 @@ DECLARE melee_a VARCHAR(16); DECLARE melee_f INTEGER; DECLARE missile_a VARCHAR(
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE gx DOUBLE PRECISION; DECLARE gy DOUBLE PRECISION; DECLARE gz DOUBLE PRECISION;
 DECLARE d DOUBLE PRECISION; DECLARE gt VARCHAR(40); DECLARE gw DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE cl INTEGER;
 DECLARE nt DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE pe INTEGER; DECLARE vis SMALLINT;
+DECLARE aif INTEGER; DECLARE itime DOUBLE PRECISION; DECLARE sflags INTEGER;
 BEGIN
   -- (an UPDATE of the wide ents row costs as much as a trace step: the next think time rides
   -- along with whatever else the think writes, and a path that writes nothing thinks again next tic)
   t = now_();
   nt = t + 0.1e0;
-  SELECT e.st, e.anim, e.anim_frame, e.model_id, e.enemy_id, e.flags, e.mtype, e.attack_state, e.target, e.goal_id, e.x, e.y, e.z, e.cluster
-    FROM ents e WHERE e.id = :eid INTO st, anim, af, mid, enemy, flags, mt, atkst, tgt, goal, x, y, z, cl;
+  SELECT e.st, e.anim, e.anim_frame, e.model_id, e.enemy_id, e.flags, e.mtype, e.attack_state, e.target, e.goal_id, e.x, e.y, e.z, e.cluster,
+         e.aiflags, e.idle_time, e.spawnflags
+    FROM ents e WHERE e.id = :eid INTO st, anim, af, mid, enemy, flags, mt, atkst, tgt, goal, x, y, z, cl, aif, itime, sflags;
   SELECT t.run_speed, t.walk_speed, t.stand_anim, t.walk_anim, t.run_anim, t.melee_anim, t.melee_frame, t.missile_anim, t.missile_frames, t.idle_snd, t.search_snd
     FROM monster_types t WHERE t.name = :mt INTO run_spd, walk_spd, stand_a, walk_a, run_a, melee_a, melee_f, missile_a, missile_f, idle_s, search_s;
   IF (st = 'dead' OR st = 'asleep') THEN
@@ -411,7 +464,8 @@ BEGIN
     IF (ehp IS NULL OR ehp <= 0) THEN
     BEGIN
       enemy = NULL;
-      UPDATE ents e SET e.enemy_id = NULL WHERE e.id = :eid;
+      UPDATE ents e SET e.enemy_id = NULL, e.goal_id = IIF(BIN_AND(e.aiflags, 2) <> 0, NULL, e.goal_id), e.aiflags = BIN_AND(e.aiflags, BIN_NOT(3)) WHERE e.id = :eid;
+      aif = BIN_AND(aif, BIN_NOT(3));
       IF (st IN ('run', 'melee', 'missile')) THEN
       BEGIN
         st = 'stand';
@@ -470,7 +524,17 @@ BEGIN
       EXECUTE PROCEDURE set_anim(eid, walk_a);
       EXIT;
     END
-    IF (st = 'stand' AND RAND() < 0.01e0 AND idle_s IS NOT NULL) THEN EXECUTE PROCEDURE snd(eid, 2, idle_s, 1, 2);
+    -- ai_stand's idle sound (not for an ambush monster) and ai_walk's search sound, every 15–30 seconds
+    IF (t > itime) THEN
+    BEGIN
+      IF (itime > 0) THEN
+      BEGIN
+        IF (st = 'stand' AND BIN_AND(sflags, 1) = 0 AND idle_s IS NOT NULL) THEN EXECUTE PROCEDURE snd(eid, 2, idle_s, 1, 2);
+        ELSE IF (st = 'walk' AND search_s IS NOT NULL) THEN EXECUTE PROCEDURE snd(eid, 2, search_s, 1, 1);
+        UPDATE ents e SET e.idle_time = :t + 15 + RAND() * 15 WHERE e.id = :eid;
+      END
+      ELSE UPDATE ents e SET e.idle_time = :t + RAND() * 15 WHERE e.id = :eid;
+    END
     af = af + 1;
     IF (af >= fc) THEN af = 0;
     UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
@@ -483,6 +547,36 @@ BEGIN
     BEGIN
       UPDATE ents e SET e.st = 'stand', e.nextthink = :nt WHERE e.id = :eid;
       EXECUTE PROCEDURE set_anim(eid, stand_a);
+      EXIT;
+    END
+    IF (BIN_AND(aif, 2) <> 0 AND goal IS NOT NULL) THEN
+    BEGIN
+      -- ai_run with AI_COMBAT_POINT: run for the point, ignoring the enemy; touch it on arrival
+      SELECT vectoyaw(c.x - :x, c.y - :y) FROM ents c WHERE c.id = :goal INTO iy;
+      IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd, iy);
+      IF (EXISTS (SELECT 1 FROM ents m JOIN ents c ON c.id = :goal WHERE m.id = :eid
+                     AND c.x + c.minx <= m.x + m.maxx AND c.x + c.maxx >= m.x + m.minx
+                     AND c.y + c.miny <= m.y + m.maxy AND c.y + c.maxy >= m.y + m.miny
+                     AND c.z + c.minz <= m.z + m.maxz AND c.z + c.maxz >= m.z + m.minz)) THEN
+        EXECUTE PROCEDURE point_combat_touch(goal, eid);
+      af = MOD(af + 1, fc);
+      UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
+      EXIT;
+    END
+    IF (BIN_AND(aif, 1) <> 0) THEN
+    BEGIN
+      -- AI_STAND_GROUND (a point_combat held): face the enemy and fight from here
+      UPDATE ents e SET e.ideal_yaw = (SELECT vectoyaw(n.x - :x, n.y - :y) FROM ents n WHERE n.id = :enemy) WHERE e.id = :eid;
+      EXECUTE PROCEDURE change_yaw(eid);
+      IF (check_attack(eid) = 1) THEN EXIT;
+      IF (anim IS DISTINCT FROM stand_a) THEN
+      BEGIN
+        EXECUTE PROCEDURE set_anim(eid, stand_a);
+        UPDATE ents e SET e.nextthink = :nt WHERE e.id = :eid;
+        EXIT;
+      END
+      af = MOD(af + 1, fc);
+      UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
       EXIT;
     END
     SELECT vectoyaw(n.x - :x, n.y - :y) FROM ents n WHERE n.id = :enemy INTO iy;
@@ -519,7 +613,6 @@ BEGIN
       UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
       EXIT;
     END
-    IF (RAND() < 0.01e0 AND search_s IS NOT NULL AND visible(eid, enemy) = 0) THEN EXECUTE PROCEDURE snd(eid, 2, search_s, 1, 1);
     IF (check_attack(eid) = 1) THEN EXIT;
     IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd, iy);
     ELSE EXECUTE PROCEDURE change_yaw(eid);
@@ -550,12 +643,13 @@ BEGIN
     EXIT;
   END
 
-  IF (st = 'pain') THEN
+  IF (st = 'pain' OR st = 'duck') THEN
   BEGIN
     af = af + 1;
     IF (af >= fc) THEN
     BEGIN
-      UPDATE ents e SET e.st = IIF(e.enemy_id IS NULL, 'stand', 'run'), e.nextthink = :nt WHERE e.id = :eid;
+      IF (st = 'duck') THEN EXECUTE PROCEDURE monster_duck_up(eid);
+      UPDATE ents e SET e.st = TRIM(IIF(e.enemy_id IS NULL, 'stand', 'run')), e.nextthink = :nt WHERE e.id = :eid;   -- (IIF pads the shorter literal)
       EXECUTE PROCEDURE set_anim(eid, IIF(enemy IS NULL, stand_a, run_a));
       EXIT;
     END
@@ -835,9 +929,11 @@ BEGIN
         END
       END
       ELSE
-        UPDATE ents e SET e.vx = COS(e.yaw * 0.0174532925e0) * (SELECT tr.speed FROM ents tr WHERE tr.id = :tid),
-               e.vy = SIN(e.yaw * 0.0174532925e0) * (SELECT tr.speed FROM ents tr WHERE tr.id = :tid),
-               e.vz = (SELECT tr.height FROM ents tr WHERE tr.id = :tid), e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :eid;
+        -- trigger_monsterjump_touch: XY from the trigger's direction always (so the jump clears lips), up only from the ground
+        UPDATE ents e SET e.vx = (SELECT tr.p1x * tr.speed FROM ents tr WHERE tr.id = :tid),
+               e.vy = (SELECT tr.p1y * tr.speed FROM ents tr WHERE tr.id = :tid),
+               e.vz = IIF(BIN_AND(e.flags, 512) <> 0, (SELECT tr.height FROM ents tr WHERE tr.id = :tid), e.vz),
+               e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :eid AND BIN_AND(e.flags, 3) = 0;
     END
   END
 END^

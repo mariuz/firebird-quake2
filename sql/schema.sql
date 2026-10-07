@@ -325,6 +325,8 @@ CREATE TABLE ents (
   attack_finished DOUBLE PRECISION DEFAULT 0 NOT NULL,
   pain_finished   DOUBLE PRECISION DEFAULT 0 NOT NULL,
   search_time     DOUBLE PRECISION DEFAULT 0 NOT NULL,
+  idle_time       DOUBLE PRECISION DEFAULT 0 NOT NULL,   -- when the next idle (standing) or search (walking) sound is due
+  aiflags         INTEGER DEFAULT 0 NOT NULL,            -- 1 AI_STAND_GROUND, 2 AI_COMBAT_POINT, 4 AI_DUCKED
   attack_state    SMALLINT DEFAULT 0 NOT NULL,   -- 1 straight 2 sliding 3 melee 4 missile 5 leaping
   lefty      SMALLINT DEFAULT 0 NOT NULL,
   -- placement

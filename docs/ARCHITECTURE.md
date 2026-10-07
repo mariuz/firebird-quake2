@@ -168,7 +168,12 @@ sight of the player: `find_target` (PVS, range, in-front, then a visibility trac
 / `new_chase_dir` / `step_direction` for walking and chasing, `check_attack`, `monster_melee`,
 `monster_missile`, pain and death with corpses and gibs. Out of the player's PVS a standing
 monster thinks at 3 Hz and a patrol strides four times as far at 2.5 Hz, with
-`SV_CloseEnough`'s stride-sized path-corner check. Supported: soldier (light, shotgun, machinegun),
+`SV_CloseEnough`'s stride-sized path-corner check. Idle and search sounds follow `ai_stand`'s and
+`ai_walk`'s 15–30 second timer (`ents.idle_time`). A `combattarget` makes `found_target` send the
+monster to that `point_combat` first (`aiflags` 2, `AI_COMBAT_POINT`), and `point_combat_touch`
+moves it on, fires the point's pathtarget, or holds it there (`aiflags` 1, `AI_STAND_GROUND`). A
+player's bolt, rocket or BFG ball is traced along its flight (`check_dodge`) and the soldiers,
+infantry and gunners it would hit duck a quarter of the time (`monster_dodge`, `aiflags` 4). Supported: soldier (light, shotgun, machinegun),
 infantry, gunner, berserker, flyer, parasite, tank; see ROADMAP.md for the rest.
 
 ## 5. Visibility and the frame (`sql/render.sql`)

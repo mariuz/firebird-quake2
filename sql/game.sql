@@ -25,6 +25,7 @@ CREATE OR ALTER PROCEDURE monster_think (eid INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE player_fire (btn SMALLINT) AS BEGIN END^
 CREATE OR ALTER PROCEDURE become_explosion (eid INTEGER, kind SMALLINT) AS BEGIN END^
 CREATE OR ALTER PROCEDURE monster_wake (eid INTEGER, activator INTEGER) AS BEGIN END^
+CREATE OR ALTER PROCEDURE monster_dodge (eid INTEGER, attacker INTEGER, eta DOUBLE PRECISION) AS BEGIN END^
 
 -- ── utilities ─────────────────────────────────────────────────────────────
 CREATE OR ALTER PROCEDURE snd (eid INTEGER, chan SMALLINT, name VARCHAR(64), vol DOUBLE PRECISION, attn DOUBLE PRECISION)
@@ -1379,6 +1380,27 @@ END^
 
 -- ── projectiles (g_weapon.c) ────────────────────────────────────────────
 -- fire_blaster: a bolt (hyperblaster bolts are the same with another effect)
+-- check_dodge (g_weapon.c): the monster in a player projectile's flight line may duck. On easy only a
+-- quarter of the shots are looked at; the monster must face the shooter.
+CREATE OR ALTER PROCEDURE check_dodge (shooter INTEGER, ox DOUBLE PRECISION, oy DOUBLE PRECISION, oz DOUBLE PRECISION,
+  dx DOUBLE PRECISION, dy DOUBLE PRECISION, dz DOUBLE PRECISION, spd DOUBLE PRECISION)
+AS
+DECLARE sk SMALLINT; DECLARE f DOUBLE PRECISION; DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
+DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION; DECLARE sfl INTEGER; DECLARE cts INTEGER;
+DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER; DECLARE mx DOUBLE PRECISION; DECLARE fr SMALLINT;
+BEGIN
+  SELECT g.skill FROM game g WHERE g.id = 1 INTO sk;
+  IF (sk = 0 AND RAND() > 0.25e0) THEN EXIT;
+  EXECUTE PROCEDURE trace_move(shooter, 0, 0, 0, 0, 0, 0, ox, oy, oz, ox + dx * 8192, oy + dy * 8192, oz + dz * 8192, 100663299)
+    RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sfl, cts, als, sts, hit;
+  IF (hit IS NULL OR hit = 0) THEN EXIT;
+  SELECT e.maxx FROM ents e WHERE e.id = :hit AND e.mtype IS NOT NULL AND e.health > 0 INTO mx;
+  IF (mx IS NULL) THEN EXIT;
+  fr = infront(hit, shooter);
+  IF (fr = 0) THEN EXIT;
+  EXECUTE PROCEDURE monster_dodge(hit, shooter, (vlen(ex - ox, ey - oy, ez - oz) - mx) / spd);
+END^
+
 CREATE OR ALTER PROCEDURE launch_bolt (owner INTEGER, ox DOUBLE PRECISION, oy DOUBLE PRECISION, oz DOUBLE PRECISION,
   dx DOUBLE PRECISION, dy DOUBLE PRECISION, dz DOUBLE PRECISION, spd DOUBLE PRECISION, dmg INTEGER, effect INTEGER)
 AS
@@ -1633,7 +1655,7 @@ BEGIN
     sf = BIN_AND(sf, BIN_NOT(7936));
     -- "angles" overrides "angle"
     IF (ay IS NOT NULL AND ang IS NULL) THEN ang = ay;
-    IF (cls IN ('info_player_deathmatch', 'info_player_coop', 'info_player_intermission', 'func_group', 'point_combat')) THEN CONTINUE;
+    IF (cls IN ('info_player_deathmatch', 'info_player_coop', 'info_player_intermission', 'func_group')) THEN CONTINUE;
     IF (cls = 'light') THEN
     BEGIN
       IF (tn IS NOT NULL AND tn <> '' AND sty IS NOT NULL AND sty >= 32) THEN
@@ -1811,7 +1833,9 @@ BEGIN
       ELSE IF (cls = 'trigger_hurt') THEN
         UPDATE ents e SET e.dmg = IIF(COALESCE(:dmg, 0) = 0, 5, :dmg), e.solid = IIF(BIN_AND(:sf, 1) <> 0, 0, e.solid) WHERE e.id = :eid;   -- START_OFF
       ELSE IF (cls = 'trigger_monsterjump') THEN
-        UPDATE ents e SET e.speed = IIF(COALESCE(:spd, 0) = 0, 200, :spd), e.height = IIF(COALESCE(:hgt, 0) = 0, 200, :hgt) WHERE e.id = :eid;
+        -- SP_trigger_monsterjump: movedir from the angle (0 means 360, so east), speed and height 200 by default
+        UPDATE ents e SET e.speed = IIF(COALESCE(:spd, 0) = 0, 200, :spd), e.height = IIF(COALESCE(:hgt, 0) = 0, 200, :hgt),
+               e.p1x = IIF(COALESCE(:ang, 0) < 0, 0, COS(COALESCE(:ang, 0) * 0.0174532925e0)), e.p1y = IIF(COALESCE(:ang, 0) < 0, 0, SIN(COALESCE(:ang, 0) * 0.0174532925e0)) WHERE e.id = :eid;
       ELSE IF (cls = 'trigger_key') THEN
         UPDATE ents e SET e.solid = 0 WHERE e.id = :eid;      -- used by its targetname, not touched
     END
@@ -1831,6 +1855,9 @@ BEGIN
       UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.speed = IIF(COALESCE(:vol, 0) = 0, 1, :vol), e.height = COALESCE(:attn, 1),
              e.sounds = IIF(BIN_AND(:sf, 1) <> 0, 1, 0), e.noise1 = IIF(POSITION('.', :noise) = 0, :noise || '.wav', :noise) WHERE e.id = :eid;
     END
+    ELSE IF (cls = 'point_combat') THEN
+      -- SP_point_combat: a 16×16×32 trigger the monster that runs to it touches
+      UPDATE ents e SET e.solid = 1, e.model_id = NULL, e.mkind = NULL, e.minx = -8, e.miny = -8, e.minz = -16, e.maxx = 8, e.maxy = 8, e.maxz = 16 WHERE e.id = :eid;
     ELSE IF (cls = 'func_areaportal') THEN
       -- a portal between two areas, closed until a door (its targeter) or a use opens it
       UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.style = :sty, e.count_ = 0 WHERE e.id = :eid;

@@ -225,6 +225,42 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert((await game()).INTERMISSION_TIME === null, 'the next level starts without the intermission');
 }
 
+// monsters: a combattarget is a point_combat to run to first; a held point makes it stand; a jump trigger throws it
+{
+  const row = async (id) => (await db.query(`SELECT st, goal_id, aiflags, combattarget, vx, vy, vz, flags FROM ents WHERE id = ${id}`)).rows[0];
+  const mk = async (cls, set, x, y, z) => (await db.query(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('${cls}', ${x}, ${y}, ${z}) RETURNING_VALUES id; UPDATE ents e SET ${set} WHERE e.id = :id; SUSPEND; END`)).rows[0].ID;
+  const think = (id) => db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_think(${id}); END`);
+  for (let i = 0; i < 30; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);   // (the map was just reloaded: let them think)
+  const idles = (await db.query("SELECT COUNT(*) n FROM ents WHERE mtype IS NOT NULL AND st IN ('stand', 'walk') AND idle_time > 0")).rows[0].N;
+  assert(idles > 0, `standing and walking monsters keep a 15–30 s idle-sound timer (${idles} have one)`);
+  const m = (await db.query("SELECT FIRST 1 id, x, y, z FROM ents WHERE mtype IS NOT NULL AND health > 0 AND st IN ('stand', 'walk') ORDER BY id")).rows[0];
+  const box = 'e.solid = 1, e.minx = -8, e.miny = -8, e.minz = -16, e.maxx = 8, e.maxy = 8, e.maxz = 16';
+  const secrets0 = (await db.query('SELECT found_secrets s FROM game')).rows[0].S;
+  await mk('target_secret', "e.solid = 0, e.targetname = 'xs_path'", 0, 0, 0);
+  const p2 = await mk('point_combat', `${box}, e.targetname = 'xp2', e.spawnflags = 1`, m.X + 2000, m.Y, m.Z);
+  const p1 = await mk('point_combat', `${box}, e.targetname = 'xp1', e.target = 'xp2', e.pathtarget = 'xs_path'`, m.X, m.Y, m.Z);
+  await db.exec(`UPDATE ents SET combattarget = 'xp1' WHERE id = ${m.ID}`);
+  await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE found_target(${m.ID}); END`);
+  let e = await row(m.ID);
+  assert(e.GOAL_ID === p1 && (e.AIFLAGS & 2) && e.COMBATTARGET === null && e.ST === 'run', 'a monster with a combattarget runs for its point_combat first');
+  assert((await db.query(`SELECT targetname t FROM ents WHERE id = ${p1}`)).rows[0].T === null, '... and the point is taken');
+  await think(m.ID);
+  e = await row(m.ID);
+  assert(e.GOAL_ID === p2 && (e.AIFLAGS & 2), 'touching the point sends it on to the next');
+  assert((await db.query('SELECT found_secrets s FROM game')).rows[0].S === secrets0 + 1, "... and fires the point's pathtarget");
+  await db.exec(`UPDATE ents SET x = (SELECT x FROM ents WHERE id = ${m.ID}), y = (SELECT y FROM ents WHERE id = ${m.ID}), z = (SELECT z FROM ents WHERE id = ${m.ID}) WHERE id = ${p2}`);
+  await think(m.ID);
+  e = await row(m.ID);
+  assert(e.GOAL_ID === null && (e.AIFLAGS & 2) === 0 && (e.AIFLAGS & 1), 'the last point, held, makes it stand its ground against the enemy');
+
+  const j = (await db.query(`SELECT FIRST 1 id, x, y, z FROM ents WHERE mtype IS NOT NULL AND health > 0 AND id <> ${m.ID} AND BIN_AND(flags, 3) = 0 ORDER BY id`)).rows[0];
+  await db.exec(`UPDATE ents SET st = 'run', flags = BIN_OR(flags, 512), vx = 0, vy = 0, vz = 0, nextthink = (SELECT time_ FROM game) + 100 WHERE id = ${j.ID}`);
+  await mk('trigger_monsterjump', 'e.solid = 1, e.minx = -64, e.miny = -64, e.minz = -64, e.maxx = 64, e.maxy = 64, e.maxz = 64, e.speed = 200, e.height = 250, e.p1x = 0, e.p1y = 1', j.X, j.Y, j.Z);
+  await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE run_physics(0.05); END');
+  e = await row(j.ID);
+  assert(Math.abs(e.VX) < 1e-6 && e.VY === 200 && e.VZ === 250 && (e.FLAGS & 512) === 0, `a monster jump trigger throws a running monster the trigger's way (v ${e.VX.toFixed(1)} ${e.VY} ${e.VZ})`);
+}
+
 // the console's commands: god, notarget, noclip through a wall, give, kill
 {
   const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;

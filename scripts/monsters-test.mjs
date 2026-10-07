@@ -66,6 +66,25 @@ for (const m of MONSTERS) {
   }
   assert(e.ENEMY_ID === pe, `${m.name} saw the player (state ${e.ST} after sighting)`);
   assert((await sounds(m.sight_snd)) > 0, `${m.name} called out (${m.sight_snd})`);
+  // a shot along the line to it: soldiers, infantry and gunners duck a quarter of the time, the rest never
+  const dodger = ['soldier_light', 'soldier', 'soldier_ss', 'infantry', 'gunner'].includes(m.name);
+  const box0 = await q1(`SELECT minz, maxz FROM ents WHERE id = ${id}`);
+  let ducked = null;
+  for (let i = 0; i < (dodger ? 60 : 40) && !ducked; i++) {
+    const p = await q1(`SELECT x, y, z FROM ents WHERE id = ${pe}`);
+    const mon = await q1(`SELECT x, y, z, st FROM ents WHERE id = ${id}`);
+    const ez = p.Z + 22, mz = mon.Z + (box0.MINZ + box0.MAXZ) / 2;
+    const len = Math.hypot(mon.X - p.X, mon.Y - p.Y, mz - ez);
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE check_dodge(${pe}, ${p.X}, ${p.Y}, ${ez}, ${(mon.X - p.X) / len}, ${(mon.Y - p.Y) / len}, ${(mz - ez) / len}, 1000); END`);
+    const d = await q1(`SELECT st, maxz, aiflags FROM ents WHERE id = ${id}`);
+    if (d.ST === 'duck') ducked = d;
+  }
+  if (dodger) {
+    assert(ducked && ducked.MAXZ === box0.MAXZ - 32 && (ducked.AIFLAGS & 4), `${m.name} ducked under a shot (box ${box0.MAXZ} → ${ducked?.MAXZ})`);
+    let up;
+    for (let i = 0; i < 40; i++) { await tic(); up = await q1(`SELECT st, maxz, aiflags FROM ents WHERE id = ${id}`); if (up.ST !== 'duck') break; }
+    assert(up.ST !== 'duck' && up.MAXZ === box0.MAXZ && (up.AIFLAGS & 4) === 0, `${m.name} stood up again (${up.ST})`);
+  } else assert(!ducked, `${m.name} has no dodge`);
   // it attacks: with god mode on, damage shows as dmg_take / attack events
   let attacked = 0, dmgSeen = 0;
   await db.exec(`UPDATE ents SET flags = BIN_AND(flags, BIN_NOT(16)) WHERE id = ${pe}`);

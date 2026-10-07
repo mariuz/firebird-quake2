@@ -172,6 +172,7 @@ BEGIN
   BEGIN
     EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE launch_bolt(pe, mx, my, mz, fx_, fy, fz, 1000, 15, 8);
+    EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 1000);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/blastf1a.wav', vol, 1);
     UPDATE player p SET p.attack_finished = :t + 0.5e0, p.punchangle = -1 WHERE p.id = 1;
   END
@@ -231,6 +232,7 @@ BEGIN
   BEGIN
     EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE launch_rocket(pe, mx, my, mz, fx_, fy, fz, 650, 100 + FLOOR(RAND() * 20), 120, 120);
+    EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 650);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/rocklf1a.wav', vol, 1);
     UPDATE player p SET p.attack_finished = :t + 0.8e0, p.rockets = p.rockets - 1, p.punchangle = -2 WHERE p.id = 1;
   END
@@ -239,6 +241,7 @@ BEGIN
     SELECT p.weapon_sound FROM player p WHERE p.id = 1 INTO ws;
     EXECUTE PROCEDURE muzzle(8 + 4 * COS(t * 25), -8 + 4 * SIN(t * 25)) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE launch_bolt(pe, mx, my, mz, fx_, fy, fz, 1000, 15, 64);
+    EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 1000);
     IF (ws = 0) THEN EXECUTE PROCEDURE snd(pe, 1, 'weapons/hyprbf1a.wav', vol, 1);
     EXECUTE PROCEDURE snd(pe, 0, 'weapons/hyprbl1a.wav', vol, 1);
     UPDATE player p SET p.attack_finished = :t + 0.1e0, p.cells = p.cells - 1, p.punchangle = -1, p.weapon_sound = 1 WHERE p.id = 1;
@@ -254,6 +257,7 @@ BEGIN
   BEGIN
     EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE launch_bfg(pe, mx, my, mz, fx_, fy, fz, 400, 500, 1000);
+    EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 400);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/bfg__f1y.wav', vol, 1);
     UPDATE player p SET p.attack_finished = :t + 1.5e0, p.cells = p.cells - 50, p.punchangle = -5 WHERE p.id = 1;
   END

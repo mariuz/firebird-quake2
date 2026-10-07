@@ -45,12 +45,16 @@ them.
 
 ## Fidelity gaps in what exists
 
-- **Monster details.** Soldiers, infantry, gunners, berserkers, flyers, parasites and the tank
-  are here with their attacks; missing are duck/dodge (`monster_dodge`), the sight/idle/search
-  sound cadence of each monster, `point_combat` paths (spawned but unused), `trigger_monsterjump`
-  jumps (handled in `run_physics` but untested), and the exact `ai_run` sub-states (ai_charge
-  turning while firing, the "blind fire" of 3.20). Flyers and parasites use the generic ranged
-  attack; the parasite's drain beam is a laser beam, not the hooked animation.
+- **Monster details.** Done: soldiers, infantry and gunners duck under a quarter of the player's
+  blaster bolts, rockets and BFG balls aimed at them (`check_dodge`, `monster_dodge`: the duck frames
+  with the box 32 units lower); idle sounds while standing and search sounds while walking come every
+  15–30 seconds, as `ai_stand` and `ai_walk` timed them; a `combattarget` sends the monster running
+  for its `point_combat`, ignoring the enemy, on along the points' targets, firing their pathtargets,
+  and standing its ground at a held one (it used to fire the combattarget as an ambush trigger, and
+  the points were not spawned); `trigger_monsterjump` throws the monster the trigger's way (it used
+  the monster's own facing). Left: the soldiers' crouch-and-fire (`attack3`) as a dodge on medium and
+  hard, the gunner's grenade from the duck, the exact `ai_run` sub-states (lost sight, trail following,
+  sliding), and the parasite's drain is a laser beam, not the hooked animation.
 - **Pusher edge cases.** Trains with `func_train` `block` damage and `movewith` are not there;
   rotating doors with `X_AXIS`/`Y_AXIS` exist, `func_door` `TOGGLE` and `START_OPEN` are honoured,
   but `func_water` moves only as a plain door (no `WATER_SMART`). `func_conveyor`, `func_killbox`,
