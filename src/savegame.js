@@ -30,6 +30,15 @@ export async function exportSave(db, mapName) {
  * Put a saved game back. The save's map must already be loaded (loadMap / init_map): the
  * geometry and the models are the pak's, only the four game tables are replaced.
  */
+/** A double as [mantissa, exponent] with v = m × 2^e and m an integer below 2^53 (null stays null). */
+function exactDouble(v) {
+  if (v == null) return [null, 0];
+  if (Number.isInteger(v) && Math.abs(v) < 2 ** 53) return [v, 0];
+  let e = Math.floor(Math.log2(Math.abs(v))) - 52;
+  while (e > -1074 && !Number.isInteger(v / 2 ** e)) e--;
+  return [v / 2 ** e, e];
+}
+
 export async function importSave(db, save) {
   if (!save || save.version !== SAVE_VERSION) throw new Error('not a saved game of this version');
   // the saved model ids → this load's, by name
@@ -38,11 +47,17 @@ export async function importSave(db, save) {
   await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM vis_faces; DELETE FROM lightstyles; DELETE FROM ents; DELETE FROM player; DELETE FROM game;');
   for (const t of TABLES) {
     const { cols, rows } = save.tables[t];
-    const sql = `INSERT INTO ${t} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;
+    // Parameters reach Firebird as text, and its text-to-double conversion is not correctly rounded (one
+    // value in six came back an ulp off). A DOUBLE PRECISION column goes over as an integer mantissa and a
+    // power of two instead, which converts exactly.
+    const dbl = new Set((await db.query(`SELECT TRIM(rf.rdb$field_name) FROM rdb$relation_fields rf JOIN rdb$fields f ON f.rdb$field_name = rf.rdb$field_source
+       WHERE rf.rdb$relation_name = ? AND f.rdb$field_type = 27`, [t.toUpperCase()], { rowMode: 'array' })).rows.map(([n]) => n));
+    const isDbl = cols.map((c) => dbl.has(c));
+    const sql = `INSERT INTO ${t} (${cols.join(', ')}) VALUES (${isDbl.map((d) => d ? 'CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)' : '?').join(', ')})`;
     const mi = cols.indexOf(t === 'game' ? 'WORLD_MODEL' : 'MODEL_ID');
     for (let row of rows) {
       if (mi >= 0) { row = row.slice(); row[mi] = remap(row[mi]); }
-      await db.query(sql, row);
+      await db.query(sql, row.flatMap((v, i) => isDbl[i] ? exactDouble(v) : [v]));
     }
   }
   const maxId = (await db.query('SELECT MAX(id) m FROM ents')).rows[0].M ?? 0;

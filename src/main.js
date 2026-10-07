@@ -39,7 +39,7 @@ let lastFxId = 0;
 let frameNo = 0;
 let beams = [];          // [{ a, b, color, until }]
 let explosions = [];     // [{ x, y, z, t0, spr }]
-const settings = { map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90, renderer: 'fast', brightness: 1.4 };
+const settings = { map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90, renderer: 'fast', brightness: 1.4, alwaysRun: true };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('firebird-quake2:settings') || '{}')); } catch { /* defaults */ }
 const saveSettings = () => { try { localStorage.setItem('firebird-quake2:settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 const viewWidth = () => (settings.detail === 'high' ? 320 : 160);
@@ -65,7 +65,7 @@ let fireClick = false;
 let impulse = 0;
 const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE',
   'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
-  'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
+  'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
 let anyKey = null;      // a picture screen waiting for a key or a click
 let showHelp = false;   // the help computer (F1)
 let helpSeen = 0;       // the help_changed count the player has looked at
@@ -210,7 +210,8 @@ function readInput(tics) {
   let side = (k('KeyD') || k('Period') ? 1 : 0) - (k('KeyA') || k('Comma') ? 1 : 0);
   const turnKeys = (k('ArrowLeft') ? 1 : 0) - (k('ArrowRight') ? 1 : 0);
   const lookKeys = (k('PageDown') ? 1 : 0) - (k('PageUp') ? 1 : 0);
-  const run = k('ShiftLeft') || k('ShiftRight') ? 0 : 1;     // always run; shift walks
+  const shift = k('ShiftLeft') || k('ShiftRight');
+  const run = settings.alwaysRun ? (shift ? 0 : 1) : (shift ? 1 : 0);    // cl_run: always run with shift to walk, or the other way
   if (touch.move) {
     fwd = Math.max(-1, Math.min(1, -touch.move.dy / 40));
     side = Math.max(-1, Math.min(1, touch.move.dx / 40));
@@ -220,7 +221,8 @@ function readInput(tics) {
   mouseYaw = 0; mousePitch = 0;
   const fire = k('ControlLeft') || k('ControlRight') || k('KeyF') || fireClick ? 1 : 0;
   if (fireClick === 'tap') fireClick = false;
-  const jump = k('Space') || k('KeyE') || k('TapJump') ? 1 : 0;
+  // Quake's upmove: jump up, crouch (C) down, both nothing
+  const jump = (k('Space') || k('KeyE') || k('TapJump') ? 1 : 0) - (k('KeyC') ? 1 : 0);
   keys.delete('TapJump');
   const imp = impulse;
   impulse = 0;
@@ -409,7 +411,7 @@ function handleFx(rows, time) {
 
 function drawFrame(faces, ents, styles, time, dt = 0.05) {
   const r = renderer;
-  const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.DEAD ? 40 : 0, fov: settings.fov };
+  const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? (last.DEAD ? 40 : 0), fov: settings.fov };
   r.beginFrame(view);
   if (faces) {
     if (settings.renderer === 'sql') r.drawFaces(faces, styles, time, brushFrames);
@@ -443,10 +445,21 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   if (!last.DEAD && !last.INTERMISSION && wp) {
     const vm = res.models.get(res.byName.get(wp.view));
     if (vm) {
-      const bob = Math.sin(time * 8) * Math.min(1, Math.hypot(last.PX - (prevPos?.x ?? last.PX), last.PY - (prevPos?.y ?? last.PY)) / 8) * 1.5;
+      // SV_CalcGunOffset: the gun sways with the walk cycle and lags behind turns of the view (the delta over a
+      // tenth of a second, at most 45 degrees); it sits at the eye, which already carries the view's bob
+      const bt = (last.BOBTIME ?? 0) * (last.DUCKED ? 4 : 1), bfs = Math.abs(Math.sin(bt * Math.PI)), xys = last.XYSPEED ?? 0;
+      let gr = xys * bfs * 0.005, gy = xys * bfs * 0.01;
+      if (Math.floor(bt) & 1) { gr = -gr; gy = -gy; }
+      let gp = xys * bfs * 0.005;
+      if (gunPrev) {
+        const lag = (a, b) => { let d = a - b; if (d > 180) d -= 360; if (d < -180) d += 360; d *= 0.1 / Math.max(dt, 0.05); return Math.max(-45, Math.min(45, d)); };
+        const dy = lag(gunPrev.yaw, last.YAW);
+        gr += 0.1 * dy; gy += 0.2 * dy; gp += 0.2 * lag(gunPrev.pitch, last.PITCH);
+      }
+      gunPrev = { yaw: last.YAW, pitch: last.PITCH };
       const light = Math.max(lightPoint(bsp, last.PX, last.PY, last.PZ), 32);
       r.zb.fill(0, 0, r.w * r.h);
-      r.drawAlias(vm.mdl, viewFrame(vm.mdl, last, time), 0, [last.PX, last.PY, last.VIEW_Z + bob], [-last.PITCH, last.YAW, 0], light, { near: 1, time });
+      r.drawAlias(vm.mdl, viewFrame(vm.mdl, last, time), 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light, { near: 1, time });
     }
   }
   prevPos = { x: last.PX, y: last.PY };
@@ -473,6 +486,7 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   r.present(tint);
 }
 let prevPos = null;
+let gunPrev = null;     // the view angles of the last frame (the gun's lag)
 
 let fpsT = performance.now(), fpsN = 0, fps = 0;
 function updateStats() {
@@ -578,6 +592,8 @@ $('detail').addEventListener('change', async (e) => {
 $('renderer').value = settings.renderer;
 $('renderer').addEventListener('change', (e) => { settings.renderer = e.target.value; saveSettings(); });
 $('brightness').value = String(settings.brightness);
+$('run').value = settings.alwaysRun ? '1' : '0';
+$('run').addEventListener('change', (e) => { settings.alwaysRun = e.target.value === '1'; saveSettings(); });
 $('brightness').addEventListener('change', (e) => { settings.brightness = Number(e.target.value); saveSettings(); if (renderer) { renderer.lightScale = settings.brightness; renderer.surfCache.clear(); } });
 $('skill').value = String(settings.skill);
 $('skill').addEventListener('change', (e) => { settings.skill = Number(e.target.value); saveSettings(); });

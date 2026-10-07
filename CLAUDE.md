@@ -71,6 +71,9 @@ short stories of what changed and what it measured; keep that.
 9. In Bash on this Windows machine, long heredocs that contain `'` sometimes fail to parse;
    write the edit script to a file (the scratchpad) and run it. `python -` falls into a REPL;
    `cat > file` without a heredoc blocks on stdin.
+10. firebird-wasm sends every query parameter as text, and Firebird's text-to-double conversion is
+    off by an ulp for about one value in six. Where a double must arrive exactly (the save's load),
+    send `m` and `e` with `v = m × 2^e` and insert `CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)`.
 
 - A forward-declaration stub (`CREATE OR ALTER PROCEDURE x (...) AS BEGIN END^`) must sit in the same
   file as the real body or an earlier one: the files load in order, and a stub in a later file
@@ -96,6 +99,9 @@ short stories of what changed and what it measured; keep that.
 - Level exits: single-player Quake 2 has no intermission between ordinary levels; only a unit's end
   (`*` in the map string) stops at one. The map string is kept as written in `game.next_map` and
   parsed by `src/levels.js`, never in SQL.
+- A tic is 0.05 s (20 Hz): 20 tics are a second. The ground flag (512) must hold every tic the player
+  stands on a floor; pmove-style code that runs only `IF (onground = 1)` silently halves otherwise. On the ground the
+  player's `vz` is 0 (pmove); any path that skips the move must still write the speed it computed.
 - Skill numbers are Quake's: 0 easy, 1 medium, 2 hard. The scripts load maps at skill 2 (hard).
 - Spawnflags 256/512/1024 keep an entity out of easy/medium/hard; an entity with all three (1792) is
   deathmatch-only, and the demo maps have many (weapons, ammo, demo3's teleporter). Before calling

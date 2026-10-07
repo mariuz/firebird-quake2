@@ -134,9 +134,13 @@ MASK_SHOT 100663299, MASK_OPAQUE 25, MASK_WATER 56, MASK_SOLID 3.
 ammo, weapons, position and angles, view height and punch, messages, damage flash values,
 level counts, water, powerups, the eye's leaf and cluster. Each tic:
 
-1. `player_think` – pmove.c: friction, acceleration (300/200 units per second, no air
-   acceleration), jumping (270), swimming, water transitions and drowning, lava and slime,
-   then the move (`walk_move` or `fly_move` in water), the relink, the step smoothing, touching
+1. `player_think` – pmove.c: ducking (`PM_CheckDuck`: a box 4 high, the eye at -2, 100 units per
+   second; standing up only where the full box fits), friction, acceleration (300/200 units per second,
+   no air acceleration), jumping (270), swimming, water transitions and drowning, lava and slime,
+   then the move (`walk_move` or `fly_move` in water), the ground probe a quarter unit down
+   (`PM_CatagorizePosition`: the move alone finds the floor only by falling onto it), the relink, the
+   view's bob (`bobtime`, `bob_z`, `bob_pitch`, `bob_roll` on `player`, read by `view_setup`
+   and `q2_tic`; the page sways the gun from `BOBTIME` and `XYSPEED`), the step smoothing, touching
    triggers and items, door and plat trigger fields, megahealth rot, then `player_fire`. A player
    standing still on the ground with no velocity makes no move; the floor is re-checked twice a
    second. The player and entity rows are each written once per tic.
@@ -291,7 +295,10 @@ Saved games (`src/savegame.js`): `F6` reads the four game tables (`game`, `playe
 `lightstyles`) as rows, with the column names from the result's field list and the model ids' names,
 and keeps them as JSON in `localStorage`; `F9` reloads the map, empties the four tables, inserts the
 saved rows with model ids remapped by name, restarts `ent_seq` above the highest id and resets the
-frame's caches. The per-frame cache columns of `ents` are not saved.
+frame's caches. The per-frame cache columns of `ents` are not saved. `DOUBLE PRECISION` columns are
+inserted as `CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)` from an integer mantissa and an exponent:
+firebird-wasm passes every parameter as text, and Firebird's text-to-double conversion is not
+correctly rounded.
 
 The loop: compute the tics owed (one or two), `q2_tic`, then one `frame_all`, split its rows by
 kind, play sounds and effects, draw the frame, the view weapon and the HUD, and present. A hidden

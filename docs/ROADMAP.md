@@ -82,9 +82,21 @@ them.
   entering water makes only a sound, and no monster of the demo swims (the full game's barracuda
   shark is in the list of missing monsters). Left: murky water's brown splash, which Quake 2 told
   from the surface's texture name (`*brwater`), not passed through the traces here.
-- **View.** Bob, step smoothing, kick and the death roll exist; the view weapon has no bob
-  animation of its own, there is no `cl_run` toggle (shift walks), and crouching is not
-  implemented at all (pmove's duck state and the 32-unit box).
+- **View**: done. `C` crouches as pmove's `PM_CheckDuck` did: on the ground the box drops to 4 units
+  high, the eye to -2 and the speed to 100, and a ducked player stands up only where the full box fits
+  (under a low ceiling it stays ducked); crouching in water swims down. The view bobs as
+  `SV_CalcViewOffset` had it: a walk cycle (`bobtime`) that advances with the speed while on the
+  ground, four times as fast ducked, giving the height (at most 6), pitch and roll; the gun sways with
+  the same cycle and lags behind turns (`SV_CalcGunOffset`). The Run setting is `cl_run`: always run
+  with Shift to walk, or the other way. Found on the way: the player's ground flag came and went every
+  other tic (the move finds the floor only by falling onto it), so friction, acceleration, jumping and
+  ducking acted on half the tics; `player_think` now probes a quarter unit down after the move, as
+  `PM_CatagorizePosition` did. With that, two more came to light: on the ground the vertical speed is
+  now zero as in pmove (a knockback's small downward push used to sink the box into the floor a few
+  thousandths at a time until the player was stuck), and the standing-still shortcut writes the speed
+  friction has just taken away (the row kept 12 units a second forever). And a saved game now comes
+  back exactly: a double passed as a query parameter goes to Firebird as text, whose conversion lost the
+  last bit of one value in six, so `importSave` sends doubles as an integer and a power of two.
 - **Weapon keys.** The page's 1–0 keys give hand grenades slot 6, so 6–0 select one weapon later than
   Quake 2's default layout (6 grenade launcher, 7 rocket launcher, 8 hyperblaster, 9 railgun, 0 BFG10K;
   hand grenades had no number key). Changing it means remapping the keys in `src/main.js` and the

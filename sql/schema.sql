@@ -422,7 +422,12 @@ CREATE TABLE player (
   chaingun_spin   DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- how long the chain gun has been firing
   grenade_time    DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- a hand grenade's fuse is lit
   weapon_sound    SMALLINT DEFAULT 0 NOT NULL,
-  mega_time       DOUBLE PRECISION DEFAULT 0 NOT NULL     -- megahealth rot timer
+  mega_time       DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- megahealth rot timer
+  ducked          SMALLINT DEFAULT 0 NOT NULL,            -- PMF_DUCKED: the box 32 → 4 high, the eye at -2
+  bobtime         DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- the walk cycle (p_view.c's bobtime)
+  bob_z           DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- the view's bob this tic: height, pitch and roll
+  bob_pitch       DOUBLE PRECISION DEFAULT 0 NOT NULL,
+  bob_roll        DOUBLE PRECISION DEFAULT 0 NOT NULL
 );
 
 -- S_StartSound: every sound the simulation makes, for the browser to play.

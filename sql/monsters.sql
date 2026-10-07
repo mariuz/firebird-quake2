@@ -963,7 +963,8 @@ RETURNS (
   dead SMALLINT, exit_kind SMALLINT, next_map VARCHAR(64), killed INTEGER, total_monsters INTEGER,
   found_secrets INTEGER, total_secrets INTEGER, found_goals INTEGER, total_goals INTEGER, waterlevel SMALLINT, watertype INTEGER, map_name VARCHAR(32),
   level_msg VARCHAR(200), quad SMALLINT, invincible SMALLINT, breather SMALLINT, enviro SMALLINT, leaf INTEGER, cluster INTEGER, help_msg VARCHAR(400),
-  help_msg2 VARCHAR(400), help_changed INTEGER, skill SMALLINT, intermission SMALLINT)
+  help_msg2 VARCHAR(400), help_changed INTEGER, skill SMALLINT, intermission SMALLINT,
+  roll DOUBLE PRECISION, bobtime DOUBLE PRECISION, xyspeed DOUBLE PRECISION, ducked SMALLINT)
 AS
 DECLARE i INTEGER = 0; DECLARE itime DOUBLE PRECISION;
 BEGIN
@@ -987,18 +988,19 @@ BEGIN
   END
   SELECT g.tic, g.time_, e.health, e.max_health, p.armor, p.armor_type, p.power_armor, p.bullets, p.shells, p.rockets, p.grenades, p.cells, p.slugs,
          p.weapons, p.keys, p.weapon, p.attack_start, p.attack_finished, p.grenade_time,
-         e.x, e.y, e.z, e.yaw, p.pitch + p.punchangle, e.z + p.view_ofs - p.stepz, p.punchangle,
+         e.x, e.y, e.z, e.yaw, p.pitch + p.punchangle + p.bob_pitch, e.z + p.view_ofs - p.stepz + p.bob_z, p.punchangle,
          IIF(p.msg_time > g.time_, p.msg, NULL), IIF(p.cprint_time > g.time_, p.cprint, NULL),
          p.dmg_take, p.dmg_save, p.dmg_time, p.bonus_time, e.deadflag, g.exit_kind, g.next_map, g.killed, g.total_monsters,
          g.found_secrets, g.total_secrets, g.found_goals, g.total_goals, e.waterlevel, e.watertype, g.map_name, g.level_msg,
          IIF(p.quad_finished > g.time_, 1, 0), IIF(p.invincible_finished > g.time_, 1, 0), IIF(p.breather_finished > g.time_, 1, 0), IIF(p.enviro_finished > g.time_, 1, 0),
-         e.leaf, e.cluster, g.help_msg, g.help_msg2, g.help_changed, g.skill, IIF(g.intermission_time IS NULL, 0, 1)
+         e.leaf, e.cluster, g.help_msg, g.help_msg2, g.help_changed, g.skill, IIF(g.intermission_time IS NULL, 0, 1),
+         IIF(e.deadflag = 1, 40, p.bob_roll), p.bobtime, SQRT(e.vx * e.vx + e.vy * e.vy), p.ducked
     FROM game g CROSS JOIN player p JOIN ents e ON e.id = p.ent_id
    WHERE g.id = 1 AND p.id = 1
     INTO tic, time_, health, max_health, armor, armor_type, power_armor, bullets, shells, rockets, grenades, cells, slugs, weapons, keys, weapon, attack_start, attack_finished, grenade_time,
          px, py, pz, yaw, pitch, view_z, punch, msg, cprint, dmg_take, dmg_save, dmg_time, bonus_time, dead, exit_kind, next_map,
          killed, total_monsters, found_secrets, total_secrets, found_goals, total_goals, waterlevel, watertype, map_name, level_msg, quad, invincible, breather, enviro, leaf, cluster, help_msg,
-         help_msg2, help_changed, skill, intermission;
+         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked;
   UPDATE player p SET p.dmg_take = 0, p.dmg_save = 0 WHERE p.id = 1 AND p.dmg_time < :time_ - 0.05e0;
   SUSPEND;
 END^

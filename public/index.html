@@ -42,6 +42,10 @@
           <option value="1.4">1.4</option>
           <option value="1.8">1.8</option>
         </select></label>
+        <label title="cl_run: run unless Shift is held, or walk unless it is">Run <select id="run">
+          <option value="1">Always (Shift walks)</option>
+          <option value="0">Hold Shift</option>
+        </select></label>
         <label title="How much of the renderer runs in SQL">Renderer <select id="renderer">
           <option value="fast">SQL picks faces, JS projects (fast)</option>
           <option value="sql">SQL projects every vertex</option>
@@ -58,7 +62,7 @@
       </div>
       <p class="keys">Click the view to capture the mouse ·
         <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows move · mouse looks ·
-        <kbd>Ctrl</kbd> or click fires · <kbd>Space</kbd> jumps · <kbd>Shift</kbd> walks ·
+        <kbd>Ctrl</kbd> or click fires · <kbd>Space</kbd> jumps · <kbd>C</kbd> crouches · <kbd>Shift</kbd> walks (or runs: the Run setting) ·
         <kbd>1</kbd>–<kbd>0</kbd> weapons · <kbd>/</kbd> or wheel cycles · <kbd>G</kbd> gives everything · <kbd>F1</kbd> help computer · <kbd>`</kbd> console (god, noclip, notarget, give, kill, map) · <kbd>P</kbd> pause ·
         <kbd>F6</kbd> quick save · <kbd>F9</kbd> quick load (the save lives in this browser).
         On touch screens the left half moves, the right half looks, a tap fires.</p>
@@ -103,7 +107,7 @@
           (rotating doors are traced in their own rotated space) and tests monsters and the player with a Minkowski slab
           test. <code>FLY_MOVE</code>, <code>WALK_MOVE</code> (the 18-unit step), <code>MOVE_STEP</code> and
           <code>PUSH_MOVE</code> are g_phys.c in PSQL.</li>
-        <li><b>The game is PSQL.</b> <code>Q2_TIC</code> runs at 20 Hz: pmove's friction, acceleration, jumping and swimming;
+        <li><b>The game is PSQL.</b> <code>Q2_TIC</code> runs at 20 Hz: pmove's ducking, friction, acceleration, jumping and swimming, and the view's bob;
           doors and their teams, rotating doors, platforms, buttons, trains with path corners, rotating fans, timers;
           triggers (once, multiple, relay, always, key, counter, hurt, push), targets (speaker, explosion, splash, secret,
           goal, help, laser, changelevel), items from stimpacks to the power shield, the ten weapons from the blaster to

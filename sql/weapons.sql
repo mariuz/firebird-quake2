@@ -429,11 +429,19 @@ DECLARE tdm INTEGER; DECLARE tlt DOUBLE PRECISION;
 DECLARE afin DOUBLE PRECISION; DECLARE hp INTEGER; DECLARE deadt DOUBLE PRECISION; DECLARE oldz DOUBLE PRECISION; DECLARE w INTEGER;
 DECLARE enviro DOUBLE PRECISION; DECLARE breather DOUBLE PRECISION; DECLARE ndt DOUBLE PRECISION; DECLARE ddmg INTEGER; DECLARE mhp INTEGER;
 DECLARE grav DOUBLE PRECISION;
+DECLARE pducked SMALLINT; DECLARE ducked2 SMALLINT; DECLARE pbobtime DOUBLE PRECISION;
+DECLARE dtf DOUBLE PRECISION; DECLARE dex DOUBLE PRECISION; DECLARE dey DOUBLE PRECISION; DECLARE dez DOUBLE PRECISION;
+DECLARE dnx DOUBLE PRECISION; DECLARE dny DOUBLE PRECISION; DECLARE dnz DOUBLE PRECISION; DECLARE dsf INTEGER; DECLARE dct INTEGER;
+DECLARE dals SMALLINT; DECLARE dsts SMALLINT; DECLARE dhit INTEGER;
+DECLARE gvz DOUBLE PRECISION; DECLARE gflags INTEGER; DECLARE gsolid SMALLINT; DECLARE ghead INTEGER;
+DECLARE bvx DOUBLE PRECISION; DECLARE bvy DOUBLE PRECISION; DECLARE xys DOUBLE PRECISION; DECLARE bt DOUBLE PRECISION; DECLARE bts DOUBLE PRECISION;
+DECLARE bfs DOUBLE PRECISION; DECLARE bobz DOUBLE PRECISION; DECLARE bobp DOUBLE PRECISION; DECLARE bobr DOUBLE PRECISION;
 DECLARE noclip SMALLINT; DECLARE ppitch DOUBLE PRECISION; DECLARE pstepz DOUBLE PRECISION; DECLARE gtic INTEGER; DECLARE stepz2 DOUBLE PRECISION; DECLARE jr2 SMALLINT; DECLARE afin2 DOUBLE PRECISION; DECLARE ddmg2 INTEGER;
 BEGIN
   -- (the player and ents rows are wide: what the think decides is written back once, at the end)
-  SELECT p.ent_id, p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz
-    FROM player p WHERE p.id = 1 INTO pe, jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz;
+  SELECT p.ent_id, p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz,
+         p.ducked, p.bobtime
+    FROM player p WHERE p.id = 1 INTO pe, jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz, pducked, pbobtime;
   IF (pe IS NULL) THEN EXIT;
   SELECT e.deadflag, e.flags, e.waterlevel, e.watertype, e.yaw, e.health, e.z, e.max_health FROM ents e WHERE e.id = :pe INTO dead, flags, owl, wt, yaw, hp, oldz, mhp;
   t = now_();
@@ -445,6 +453,7 @@ BEGIN
     EXECUTE PROCEDURE toss_move(pe, dt);
     IF (t > deadt + 1.5e0 AND (fire = 1 OR jump = 1)) THEN
       UPDATE game g SET g.exit_kind = 3 WHERE g.id = 1;
+    UPDATE player p SET p.bobtime = 0, p.bob_z = 0, p.bob_pitch = 0, p.bob_roll = 0, p.ducked = 0 WHERE p.id = 1 AND (p.bob_z <> 0 OR p.bob_pitch <> 0 OR p.bob_roll <> 0 OR p.ducked <> 0);
     EXIT;
   END
 
@@ -507,7 +516,24 @@ BEGIN
 
   SELECT e.vx, e.vy, e.vz, e.flags, IIF(e.movetype = 2, 1, 0) FROM ents e WHERE e.id = :pe INTO vx, vy, vz, flags, noclip;
   onground = IIF(BIN_AND(flags, 512) <> 0, 1, 0);
+  -- (PM_CatagorizePosition: going up faster than 180, a blast's knockback, leaves the ground)
+  IF (onground = 1 AND vz > 180) THEN BEGIN onground = 0; flags = BIN_AND(flags, BIN_NOT(512)); END
   maxspd = IIF(run = 1, 300, 200);
+
+  -- PM_CheckDuck: crouching (jump < 0, Quake's negative upmove) on the ground ducks; a ducked player stands
+  -- up again only where the full box fits. Ducked, the box is 4 high, the eye at -2, the speed 100.
+  IF (jump < 0 AND onground = 1 AND noclip = 0) THEN ducked2 = 1;
+  ELSE IF (pducked = 1) THEN
+  BEGIN
+    SELECT e.x, e.y, e.z FROM ents e WHERE e.id = :pe INTO px, py, pz;
+    EXECUTE PROCEDURE trace_move(pe, -16, -16, -24, 16, 16, 32, px, py, pz, px, py, pz, 33619971)
+      RETURNING_VALUES dtf, dex, dey, dez, dnx, dny, dnz, dsf, dct, dals, dsts, dhit;
+    ducked2 = IIF(dals = 1, 1, 0);
+  END
+  ELSE ducked2 = 0;
+  IF (ducked2 <> pducked) THEN
+    UPDATE ents e SET e.maxz = IIF(:ducked2 = 1, 4, 32), e.viewheight = IIF(:ducked2 = 1, -2, 22) WHERE e.id = :pe;
+  IF (ducked2 = 1) THEN maxspd = 100;
 
   -- PM_CheckJump
   IF (jump = 1) THEN
@@ -557,6 +583,7 @@ BEGIN
     wx = fx_ * fwd * maxspd + rx * side * maxspd; wy = fy * fwd * maxspd + ry * side * maxspd; wz = fz * fwd * maxspd;
     IF (fwd = 0 AND side = 0 AND jump = 0) THEN wz = wz - 60;
     ELSE IF (jump = 1) THEN wz = wz + 200;
+    ELSE IF (jump < 0) THEN wz = wz - 200;                               -- crouch swims down
     wspd = vlen(wx, wy, wz);
     IF (wspd > maxspd) THEN BEGIN wx = wx * maxspd / wspd; wy = wy * maxspd / wspd; wz = wz * maxspd / wspd; wspd = maxspd; END
     wspd = wspd * 0.5e0;
@@ -599,8 +626,10 @@ BEGIN
       END
     END
   END
-  -- gravity
+  -- gravity; on the ground no vertical speed at all (PM_AirMove's ground case): a small knockback down
+  -- would otherwise sink the box a little into the floor each time, until every trace started in solid
   IF (onground = 0 AND wl < 2) THEN vz = vz - grav * dt;
+  ELSE IF (onground = 1 AND wl < 2 AND noclip = 0) THEN vz = 0;
   IF (noclip = 1) THEN
   BEGIN
     -- noclip (PM_SPECTATOR): fly where the view points, jump to rise, through everything
@@ -615,7 +644,8 @@ BEGIN
   BEGIN
     -- standing still on the ground: nothing to move. The ground under us is re-checked twice a
     -- second (pmove traces for it every frame; a tenth of that keeps a vanished floor honest)
-    UPDATE ents e SET e.yaw = :yaw WHERE e.id = :pe AND e.yaw <> :yaw;
+    -- (friction may just have stopped it: the row keeps no stale speed)
+    UPDATE ents e SET e.yaw = :yaw, e.vx = 0, e.vy = 0, e.vz = 0 WHERE e.id = :pe AND (e.yaw <> :yaw OR e.vx <> 0 OR e.vy <> 0 OR e.vz <> 0);
   END
   ELSE
   BEGIN
@@ -624,9 +654,46 @@ BEGIN
     IF (wl >= 2) THEN EXECUTE PROCEDURE fly_move(pe, dt) RETURNING_VALUES tst, tid;
     ELSE EXECUTE PROCEDURE walk_move(pe, dt, onground);
     IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :pe)) THEN EXIT;
+    IF (wl < 2) THEN
+    BEGIN
+      -- PM_CatagorizePosition: on the ground means a floor within a quarter unit under the box, unless going up
+      -- faster than 180. The move finds the floor only when it falls onto it, and it falls only off the ground:
+      -- without this the flag came and went every other tic, and friction, acceleration, jumps and the duck with it.
+      SELECT e.x, e.y, e.z, e.vz, e.flags, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz FROM ents e WHERE e.id = :pe
+        INTO px, py, pz, gvz, gflags, mnx, mny, mnz, mxx, mxy, mxz;
+      IF (BIN_AND(gflags, 512) = 0 AND gvz <= 180) THEN
+      BEGIN
+        -- (the world's floor first, which is where the player nearly always stands; the entities only without one)
+        SELECT m.headnode FROM game g JOIN models m ON m.id = g.world_model WHERE g.id = 1 INTO ghead;
+        EXECUTE PROCEDURE trace_hull(ghead, 0, 0, 0, mnx, mny, mnz, mxx, mxy, mxz, px, py, pz, px, py, pz - 0.25e0, 33619971)
+          RETURNING_VALUES dtf, dex, dey, dez, dnx, dny, dnz, dsf, dct, dals, dsts;
+        dhit = 0;
+        IF (dtf = 1 OR dnz < 0.7e0) THEN
+          EXECUTE PROCEDURE trace_move(pe, mnx, mny, mnz, mxx, mxy, mxz, px, py, pz, px, py, pz - 0.25e0, 33619971)
+            RETURNING_VALUES dtf, dex, dey, dez, dnx, dny, dnz, dsf, dct, dals, dsts, dhit;
+        IF (dtf < 1 AND dnz >= 0.7e0) THEN
+        BEGIN
+          gsolid = 4;
+          IF (dhit > 0) THEN SELECT e.solid FROM ents e WHERE e.id = :dhit INTO gsolid;
+          IF (gsolid = 4) THEN
+            UPDATE ents e SET e.flags = BIN_OR(e.flags, 512), e.vz = MAXVALUE(e.vz, 0) WHERE e.id = :pe;
+        END
+      END
+    END
     EXECUTE PROCEDURE link_ent(pe);
   END
-  SELECT e.x, e.y, e.z, e.flags, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz FROM ents e WHERE e.id = :pe INTO px, py, pz, flags, mnx, mny, mnz, mxx, mxy, mxz;
+  SELECT e.x, e.y, e.z, e.flags, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz, e.vx, e.vy FROM ents e WHERE e.id = :pe INTO px, py, pz, flags, mnx, mny, mnz, mxx, mxy, mxz, bvx, bvy;
+  -- the view's bob (ClientEndServerFrame, SV_CalcViewOffset): the walk cycle advances with the speed while on the
+  -- ground, four times as fast ducked; the height bob is at most 6, the pitch and roll six times as strong ducked
+  xys = SQRT(bvx * bvx + bvy * bvy);
+  IF (xys < 5) THEN bt = 0;
+  ELSE IF (BIN_AND(flags, 512) <> 0) THEN bt = pbobtime + IIF(xys > 210, 0.25e0, IIF(xys > 100, 0.125e0, 0.0625e0)) * dt / 0.1e0;
+  ELSE bt = pbobtime;
+  bts = IIF(ducked2 = 1, bt * 4, bt);
+  bfs = ABS(SIN(bts * PI()));
+  bobz = MINVALUE(6, bfs * xys * 0.005e0);
+  bobp = bfs * 0.002e0 * xys * IIF(ducked2 = 1, 6, 1);
+  bobr = bobp * IIF(MOD(CAST(FLOOR(bts) AS INTEGER), 2) = 1, -1, 1);
   -- smooth the view over steps
   stepz2 = IIF(BIN_AND(flags, 512) <> 0 AND pz - oldz > 0 AND pz - oldz <= 18, MINVALUE(pstepz + (pz - oldz), 18), MAXVALUE(0, pstepz - 160 * dt));
 
@@ -701,6 +768,7 @@ BEGIN
 
   END
   UPDATE player p SET p.pitch = :pitch, p.punchangle = MINVALUE(0, p.punchangle + 10 * :dt), p.jump_released = :jr2, p.stepz = :stepz2,
+         p.ducked = :ducked2, p.view_ofs = IIF(:ducked2 = 1, -2, 22), p.bobtime = :bt, p.bob_z = :bobz, p.bob_pitch = :bobp, p.bob_roll = :bobr,
          p.air_finished = COALESCE(:afin2, p.air_finished), p.drown_dmg = COALESCE(:ddmg2, p.drown_dmg) WHERE p.id = 1;
 
   -- megahealth rots away above the maximum

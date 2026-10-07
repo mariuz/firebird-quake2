@@ -332,6 +332,68 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   if (!done) console.log('     (no open water surface found for the splash check)');
 }
 
+// crouching and the view's bob
+{
+  const one = async (q) => (await db.query(q)).rows[0];
+  const me = async () => one('SELECT e.id, e.x, e.y, e.z, e.maxz, e.flags, p.view_ofs, p.ducked, p.bobtime, p.bob_z FROM ents e JOIN player p ON p.ent_id = e.id WHERE p.id = 1');
+  // face the longest clear run from where the player stands
+  const face = async () => {
+    const p = await me();
+    let best = null;
+    for (let yaw = 0; yaw < 360; yaw += 45) {
+      const dx = Math.cos(yaw * Math.PI / 180), dy = Math.sin(yaw * Math.PI / 180);
+      const t = await one(`SELECT fraction f FROM trace_move(${p.ID}, -16, -16, -24, 16, 16, 32, ${p.X}, ${p.Y}, ${p.Z}, ${p.X + dx * 400}, ${p.Y + dy * 400}, ${p.Z}, 33619971)`);
+      if (!best || t.F > best.f) best = { yaw, f: t.F };
+    }
+    await db.exec(`UPDATE ents SET yaw = ${best.yaw}, vx = 0, vy = 0 WHERE id = ${p.ID}; UPDATE player SET pitch = 0 WHERE id = 1;`);
+    return best;
+  };
+  for (let i = 0; i < 4; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  const run = await face();
+  let r = await tic([1, 0, 0, 0, 0, 0, -1, 1, 0]);
+  let m = await me();
+  assert(m.DUCKED === 1 && m.MAXZ === 4 && m.VIEW_OFS === -2 && Math.abs(r.VIEW_Z - (r.PZ - 2)) < 0.01, `crouching ducks: the box 4 high, the eye at -2 (view ${(r.VIEW_Z - r.PZ).toFixed(1)})`);
+  const a = await me();
+  for (let i = 0; i < 20; i++) r = await tic([1, 1, 0, 0, 0, 0, -1, 1, 0]);   // (a tic is 0.05 s)
+  const b = await me();
+  const ducked = Math.hypot(b.X - a.X, b.Y - a.Y);
+  assert(b.DUCKED === 1 && ducked > (run.f > 0.5 ? 50 : 10) && ducked <= 101, `ducked, it moves at 100 units a second at most (${ducked.toFixed(0)} in a second)`);
+  // a low ceiling: a door's or wall's model put 20 units over the player's origin keeps it ducked
+  // (the first of them that a trace down through the copy's middle hits: some func_walls are not solid)
+  const c = await me();
+  let ceil = null;
+  const models = (await db.query("SELECT FIRST 12 m.name, m.minx, m.miny, m.minz, m.maxx, m.maxy, m.maxz FROM ents e JOIN models m ON m.id = e.model_id WHERE e.classname IN ('func_door', 'func_wall') AND m.maxx - m.minx >= 40 AND m.maxy - m.miny >= 40 ORDER BY e.id")).rows;
+  for (const w of models) {
+    const id = (await db.query(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('func_wall', ${c.X - (w.MINX + w.MAXX) / 2}, ${c.Y - (w.MINY + w.MAXY) / 2}, ${c.Z + 20 - w.MINZ}) RETURNING_VALUES id;
+      EXECUTE PROCEDURE set_model(id, '${w.NAME}'); UPDATE ents e SET e.solid = 4, e.movetype = 0, e.mkind = 'B' WHERE e.id = :id; EXECUTE PROCEDURE link_ent(id); SUSPEND; END`)).rows[0].ID;
+    const t = await one(`SELECT hit_ent h FROM trace_move(${c.ID}, 0, 0, 0, 0, 0, 0, ${c.X}, ${c.Y}, ${c.Z + 20 + w.MAXZ - w.MINZ + 1}, ${c.X}, ${c.Y}, ${c.Z + 19}, 33619971)`);
+    if (t.H === id) { ceil = id; break; }
+    await db.exec(`DELETE FROM ents WHERE id = ${id}`);
+  }
+  if (ceil) {
+    await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+    assert((await me()).DUCKED === 1, '... and stays ducked under a low ceiling when the key is let go');
+    await db.exec(`DELETE FROM ents WHERE id = ${ceil}`);
+  } else console.log('     (no solid brush model for the low-ceiling check)');
+  r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  m = await me();
+  assert(m.DUCKED === 0 && m.MAXZ === 32 && m.VIEW_OFS === 22, '... and stands up once the box fits');
+  // walking at full speed: the walk cycle runs and the eye bobs (at most 6 units); standing still it stops
+  await face();
+  let maxBob = 0;
+  for (let i = 0; i < 12; i++) { r = await tic([1, 1, 0, 0, 0, 0, 0, 1, 0]); maxBob = Math.max(maxBob, r.VIEW_Z - r.PZ - 22); }
+  m = await me();
+  assert(m.BOBTIME > 0.5 && maxBob > 0.5 && maxBob <= 6.0001, `walking runs the bob cycle (bobtime ${m.BOBTIME.toFixed(2)}) and bobs the eye up to ${maxBob.toFixed(1)} units`);
+  for (let i = 0; i < 12; i++) r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  m = await me();
+  assert(m.BOBTIME === 0 && m.BOB_Z === 0 && Math.abs(r.VIEW_Z - r.PZ - 22) < 0.01, `... and standing still stops it (bobtime ${m.BOBTIME}, xy speed ${r.XYSPEED?.toFixed(1)}, flags ${m.FLAGS}, water ${r.WATERLEVEL})`);
+  // the ground holds from tic to tic while walking (PM_CatagorizePosition), so friction and acceleration act every tic
+  await face();
+  let grounded = 0, trail = '';
+  for (let i = 0; i < 6; i++) { await tic([1, 1, 0, 0, 0, 0, 0, 1, 0]); const g = await me(); if (g.FLAGS & 512) grounded++; trail += ` ${g.Z.toFixed(1)}${g.FLAGS & 512 ? 'g' : 'a'}`; }
+  assert(grounded === 6, `walking on a floor stays on the ground every tic (${grounded} of 6:${trail})`);
+}
+
 // the console's commands: god, notarget, noclip through a wall, give, kill
 {
   const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;

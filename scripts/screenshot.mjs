@@ -65,12 +65,12 @@ async function shot(name) {
   const t1 = performance.now();
   const entFrames = new Map(), entAngles = new Map();
   for (const [id, f, p, y, r] of bents) { entFrames.set(id, f); if (p || y || r) entAngles.set(id, [p, y, r]); }
-  renderer.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, fov: 90 });
+  renderer.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? 0, fov: 90 });
   if (useSql) renderer.drawFaces(faces, styles, last.TIME_, entFrames);
   else renderer.drawFaceList(faces, styles, last.TIME_, entFrames, entAngles);
   if (compare) {
     const sqlFb = renderer.fb.slice();
-    renderer.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, fov: 90 });
+    renderer.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? 0, fov: 90 });
     renderer.drawFaceList(facesFast, styles, last.TIME_, entFrames, entAngles);
     let diff = 0;
     for (let i = 0; i < sqlFb.length; i++) if (sqlFb[i] !== renderer.fb[i]) diff++;

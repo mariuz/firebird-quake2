@@ -29,9 +29,12 @@ AS
 DECLARE yaw DOUBLE PRECISION; DECLARE pitch DOUBLE PRECISION; DECLARE fov DOUBLE PRECISION;
 DECLARE sy DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE sp DOUBLE PRECISION; DECLARE cp DOUBLE PRECISION;
 DECLARE stepz DOUBLE PRECISION; DECLARE punch DOUBLE PRECISION; DECLARE dead SMALLINT;
+DECLARE roll DOUBLE PRECISION; DECLARE cr DOUBLE PRECISION; DECLARE sr DOUBLE PRECISION;
+DECLARE t1 DOUBLE PRECISION; DECLARE t2 DOUBLE PRECISION; DECLARE t3 DOUBLE PRECISION;
 BEGIN
-  SELECT e.x, e.y, e.z + p.view_ofs, e.yaw, p.pitch + p.punchangle, p.stepz, e.deadflag
-    FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1 INTO ex, ey, ez, yaw, pitch, stepz, dead;
+  -- the eye with the view's bob (SV_CalcViewOffset), the same q2_tic hands the page
+  SELECT e.x, e.y, e.z + p.view_ofs + p.bob_z, e.yaw, p.pitch + p.punchangle + p.bob_pitch, p.stepz, e.deadflag, p.bob_roll
+    FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1 INTO ex, ey, ez, yaw, pitch, stepz, dead, roll;
   ez = ez - COALESCE(stepz, 0);
   SELECT c.w, c.h, c.fov, c.near_z FROM viewcfg c WHERE c.id = 1 INTO w, h, fov, nearz;
   sy = SIN(yaw * 0.0174532925e0); cy = COS(yaw * 0.0174532925e0);
@@ -39,12 +42,14 @@ BEGIN
   fx = cp * cy; fy = cp * sy; fz = -sp;
   rx = sy; ry = -cy; rz = 0;
   ux = sp * cy; uy = sp * sy; uz = cp;
-  IF (dead = 1) THEN
+  -- the roll: the dead lie on their side (40 degrees), the living sway with the walk
+  IF (dead = 1) THEN roll = 40;
+  IF (roll <> 0) THEN
   BEGIN
-    -- the dead lie on their side: roll the view 40 degrees
-    sp = rx; cp = ry;
-    rx = sp * 0.766e0 + ux * 0.643e0; ry = cp * 0.766e0 + uy * 0.643e0; rz = rz * 0.766e0 + uz * 0.643e0;
-    ux = -sp * 0.643e0 + ux * 0.766e0; uy = -cp * 0.643e0 + uy * 0.766e0; uz = uz * 0.766e0;
+    cr = COS(roll * 0.0174532925e0); sr = SIN(roll * 0.0174532925e0);
+    t1 = rx; t2 = ry; t3 = rz;
+    rx = t1 * cr + ux * sr; ry = t2 * cr + uy * sr; rz = t3 * cr + uz * sr;
+    ux = -t1 * sr + ux * cr; uy = -t2 * sr + uy * cr; uz = -t3 * sr + uz * cr;
   END
   scale_ = (w / 2e0) / TAN(fov * 0.5e0 * 0.0174532925e0);
   kx = (w / 2e0) / scale_;

@@ -97,7 +97,8 @@ and the pushed entities live in global temporary tables because PSQL has no arra
 
 ### The game is PSQL (`sql/game.sql`, `sql/weapons.sql`, `sql/monsters.sql`)
 
-`Q2_TIC` runs the player (pmove.c: friction, acceleration, jumping, swimming, drowning, lava),
+`Q2_TIC` runs the player (pmove.c: ducking, friction, acceleration, jumping, swimming, drowning, lava,
+and the view's bob),
 the pushers (doors and their teams, rotating doors, plats, buttons, trains with path corners, rotating
 fans, timers), the thinks that are due, and the physics of everything that flies, bounces or falls.
 Triggers (once, multiple, relay, always, counter, key, push, hurt) and targets (speaker, explosion,
