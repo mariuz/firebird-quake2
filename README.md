@@ -51,6 +51,13 @@ re-issues responses with the headers after a one-time reload.
 
 ## How it works
 
+The long version is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): every table, procedure and pass, the
+frame protocol, the painter, and the measurements behind the design. [docs/ROADMAP.md](docs/ROADMAP.md)
+lists what is missing, from save games to the rest of the monsters. [CLAUDE.md](CLAUDE.md) is the
+working memory for whoever (or whatever) works on this next: commands, how to measure, the engine's
+rules learned the hard way.
+
+
 ### The BSP becomes tables (`sql/schema.sql`, `src/loader.js`)
 
 A Quake 2 BSP (IBSP version 38) is a relational database in disguise, and more so than Quake's:
