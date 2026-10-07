@@ -29,10 +29,10 @@ BEGIN
   n = head;
   WHILE (n >= 0) DO
   BEGIN
-    SELECT h.nx, h.ny, h.nz, h.dist, h.c0, h.c1 FROM nodes h WHERE h.id = :n INTO nx, ny, nz, d, c0, c1;
-    IF (nx IS NULL) THEN RETURN 0;
-    n = IIF(nx * px + ny * py + nz * pz - d >= 0, c0, c1);
-    nx = NULL;
+    c0 = NULL;
+    SELECT IIF(h.nx * :px + h.ny * :py + h.nz * :pz - h.dist >= 0, h.c0, h.c1) FROM nodes h WHERE h.id = :n INTO c0;
+    IF (c0 IS NULL) THEN RETURN 0;
+    n = c0;
   END
   RETURN -n - 1;
 END^
@@ -243,15 +243,13 @@ BEGIN
   n = node;
   WHILE (n >= 0) DO
   BEGIN
-    SELECT h.nx, h.ny, h.nz, h.dist, h.ptype, h.c0, h.c1, h.cc0, h.cc1 FROM nodes h WHERE h.id = :n INTO plnx, plny, plnz, pld, ptype, c0, c1, cc0, cc1;
-    IF (plnx IS NULL) THEN BEGIN SUSPEND; EXIT; END
-    t1 = plnx * p1x + plny * p1y + plnz * p1z - pld;
-    t2 = plnx * p2x + plny * p2y + plnz * p2z - pld;
-    IF (ispoint = 1) THEN offset_ = 0;
-    ELSE IF (ptype = 0) THEN offset_ = ex;
-    ELSE IF (ptype = 1) THEN offset_ = ey;
-    ELSE IF (ptype = 2) THEN offset_ = ez;
-    ELSE offset_ = ABS(ex * plnx) + ABS(ey * plny) + ABS(ez * plnz);
+    -- the plane distances of both ends and the box's offset are expressions of the node fetch:
+    -- one statement per level instead of six (a PSQL statement costs about as much as the fetch)
+    SELECT h.c0, h.c1, h.cc0, h.cc1,
+           h.nx * :p1x + h.ny * :p1y + h.nz * :p1z - h.dist,
+           h.nx * :p2x + h.ny * :p2y + h.nz * :p2z - h.dist,
+           IIF(:ispoint = 1, 0, CASE h.ptype WHEN 0 THEN :ex WHEN 1 THEN :ey WHEN 2 THEN :ez ELSE ABS(:ex * h.nx) + ABS(:ey * h.ny) + ABS(:ez * h.nz) END)
+      FROM nodes h WHERE h.id = :n INTO c0, c1, cc0, cc1, t1, t2, offset_;
     -- the whole segment on one side: just descend (into an empty leaf: nothing to hit, done)
     IF (t1 >= offset_ AND t2 >= offset_) THEN
     BEGIN
@@ -556,7 +554,7 @@ END^
 
 -- SV_LinkEdict: remember the leaf and cluster of the origin and the clusters
 -- the box touches (for the PVS test when drawing).
-CREATE OR ALTER PROCEDURE link_ent (eid INTEGER)
+CREATE OR ALTER PROCEDURE link_core (eid INTEGER, write_l SMALLINT)
 AS
 DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
 DECLARE mnx DOUBLE PRECISION; DECLARE mny DOUBLE PRECISION; DECLARE mnz DOUBLE PRECISION;
@@ -565,14 +563,14 @@ DECLARE lf INTEGER; DECLARE cl INTEGER; DECLARE c2 INTEGER; DECLARE lf2 INTEGER;
 DECLARE lst VARCHAR(200) CHARACTER SET ASCII;
 DECLARE i INTEGER;
 BEGIN
-  SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz, e.leaf FROM ents e WHERE e.id = :eid AND (e.lx IS DISTINCT FROM e.x OR e.ly IS DISTINCT FROM e.y OR e.lz IS DISTINCT FROM e.z)
+  SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz, e.leaf FROM ents e WHERE e.id = :eid
     INTO px, py, pz, mnx, mny, mnz, mxx, mxy, mxz, oldleaf;
-  IF (px IS NULL) THEN EXIT;      -- not moved since the last link (or gone)
+  IF (px IS NULL) THEN EXIT;      -- gone
   lf = point_leaf(px, py, pz);
   IF (lf = oldleaf AND mnx <= 0 AND mxx >= 0 AND mny <= 0 AND mxy >= 0 AND mnz <= 0 AND mxz >= 0) THEN
   BEGIN
     -- a step that stays in the same leaf: the box's clusters are taken to be unchanged
-    UPDATE ents e SET e.lx = :px, e.ly = :py, e.lz = :pz WHERE e.id = :eid;
+    IF (write_l = 1) THEN UPDATE ents e SET e.lx = :px, e.ly = :py, e.lz = :pz WHERE e.id = :eid;
     EXIT;
   END
   -- a brush model's origin is usually far outside its box: its leaf says nothing about it
@@ -599,6 +597,14 @@ BEGIN
   UPDATE ents e SET e.leaf = :lf, e.cluster = :cl, e.clusters = :lst, e.lx = :px, e.ly = :py, e.lz = :pz, e.vis_cl = NULL WHERE e.id = :eid;
 END^
 
+-- SV_LinkEdict: relink an entity that moved since its last link
+CREATE OR ALTER PROCEDURE link_ent (eid INTEGER)
+AS
+BEGIN
+  IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND (e.lx IS DISTINCT FROM e.x OR e.ly IS DISTINCT FROM e.y OR e.lz IS DISTINCT FROM e.z))) THEN EXIT;
+  EXECUTE PROCEDURE link_core(eid, 1);
+END^
+
 -- SV_CheckWater / PM_CatagorizePosition: water level 0 none, 1 feet, 2 waist, 3 eyes.
 CREATE OR ALTER PROCEDURE check_water (eid INTEGER) RETURNS (waterlevel SMALLINT, watertype INTEGER)
 AS
@@ -609,7 +615,8 @@ BEGIN
   SELECT e.x, e.y, e.z, e.minz, e.maxz, IIF(e.classname = 'player', 22, (e.minz + e.maxz) / 2)
     FROM ents e WHERE e.id = :eid INTO px, py, pz, mnz, mxz, vo;
   waterlevel = 0; watertype = 0;
-  c = point_contents(px, py, pz + mnz + 1);
+  IF ((SELECT g.has_water FROM game g WHERE g.id = 1) = 0) THEN c = 0;
+  ELSE c = point_contents(px, py, pz + mnz + 1);
   IF (BIN_AND(c, 56) <> 0) THEN
   BEGIN
     watertype = BIN_AND(c, 56); waterlevel = 1;
@@ -621,7 +628,7 @@ BEGIN
       IF (BIN_AND(c, 56) <> 0) THEN waterlevel = 3;
     END
   END
-  UPDATE ents e SET e.waterlevel = :waterlevel, e.watertype = :watertype WHERE e.id = :eid;
+  UPDATE ents e SET e.waterlevel = :waterlevel, e.watertype = :watertype WHERE e.id = :eid AND (e.waterlevel <> :waterlevel OR e.watertype <> :watertype);
   SUSPEND;
 END^
 
@@ -884,8 +891,8 @@ BEGIN
         -- fly monsters don't enter water voluntarily; swim monsters don't leave it
         IF (BIN_AND(flags, 1) <> 0 AND wl = 0 AND BIN_AND(point_contents(ex, ey, ez + mnz + 1), 56) <> 0) THEN RETURN 0;
         IF (BIN_AND(flags, 2) <> 0 AND BIN_AND(point_contents(ex, ey, ez + mnz + 1), 56) = 0) THEN RETURN 0;
-        UPDATE ents e SET e.x = :ex, e.y = :ey, e.z = :ez WHERE e.id = :eid;
-        EXECUTE PROCEDURE link_ent(eid);
+        UPDATE ents e SET e.x = :ex, e.y = :ey, e.z = :ez, e.lx = :ex, e.ly = :ey, e.lz = :ez WHERE e.id = :eid;
+        EXECUTE PROCEDURE link_core(eid, 0);
         RETURN 1;
       END
       IF (enemy IS NULL OR enemy = 0) THEN LEAVE;
@@ -906,22 +913,22 @@ BEGIN
       RETURNING_VALUES f, ex, ey, ez, pnx, pny, pnz, sfl, cts, als, sts, hit;
     IF (als = 1 OR sts = 1) THEN RETURN 0;
   END
-  -- don't go into water
-  IF (wl = 0 AND BIN_AND(point_contents(ex, ey, ez + mnz + 1), 56) <> 0) THEN RETURN 0;
+  -- don't go into water (on maps that have any)
+  IF (wl = 0 AND (SELECT g.has_water FROM game g WHERE g.id = 1) = 1 AND BIN_AND(point_contents(ex, ey, ez + mnz + 1), 56) <> 0) THEN RETURN 0;
   IF (f = 1) THEN
   BEGIN
     -- if monster had the ground pulled out, go ahead and fall
     IF (BIN_AND(flags, 1024) <> 0) THEN
     BEGIN
-      UPDATE ents e SET e.x = e.x + :dx, e.y = e.y + :dy, e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :eid;
-      EXECUTE PROCEDURE link_ent(eid);
+      UPDATE ents e SET e.x = e.x + :dx, e.y = e.y + :dy, e.flags = BIN_AND(e.flags, BIN_NOT(512)), e.lx = e.x + :dx, e.ly = e.y + :dy, e.lz = e.z WHERE e.id = :eid;
+      EXECUTE PROCEDURE link_core(eid, 0);
       RETURN 1;
     END
     RETURN 0;                 -- walked off an edge
   END
   -- the move is ok
-  UPDATE ents e SET e.x = :ex, e.y = :ey, e.z = :ez, e.flags = BIN_OR(BIN_AND(e.flags, BIN_NOT(1024)), 512) WHERE e.id = :eid;
-  EXECUTE PROCEDURE link_ent(eid);
+  UPDATE ents e SET e.x = :ex, e.y = :ey, e.z = :ez, e.flags = BIN_OR(BIN_AND(e.flags, BIN_NOT(1024)), 512), e.lx = :ex, e.ly = :ey, e.lz = :ez WHERE e.id = :eid;
+  EXECUTE PROCEDURE link_core(eid, 0);
   RETURN 1;
 END^
 

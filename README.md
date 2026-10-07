@@ -164,7 +164,13 @@ text). New here:
 - **An `UPDATE` of the wide `ents` row costs about 85 µs, as much as a trace step.** A monster's think
   wrote its next think time in one statement and its frame in another; now the think time rides along
   with whatever the think writes anyway. A step that stays in the same leaf keeps its cluster list
-  instead of probing the box's corners again.
+  instead of probing the box's corners again, and the step's position write carries the link position
+  so the relink writes nothing. The player's water check runs only after a move, and writes the row
+  only when the level changed; a map without water skips it altogether.
+- **What nobody sees can think slowly.** A standing monster out of the player's PVS cannot see the player
+  either, so it thinks at 3 Hz like a patrolling one does; in sight it is back to Quake's 10 Hz. That
+  halved the thinks per tic. Moving the tree walk's arithmetic into the node fetch's select list, on the
+  other hand, changed nothing measurable: the fetch itself is the cost of a level, not the statements.
 - **A row out of a procedure costs about 6 µs; a `LIST()` costs about 1 µs per element.** The frame used to
   be six queries returning some 600 rows (one per visible face), each row fetched through the WASM
   boundary; in the browser each query is a round trip to the engine's worker as well. Now the visible
@@ -174,7 +180,7 @@ text). New here:
   per view cluster rather than parsed from strings every frame.
 
 With all that, an idle tic on the Outer Base at medium skill (31 monsters, 14 of them patrolling) costs
-about 6 ms in Node (about 9 with the player walking), down from 40 at first and 20 after the first round;
+about 4 ms in Node (about 6.5 with the player walking), down from 40 at first and 20 after the first round;
 the frame's queries 5 to 8 ms, down from about 18.
 
 ## Licence

@@ -410,21 +410,19 @@ BEGIN
 
   IF (st = 'stand' OR st = 'walk') THEN
   BEGIN
-    -- ai_stand / ai_walk: look for the player (cheaply: only when in the player's PVS)
-    IF (MOD(af, 2) = 0) THEN
+    -- ai_stand / ai_walk: look for the player (cheaply: only when in the player's PVS;
+    -- out of it, nothing is seen either way, so think at 3 Hz)
+    SELECT l.pvs FROM leaves l WHERE l.id = (SELECT e.leaf FROM ents e WHERE e.id = player_ent()) INTO pvs;
+    IF (pvs_visible(pvs, cl) = 0) THEN nt = t + 0.3e0;
+    ELSE IF (MOD(af, 2) = 0 AND find_target(eid) = 1) THEN
     BEGIN
-      SELECT l.pvs FROM leaves l WHERE l.id = (SELECT e.leaf FROM ents e WHERE e.id = player_ent()) INTO pvs;
-      IF (pvs_visible(pvs, cl) = 1 AND find_target(eid) = 1) THEN
-      BEGIN
-        EXECUTE PROCEDURE found_target(eid);
-        EXIT;
-      END
+      EXECUTE PROCEDURE found_target(eid);
+      EXIT;
     END
     IF (st = 'walk' AND tgt IS NOT NULL) THEN
     BEGIN
       -- follow the path_corner chain (out of the player's sight: at 3 Hz, striding thrice as far)
-      IF (pvs IS NULL) THEN SELECT l.pvs FROM leaves l WHERE l.id = (SELECT e.leaf FROM ents e WHERE e.id = player_ent()) INTO pvs;
-      IF (pvs_visible(pvs, cl) = 0) THEN BEGIN nt = t + 0.3e0; walk_spd = walk_spd * 3; END
+      IF (nt > t + 0.2e0) THEN walk_spd = walk_spd * 3;
       IF (goal IS NULL) THEN
       BEGIN
         SELECT FIRST 1 e.id FROM ents e WHERE e.targetname = :tgt AND e.classname = 'path_corner' INTO goal;
@@ -894,6 +892,7 @@ BEGIN
          p.chaingun_spin = 0, p.grenade_time = 0, p.mega_time = 0, p.keys = 0 WHERE p.id = 1;
   -- keys don't carry over; neither do dead weapons
   UPDATE player p SET p.weapon = best_weapon() WHERE p.id = 1 AND (BIN_AND(p.weapons, p.weapon) = 0 OR p.weapon = 0);
+  UPDATE game g SET g.has_water = IIF(EXISTS (SELECT 1 FROM leaves l WHERE BIN_AND(l.contents, 56) <> 0), 1, 0) WHERE g.id = 1;
   EXECUTE PROCEDURE spawn_map_ents(skill, spawnpoint);
   -- the level name
   UPDATE player p SET p.cprint = (SELECT g.level_msg FROM game g WHERE g.id = 1), p.cprint_time = 3 WHERE p.id = 1;

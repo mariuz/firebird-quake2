@@ -11,6 +11,7 @@
 
 -- ── session / configuration ─────────────────────────────────────────────
 CREATE TABLE game (
+  has_water  SMALLINT DEFAULT 1 NOT NULL,   -- any lava, slime or water leaf in the map (else the water checks are skipped)
   id             SMALLINT NOT NULL PRIMARY KEY,
   tic            INTEGER DEFAULT 0 NOT NULL,
   time_          DOUBLE PRECISION DEFAULT 0 NOT NULL,   -- seconds, tic / 20

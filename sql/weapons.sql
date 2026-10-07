@@ -352,7 +352,8 @@ BEGIN
   IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(imp);
 
   -- P_WorldEffects: water, slime, lava, drowning
-  EXECUTE PROCEDURE check_water(pe) RETURNING_VALUES wl, wt;
+  IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :pe AND e.lx = e.x AND e.ly = e.y AND e.lz = e.z)) THEN wl = owl;   -- not moved since the last check
+  ELSE EXECUTE PROCEDURE check_water(pe) RETURNING_VALUES wl, wt;
   IF (owl = 0 AND wl > 0) THEN
   BEGIN
     IF (BIN_AND(wt, 8) <> 0) THEN EXECUTE PROCEDURE snd(pe, 0, 'player/lava_in.wav', 1, 1);
