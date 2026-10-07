@@ -44,13 +44,24 @@ END^
 CREATE OR ALTER FUNCTION step_direction (eid INTEGER, yaw DOUBLE PRECISION, dist DOUBLE PRECISION) RETURNS SMALLINT
 AS
 DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION; DECLARE d DOUBLE PRECISION;
+DECLARE cur DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION; DECLARE mv DOUBLE PRECISION; DECLARE newyaw DOUBLE PRECISION;
 BEGIN
-  UPDATE ents e SET e.ideal_yaw = :yaw WHERE e.id = :eid;
-  EXECUTE PROCEDURE change_yaw(eid);
-  SELECT e.x, e.y, e.z FROM ents e WHERE e.id = :eid INTO ox, oy, oz;
+  -- M_ChangeYaw toward the wished direction, written together with it (one write of the row, not two)
+  SELECT e.x, e.y, e.z, anglemod(e.yaw), e.yaw_speed FROM ents e WHERE e.id = :eid INTO ox, oy, oz, cur, spd;
+  newyaw = cur;
+  IF (cur <> yaw) THEN
+  BEGIN
+    mv = yaw - cur;
+    IF (yaw > cur) THEN BEGIN IF (mv >= 180) THEN mv = mv - 360; END
+    ELSE BEGIN IF (mv <= -180) THEN mv = mv + 360; END
+    IF (mv > 0) THEN BEGIN IF (mv > spd) THEN mv = spd; END
+    ELSE BEGIN IF (mv < -spd) THEN mv = -spd; END
+    newyaw = anglemod(cur + mv);
+  END
+  UPDATE ents e SET e.ideal_yaw = :yaw, e.yaw = :newyaw WHERE e.id = :eid;
   IF (move_step(eid, COS(yaw * 0.0174532925e0) * dist, SIN(yaw * 0.0174532925e0) * dist, 0) = 1) THEN
   BEGIN
-    SELECT anglemod(e.yaw - e.ideal_yaw) FROM ents e WHERE e.id = :eid INTO d;
+    d = anglemod(newyaw - yaw);
     IF (d > 45 AND d < 315) THEN
     BEGIN
       -- not turned far enough, so don't take the step
@@ -63,13 +74,14 @@ BEGIN
 END^
 
 -- SV_NewChaseDir: pick a direction toward the goal, trying the sides
-CREATE OR ALTER PROCEDURE new_chase_dir (eid INTEGER, goal INTEGER, dist DOUBLE PRECISION)
+CREATE OR ALTER PROCEDURE new_chase_dir (eid INTEGER, goal INTEGER, dist DOUBLE PRECISION, iy_in DOUBLE PRECISION DEFAULT NULL)
 AS
 DECLARE olddir DOUBLE PRECISION; DECLARE turnaround DOUBLE PRECISION;
 DECLARE dx DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; DECLARE d1 DOUBLE PRECISION; DECLARE d2 DOUBLE PRECISION; DECLARE tdir DOUBLE PRECISION;
 DECLARE nodir DOUBLE PRECISION = -1;
 BEGIN
-  SELECT anglemod(FLOOR(e.ideal_yaw / 45) * 45) FROM ents e WHERE e.id = :eid INTO olddir;
+  IF (iy_in IS NOT NULL) THEN olddir = anglemod(FLOOR(iy_in / 45) * 45);
+  ELSE SELECT anglemod(FLOOR(e.ideal_yaw / 45) * 45) FROM ents e WHERE e.id = :eid INTO olddir;
   turnaround = anglemod(olddir - 180);
   SELECT g.x - e.x, g.y - e.y FROM ents e CROSS JOIN ents g WHERE e.id = :eid AND g.id = :goal INTO dx, dy;
   IF (dx IS NULL) THEN EXIT;
@@ -96,11 +108,13 @@ BEGIN
 END^
 
 -- M_MoveToGoal
-CREATE OR ALTER PROCEDURE move_to_goal (eid INTEGER, dist DOUBLE PRECISION)
+CREATE OR ALTER PROCEDURE move_to_goal (eid INTEGER, dist DOUBLE PRECISION, iy_in DOUBLE PRECISION DEFAULT NULL)
 AS
 DECLARE goal INTEGER; DECLARE flags INTEGER; DECLARE iy DOUBLE PRECISION; DECLARE close_ SMALLINT = 0;
 BEGIN
+  -- (iy_in: the wished yaw, when the caller has it; saves writing it to the row first)
   SELECT COALESCE(e.goal_id, e.enemy_id), e.flags, e.ideal_yaw FROM ents e WHERE e.id = :eid INTO goal, flags, iy;
+  iy = COALESCE(iy_in, iy);
   IF (BIN_AND(flags, 512 + 1 + 2) = 0) THEN EXIT;              -- in the air
   IF (goal IS NULL) THEN EXIT;
   SELECT 1 FROM ents e CROSS JOIN ents g WHERE e.id = :eid AND g.id = :goal
@@ -109,7 +123,7 @@ BEGIN
      AND g.z + g.minz <= e.z + e.maxz + :dist AND g.z + g.maxz >= e.z + e.minz - :dist INTO close_;
   IF (close_ = 1 AND EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.enemy_id = :goal)) THEN EXIT;
   IF (FLOOR(RAND() * 4) = 1 OR step_direction(eid, iy, dist) = 0) THEN
-    EXECUTE PROCEDURE new_chase_dir(eid, goal, dist);
+    EXECUTE PROCEDURE new_chase_dir(eid, goal, dist, iy);
 END^
 
 -- FindTarget: can this monster see the player?
@@ -366,7 +380,7 @@ DECLARE run_spd DOUBLE PRECISION; DECLARE walk_spd DOUBLE PRECISION; DECLARE sta
 DECLARE melee_a VARCHAR(16); DECLARE melee_f INTEGER; DECLARE missile_a VARCHAR(16); DECLARE missile_f VARCHAR(60); DECLARE idle_s VARCHAR(64); DECLARE search_s VARCHAR(64);
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE gx DOUBLE PRECISION; DECLARE gy DOUBLE PRECISION; DECLARE gz DOUBLE PRECISION;
 DECLARE d DOUBLE PRECISION; DECLARE gt VARCHAR(40); DECLARE gw DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE cl INTEGER;
-DECLARE nt DOUBLE PRECISION;
+DECLARE nt DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE pe INTEGER; DECLARE vis SMALLINT;
 BEGIN
   -- (an UPDATE of the wide ents row costs as much as a trace step: the next think time rides
   -- along with whatever else the think writes, and a path that writes nothing thinks again next tic)
@@ -412,8 +426,11 @@ BEGIN
   BEGIN
     -- ai_stand / ai_walk: look for the player (cheaply: only when in the player's PVS;
     -- out of it, nothing is seen either way, so think at 3 Hz)
-    SELECT l.pvs FROM leaves l WHERE l.id = (SELECT e.leaf FROM ents e WHERE e.id = player_ent()) INTO pvs;
-    IF (pvs_visible(pvs, cl) = 0) THEN nt = t + 0.3e0;
+    pe = player_ent();
+    vis = 0;
+    SELECT IIF(l.pvs = '' OR (:cl >= 0 AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(:cl, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(:cl, 3))) <> 0), 1, 0)
+      FROM leaves l JOIN ents p ON p.id = :pe WHERE l.id = p.leaf INTO vis;
+    IF (vis = 0) THEN nt = t + IIF(st = 'walk', 0.4e0, 0.3e0);   -- a patrol out of sight strides four times as far at 2.5 Hz
     ELSE IF (MOD(af, 2) = 0 AND find_target(eid) = 1) THEN
     BEGIN
       EXECUTE PROCEDURE found_target(eid);
@@ -422,7 +439,7 @@ BEGIN
     IF (st = 'walk' AND tgt IS NOT NULL) THEN
     BEGIN
       -- follow the path_corner chain (out of the player's sight: at 3 Hz, striding thrice as far)
-      IF (nt > t + 0.2e0) THEN walk_spd = walk_spd * 3;
+      IF (nt > t + 0.2e0) THEN walk_spd = walk_spd * 4;
       IF (goal IS NULL) THEN
       BEGIN
         SELECT FIRST 1 e.id FROM ents e WHERE e.targetname = :tgt AND e.classname = 'path_corner' INTO goal;
@@ -431,7 +448,7 @@ BEGIN
       IF (goal IS NOT NULL) THEN
       BEGIN
         SELECT e.x, e.y, e.z, e.target, e.wait_ FROM ents e WHERE e.id = :goal INTO gx, gy, gz, gt, gw;
-        IF (vlen(gx - x, gy - y, 0) < 24) THEN
+        IF (vlen(gx - x, gy - y, 0) < MAXVALUE(24, walk_spd)) THEN   -- SV_CloseEnough: within a stride of the corner
         BEGIN
           UPDATE ents e SET e.target = :gt, e.goal_id = NULL, e.ideal_yaw = vectoyaw(:gx - e.x, :gy - e.y) WHERE e.id = :eid;
           IF (gt IS NULL OR gw > 0) THEN
@@ -443,8 +460,7 @@ BEGIN
         END
         ELSE
         BEGIN
-          UPDATE ents e SET e.ideal_yaw = vectoyaw(:gx - :x, :gy - :y) WHERE e.id = :eid;
-          EXECUTE PROCEDURE move_to_goal(eid, walk_spd);
+          EXECUTE PROCEDURE move_to_goal(eid, walk_spd, vectoyaw(gx - x, gy - y));
         END
       END
     END
@@ -469,7 +485,9 @@ BEGIN
       EXECUTE PROCEDURE set_anim(eid, stand_a);
       EXIT;
     END
-    UPDATE ents e SET e.ideal_yaw = vectoyaw((SELECT x FROM ents n WHERE n.id = :enemy) - e.x, (SELECT y FROM ents n WHERE n.id = :enemy) - e.y) WHERE e.id = :eid;
+    SELECT vectoyaw(n.x - :x, n.y - :y) FROM ents n WHERE n.id = :enemy INTO iy;
+    -- the attack states and turret-like monsters turn from the row; the chasers get the yaw as a parameter
+    IF (atkst IN (3, 4) OR run_spd <= 0) THEN UPDATE ents e SET e.ideal_yaw = :iy WHERE e.id = :eid;
     IF (atkst = 3) THEN                                    -- ai_run_melee
     BEGIN
       EXECUTE PROCEDURE change_yaw(eid);
@@ -496,14 +514,14 @@ BEGIN
     IF (d > 1200 AND pvs_visible((SELECT l.pvs FROM leaves l WHERE l.id = (SELECT e.leaf FROM ents e WHERE e.id = :enemy)), cl) = 0) THEN
     BEGIN
       nt = t + 0.3e0;
-      IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd * 3);
+      IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd * 3, iy);
       af = MOD(af + 1, fc);
       UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
       EXIT;
     END
     IF (RAND() < 0.01e0 AND search_s IS NOT NULL AND visible(eid, enemy) = 0) THEN EXECUTE PROCEDURE snd(eid, 2, search_s, 1, 1);
     IF (check_attack(eid) = 1) THEN EXIT;
-    IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd);
+    IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd, iy);
     ELSE EXECUTE PROCEDURE change_yaw(eid);
     af = MOD(af + 1, fc);
     UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;

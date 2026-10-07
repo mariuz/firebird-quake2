@@ -177,8 +177,11 @@ text). New here:
   on the ground with no velocity does not move at all (the floor under them is re-checked twice a second
   rather than, as pmove does, every frame).
 - **What nobody sees can think slowly.** A standing monster out of the player's PVS cannot see the player
-  either, so it thinks at 3 Hz like a patrolling one does; in sight it is back to Quake's 10 Hz. That
-  halved the thinks per tic. Moving the tree walk's arithmetic into the node fetch's select list, on the
+  either, so it thinks at 3 Hz like a patrolling one does; a patrol out of sight strides four times as far
+  at 2.5 Hz, with `SV_CloseEnough`'s stride-sized corner check so it does not overshoot its path corners;
+  in sight everything is back to Quake's 10 Hz. A think also turns and aims in one write of the row (the
+  wished yaw travels as a parameter instead of being written and read back) and tests the PVS on the leaf
+  row itself rather than copying the 2 KB string into a variable first. Moving the tree walk's arithmetic into the node fetch's select list, on the
   other hand, changed nothing measurable: the fetch itself is the cost of a level, not the statements.
 - **A row out of a procedure costs about 6 µs; a `LIST()` costs about 1 µs per element.** The frame used to
   be six queries returning some 600 rows (one per visible face), each row fetched through the WASM
@@ -189,7 +192,7 @@ text). New here:
   per view cluster rather than parsed from strings every frame.
 
 With all that, an idle tic on the Outer Base at medium skill (31 monsters, 14 of them patrolling) costs
-about 3.5 ms in Node (about 6 with the player walking), down from 40 at first and 20 after the first round;
+about 3 ms in Node (about 5.5 with the player walking), down from 40 at first and 20 after the first round;
 the frame's queries 5 to 8 ms, down from about 18.
 
 ## Licence
