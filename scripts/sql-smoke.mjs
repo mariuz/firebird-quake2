@@ -130,6 +130,26 @@ const refs = [...new Set([...Object.values(sql).join('\n').matchAll(/'([a-z0-9_\
 const missing2 = refs.filter((n) => !pak.has('sound/' + n));
 assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing2.join(', ') || 'none missing'})`);
 
+// area portals: a closed door cuts the areas behind it off; opening it joins them, closing parts them again
+{
+  const portals = (await db.query("SELECT COUNT(*) n FROM ents WHERE classname = 'func_areaportal'")).rows[0].N;
+  const floods = async () => (await db.query('SELECT COUNT(DISTINCT flood) n FROM area_flood')).rows[0].N;
+  const d = (await db.query("SELECT FIRST 1 d.id FROM ents d JOIN ents a ON a.targetname = d.target AND a.classname = 'func_areaportal' WHERE d.classname IN ('func_door', 'func_door_rotating')")).rows[0]?.ID;
+  console.log(`     ${portals} area portals, ${(await db.query('SELECT COUNT(*) n FROM areas')).rows[0].N} areas`);
+  if (portals > 0 && d) {
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE door_hit_bottom(${d}); END`);   // (an earlier check may have opened it)
+    const closed = await floods();
+    assert(closed > 1, `with the door closed, the map falls into ${closed} groups of areas`);
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE door_use(${d}, player_ent()); END`);
+    const open = await floods();
+    assert(open < closed, `the door opening joins the areas it separates (${closed} → ${open} groups)`);
+    assert((await db.query('SELECT vis_cluster FROM viewcfg')).rows[0].VIS_CLUSTER === null, 'the marked view is forgotten when a portal changes');
+    assert((await db.query('SELECT COUNT(*) n FROM frame_all(0, 0, 0, 0) WHERE kind = 1')).rows[0].N > 0, 'the frame marks and draws again');
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE door_hit_bottom(${d}); END`);
+    assert((await floods()) === closed, 'the door closing parts them again');
+  } else console.log('     (no door targets an area portal on this map: skipping the portal checks)');
+}
+
 // cross-level flags: a target waits for a flag, a trigger sets it, the flag survives a level change and not a new game
 {
   const secrets0 = (await db.query('SELECT found_secrets s FROM game')).rows[0].S;
@@ -156,6 +176,7 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert((await db.query('SELECT serverflags f FROM game')).rows[0].F === 2, 'the flag survives a level change');
   await loadMap(db, pak, res, mapName, { skill: 2, newGame: true });
   assert((await db.query('SELECT serverflags f FROM game')).rows[0].F === 0, 'a new game clears the unit');
+  assert((await db.query('SELECT COUNT(*) n FROM portal_state WHERE open_ = 1')).rows[0].N === 0, 'every area portal starts a map closed');
 }
 
 await db.close();

@@ -18,9 +18,12 @@ them.
   asks for is set (`crosslevel_think`). The smoke test exercises the pair and the level change. Left:
   per-level state when returning to a map (Quake 2 keeps each level's entities in the unit's save;
   here a revisited map spawns fresh, so the Installation's exit opens but its monsters are back).
-- **Area portals.** `func_areaportal` is ignored, so a closed door does not block visibility
-  behind it (the PVS alone decides). Quake 2 keeps an area-connection matrix updated by doors;
-  here it would be an `areas` table and an extra test in `mark_faces` and the entity pass.
+- **Area portals**: done. The BSP's areas and portals are tables; `portal_state` says which are open,
+  `area_flood` (`FloodAreaConnections`) which areas are connected, recomputed when a door opens or
+  closes (`door_use_areaportals`) or a `func_areaportal` is used. Marking keeps only the leaves of the
+  eye's connected areas, and the entity pass only the entities in them; a change forgets the marked
+  view. Left: a door's own faces are still listed from either side (brush models skip the area test,
+  which keeps a door visible from both areas), and the re-mark a door causes is the usual hitch.
 - **Intermission and the unit's end.** `target_changelevel` loads the next map after a status
   line; there is no intermission screen with the level's statistics and no end-of-unit text.
 - **Teleporter in demo3** does not spawn (`misc_teleporter` is handled in `spawn_map_ents`; the

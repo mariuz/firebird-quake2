@@ -71,6 +71,7 @@ specs in `TABLES`). The Outer Base loads in about three seconds.
 | `face_verts` | EDGES and SURFEDGES resolved to an ordered vertex list | |
 | `textures` | TEXINFO names | |
 | `models` | the world and its `*N` submodels, plus every MD2 and SP2 | `kind` B/M/S, bounds, `headnode`, `radius` |
+| `areas`, `areaportals` | AREAS, AREAPORTALS | the portals between areas; `portal_state` (open while a door holds it) and `area_flood` (which areas are connected, `FloodAreaConnections`) are derived at run time |
 | `map_ents` | the entity lump | one row per entity with the Quake 2 keys as columns |
 
 Lightmaps are not in SQL: the painter reads them from the parsed BSP (`bsp.lightdata`), collapsed
@@ -139,7 +140,8 @@ level counts, water, powerups, the eye's leaf and cluster. Each tic:
    triggers and items, door and plat trigger fields, megahealth rot, then `player_fire`. A player
    standing still on the ground with no velocity makes no move; the floor is re-checked twice a
    second. The player and entity rows are each written once per tic.
-2. `run_pushers` – doors (with teams), rotating doors, plats, buttons, trains and path corners,
+2. `run_pushers` – doors (with teams, and the area portals they target: open on the way up, closed at
+   the bottom), rotating doors, plats, buttons, trains and path corners,
    rotating fans, timers: `push_move` is `SV_Push` with the pushed set in the `pushed` GTT, the
    crush and the blocked callbacks; an idle pusher costs nothing.
 3. `run_physics` – the thinks that are due (dispatched by name in `run_think`), then
@@ -177,8 +179,9 @@ spheres, leaves with clusters, clusters with PVS bits.
 pitch and the death roll, the projection scale, and the eye's leaf (cached on `viewcfg` while the
 eye stands still) with its cluster and PVS.
 
-`mark_faces(pvs, cluster)` is `R_MarkLeaves`, run when the eye's cluster changes: every face of
-every leaf whose cluster is in the PVS goes into `vis_faces` (`DISTINCT`, Quake's `visframe`),
+`mark_faces(pvs, cluster, leaf)` is `R_MarkLeaves`, run when the eye's cluster or area changes or a
+portal opens or closes: every face of every leaf whose cluster is in the PVS, in an area connected
+to the eye's through open portals (`area_flood`), goes into `vis_faces` (`DISTINCT`, Quake's `visframe`),
 with its plane and bounding sphere copied in so the frame is a scan of that table alone. A face
 whose plane has the cluster's whole bounding box behind it is left out: no eye in the cluster
 can ever face it. This re-marking is the one per-cluster-change hitch (tens of milliseconds).
@@ -208,9 +211,9 @@ per view cluster and kept on the row), the model is tested against the frustum a
 its faces at its origin (rotated models skip the per-face tests: the painter clips them), as one
 list per model; a model's list is kept on its row with the view stamp and pose it was made for.
 
-Alias models and sprites are one cursor whose `WHERE` holds the frustum tests and the PVS test
-(an expression on the eye's leaf row, joined in, over the entity's three cluster columns), so only
-the entities drawn reach PSQL.
+Alias models and sprites are one cursor whose `WHERE` holds the frustum tests, the PVS test
+(an expression on the eye's leaf row, joined in, over the entity's three cluster columns) and the
+area test (the entity's area in the eye's flood), so only the entities drawn reach PSQL.
 
 `frame_faces_fast` and `frame_ents` are thin wrappers over `frame_all` for the scripts and the SQL
 console. `frame_faces` is the other renderer mode, selectable on the page: it projects every vertex

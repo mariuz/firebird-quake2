@@ -99,15 +99,18 @@ END^
 
 -- mark_faces: R_MarkLeaves, once per view cluster: every face of every leaf
 -- in the PVS goes into VIS_FACES (kept until the eye moves to another cluster)
-CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER)
+CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER, vleaf INTEGER)
 AS
-DECLARE cur INTEGER; DECLARE world INTEGER;
+DECLARE cur INTEGER; DECLARE world INTEGER; DECLARE curarea INTEGER; DECLARE varea INTEGER; DECLARE eflood INTEGER;
 DECLARE bminx DOUBLE PRECISION; DECLARE bminy DOUBLE PRECISION; DECLARE bminz DOUBLE PRECISION;
 DECLARE bmaxx DOUBLE PRECISION; DECLARE bmaxy DOUBLE PRECISION; DECLARE bmaxz DOUBLE PRECISION;
 BEGIN
-  SELECT c.vis_cluster FROM viewcfg c WHERE c.id = 1 INTO cur;
-  IF (cur IS NOT DISTINCT FROM vcluster) THEN EXIT;
+  SELECT l.area FROM leaves l WHERE l.id = :vleaf INTO varea;
+  SELECT c.vis_cluster, c.vis_area FROM viewcfg c WHERE c.id = 1 INTO cur, curarea;
+  IF (cur IS NOT DISTINCT FROM vcluster AND curarea IS NOT DISTINCT FROM varea) THEN EXIT;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
+  -- the areas the eye's area is connected to through open portals (CM_WriteAreaBits)
+  SELECT f.flood FROM area_flood f WHERE f.area = :varea INTO eflood;
   -- the cluster's box: a face with all of it behind its plane cannot face an eye anywhere in it
   SELECT MIN(l.minx), MIN(l.miny), MIN(l.minz), MAX(l.maxx), MAX(l.maxy), MAX(l.maxz) FROM leaves l WHERE l.cluster = :vcluster
     INTO bminx, bminy, bminz, bmaxx, bmaxy, bmaxz;
@@ -122,8 +125,9 @@ BEGIN
                     FROM leaves l
                     JOIN leaffaces lf ON lf.id >= l.first_lf AND lf.id < l.first_lf + l.num_lf
                    WHERE l.cluster >= 0 AND l.num_lf > 0
+                     AND (:eflood IS NULL OR l.area IN (SELECT f.area FROM area_flood f WHERE f.flood = :eflood))
                      AND (:pvs = '' OR BIN_AND(POSITION(SUBSTRING(:pvs FROM BIN_SHR(l.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(l.cluster, 3))) <> 0));
-  UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.world_lst = NULL WHERE c.id = 1;
+  UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.vis_area = :varea, c.world_lst = NULL WHERE c.id = 1;
 END^
 
 -- FRAME_FACES: the same faces, projected vertex by vertex in SQL.
@@ -148,7 +152,7 @@ BEGIN
   EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
   hw = w / 2e0; hh = h / 2e0;
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
-  EXECUTE PROCEDURE mark_faces(pvs, vcl);
+  EXECUTE PROCEDURE mark_faces(pvs, vcl, vleaf);
 
   -- the faces that face the eye and whose sphere is in the frustum
   DELETE FROM sel_faces;
@@ -266,7 +270,7 @@ DECLARE nrx DOUBLE PRECISION; DECLARE nry DOUBLE PRECISION; DECLARE nrz DOUBLE P
 DECLARE nlx DOUBLE PRECISION; DECLARE nly DOUBLE PRECISION; DECLARE nlz DOUBLE PRECISION; DECLARE enl DOUBLE PRECISION;
 DECLARE ntx DOUBLE PRECISION; DECLARE nty DOUBLE PRECISION; DECLARE ntz DOUBLE PRECISION; DECLARE ent DOUBLE PRECISION;
 DECLARE nbx DOUBLE PRECISION; DECLARE nby DOUBLE PRECISION; DECLARE nbz DOUBLE PRECISION; DECLARE enb DOUBLE PRECISION;
-DECLARE stamp INTEGER; DECLARE held SMALLINT; DECLARE fl_stamp INTEGER; DECLARE pose_ok SMALLINT;
+DECLARE stamp INTEGER; DECLARE held SMALLINT; DECLARE fl_stamp INTEGER; DECLARE pose_ok SMALLINT; DECLARE eflood INTEGER;
 DECLARE bcx DOUBLE PRECISION; DECLARE bcy DOUBLE PRECISION; DECLARE bcz DOUBLE PRECISION; DECLARE brad DOUBLE PRECISION; DECLARE bcf DOUBLE PRECISION;
 BEGIN
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
@@ -281,6 +285,8 @@ BEGIN
   nlx = kx * fx + rx; nly = kx * fy + ry; nlz = kx * fz + rz; enl = ex * nlx + ey * nly + ez * nlz;
   ntx = ky * fx - ux; nty = ky * fy - uy; ntz = ky * fz - uz; ent = ex * ntx + ey * nty + ez * ntz;
   nbx = ky * fx + ux; nby = ky * fy + uy; nbz = ky * fz + uz; enb = ex * nbx + ey * nby + ez * nbz;
+  -- the eye's flood of connected areas: entities behind closed doors are not drawn
+  SELECT f.flood FROM area_flood f JOIN leaves l ON l.id = :vleaf WHERE f.area = l.area INTO eflood;
   IF (mode = 1) THEN
   BEGIN
     kind = 8;
@@ -289,7 +295,7 @@ BEGIN
   END
   ELSE
   BEGIN
-    EXECUTE PROCEDURE mark_faces(pvs, vcl);
+    EXECUTE PROCEDURE mark_faces(pvs, vcl, vleaf);
     kind = 1; i2 = 0; d1 = 0; d2 = 0; d3 = 0;
     -- the world's list holds while the eye holds still: the last one is kept on viewcfg
     SELECT c.view_stamp, IIF(c.lv_ex = :ex AND c.lv_ey = :ey AND c.lv_ez = :ez
@@ -384,6 +390,7 @@ BEGIN
               OR (e.cluster >= 0 AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cluster, 3))) <> 0)
               OR (e.cl2 IS NOT NULL AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cl2, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cl2, 3))) <> 0)
               OR (e.cl3 IS NOT NULL AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cl3, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cl3, 3))) <> 0))
+         AND (:eflood IS NULL OR e.area IS NULL OR (SELECT f.flood FROM area_flood f WHERE f.area = e.area) = :eflood)
         INTO i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, alpha, rfx, k
   DO
   BEGIN

@@ -915,7 +915,11 @@ BEGIN
   -- keys don't carry over; neither do dead weapons
   UPDATE player p SET p.weapon = best_weapon() WHERE p.id = 1 AND (BIN_AND(p.weapons, p.weapon) = 0 OR p.weapon = 0);
   UPDATE game g SET g.has_water = IIF(EXISTS (SELECT 1 FROM leaves l WHERE BIN_AND(l.contents, 56) <> 0), 1, 0) WHERE g.id = 1;
-  UPDATE viewcfg c SET c.vis_cluster = NULL, c.lv_ex = NULL, c.lv_leaf = NULL, c.world_lst = NULL WHERE c.id = 1;
+  UPDATE viewcfg c SET c.vis_cluster = NULL, c.vis_area = NULL, c.lv_ex = NULL, c.lv_leaf = NULL, c.world_lst = NULL WHERE c.id = 1;
+  -- every area portal starts closed (CM_LoadMap); the doors open them
+  DELETE FROM portal_state;
+  INSERT INTO portal_state (portal, open_) SELECT DISTINCT ap.portal, 0 FROM areaportals ap;
+  EXECUTE PROCEDURE flood_areas;
   EXECUTE PROCEDURE spawn_map_ents(skill, spawnpoint);
   UPDATE lightstyles l SET l.base_pattern = l.pattern;
   -- the level name

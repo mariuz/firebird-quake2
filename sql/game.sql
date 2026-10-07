@@ -304,6 +304,71 @@ BEGIN
       (SELECT e.p1z FROM ents e WHERE e.id = :eid), spd, 'door_hit_bottom');
 END^
 
+-- FloodAreaConnections: areas reachable through open portals share a flood number. A change
+-- forgets the marked view, since the eye may now see more, or less.
+CREATE OR ALTER PROCEDURE flood_areas
+AS
+DECLARE a INTEGER; DECLARE n INTEGER = 0; DECLARE other INTEGER; DECLARE grew SMALLINT;
+BEGIN
+  DELETE FROM area_flood;
+  FOR SELECT ar.id FROM areas ar ORDER BY ar.id INTO a
+  DO
+  BEGIN
+    IF (EXISTS (SELECT 1 FROM area_flood f WHERE f.area = :a)) THEN CONTINUE;
+    n = n + 1;
+    INSERT INTO area_flood (area, flood) VALUES (:a, :n);
+    grew = 1;
+    WHILE (grew = 1) DO
+    BEGIN
+      grew = 0;
+      FOR SELECT DISTINCT ap.other_area
+            FROM area_flood f JOIN areas ar ON ar.id = f.area
+            JOIN areaportals ap ON ap.id >= ar.first_ap AND ap.id < ar.first_ap + ar.num_ap
+            JOIN portal_state ps ON ps.portal = ap.portal AND ps.open_ = 1
+           WHERE f.flood = :n AND NOT EXISTS (SELECT 1 FROM area_flood f2 WHERE f2.area = ap.other_area)
+            INTO other
+      DO
+      BEGIN
+        INSERT INTO area_flood (area, flood) VALUES (:other, :n);
+        grew = 1;
+      END
+    END
+  END
+  UPDATE viewcfg c SET c.vis_cluster = NULL, c.world_lst = NULL WHERE c.id = 1;
+END^
+
+-- gi.SetAreaPortalState
+CREATE OR ALTER PROCEDURE set_portal_state (portal INTEGER, open_ SMALLINT)
+AS
+BEGIN
+  IF (portal IS NULL) THEN EXIT;
+  IF (EXISTS (SELECT 1 FROM portal_state p WHERE p.portal = :portal AND p.open_ = :open_)) THEN EXIT;
+  UPDATE OR INSERT INTO portal_state (portal, open_) VALUES (:portal, :open_) MATCHING (portal);
+  EXECUTE PROCEDURE flood_areas;
+END^
+
+-- door_use_areaportals: the func_areaportals a door targets follow it open and closed
+CREATE OR ALTER PROCEDURE door_use_areaportals (eid INTEGER, open_ SMALLINT)
+AS
+DECLARE sty INTEGER; DECLARE tgt VARCHAR(40);
+BEGIN
+  SELECT e.target FROM ents e WHERE e.id = :eid INTO tgt;
+  IF (tgt IS NULL OR tgt = '') THEN EXIT;
+  FOR SELECT a.style FROM ents a WHERE a.targetname = :tgt AND a.classname = 'func_areaportal' INTO sty
+  DO EXECUTE PROCEDURE set_portal_state(sty, open_);
+END^
+
+-- Use_Areaportal: anything but a door toggles the portal (doors set it as they move, above)
+CREATE OR ALTER PROCEDURE areaportal_use (t INTEGER, user_ INTEGER)
+AS
+DECLARE ucls VARCHAR(40); DECLARE sty INTEGER; DECLARE st INTEGER;
+BEGIN
+  SELECT e.classname FROM ents e WHERE e.id = :user_ INTO ucls;
+  IF (ucls IN ('func_door', 'func_door_rotating')) THEN EXIT;
+  UPDATE ents e SET e.count_ = 1 - COALESCE(e.count_, 0) WHERE e.id = :t RETURNING e.style, e.count_ INTO sty, st;
+  EXECUTE PROCEDURE set_portal_state(sty, st);
+END^
+
 CREATE OR ALTER PROCEDURE door_go_up (eid INTEGER, activator INTEGER)
 AS
 DECLARE n1 VARCHAR(64); DECLARE spd DOUBLE PRECISION; DECLARE st SMALLINT; DECLARE cls VARCHAR(40);
@@ -317,6 +382,7 @@ BEGIN
   END
   EXECUTE PROCEDURE snd(eid, 0, n1, 1, 1);
   UPDATE ents e SET e.mv_state = 2 WHERE e.id = :eid;
+  EXECUTE PROCEDURE door_use_areaportals(eid, 1);
   IF (cls = 'func_door_rotating') THEN
     EXECUTE PROCEDURE calc_angle_move(eid, (SELECT e.p2x FROM ents e WHERE e.id = :eid), (SELECT e.p2y FROM ents e WHERE e.id = :eid),
       (SELECT e.p2z FROM ents e WHERE e.id = :eid), spd, 'door_hit_top');
@@ -343,6 +409,7 @@ BEGIN
   SELECT e.noise3 FROM ents e WHERE e.id = :eid INTO n3;
   EXECUTE PROCEDURE snd(eid, 0, n3, 1, 1);
   UPDATE ents e SET e.mv_state = 1 WHERE e.id = :eid;
+  EXECUTE PROCEDURE door_use_areaportals(eid, 0);
 END^
 
 -- door_use: fire the whole team
@@ -671,7 +738,8 @@ BEGIN
       UPDATE game g SET g.serverflags = BIN_OR(g.serverflags, BIN_AND((SELECT e.spawnflags FROM ents e WHERE e.id = :t), 255)) WHERE g.id = 1;
       DELETE FROM ents e WHERE e.id = :t;
     END
-    ELSE IF (tcls IN ('info_null', 'info_notnull', 'path_corner', 'point_combat', 'func_areaportal', 'target_crosslevel_target')) THEN BEGIN END
+    ELSE IF (tcls = 'func_areaportal') THEN EXECUTE PROCEDURE areaportal_use(t, eid);
+    ELSE IF (tcls IN ('info_null', 'info_notnull', 'path_corner', 'point_combat', 'target_crosslevel_target')) THEN BEGIN END
     ELSE EXECUTE PROCEDURE use_targets(t, activator);               -- anything with a target of its own
   END
 END^
@@ -1531,7 +1599,7 @@ BEGIN
     IF (BIN_AND(sf, 4096) <> 0) THEN CONTINUE;                     -- coop only
     -- "angles" overrides "angle"
     IF (ay IS NOT NULL AND ang IS NULL) THEN ang = ay;
-    IF (cls IN ('info_player_deathmatch', 'info_player_coop', 'info_player_intermission', 'func_group', 'func_areaportal', 'point_combat')) THEN CONTINUE;
+    IF (cls IN ('info_player_deathmatch', 'info_player_coop', 'info_player_intermission', 'func_group', 'point_combat')) THEN CONTINUE;
     IF (cls = 'light') THEN
     BEGIN
       IF (tn IS NOT NULL AND tn <> '' AND sty IS NOT NULL AND sty >= 32) THEN
@@ -1729,6 +1797,9 @@ BEGIN
       UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.speed = IIF(COALESCE(:vol, 0) = 0, 1, :vol), e.height = COALESCE(:attn, 1),
              e.sounds = IIF(BIN_AND(:sf, 1) <> 0, 1, 0), e.noise1 = IIF(POSITION('.', :noise) = 0, :noise || '.wav', :noise) WHERE e.id = :eid;
     END
+    ELSE IF (cls = 'func_areaportal') THEN
+      -- a portal between two areas, closed until a door (its targeter) or a use opens it
+      UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.style = :sty, e.count_ = 0 WHERE e.id = :eid;
     ELSE IF (cls = 'target_crosslevel_trigger') THEN
       -- used, it sets its spawnflags (SFL_CROSS_TRIGGER_1..8) in the unit's flags
       UPDATE ents e SET e.solid = 0, e.model_id = NULL WHERE e.id = :eid;

@@ -44,6 +44,7 @@ CREATE TABLE viewcfg (
   fov    DOUBLE PRECISION NOT NULL,     -- horizontal, degrees
   near_z DOUBLE PRECISION NOT NULL,
   vis_cluster INTEGER,                 -- the cluster VIS_FACES was marked for
+  vis_area    INTEGER,                 -- ... and the area the eye was in
   -- the view the world's face list was last made for, and that list (reused while the view holds still)
   lv_ex DOUBLE PRECISION, lv_ey DOUBLE PRECISION, lv_ez DOUBLE PRECISION,
   lv_fx DOUBLE PRECISION, lv_fy DOUBLE PRECISION, lv_fz DOUBLE PRECISION,
@@ -115,6 +116,28 @@ CREATE TABLE leaves (
   pvs      VARCHAR(2048) CHARACTER SET ASCII
 );
 CREATE INDEX leaves_cluster ON leaves (cluster);
+
+-- the map's areas and the portals between them (AREAS and AREAPORTALS lumps). A portal is open while a
+-- door holds it open (portal_state); areas reachable from one another through open portals share a
+-- flood number (area_flood, FloodAreaConnections), and the view marks only the leaves of its own flood.
+CREATE TABLE areas (
+  id       INTEGER NOT NULL PRIMARY KEY,
+  num_ap   INTEGER NOT NULL,
+  first_ap INTEGER NOT NULL
+);
+CREATE TABLE areaportals (
+  id         INTEGER NOT NULL PRIMARY KEY,
+  portal     INTEGER NOT NULL,              -- the func_areaportal's style
+  other_area INTEGER NOT NULL
+);
+CREATE TABLE portal_state (
+  portal INTEGER NOT NULL PRIMARY KEY,
+  open_  SMALLINT DEFAULT 0 NOT NULL
+);
+CREATE TABLE area_flood (
+  area  INTEGER NOT NULL PRIMARY KEY,
+  flood INTEGER NOT NULL
+);
 
 CREATE TABLE leaffaces (
   id   INTEGER NOT NULL PRIMARY KEY,
@@ -307,6 +330,7 @@ CREATE TABLE ents (
   -- placement
   leaf       INTEGER,                      -- leaf of the origin
   cluster    INTEGER,
+  area       INTEGER,                      -- the origin leaf's area (entities in areas cut off by closed doors are not drawn)
   cl2        INTEGER, cl3 INTEGER,           -- further clusters the box touches (its corners), if any
   lx DOUBLE PRECISION, ly DOUBLE PRECISION, lz DOUBLE PRECISION,   -- where it was last linked
   mkind      CHAR(1),                      -- the model's kind (B bsp, M md2, S sp2), copied in by set_model

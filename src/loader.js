@@ -19,6 +19,8 @@ const TABLES = {
   nodes: 'id:i nx:d ny:d nz:d dist:d ptype:i c0:i c1:i cc0:i cc1:i',
   leaves: 'id:i contents:i cluster:i area:i minx:d miny:d minz:d maxx:d maxy:d maxz:d first_lf:i num_lf:i first_lb:i num_lb:i pvs:s',
   leaffaces: 'id:i face:i',
+  areas: 'id:i num_ap:i first_ap:i',
+  areaportals: 'id:i portal:i other_area:i',
   leafbrushes: 'id:i brush:i',
   brushes: 'id:i contents:i first_side:i num_sides:i minx:d miny:d minz:d maxx:d maxy:d maxz:d',
   brushsides: 'id:i nx:d ny:d nz:d dist:d flags:i',
@@ -90,7 +92,7 @@ export async function createSchema(db, sql) {
  */
 export async function loadResources(db, pak, { width = 320, height = 200, fov = 90 } = {}) {
   await db.exec('DELETE FROM anims; DELETE FROM models; DELETE FROM monster_types; DELETE FROM lightstyles; DELETE FROM game; DELETE FROM player; DELETE FROM viewcfg; ' +
-    'DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM leaffaces; DELETE FROM leafbrushes; ' +
+    'DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM leaffaces; DELETE FROM leafbrushes; DELETE FROM areas; DELETE FROM areaportals; DELETE FROM portal_state; DELETE FROM area_flood; ' +
     'DELETE FROM brushes; DELETE FROM brushsides; DELETE FROM ents; DELETE FROM map_ents');
 
   const res = { models: new Map(), byName: new Map(), nextModel: 1, pak, pics: new Map() };
@@ -201,6 +203,9 @@ function geometryRows(bsp, res) {
       l.cluster >= 0 ? bsp.pvsHex[l.cluster] ?? '' : '']);
   });
   for (let i = 0; i < bsp.leaffaces.length; i++) out.leaffaces.push([i, bsp.leaffaces[i]]);
+  // areas and the portals between them (a func_areaportal's style is the portal number)
+  out.areas = bsp.areas.map((a, i) => [i, a.numPortals, a.firstPortal]);
+  out.areaportals = bsp.areaportals.map((p, i) => [i, p.portal, p.otherArea]);
   for (let i = 0; i < bsp.leafbrushes.length; i++) out.leafbrushes.push([i, bsp.leafbrushes[i]]);
   // a brush's bounds: the union of the leaves that list it
   const bb = new Float64Array(bsp.brushes.length * 6);
@@ -243,7 +248,7 @@ const ENT_NUM = ['angle', 'spawnflags', 'wait', 'delay', 'random', 'speed', 'acc
 export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null } = {}) {
   const bsp = new Bsp(pak.buffer(`maps/${name}.bsp`), `maps/${name}.bsp`);
   await db.exec(`DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents; DELETE FROM map_ents; DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL;
-    DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM leaffaces; DELETE FROM leafbrushes;
+    DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM leaffaces; DELETE FROM leafbrushes; DELETE FROM areas; DELETE FROM areaportals; DELETE FROM portal_state; DELETE FROM area_flood;
     DELETE FROM brushes; DELETE FROM brushsides; DELETE FROM models WHERE kind = 'B'`);
   for (const [id, m] of [...res.models]) if (m.kind === 'B') res.models.delete(id);
   const geo = geometryRows(bsp, res);
@@ -256,6 +261,8 @@ export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, s
   await bulkLoad(db, 'face_verts', geo.faceVerts);
   await bulkLoad(db, 'nodes', geo.nodes);
   await bulkLoad(db, 'leaves', geo.leaves);
+  await bulkLoad(db, 'areas', geo.areas);
+  await bulkLoad(db, 'areaportals', geo.areaportals);
   await bulkLoad(db, 'leaffaces', geo.leaffaces);
   await bulkLoad(db, 'leafbrushes', geo.leafbrushes);
   await bulkLoad(db, 'brushes', geo.brushes);
