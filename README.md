@@ -32,6 +32,7 @@ npm run test:monsters  # every monster of the demo: spawned, it sees the player,
 npm run serve          # http://localhost:8080/ — add -- --coi if your browser blocks service workers
 npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs demo1 --at=x,y,z,yaw)
 npm run bench          # where a tic and a frame spend their time
+npm run bench:raster   # where the painter spends its time (add --cold to rebuild every surface each frame)
 npm run inspect        # what is in the pak (maps, models and their frame runs, sounds)
 ```
 
@@ -114,7 +115,11 @@ and entity rows for scripts and the SQL console.
 
 An 8-bit framebuffer of palette indices and a z-buffer, like ref_soft. Polygons are scan-converted with
 perspective-correct spans over a surface cache: the `.wal` tiled under the face's lightmap (the RGB
-lightmap collapsed to its brightest channel, as `Mod_LoadLighting` did), run through `colormap.pcx`.
+lightmap collapsed to its brightest channel, as `Mod_LoadLighting` did), run through `colormap.pcx`. As in
+`D_DrawSpans16`, the texel coordinates are divided out every 16 pixels and stepped linearly between, and a
+surface is built the way `R_DrawSurfaceBlock8` did it: one row of light values interpolated per texel row,
+stepped along it, so the painter spends about 2 ms on a 320×240 frame in Node and 8 ms when every surface
+in view has to be rebuilt (a light style changed, a new area opened), down from 3 and 30.
 Translucent surfaces (`SURF_TRANS33/66`) are blended through the alpha map in the same picture; warping
 surfaces ripple and flow; the sky is the `env/` cube map sampled by each pixel's direction. MD2 models
 are drawn with the lightmap value under the entity and Gouraud light from the vertex normals, clipped

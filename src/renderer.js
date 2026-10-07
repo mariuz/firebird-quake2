@@ -31,6 +31,9 @@ export class Renderer {
     this.sbarLines = 0;
     this.sky = null;             // [6 × { w, h, data }]
     this.lightScale = 1.4;       // ref_gl's intensity: the software lightmaps are dim on their own
+    this.vv = new Float64Array(64 * 7);   // a polygon's vertices in view space
+    this.pp = new Float64Array(64 * 5);   // ... and on screen, clipped
+    this.av = new Float32Array(1024 * 7); // an alias model's transformed vertices
     this.setSize(320, 240);
   }
 
@@ -72,6 +75,7 @@ export class Renderer {
       try { t = new Wal(this.pak.get(file), name); } catch { t = null; }
     }
     if (!t) t = { name, w: 64, h: 64, mips: [new Uint8Array(64 * 64).fill(8)], animname: '', flags: 0 };
+    t.id = this.textures.size;
     this.textures.set(name, t);
     return t;
   }
@@ -108,57 +112,71 @@ export class Renderer {
       tex = t;
     }
     let light = 0;
-    for (let i = 0; i < 4 && f.styles[i] !== 255; i++) {
-      const v = styles[f.styles[i]] ?? 1;
+    const fs = f.styles;
+    for (let i = 0; i < 4 && fs[i] !== 255; i++) {
+      const v = styles[fs[i]] ?? 1;
       light = light * 7 + Math.round(v * 16);
     }
-    const key = faceId + ':' + light + ':' + tex.name + ':' + this.lightScale;
+    // face, texture and light levels in one number (the brightness setting clears the cache)
+    const key = (faceId * 4096 + tex.id) * 16384 + light;
     let s = this.surfCache.get(key);
-    if (s) return s;
+    if (s !== undefined) return s;
     if (this.surfCache.size > SURF_CACHE_MAX) this.surfCache.clear();
     s = this.buildSurface(bsp, f, tex, styles);
     this.surfCache.set(key, s);
     return s;
   }
 
+  /**
+   * The texture tiled under the face's lightmap, through the colormap. The
+   * lightmap is bilinear over 16×16 texel blocks: one row of light values is
+   * interpolated per texel row, then stepped along it (R_DrawSurfaceBlock8).
+   */
   buildSurface(bsp, f, tex, styles) {
     const sw = Math.max(1, f.extents[0]);
     const sh = Math.max(1, f.extents[1]);
     const data = new Uint8Array(sw * sh);
     const lw = f.lightW;
     const lh = f.lightH;
+    const ls = this.lightScale;
     const block = new Float32Array(lw * lh);
     if (f.lightofs >= 0 && bsp.lightdata.length) {
+      const ld = bsp.lightdata;
       let off = f.lightofs;
       for (let i = 0; i < 4 && f.styles[i] !== 255; i++) {
-        const scale = styles[f.styles[i]] ?? 1;
-        for (let k = 0; k < lw * lh; k++) block[k] += bsp.lightdata[off + k] * scale;
+        const scale = (styles[f.styles[i]] ?? 1) * ls;
+        for (let k = 0; k < lw * lh; k++) block[k] += ld[off + k] * scale;
         off += lw * lh;
       }
     } else {
-      block.fill(f.flags & (SURF.WARP | SURF.SKY) ? 255 : f.lightofs === -1 ? 255 : 0);
+      block.fill((f.flags & (SURF.WARP | SURF.SKY) ? 255 : f.lightofs === -1 ? 255 : 0) * ls);
     }
-    const cm = this.colormap, ls = this.lightScale;
+    const cm = this.colormap;
     const texw = tex.w, texh = tex.h, mip = tex.mips[0];
     const smin = f.texturemins[0], tmin = f.texturemins[1];
+    const col = new Int32Array(sw);
+    for (let u = 0; u < sw; u++) col[u] = (((u + smin) % texw) + texw) % texw;
+    const rowL = new Float32Array(lw);
     for (let v = 0; v < sh; v++) {
-      const ty = (((v + tmin) % texh) + texh) % texh;
+      const mrow = ((((v + tmin) % texh) + texh) % texh) * texw;
       const lv = v >> 4, lf = (v & 15) / 16;
       const lv1 = Math.min(lv + 1, lh - 1);
+      const b0 = lv * lw, b1 = lv1 * lw;
+      for (let lu = 0; lu < lw; lu++) rowL[lu] = block[b0 + lu] * (1 - lf) + block[b1 + lu] * lf;
       const row = v * sw;
-      for (let u = 0; u < sw; u++) {
-        const tx = (((u + smin) % texw) + texw) % texw;
-        const lu = u >> 4, luf = (u & 15) / 16;
-        const lu1 = Math.min(lu + 1, lw - 1);
-        const l0 = block[lv * lw + lu] * (1 - luf) + block[lv * lw + lu1] * luf;
-        const l1 = block[lv1 * lw + lu] * (1 - luf) + block[lv1 * lw + lu1] * luf;
-        const l = (l0 * (1 - lf) + l1 * lf) * ls;
-        let shade = (255 - l) >> 2;
-        if (shade < 0) shade = 0; else if (shade > 63) shade = 63;
-        data[row + u] = cm[(shade << 8) | mip[ty * texw + tx]];
+      let u = 0;
+      for (let lu = 0; u < sw; lu++) {
+        let l = rowL[lu];
+        const step = (rowL[Math.min(lu + 1, lw - 1)] - l) / 16;
+        const end = Math.min(sw, u + 16);
+        for (; u < end; u++, l += step) {
+          let shade = (255 - l) >> 2;
+          if (shade < 0) shade = 0; else if (shade > 63) shade = 63;
+          data[row + u] = cm[(shade << 8) | mip[mrow + col[u]]];
+        }
       }
     }
-    return { data, w: sw, h: sh, smin, tmin };
+    return { data, w: sw, h: sh, smin, tmin, mask: (sw & (sw - 1)) === 0 && (sh & (sh - 1)) === 0 };
   }
 
   // ── a frame ─────────────────────────────────────────────────────────────
@@ -183,6 +201,11 @@ export class Renderer {
     view.cy = (h - this.sbarLines) / 2;
   }
 
+  /** Room for n vertices in the view-space (stride 7) and screen-space (stride 5) scratch polygons. */
+  polyRoom(n) {
+    if (this.vv.length < n * 7) { this.vv = new Float64Array(n * 7 * 2); this.pp = new Float64Array(n * 5 * 4); }
+  }
+
   /**
    * The world and brush models: rows [face, seq, vf, vr, vu, sx, sy, s, t, ent_id]
    * in order (view-space forward/right/up, projected x/y or null when behind
@@ -192,114 +215,150 @@ export class Renderer {
   drawFaces(rows, styles, time, entFrames) {
     let i = 0;
     const n = rows.length;
-    const view = this.view;
     const near = 4;
-    const poly = [];
-    // translucent surfaces last (R_DrawAlphaSurfaces)
     const alphaPolys = [];
     while (i < n) {
       const face = rows[i][0], ent = rows[i][9];
-      poly.length = 0;
+      let m = 0;
       let behind = false;
-      while (i < n && rows[i][0] === face && rows[i][9] === ent) {
-        if (rows[i][2] < near) behind = true;
-        poly.push(rows[i]);
-        i++;
-      }
-      if (poly.length < 3) continue;
+      const j = i;
+      while (i < n && rows[i][0] === face && rows[i][9] === ent) { if (rows[i][2] < near) behind = true; i++; m++; }
+      if (m < 3) continue;
       const info = this.faceInfo.get(face);
       if (!info) continue;
-      let verts;
-      if (!behind) verts = poly.map((p) => [p[5], p[6], p[2], p[7], p[8]]);
-      else {
-        verts = [];
-        const m = poly.length;
-        for (let k = 0; k < m; k++) {
-          const a = poly[k], b = poly[(k + 1) % m];
-          const ain = a[2] >= near, bin = b[2] >= near;
-          if (ain) verts.push([a[5], a[6], a[2], a[7], a[8]]);
-          if (ain !== bin) {
-            const f = (near - a[2]) / (b[2] - a[2]);
-            const r = a[3] + (b[3] - a[3]) * f, u = a[4] + (b[4] - a[4]) * f;
-            verts.push([view.cx + (r * view.scale) / near, view.cy - (u * view.scale) / near, near, a[7] + (b[7] - a[7]) * f, a[8] + (b[8] - a[8]) * f]);
-          }
-        }
-        if (verts.length < 3) continue;
+      this.polyRoom(m);
+      const vv = this.vv;
+      for (let k = 0; k < m; k++) {
+        const r = rows[j + k], o = k * 7;
+        vv[o] = r[2]; vv[o + 1] = r[3]; vv[o + 2] = r[4]; vv[o + 3] = r[5]; vv[o + 4] = r[6]; vv[o + 5] = r[7]; vv[o + 6] = r[8];
       }
-      const flags = info.f.flags;
-      if (flags & (SURF.TRANS33 | SURF.TRANS66)) { alphaPolys.push({ verts, face, ent, flags, info }); continue; }
-      this.drawSurfacePoly(verts, face, ent, flags, info, styles, time, entFrames);
+      this.emitPoly(m, behind, face, ent, info, styles, time, entFrames, alphaPolys);
     }
-    for (const a of alphaPolys) this.drawSurfacePoly(a.verts, a.face, a.ent, a.flags, a.info, styles, time, entFrames);
-  }
-
-  drawSurfacePoly(verts, face, ent, flags, info, styles, time, entFrames) {
-    const blend = flags & SURF.TRANS33 ? 1 : flags & SURF.TRANS66 ? 2 : 0;
-    if (flags & SURF.SKY) this.fillPolygon(verts, null, 2, time, 0, 0);
-    else if (flags & SURF.WARP) {
-      const tex = this.texture(info.ti.texture);
-      const scroll = flags & SURF.FLOWING ? -128 * ((time * 0.25) % 1) : 0;
-      this.fillPolygon(verts, { data: tex.mips[0], w: tex.w, h: tex.h, smin: 0, tmin: 0 }, 1, time, blend, scroll);
-    } else {
-      const s = this.surface(face, styles, time, entFrames.get(ent) ?? 0);
-      const scroll = flags & SURF.FLOWING ? -128 * ((time * 0.77) % 1) : 0;
-      if (s) this.fillPolygon(verts, s, 0, time, blend, scroll);
-    }
+    this.drawAlphaPolys(alphaPolys, styles, time, entFrames);
   }
 
   /**
    * FRAME_FACES_FAST rows [face, ent_id, ox, oy, oz]: SQL chose the faces,
-   * the vertices come from the BSP held here. Builds the same per-vertex
-   * rows FRAME_FACES would and hands them to drawFaces.
+   * the vertices come from the BSP held here, transformed and projected
+   * exactly as FRAME_FACES would.
    */
   drawFaceList(rows, styles, time, entFrames, entAngles = new Map()) {
     const view = this.view;
     const [fx, fy, fz] = view.fwd, [rx, ry, rz] = view.right, [ux, uy, uz] = view.up;
     const near = 4, sc = view.scale, cx = view.cx, cy = view.cy;
-    const out = [];
-    for (const [face, ent, ox, oy, oz] of rows) {
+    const alphaPolys = [];
+    let lastEnt = -1, M = null;
+    for (let ri = 0; ri < rows.length; ri++) {
+      const row = rows[ri];
+      const face = row[0], ent = row[1], ox = row[2], oy = row[3], oz = row[4];
       const info = this.faceInfo.get(face);
       if (!info) continue;
       const { bsp, f, ti } = info;
       const lx = view.x - ox, ly = view.y - oy, lz = view.z - oz;
-      const verts = f.verts, vs = bsp.vertices;
-      const M = ent && entAngles.get(ent) ? angleMatrix(entAngles.get(ent)) : null;
-      for (let k = 0; k < verts.length; k++) {
+      const verts = f.verts, vs = bsp.vertices, m = verts.length;
+      if (m < 3) continue;
+      if (ent !== lastEnt) { lastEnt = ent; M = ent && entAngles.get(ent) ? angleMatrix(entAngles.get(ent)) : null; }
+      const s0 = ti.s[0], s1 = ti.s[1], s2 = ti.s[2], soff = ti.soff, t0 = ti.t[0], t1 = ti.t[1], t2 = ti.t[2], toff = ti.toff;
+      this.polyRoom(m);
+      const vv = this.vv;
+      let behind = false;
+      for (let k = 0; k < m; k++) {
         const vi = verts[k] * 3;
         const x = vs[vi], y = vs[vi + 1], z = vs[vi + 2];
         let dx, dy, dz;
         if (M) { dx = M[0] * x + M[1] * y + M[2] * z - lx; dy = M[3] * x + M[4] * y + M[5] * z - ly; dz = M[6] * x + M[7] * y + M[8] * z - lz; }
         else { dx = x - lx; dy = y - ly; dz = z - lz; }
         const vf = dx * fx + dy * fy + dz * fz, vr = dx * rx + dy * ry + dz * rz, vu = dx * ux + dy * uy + dz * uz;
-        out.push([face, k, vf, vr, vu, vf >= near ? cx + (vr * sc) / vf : null, vf >= near ? cy - (vu * sc) / vf : null,
-          x * ti.s[0] + y * ti.s[1] + z * ti.s[2] + ti.soff, x * ti.t[0] + y * ti.t[1] + z * ti.t[2] + ti.toff, ent]);
+        const o = k * 7;
+        vv[o] = vf; vv[o + 1] = vr; vv[o + 2] = vu;
+        if (vf >= near) { vv[o + 3] = cx + (vr * sc) / vf; vv[o + 4] = cy - (vu * sc) / vf; } else behind = true;
+        vv[o + 5] = x * s0 + y * s1 + z * s2 + soff;
+        vv[o + 6] = x * t0 + y * t1 + z * t2 + toff;
       }
+      this.emitPoly(m, behind, face, ent, info, styles, time, entFrames, alphaPolys);
     }
-    this.drawFaces(out, styles, time, entFrames);
+    this.drawAlphaPolys(alphaPolys, styles, time, entFrames);
   }
 
   /**
-   * Scan-convert a convex polygon of [sx, sy, z, s, t]. mode 0: textured,
-   * 1: warp (unlit, rippling), 2: sky. blend 0 opaque, 1 trans33, 2 trans66.
-   * 1/z, s/z and t/z are affine in screen space.
+   * The polygon in this.vv (m vertices of vf, vr, vu, sx, sy, s, t) becomes
+   * screen-space vertices in this.pp (sx, sy, z, s, t), clipped to the near
+   * plane if it crosses it, and is drawn — or kept for after the opaque
+   * surfaces when translucent (R_DrawAlphaSurfaces).
    */
-  fillPolygon(poly, surf, mode, time, blend, scroll) {
+  emitPoly(m, behind, face, ent, info, styles, time, entFrames, alphaPolys) {
+    const vv = this.vv, pp = this.pp;
+    const view = this.view, near = 4;
+    let n = 0;
+    if (!behind) {
+      for (let k = 0; k < m; k++) {
+        const o = k * 7, q = k * 5;
+        pp[q] = vv[o + 3]; pp[q + 1] = vv[o + 4]; pp[q + 2] = vv[o]; pp[q + 3] = vv[o + 5]; pp[q + 4] = vv[o + 6];
+      }
+      n = m;
+    } else {
+      for (let k = 0; k < m; k++) {
+        const a = k * 7, b = ((k + 1) % m) * 7;
+        const ain = vv[a] >= near, bin = vv[b] >= near;
+        if (ain) { const q = n++ * 5; pp[q] = vv[a + 3]; pp[q + 1] = vv[a + 4]; pp[q + 2] = vv[a]; pp[q + 3] = vv[a + 5]; pp[q + 4] = vv[a + 6]; }
+        if (ain !== bin) {
+          const f = (near - vv[a]) / (vv[b] - vv[a]);
+          const r = vv[a + 1] + (vv[b + 1] - vv[a + 1]) * f, u = vv[a + 2] + (vv[b + 2] - vv[a + 2]) * f;
+          const q = n++ * 5;
+          pp[q] = view.cx + (r * view.scale) / near; pp[q + 1] = view.cy - (u * view.scale) / near; pp[q + 2] = near;
+          pp[q + 3] = vv[a + 5] + (vv[b + 5] - vv[a + 5]) * f; pp[q + 4] = vv[a + 6] + (vv[b + 6] - vv[a + 6]) * f;
+        }
+      }
+      if (n < 3) return;
+    }
+    const flags = info.f.flags;
+    if (flags & (SURF.TRANS33 | SURF.TRANS66)) { alphaPolys.push({ verts: pp.slice(0, n * 5), n, face, ent, flags, info }); return; }
+    this.drawSurfacePoly(pp, n, face, ent, flags, info, styles, time, entFrames);
+  }
+
+  drawAlphaPolys(alphaPolys, styles, time, entFrames) {
+    for (const a of alphaPolys) this.drawSurfacePoly(a.verts, a.n, a.face, a.ent, a.flags, a.info, styles, time, entFrames);
+  }
+
+  drawSurfacePoly(poly, n, face, ent, flags, info, styles, time, entFrames) {
+    const blend = flags & SURF.TRANS33 ? 1 : flags & SURF.TRANS66 ? 2 : 0;
+    if (flags & SURF.SKY) this.fillPolygon(poly, n, null, 2, time, 0, 0);
+    else if (flags & SURF.WARP) {
+      const tex = this.texture(info.ti.texture);
+      const scroll = flags & SURF.FLOWING ? -128 * ((time * 0.25) % 1) : 0;
+      let ws = tex.warp;
+      if (!ws) ws = tex.warp = { data: tex.mips[0], w: tex.w, h: tex.h, smin: 0, tmin: 0, mask: (tex.w & (tex.w - 1)) === 0 && (tex.h & (tex.h - 1)) === 0 };
+      this.fillPolygon(poly, n, ws, 1, time, blend, scroll);
+    } else {
+      const s = this.surface(face, styles, time, entFrames.get(ent) ?? 0);
+      const scroll = flags & SURF.FLOWING ? -128 * ((time * 0.77) % 1) : 0;
+      if (s) this.fillPolygon(poly, n, s, 0, time, blend, scroll);
+    }
+  }
+
+  /**
+   * Scan-convert a convex polygon: n vertices of [sx, sy, z, s, t] in poly.
+   * mode 0: textured, 1: warp (unlit, rippling), 2: sky. blend 0 opaque,
+   * 1 trans33, 2 trans66. 1/z, s/z and t/z are affine in screen space; the
+   * texel coordinates are divided out every 16 pixels and stepped linearly
+   * between (D_DrawSpans16), the depth test runs on every pixel.
+   */
+  fillPolygon(poly, n, surf, mode, time, blend, scroll) {
     const { w, h, edgeL, edgeR, fb, zb } = this;
     let ymin = Infinity, ymax = -Infinity;
-    for (const p of poly) { if (p[1] < ymin) ymin = p[1]; if (p[1] > ymax) ymax = p[1]; }
-    let y0 = Math.max(0, Math.ceil(ymin - 0.5));
-    let y1 = Math.min(h - 1, Math.ceil(ymax - 0.5) - 1);
+    for (let k = 0; k < n; k++) { const py = poly[k * 5 + 1]; if (py < ymin) ymin = py; if (py > ymax) ymax = py; }
+    const y0 = Math.max(0, Math.ceil(ymin - 0.5));
+    const y1 = Math.min(h - 1, Math.ceil(ymax - 0.5) - 1);
     if (y0 > y1) return;
     for (let y = y0; y <= y1; y++) { edgeL[y * 5] = Infinity; edgeR[y * 5] = -Infinity; }
-    const m = poly.length;
-    for (let k = 0; k < m; k++) {
-      const a = poly[k], b = poly[(k + 1) % m];
-      let ax = a[0], ay = a[1], bx = b[0], by = b[1];
+    for (let k = 0; k < n; k++) {
+      const a = k * 5, b = ((k + 1) % n) * 5;
+      let ax = poly[a], ay = poly[a + 1], bx = poly[b], by = poly[b + 1];
       if (ay === by) continue;
-      let aiz = 1 / a[2], biz = 1 / b[2];
-      let asz = a[3] * aiz, bsz = b[3] * biz, atz = a[4] * aiz, btz = b[4] * biz;
+      let aiz = 1 / poly[a + 2], biz = 1 / poly[b + 2];
+      let asz = poly[a + 3] * aiz, bsz = poly[b + 3] * biz, atz = poly[a + 4] * aiz, btz = poly[b + 4] * biz;
       if (ay > by) {
-        [ax, bx] = [bx, ax]; [ay, by] = [by, ay]; [aiz, biz] = [biz, aiz]; [asz, bsz] = [bsz, asz]; [atz, btz] = [btz, atz];
+        let t = ax; ax = bx; bx = t; t = ay; ay = by; by = t; t = aiz; aiz = biz; biz = t; t = asz; asz = bsz; bsz = t; t = atz; atz = btz; btz = t;
       }
       const dy = by - ay;
       const dx = (bx - ax) / dy, diz = (biz - aiz) / dy, dsz = (bsz - asz) / dy, dtz = (btz - atz) / dy;
@@ -312,11 +371,36 @@ export class Renderer {
         if (x > edgeR[o]) { edgeR[o] = x; edgeR[o + 1] = aiz + diz * t; edgeR[o + 2] = asz + dsz * t; edgeR[o + 3] = atz + dtz * t; }
       }
     }
-    const sd = surf ? surf.data : null;
-    const sw = surf ? surf.w : 0, sh = surf ? surf.h : 0, smin = surf ? surf.smin : 0, tmin = surf ? surf.tmin : 0;
+    const view = this.view;
+    if (mode === 2) {
+      // the sky box, by each pixel's direction: the ray steps along the span
+      const sky = this.sky;
+      const fwd = view.fwd, right = view.right, up = view.up;
+      const dk = 1 / view.scale;
+      const sdx = right[0] * dk, sdy = right[1] * dk, sdz = right[2] * dk;
+      for (let y = y0; y <= y1; y++) {
+        const o = y * 5;
+        const xl = edgeL[o], xr = edgeR[o];
+        if (xl === Infinity || xr === -Infinity) continue;
+        const xs = Math.max(0, Math.ceil(xl - 0.5)), xe = Math.min(w - 1, Math.ceil(xr - 0.5) - 1);
+        if (xs > xe) continue;
+        const kx = (xs + 0.5 - view.cx) * dk, ky = (view.cy - y - 0.5) * dk;
+        let dx = fwd[0] + right[0] * kx + up[0] * ky, dy = fwd[1] + right[1] * kx + up[1] * ky, dz = fwd[2] + right[2] * kx + up[2] * ky;
+        let idx = y * w + xs;
+        for (let x = xs; x <= xe; x++, idx++, dx += sdx, dy += sdy, dz += sdz) {
+          if (1e-6 > zb[idx]) {
+            zb[idx] = 1e-6;
+            fb[idx] = sky ? skyDir(sky, dx, dy, dz) : 0;
+          }
+        }
+      }
+      return;
+    }
+    const sd = surf.data;
+    const sw = surf.w, sh = surf.h, smin = surf.smin - scroll, tmin = surf.tmin;
+    const pow2 = surf.mask, swm = sw - 1, shm = sh - 1;
     const sin = this.sinTable;
     const tphase = (time * 20) & 255;
-    const view = this.view;
     const am = this.alphamap;
     const useBlend = blend && am;
     const cm = this.colormap;
@@ -333,124 +417,165 @@ export class Renderer {
       const t0 = xs + 0.5 - xl;
       let iz = edgeL[o + 1] + diz * t0, sz = edgeL[o + 2] + dsz * t0, tz = edgeL[o + 3] + dtz * t0;
       let idx = y * w + xs;
-      if (mode === 2) {
-        // the sky box, by the pixel's direction
-        for (let x = xs; x <= xe; x++, idx++, iz += diz) {
-          if (1e-6 > zb[idx]) {
-            zb[idx] = 1e-6;
-            fb[idx] = this.sky ? skyPixel(this.sky, view, x, y) : 0;
+      let z = 1 / iz, s = sz * z - smin, t = tz * z - tmin;
+      let x = xs;
+      while (x <= xe) {
+        const run = xe - x + 1 < 16 ? xe - x + 1 : 16;
+        const iz2 = iz + diz * run, sz2 = sz + dsz * run, tz2 = tz + dtz * run;
+        z = 1 / iz2;
+        const s2 = sz2 * z - smin, t2 = tz2 * z - tmin;
+        const ds = (s2 - s) / run, dt = (t2 - t) / run;
+        if (mode === 1) {
+          for (let k = 0; k < run; k++, idx++, iz += diz, s += ds, t += dt) {
+            if (iz <= zb[idx]) continue;
+            // D_DrawTurbulent8Span: each axis rippled by the other
+            let ss = s + sin[(tphase + (t >> 0)) & 255], tt = t + sin[(tphase + (s >> 0)) & 255];
+            let si, ti;
+            if (pow2) { si = Math.floor(ss) & swm; ti = Math.floor(tt) & shm; }
+            else { si = (((ss % sw) + sw) % sw) | 0; ti = (((tt % sh) + sh) % sh) | 0; }
+            let c = cm[(8 << 8) | sd[ti * sw + si]];   // unlit water, slightly dimmed
+            if (useBlend) { const d = fb[idx]; fb[idx] = blend === 1 ? am[d + (c << 8)] : am[(d << 8) + c]; continue; }
+            zb[idx] = iz;
+            fb[idx] = c;
+          }
+        } else if (useBlend) {
+          for (let k = 0; k < run; k++, idx++, iz += diz, s += ds, t += dt) {
+            if (iz <= zb[idx]) continue;
+            let si = s | 0, ti = t | 0;
+            if (si < 0) si = 0; else if (si >= sw) si = swm;
+            if (ti < 0) ti = 0; else if (ti >= sh) ti = shm;
+            const c = sd[ti * sw + si], d = fb[idx];
+            fb[idx] = blend === 1 ? am[d + (c << 8)] : am[(d << 8) + c];   // translucent surfaces don't write depth
+          }
+        } else {
+          for (let k = 0; k < run; k++, idx++, iz += diz, s += ds, t += dt) {
+            if (iz <= zb[idx]) continue;
+            let si = s | 0, ti = t | 0;
+            if (si < 0) si = 0; else if (si >= sw) si = swm;
+            if (ti < 0) ti = 0; else if (ti >= sh) ti = shm;
+            zb[idx] = iz;
+            fb[idx] = sd[ti * sw + si];
           }
         }
-        continue;
-      }
-      for (let x = xs; x <= xe; x++, idx++, iz += diz, sz += dsz, tz += dtz) {
-        if (iz <= zb[idx]) continue;
-        const z = 1 / iz;
-        let s = sz * z - smin + scroll, t = tz * z - tmin;
-        if (mode === 1) {
-          const ss = s, tt = t;
-          s += sin[(tphase + (tt >> 0)) & 255];
-          t += sin[(tphase + (ss >> 0)) & 255];
-          s = ((s % sw) + sw) % sw; t = ((t % sh) + sh) % sh;
-        } else {
-          if (s < 0) s = 0; else if (s >= sw) s = sw - 1;
-          if (t < 0) t = 0; else if (t >= sh) t = sh - 1;
-        }
-        let c = sd[(t | 0) * sw + (s | 0)];
-        if (mode === 1) c = cm[(8 << 8) | c];   // unlit water, slightly dimmed like D_DrawTurbulent8Span
-        if (useBlend) {
-          const d = fb[idx];
-          c = blend === 1 ? am[d + (c << 8)] : am[(d << 8) + c];
-          fb[idx] = c;
-          continue;   // translucent surfaces don't write depth
-        }
-        zb[idx] = iz;
-        fb[idx] = c;
+        x += run; iz = iz2; sz = sz2; tz = tz2; s = s2; t = t2;
       }
     }
   }
 
   // ── alias models (R_AliasDrawModel) ─────────────────────────────────────
+  /** Room for n transformed vertices: vf, vr, vu, px, py, iz, light (stride 7). */
+  aliasRoom(n) {
+    if (this.av.length < n * 7) this.av = new Float32Array(n * 7 * 2);
+  }
+
   /**
    * Draw an MD2 at origin with Quake angles (pitch positive up as
    * vectoangles gives it). light: 0..255 from the lightmap below the entity.
+   * Every vertex is transformed, lit and projected once; triangles that
+   * cross the near plane are clipped one by one.
    */
   drawAlias(mdl, frameIndex, skin, origin, angles, light, opts = {}) {
     const view = this.view;
-    const [pitch, yaw, roll] = angles.map((a) => (a * Math.PI) / 180);
+    const pitch = (angles[0] * Math.PI) / 180, yaw = (angles[1] * Math.PI) / 180, roll = (angles[2] * Math.PI) / 180;
     const sy = Math.sin(yaw), cy = Math.cos(yaw), sp = Math.sin(-pitch), cp = Math.cos(-pitch), sr = Math.sin(roll), cr = Math.cos(roll);
-    const F = [cp * cy, cp * sy, -sp];
-    const R = [-sr * sp * cy + cr * sy, -sr * sp * sy - cr * cy, -sr * cp];
-    const U = [cr * sp * cy + sr * sy, cr * sp * sy - sr * cy, cr * cp];
+    const F0 = cp * cy, F1 = cp * sy, F2 = -sp;
+    const R0 = -sr * sp * cy + cr * sy, R1 = -sr * sp * sy - cr * cy, R2 = -sr * cp;
+    const U0 = cr * sp * cy + sr * sy, U1 = cr * sp * sy - sr * cy, U2 = cr * cp;
     const frame = mdl.frames[Math.min(Math.max(frameIndex | 0, 0), mdl.frames.length - 1)];
     const verts = frame.verts;
-    const [scx, scy, scz] = frame.scale, [trx, try_, trz] = frame.translate;
+    const scx = frame.scale[0], scy = frame.scale[1], scz = frame.scale[2];
+    const trx = frame.translate[0], try_ = frame.translate[1], trz = frame.translate[2];
     const n = mdl.numVerts;
-    const vf = new Float32Array(n), vr = new Float32Array(n), vu = new Float32Array(n), lv = new Float32Array(n);
+    this.aliasRoom(n);
+    const av = this.av;
     const near = opts.near ?? 4;
-    const ex = view.x, ey = view.y, ez = view.z;
+    const ox = origin[0] - view.x, oy = origin[1] - view.y, oz = origin[2] - view.z;
     const fwd = view.fwd, right = view.right, up = view.up;
-    const ldx = -1, ldy = 0, ldz = 1;
+    const fx = fwd[0], fy = fwd[1], fz = fwd[2], rx = right[0], ry = right[1], rz = right[2], ux = up[0], uy = up[1], uz = up[2];
+    const ldx = -1, ldz = 1;
     light = Math.min(255, light * this.lightScale);
     const ambient = Math.max(light, 8), shade = Math.max(light, 8);
+    const depthHack = opts.depthHack ? 3 : 1;
+    const vcx = view.cx, vcy = view.cy, sc = view.scale;
     let anyNear = false;
     for (let i = 0; i < n; i++) {
       const mx = verts[i * 4] * scx + trx;
       const my = verts[i * 4 + 1] * scy + try_;
       const mz = verts[i * 4 + 2] * scz + trz;
-      const wx = origin[0] + F[0] * mx - R[0] * my + U[0] * mz - ex;
-      const wy = origin[1] + F[1] * mx - R[1] * my + U[1] * mz - ey;
-      const wz = origin[2] + F[2] * mx - R[2] * my + U[2] * mz - ez;
-      const f = wx * fwd[0] + wy * fwd[1] + wz * fwd[2];
+      const wx = ox + F0 * mx - R0 * my + U0 * mz;
+      const wy = oy + F1 * mx - R1 * my + U1 * mz;
+      const wz = oz + F2 * mx - R2 * my + U2 * mz;
+      const f = wx * fx + wy * fy + wz * fz;
+      const r = wx * rx + wy * ry + wz * rz, u = wx * ux + wy * uy + wz * uz;
+      const o = i * 7;
+      av[o] = f; av[o + 1] = r; av[o + 2] = u;
       if (f < near) anyNear = true;
-      vf[i] = f;
-      vr[i] = wx * right[0] + wy * right[1] + wz * right[2];
-      vu[i] = wx * up[0] + wy * up[1] + wz * up[2];
+      else { av[o + 3] = vcx + (r * sc) / f; av[o + 4] = vcy - (u * sc) / f; av[o + 5] = (1 / f) * depthHack; }
       const ni = Math.min(verts[i * 4 + 3], 161) * 3;
-      const nx = F[0] * ANORMS[ni] - R[0] * ANORMS[ni + 1] + U[0] * ANORMS[ni + 2];
-      const ny = F[1] * ANORMS[ni] - R[1] * ANORMS[ni + 1] + U[1] * ANORMS[ni + 2];
-      const nz = F[2] * ANORMS[ni] - R[2] * ANORMS[ni + 1] + U[2] * ANORMS[ni + 2];
-      const d = (nx * ldx + ny * ldy + nz * ldz) * 0.7071;
-      lv[i] = Math.min(255, ambient + shade * Math.max(0, d));
+      const a0 = ANORMS[ni], a1 = ANORMS[ni + 1], a2 = ANORMS[ni + 2];
+      const nx = F0 * a0 - R0 * a1 + U0 * a2;
+      const nz = F2 * a0 - R2 * a1 + U2 * a2;
+      const d = (nx * ldx + nz * ldz) * 0.7071;
+      av[o + 6] = Math.min(255, ambient + shade * Math.max(0, d));
     }
     const sk = mdl.skins[Math.min(skin, mdl.skins.length - 1)] ?? mdl.skins[0];
     const skinData = sk.data, skinW = sk.w, skinH = sk.h;
     const tris = mdl.tris, st = mdl.st;
-    const depthHack = opts.depthHack ? 3 : 1;
     const transparent = opts.transparent ? 255 : -1;
-    const vcx = view.cx, vcy = view.cy, sc = view.scale;
-    const proj = (v) => [vcx + (v[1] * sc) / v[0], vcy - (v[2] * sc) / v[0], (1 / v[0]) * depthHack, v[3], v[4], v[5]];
-    const drawTri = (A, B, C) => {
-      const a = proj(A), b = proj(B), c = proj(C);
-      if ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) <= 0) return;   // back face (MD2 winding)
-      this.triangle(a[0], a[1], a[2], a[3], a[4], a[5], b[0], b[1], b[2], b[3], b[4], b[5], c[0], c[1], c[2], c[3], c[4], c[5],
-        skinData, skinW, skinH, transparent, opts.noZTest, opts.alpha, opts.shell);
-    };
-    const lerp = (A, B) => {
-      const k = (near - A[0]) / (B[0] - A[0]);
-      return [near, A[1] + (B[1] - A[1]) * k, A[2] + (B[2] - A[2]) * k, A[3] + (B[3] - A[3]) * k, A[4] + (B[4] - A[4]) * k, A[5] + (B[5] - A[5]) * k];
-    };
+    const noZ = opts.noZTest, alpha = opts.alpha, shell = opts.shell;
     for (let t = 0; t < mdl.numTris; t++) {
-      const ia = tris[t * 6], ib = tris[t * 6 + 1], ic = tris[t * 6 + 2];
+      const ia = tris[t * 6] * 7, ib = tris[t * 6 + 1] * 7, ic = tris[t * 6 + 2] * 7;
       const ta = tris[t * 6 + 3] * 2, tb = tris[t * 6 + 4] * 2, tc = tris[t * 6 + 5] * 2;
-      const A = [vf[ia], vr[ia], vu[ia], st[ta], st[ta + 1], lv[ia]], B = [vf[ib], vr[ib], vu[ib], st[tb], st[tb + 1], lv[ib]], C = [vf[ic], vr[ic], vu[ic], st[tc], st[tc + 1], lv[ic]];
-      const inA = A[0] >= near, inB = B[0] >= near, inC = C[0] >= near;
-      const cnt = inA + inB + inC;
-      if (cnt === 3) drawTri(A, B, C);
-      else if (cnt === 0) continue;
-      else {
-        const inp = [A, B, C], out = [];
-        for (let k = 0; k < 3; k++) {
-          const P = inp[k], Q = inp[(k + 1) % 3];
-          const pin = P[0] >= near, qin = Q[0] >= near;
-          if (pin) out.push(P);
-          if (pin !== qin) out.push(lerp(P, Q));
-        }
-        drawTri(out[0], out[1], out[2]);
-        if (out.length === 4) drawTri(out[0], out[2], out[3]);
+      if (av[ia] >= near && av[ib] >= near && av[ic] >= near) {
+        const ax = av[ia + 3], ay = av[ia + 4], bx = av[ib + 3], by = av[ib + 4], cx = av[ic + 3], cy = av[ic + 4];
+        if ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax) <= 0) continue;   // back face (MD2 winding)
+        this.triangle(ax, ay, av[ia + 5], st[ta], st[ta + 1], av[ia + 6], bx, by, av[ib + 5], st[tb], st[tb + 1], av[ib + 6],
+          cx, cy, av[ic + 5], st[tc], st[tc + 1], av[ic + 6], skinData, skinW, skinH, transparent, noZ, alpha, shell);
+        continue;
       }
+      if (av[ia] < near && av[ib] < near && av[ic] < near) continue;
+      // clip against the near plane in view space, then project the pieces
+      const A = [av[ia], av[ia + 1], av[ia + 2], st[ta], st[ta + 1], av[ia + 6]];
+      const B = [av[ib], av[ib + 1], av[ib + 2], st[tb], st[tb + 1], av[ib + 6]];
+      const C = [av[ic], av[ic + 1], av[ic + 2], st[tc], st[tc + 1], av[ic + 6]];
+      const inp = [A, B, C], out = [];
+      for (let k = 0; k < 3; k++) {
+        const P = inp[k], Q = inp[(k + 1) % 3];
+        const pin = P[0] >= near, qin = Q[0] >= near;
+        if (pin) out.push(P);
+        if (pin !== qin) {
+          const kk = (near - P[0]) / (Q[0] - P[0]);
+          out.push([near, P[1] + (Q[1] - P[1]) * kk, P[2] + (Q[2] - P[2]) * kk, P[3] + (Q[3] - P[3]) * kk, P[4] + (Q[4] - P[4]) * kk, P[5] + (Q[5] - P[5]) * kk]);
+        }
+      }
+      const proj = (v) => [vcx + (v[1] * sc) / v[0], vcy - (v[2] * sc) / v[0], (1 / v[0]) * depthHack, v[3], v[4], v[5]];
+      const drawTri = (P, Q, S) => {
+        const a = proj(P), b = proj(Q), c = proj(S);
+        if ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) <= 0) return;
+        this.triangle(a[0], a[1], a[2], a[3], a[4], a[5], b[0], b[1], b[2], b[3], b[4], b[5], c[0], c[1], c[2], c[3], c[4], c[5], skinData, skinW, skinH, transparent, noZ, alpha, shell);
+      };
+      drawTri(out[0], out[1], out[2]);
+      if (out.length === 4) drawTri(out[0], out[2], out[3]);
     }
     return anyNear;
+  }
+
+  /** One edge of a triangle into the scanline tables (x, 1/z, s, t, light). */
+  triEdge(ya, yb, ax, ay, aiz, as, at, al, bx, by, biz, bs, bt, bl) {
+    if (ay === by) return;
+    if (ay > by) {
+      let t = ax; ax = bx; bx = t; t = ay; ay = by; by = t; t = aiz; aiz = biz; biz = t;
+      t = as; as = bs; bs = t; t = at; at = bt; bt = t; t = al; al = bl; bl = t;
+    }
+    const { edgeL, edgeR } = this;
+    const dy = by - ay;
+    const dx = (bx - ax) / dy, diz = (biz - aiz) / dy, ds = (bs - as) / dy, dt = (bt - at) / dy, dl = (bl - al) / dy;
+    const ys = Math.max(ya, Math.ceil(ay - 0.5)), ye = Math.min(yb, Math.ceil(by - 0.5) - 1);
+    for (let y = ys; y <= ye; y++) {
+      const t = y + 0.5 - ay, x = ax + dx * t, o = y * 5;
+      if (x < edgeL[o]) { edgeL[o] = x; edgeL[o + 1] = aiz + diz * t; edgeL[o + 2] = as + ds * t; edgeL[o + 3] = at + dt * t; edgeL[o + 4] = al + dl * t; }
+      if (x > edgeR[o]) { edgeR[o] = x; edgeR[o + 1] = aiz + diz * t; edgeR[o + 2] = as + ds * t; edgeR[o + 3] = at + dt * t; edgeR[o + 4] = al + dl * t; }
+    }
   }
 
   /** A Gouraud-lit, affine-textured triangle with z-test. shell: a flat colour instead of the skin. */
@@ -460,22 +585,12 @@ export class Renderer {
     const ya = Math.max(0, Math.ceil(ymin - 0.5)), yb = Math.min(h - 1, Math.ceil(ymax - 0.5) - 1);
     if (ya > yb) return;
     for (let y = ya; y <= yb; y++) { edgeL[y * 5] = Infinity; edgeR[y * 5] = -Infinity; }
-    const edge = (ax, ay, aiz, as, at, al, bx, by, biz, bs, bt, bl) => {
-      if (ay === by) return;
-      if (ay > by) { [ax, bx] = [bx, ax]; [ay, by] = [by, ay]; [aiz, biz] = [biz, aiz]; [as, bs] = [bs, as]; [at, bt] = [bt, at]; [al, bl] = [bl, al]; }
-      const dy = by - ay;
-      const dx = (bx - ax) / dy, diz = (biz - aiz) / dy, ds = (bs - as) / dy, dt = (bt - at) / dy, dl = (bl - al) / dy;
-      const ys = Math.max(ya, Math.ceil(ay - 0.5)), ye = Math.min(yb, Math.ceil(by - 0.5) - 1);
-      for (let y = ys; y <= ye; y++) {
-        const t = y + 0.5 - ay, x = ax + dx * t, o = y * 5;
-        if (x < edgeL[o]) { edgeL[o] = x; edgeL[o + 1] = aiz + diz * t; edgeL[o + 2] = as + ds * t; edgeL[o + 3] = at + dt * t; edgeL[o + 4] = al + dl * t; }
-        if (x > edgeR[o]) { edgeR[o] = x; edgeR[o + 1] = aiz + diz * t; edgeR[o + 2] = as + ds * t; edgeR[o + 3] = at + dt * t; edgeR[o + 4] = al + dl * t; }
-      }
-    };
-    edge(x0, y0, iz0, s0, t0, l0, x1, y1, iz1, s1, t1, l1);
-    edge(x1, y1, iz1, s1, t1, l1, x2, y2, iz2, s2, t2, l2);
-    edge(x2, y2, iz2, s2, t2, l2, x0, y0, iz0, s0, t0, l0);
+    this.triEdge(ya, yb, x0, y0, iz0, s0, t0, l0, x1, y1, iz1, s1, t1, l1);
+    this.triEdge(ya, yb, x1, y1, iz1, s1, t1, l1, x2, y2, iz2, s2, t2, l2);
+    this.triEdge(ya, yb, x2, y2, iz2, s2, t2, l2, x0, y0, iz0, s0, t0, l0);
     const am = this.alphamap;
+    const blend = alpha && am;
+    const flat = shell != null;
     for (let y = ya; y <= yb; y++) {
       const o = y * 5, xl = edgeL[o], xr = edgeR[o];
       if (xl === Infinity) continue;
@@ -492,13 +607,13 @@ export class Renderer {
         let si = s | 0, ti = t | 0;
         if (si < 0) si = 0; else if (si >= tw) si = tw - 1;
         if (ti < 0) ti = 0; else if (ti >= th) ti = th - 1;
-        const c = shell != null ? shell : tex[ti * tw + si];
+        const c = flat ? shell : tex[ti * tw + si];
         if (c === transparent) continue;
         zb[idx] = iz;
-        let shade = (255 - l) >> 2;
-        if (shade < 0) shade = 0; else if (shade > 63) shade = 63;
-        const lit = colormap[(shade << 8) | c];
-        fb[idx] = alpha && am ? am[fb[idx] + (lit << 8)] : lit;
+        let sh = (255 - l) >> 2;
+        if (sh < 0) sh = 0; else if (sh > 63) sh = 63;
+        const lit = colormap[(sh << 8) | c];
+        fb[idx] = blend ? am[fb[idx] + (lit << 8)] : lit;
       }
     }
   }
@@ -690,12 +805,8 @@ export function angleMatrix([pitch, yaw, roll]) {
   return [cp * cy, sr * sp * cy - cr * sy, cr * sp * cy + sr * sy, cp * sy, sr * sp * sy + cr * cy, cr * sp * sy - sr * cy, -sp, sr * cp, cr * cp];
 }
 
-/** The sky box: pick the face by the pixel direction's major axis (R_DrawSkyBox's vec_to_st). */
-function skyPixel(sky, view, x, y) {
-  const kx = (x + 0.5 - view.cx) / view.scale, ky = (view.cy - y - 0.5) / view.scale;
-  const dx = view.fwd[0] + view.right[0] * kx + view.up[0] * ky;
-  const dy = view.fwd[1] + view.right[1] * kx + view.up[1] * ky;
-  const dz = view.fwd[2] + view.right[2] * kx + view.up[2] * ky;
+/** The sky box: pick the face by the ray direction's major axis (R_DrawSkyBox's vec_to_st). */
+function skyDir(sky, dx, dy, dz) {
   const ax = Math.abs(dx), ay = Math.abs(dy), az = Math.abs(dz);
   let axis, s, t;
   if (ax >= ay && ax >= az) {
