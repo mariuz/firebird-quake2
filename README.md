@@ -134,7 +134,9 @@ and entity rows for scripts and the SQL console.
 An 8-bit framebuffer of palette indices and a z-buffer, like ref_soft. Polygons are scan-converted with
 perspective-correct spans over a surface cache: the `.wal` tiled under the face's lightmap (the RGB
 lightmap collapsed to its brightest channel, as `Mod_LoadLighting` did), run through `colormap.pcx`. As in
-`D_DrawSpans16`, the texel coordinates are divided out every 16 pixels and stepped linearly between, and a
+`D_DrawSpans16`, the texel coordinates are divided out every 16 pixels and stepped linearly between, the
+mip level is chosen per surface as `D_MipLevelForScale` chose it (so far walls come from the smaller
+images and don't shimmer), and a
 surface is built the way `R_DrawSurfaceBlock8` did it: one row of light values interpolated per texel row,
 stepped along it, so the painter spends about 2 ms on a 320×240 frame in Node and 8 ms when every surface
 in view has to be rebuilt (a light style changed, a new area opened), down from 3 and 30.

@@ -22,7 +22,7 @@
     "test:save": "node scripts/save-test.mjs",
     "test:base3": "node scripts/sql-smoke.mjs demo3",
     "test:menu": "node scripts/menu-test.mjs",
-    "test:dlight": "node scripts/dlight-test.mjs"
+    "test:painter": "node scripts/painter-test.mjs"
   },
   "license": "MIT",
   "dependencies": {

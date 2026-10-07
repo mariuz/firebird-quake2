@@ -95,7 +95,7 @@ export class Renderer {
   }
 
   // ── surface cache (R_DrawSurface) ───────────────────────────────────────
-  surface(faceId, styles, time, frame) {
+  surface(faceId, styles, time, frame, mip = 0) {
     const info = this.faceInfo.get(faceId);
     if (!info) return null;
     const { bsp, f, ti } = info;
@@ -115,7 +115,7 @@ export class Renderer {
     // a face a dynamic light reaches is built afresh for this frame and not cached (ref_soft did the same)
     if (this.dlights.length && !(f.flags & (SURF.SKY | SURF.WARP))) {
       const lit = this.faceDlights(bsp, f, ti);
-      if (lit) return this.buildSurface(bsp, f, tex, styles, lit);
+      if (lit) return this.buildSurface(bsp, f, tex, styles, lit, mip);
     }
     let light = 0;
     const fs = f.styles;
@@ -123,12 +123,12 @@ export class Renderer {
       const v = styles[fs[i]] ?? 1;
       light = light * 7 + Math.round(v * 16);
     }
-    // face, texture and light levels in one number (the brightness setting clears the cache)
-    const key = (faceId * 4096 + tex.id) * 16384 + light;
+    // face, texture, light levels and mip level in one number (the brightness setting clears the cache)
+    const key = ((faceId * 4096 + tex.id) * 16384 + light) * 4 + mip;
     let s = this.surfCache.get(key);
     if (s !== undefined) return s;
     if (this.surfCache.size > SURF_CACHE_MAX) this.surfCache.clear();
-    s = this.buildSurface(bsp, f, tex, styles);
+    s = this.buildSurface(bsp, f, tex, styles, null, mip);
     this.surfCache.set(key, s);
     return s;
   }
@@ -161,9 +161,13 @@ export class Renderer {
    * lightmap is bilinear over 16×16 texel blocks: one row of light values is
    * interpolated per texel row, then stepped along it (R_DrawSurfaceBlock8).
    */
-  buildSurface(bsp, f, tex, styles, lit = null) {
-    const sw = Math.max(1, f.extents[0]);
-    const sh = Math.max(1, f.extents[1]);
+  buildSurface(bsp, f, tex, styles, lit = null, mip = 0) {
+    // at mip level k the surface is the extents >> k from the .wal's k-th image, a light sample every 16 >> k
+    // pixels (R_DrawSurface's surfmip, blocksize, blockdivshift)
+    if (!tex.mips[mip]) mip = 0;
+    const sw = Math.max(1, f.extents[0] >> mip);
+    const sh = Math.max(1, f.extents[1] >> mip);
+    const bs = 16 >> mip, bshift = 4 - mip;
     const data = new Uint8Array(sw * sh);
     const lw = f.lightW;
     const lh = f.lightH;
@@ -197,14 +201,15 @@ export class Renderer {
       }
     }
     const cm = this.colormap;
-    const texw = tex.w, texh = tex.h, mip = tex.mips[0];
+    const texw = Math.max(1, tex.w >> mip), texh = Math.max(1, tex.h >> mip), pix = tex.mips[mip];
     const smin = f.texturemins[0], tmin = f.texturemins[1];
+    const msmin = smin >> mip, mtmin = tmin >> mip;
     const col = new Int32Array(sw);
-    for (let u = 0; u < sw; u++) col[u] = (((u + smin) % texw) + texw) % texw;
+    for (let u = 0; u < sw; u++) col[u] = (((u + msmin) % texw) + texw) % texw;
     const rowL = new Float32Array(lw);
     for (let v = 0; v < sh; v++) {
-      const mrow = ((((v + tmin) % texh) + texh) % texh) * texw;
-      const lv = v >> 4, lf = (v & 15) / 16;
+      const mrow = ((((v + mtmin) % texh) + texh) % texh) * texw;
+      const lv = v >> bshift, lf = (v & (bs - 1)) / bs;
       const lv1 = Math.min(lv + 1, lh - 1);
       const b0 = lv * lw, b1 = lv1 * lw;
       for (let lu = 0; lu < lw; lu++) rowL[lu] = block[b0 + lu] * (1 - lf) + block[b1 + lu] * lf;
@@ -212,16 +217,16 @@ export class Renderer {
       let u = 0;
       for (let lu = 0; u < sw; lu++) {
         let l = rowL[lu];
-        const step = (rowL[Math.min(lu + 1, lw - 1)] - l) / 16;
-        const end = Math.min(sw, u + 16);
+        const step = (rowL[Math.min(lu + 1, lw - 1)] - l) / bs;
+        const end = Math.min(sw, u + bs);
         for (; u < end; u++, l += step) {
           let shade = (255 - l) >> 2;
           if (shade < 0) shade = 0; else if (shade > 63) shade = 63;
-          data[row + u] = cm[(shade << 8) | mip[mrow + col[u]]];
+          data[row + u] = cm[(shade << 8) | pix[mrow + col[u]]];
         }
       }
     }
-    return { data, w: sw, h: sh, smin, tmin, mask: (sw & (sw - 1)) === 0 && (sh & (sh - 1)) === 0 };
+    return { data, w: sw, h: sh, smin, tmin, ms: 1 / (1 << mip), mask: (sw & (sw - 1)) === 0 && (sh & (sh - 1)) === 0 };
   }
 
   // ── a frame ─────────────────────────────────────────────────────────────
@@ -375,7 +380,15 @@ export class Renderer {
       if (!ws) ws = tex.warp = { data: tex.mips[0], w: tex.w, h: tex.h, smin: 0, tmin: 0, mask: (tex.w & (tex.w - 1)) === 0 && (tex.h & (tex.h - 1)) === 0 };
       this.fillPolygon(poly, n, ws, 1, time, blend, scroll);
     } else {
-      const s = this.surface(face, styles, time, entFrames.get(ent) ?? 0);
+      // D_SolidSurf: the mip level from the nearest point's 1/z, the projection scale and the texture's own
+      // scale (translucent surfaces are drawn from the full-size image, as R_DrawAlphaSurfaces drew them)
+      let mip = 0;
+      if (!blend) {
+        let nearzi = 0;
+        for (let k = 0; k < n; k++) { const iz = 1 / poly[k * 5 + 2]; if (iz > nearzi) nearzi = iz; }
+        mip = mipLevel(nearzi * this.view.scale * mipAdjust(info.ti));
+      }
+      const s = this.surface(face, styles, time, entFrames.get(ent) ?? 0, mip);
       const scroll = flags & SURF.FLOWING ? -128 * ((time * 0.77) % 1) : 0;
       if (s) this.fillPolygon(poly, n, s, 0, time, blend, scroll);
     }
@@ -442,7 +455,7 @@ export class Renderer {
       return;
     }
     const sd = surf.data;
-    const sw = surf.w, sh = surf.h, smin = surf.smin - scroll, tmin = surf.tmin;
+    const sw = surf.w, sh = surf.h, smin = surf.smin - scroll, tmin = surf.tmin, ms = surf.ms ?? 1;
     const pow2 = surf.mask, swm = sw - 1, shm = sh - 1;
     const sin = this.sinTable;
     const tphase = (time * 20) & 255;
@@ -462,13 +475,13 @@ export class Renderer {
       const t0 = xs + 0.5 - xl;
       let iz = edgeL[o + 1] + diz * t0, sz = edgeL[o + 2] + dsz * t0, tz = edgeL[o + 3] + dtz * t0;
       let idx = y * w + xs;
-      let z = 1 / iz, s = sz * z - smin, t = tz * z - tmin;
+      let z = 1 / iz, s = (sz * z - smin) * ms, t = (tz * z - tmin) * ms;
       let x = xs;
       while (x <= xe) {
         const run = xe - x + 1 < 16 ? xe - x + 1 : 16;
         const iz2 = iz + diz * run, sz2 = sz + dsz * run, tz2 = tz + dtz * run;
         z = 1 / iz2;
-        const s2 = sz2 * z - smin, t2 = tz2 * z - tmin;
+        const s2 = (sz2 * z - smin) * ms, t2 = (tz2 * z - tmin) * ms;
         const ds = (s2 - s) / run, dt = (t2 - t) / run;
         if (mode === 1) {
           for (let k = 0; k < run; k++, idx++, iz += diz, s += ds, t += dt) {
@@ -900,6 +913,23 @@ export function dlightAt(lights, x, y, z) {
     if (a > 0) add += a * (d.c ?? 2 / 3);
   }
   return add;
+}
+
+/**
+ * D_MipLevelForScale with sw_mipscale 1: d_scalemip is 1, 0.5 × 0.8 and 0.25 × 0.8 (a surface drawn at
+ * least as large as its texels is mip 0, from 0.4 mip 1, from 0.2 mip 2, below that mip 3).
+ */
+export function mipLevel(scale) {
+  return scale >= 1 ? 0 : scale >= 0.4 ? 1 : scale >= 0.2 ? 2 : 3;
+}
+
+/** Mod_LoadTexinfo's mipadjust: a texture stretched small (long texture vectors) needs less detail. */
+function mipAdjust(ti) {
+  if (ti.mipadjust === undefined) {
+    const len = (Math.hypot(ti.s[0], ti.s[1], ti.s[2]) + Math.hypot(ti.t[0], ti.t[1], ti.t[2])) / 2;
+    ti.mipadjust = len < 0.32 ? 4 : len < 0.49 ? 3 : len < 0.99 ? 2 : 1;
+  }
+  return ti.mipadjust;
 }
 
 /** R_LightPoint: the lightmap value of the floor below a point (for models). */

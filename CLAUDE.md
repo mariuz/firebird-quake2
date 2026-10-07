@@ -25,13 +25,13 @@ npm test && npm run test:base2 && npm run test:base3   # smoke tests, demo1, dem
 npm run test:monsters                 # every monster: sees, attacks, dies
 npm run test:save                     # save, play on, load: the game comes back exactly
 npm run test:menu                     # the menus, headless: keys, slots, settings, pictures
-npm run test:dlight                   # dynamic lights in the painter, headless
+npm run test:painter                  # the painter headless: dynamic lights, mip levels
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
 ```
 
-A change is done when: `sql-check` passes, the three smoke tests, the monsters, save, menu and dlight tests say `all good`,
+A change is done when: `sql-check` passes, the three smoke tests, the monsters, save, menu and painter tests say `all good`,
 `screenshot.mjs --compare` reports `differ in 0 of 76800 pixels` on demo1 and demo2 (and the
 viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), the page runs
 in a real browser without console errors, and CI is green. Commit messages here are written as

@@ -1,14 +1,16 @@
-// dlight-test.mjs – dynamic lights in the painter (R_MarkLights, R_AddDynamicLights, R_LightPoint):
-// a light near a face brightens its surface by what is left of its radius, from either side of the
-// plane, a face out of reach keeps its cached surface, and lit surfaces are never cached.
-//   node scripts/dlight-test.mjs [map]
+// painter-test.mjs – the painter's surfaces, headless. Dynamic lights (R_MarkLights, R_AddDynamicLights,
+// R_LightPoint): a light near a face brightens its surface by what is left of its radius, from either side
+// of the plane, a face out of reach keeps its cached surface, lit surfaces are never cached. Mip levels
+// (D_MipLevelForScale, R_DrawSurface's surfmip): the thresholds, a surface at a level, and a frame that
+// draws its far walls from smaller images.
+//   node scripts/painter-test.mjs [map]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak, loadColormap } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
-import { Renderer, dlightAt } from '../src/renderer.js';
+import { Renderer, dlightAt, mipLevel } from '../src/renderer.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mapName = process.argv[2] ?? 'demo1';
@@ -64,5 +66,23 @@ const small = r.surface(id, styles, 0, 0);
 assert(lum(small) > lum(plain) && lum(small) < lum(lit), `a smaller light brightens less (${lum(small).toFixed(0)})`);
 assert(Math.abs(dlightAt([{ x: 0, y: 0, z: 0, r: 200, c: 1 }], 50, 0, 0) - 150) < 1e-9 && dlightAt([{ x: 0, y: 0, z: 0, r: 200 }], 300, 0, 0) === 0,
   'R_LightPoint adds intensity less distance to models, nothing out of reach');
+// mip levels
+assert(mipLevel(1) === 0 && mipLevel(0.99) === 1 && mipLevel(0.4) === 1 && mipLevel(0.39) === 2 && mipLevel(0.2) === 2 && mipLevel(0.19) === 3,
+  'D_MipLevelForScale: 1, 0.4 and 0.2 are where the levels change');
+r.dlights = [];
+const before = r.surfCache.size;
+const m2 = r.surface(id, styles, 0, 0, 2);
+assert(m2 !== plain && m2.w === f.extents[0] >> 2 && m2.h === f.extents[1] >> 2 && m2.ms === 0.25 && r.surfCache.size === before + 1,
+  `a surface at mip 2 is a quarter the size (${m2.w}×${m2.h} of ${plain.w}×${plain.h}), its texels a quarter, cached apart`);
+assert(Math.abs(lum(m2) - lum(plain)) < 12, `... and about as bright (${lum(m2).toFixed(0)} against ${lum(plain).toFixed(0)})`);
+// a frame from the start: the near walls at mip 0, the far ones at higher levels
+const last = (await db.query('SELECT * FROM q2_tic(1, 0, 0, 0, 0, 0, 0, 1, 0)', [], { rowMode: 'object' })).rows[0];
+const rows = (await db.query('SELECT * FROM frame_faces_fast', [], { rowMode: 'array' })).rows;
+r.surfCache.clear();
+r.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: 0, fov: 90 });
+r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
+const levels = [0, 0, 0, 0];
+for (const k of r.surfCache.keys()) levels[k % 4]++;
+assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws near surfaces at mip 0 and far ones smaller (by level: ${levels.join(' ')})`);
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

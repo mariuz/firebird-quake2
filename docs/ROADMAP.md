@@ -143,8 +143,13 @@ them.
   cached; models get `R_LightPoint`'s intensity less distance. Monochrome, as ref_soft was. Left: brush
   models are lit in their BSP position (a moved door or a rotating fan takes the light where it stood), and
   only lights carried by drawn entities count (one behind the view does not light the wall in front).
-- **Mipmaps**: the painter samples mip 0 always; ref_soft picked the mip level by scale, which
-  is the visible difference on far walls (shimmer). `Wal.mips` has all four.
+- **Mipmaps**: done, as ref_soft chose them. Each polygon's level is `D_MipLevelForScale` of the nearest
+  vertex's 1/z times the projection scale times the texture's `mipadjust` (from the length of its texture
+  vectors), against `d_scalemip`'s 1, 0.4 and 0.2; the surface is cached per level, built from the
+  `.wal`'s smaller image with a light sample every 16 >> level pixels, and the spans step the texels scaled
+  to it. Far walls no longer shimmer, and a cold frame builds faster (smaller surfaces). Warping and
+  translucent surfaces stay at the full-size image, as ref_soft drew them. At 320×240 most of a room is
+  drawn at mip 1 or 2, as it was in the software renderer at that size.
 - **Translucent water from inside / warp surfaces**: the underwater screen warp
   (`D_WarpScreen`) is not done; the tint is.
 - **Entity lighting**: alias models take the lightmap value under them, the dynamic lights near them and

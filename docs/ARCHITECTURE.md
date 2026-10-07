@@ -248,13 +248,16 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   `colormap.pcx` (64 shades × 256 colours), built by `buildSurface` the way `R_DrawSurfaceBlock8`
   did: one row of light values interpolated per texel row, stepped along it; the texture column
   wrap is tabled. Surfaces are cached by face, texture (animation frame) and the face's light
-  style values; the cache clears at 2000 entries and when the brightness setting changes.
+  style values and the mip level; the cache clears at 2000 entries and when the brightness setting
+  changes. The level is chosen per polygon in `drawSurfacePoly` (`mipLevel`, `D_MipLevelForScale`:
+  the nearest vertex's 1/z × `view.scale` × the texinfo's `mipadjust`); a surface at level k is
+  `extents >> k` from `tex.mips[k]`, and its `ms` (1/2^k) scales the texels in `fillPolygon`.
 - **Dynamic lights.** `renderer.dlights` is the frame's lights (`frameDlights` in `src/main.js`: muzzle
   flashes from fx 15, projectiles by their effects bits, explosions fading). `faceDlights` is
   `R_MarkLights` face by face (the plane distance, the reach across the face); a face it returns lights
   for is built by `buildSurface` with `R_AddDynamicLights`'s term added to the samples and is not
   cached. `dlightAt` is `R_LightPoint`'s dynamic part for models and the view weapon.
-  `scripts/dlight-test.mjs` checks it headless; `scripts/screenshot.mjs --flash` paints frames lit by a
+  `scripts/painter-test.mjs` checks it headless; `scripts/screenshot.mjs --flash` paints frames lit by a
   muzzle flash.
 - **Polygons.** `drawFaceList` takes the frame's face rows, transforms the BSP vertices it holds
   (with the brush model's origin and rotation matrix), clips at the near plane in view space and
