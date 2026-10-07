@@ -312,9 +312,11 @@ END^
 -- "use <weapon>" for a key 1..0, cycling, and the cheats
 CREATE OR ALTER PROCEDURE player_impulse (imp SMALLINT)
 AS
-DECLARE have INTEGER; DECLARE w INTEGER; DECLARE i INTEGER; DECLARE ak SMALLINT;
+DECLARE have INTEGER; DECLARE w INTEGER; DECLARE i INTEGER; DECLARE ak SMALLINT; DECLARE cur INTEGER; DECLARE n INTEGER;
+DECLARE wname VARCHAR(20); DECLARE aname VARCHAR(10);
 BEGIN
   SELECT p.weapons, p.weapon FROM player p WHERE p.id = 1 INTO have, w;
+  cur = w;
   IF (imp = 99) THEN                                                     -- give all
   BEGIN
     UPDATE player p SET p.weapons = 2047, p.bullets = p.max_bullets, p.shells = p.max_shells, p.rockets = p.max_rockets, p.grenades = p.max_grenades,
@@ -323,34 +325,51 @@ BEGIN
     EXECUTE PROCEDURE sprint('Very impressive');
     EXIT;
   END
-  IF (imp = 12) THEN                                                     -- cycle to the next weapon held
+  -- the impulses are the weapons in item order (1 blaster … 6 hand grenades … 11 BFG10K); the page maps
+  -- default.cfg's keys onto them: 1-5, 6 grenade launcher … 0 BFG10K, G "use grenades"
+  IF (imp = 12) THEN
   BEGIN
+    -- Cmd_WeapNext: the next weapon held, in item order, that Use_Weapon accepts (one with the ammo for a
+    -- shot; hand grenades are their own ammo). (Quake 2 also printed the refusals it passed over.)
     i = 0;
+    cur = w;
     WHILE (i < 11) DO
     BEGIN
-      w = IIF(w >= 1024, 1, w * 2);
-      IF (BIN_AND(have, w) <> 0) THEN LEAVE;
+      w = IIF(w >= 1024 OR w < 1, 1, w * 2);
+      IF (w = cur) THEN EXIT;
+      IF (BIN_AND(have, w) <> 0) THEN
+      BEGIN
+        ak = weapon_ammo(w);
+        IF (w = 32 OR ak = 0 OR ammo_count(ak) >= IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN LEAVE;
+      END
       i = i + 1;
     END
-    UPDATE player p SET p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0 WHERE p.id = 1;
-    EXIT;
+    IF (i >= 11) THEN EXIT;
   END
-  w = CASE imp WHEN 1 THEN 1 WHEN 2 THEN 2 WHEN 3 THEN 4 WHEN 4 THEN 8 WHEN 5 THEN 16 WHEN 6 THEN 32 WHEN 7 THEN 64 WHEN 8 THEN 128 WHEN 9 THEN 256 WHEN 10 THEN 512 WHEN 11 THEN 1024 ELSE 0 END;
-  IF (w = 0 OR BIN_AND(have, w) = 0) THEN
+  ELSE
   BEGIN
-    IF (w <> 0) THEN EXECUTE PROCEDURE sprint('Out of item: ' || CASE w WHEN 2 THEN 'Shotgun' WHEN 4 THEN 'Super Shotgun' WHEN 8 THEN 'Machinegun' WHEN 16 THEN 'Chaingun' WHEN 32 THEN 'Grenades' WHEN 64 THEN 'Grenade Launcher' WHEN 128 THEN 'Rocket Launcher' WHEN 256 THEN 'HyperBlaster' WHEN 512 THEN 'Railgun' ELSE 'BFG10K' END);
-    EXIT;
+    -- Cmd_Use_f: a weapon not held is "out of item"; Use_Weapon: one already up does nothing, and one
+    -- without the ammo for a shot is refused with the ammo's name
+    w = CASE imp WHEN 1 THEN 1 WHEN 2 THEN 2 WHEN 3 THEN 4 WHEN 4 THEN 8 WHEN 5 THEN 16 WHEN 6 THEN 32 WHEN 7 THEN 64 WHEN 8 THEN 128 WHEN 9 THEN 256 WHEN 10 THEN 512 WHEN 11 THEN 1024 ELSE 0 END;
+    IF (w = 0) THEN EXIT;
+    wname = TRIM(CASE w WHEN 1 THEN 'Blaster' WHEN 2 THEN 'Shotgun' WHEN 4 THEN 'Super Shotgun' WHEN 8 THEN 'Machinegun' WHEN 16 THEN 'Chaingun' WHEN 32 THEN 'Grenades'
+                 WHEN 64 THEN 'Grenade Launcher' WHEN 128 THEN 'Rocket Launcher' WHEN 256 THEN 'HyperBlaster' WHEN 512 THEN 'Railgun' ELSE 'BFG10K' END);
+    IF (BIN_AND(have, w) = 0) THEN
+    BEGIN
+      EXECUTE PROCEDURE sprint('Out of item: ' || wname);
+      EXIT;
+    END
+    IF (w = cur) THEN EXIT;
+    ak = weapon_ammo(w);
+    IF (ak > 0 AND w <> 32) THEN
+    BEGIN
+      n = ammo_count(ak);
+      aname = TRIM(CASE ak WHEN 1 THEN 'Shells' WHEN 2 THEN 'Bullets' WHEN 3 THEN 'Grenades' WHEN 4 THEN 'Rockets' WHEN 5 THEN 'Cells' ELSE 'Slugs' END);
+      IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('No ' || aname || ' for ' || wname || '.'); EXIT; END
+      IF (n < IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN BEGIN EXECUTE PROCEDURE sprint('Not enough ' || aname || ' for ' || wname || '.'); EXIT; END
+    END
   END
-  ak = weapon_ammo(w);
-  IF (ak > 0 AND ammo_count(ak) < IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN
-  BEGIN
-    EXECUTE PROCEDURE sprint('Not enough ammo for ' || CASE w WHEN 2 THEN 'Shotgun' WHEN 4 THEN 'Super Shotgun' WHEN 8 THEN 'Machinegun' WHEN 16 THEN 'Chaingun' WHEN 32 THEN 'Grenades' WHEN 64 THEN 'Grenade Launcher' WHEN 128 THEN 'Rocket Launcher' WHEN 256 THEN 'HyperBlaster' WHEN 512 THEN 'Railgun' ELSE 'BFG10K' END || '.');
-    EXIT;
-  END
-  IF (w <> (SELECT p.weapon FROM player p WHERE p.id = 1)) THEN
-  BEGIN
-    UPDATE player p SET p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0, p.attack_finished = MAXVALUE(p.attack_finished, now_() + 0.3e0) WHERE p.id = 1;
-  END
+  UPDATE player p SET p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0, p.attack_finished = MAXVALUE(p.attack_finished, now_() + 0.3e0) WHERE p.id = 1;
 END^
 
 -- ClientThink + Pmove + ClientEndServerFrame for one tic

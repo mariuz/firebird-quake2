@@ -97,10 +97,15 @@ them.
   friction has just taken away (the row kept 12 units a second forever). And a saved game now comes
   back exactly: a double passed as a query parameter goes to Firebird as text, whose conversion lost the
   last bit of one value in six, so `importSave` sends doubles as an integer and a power of two.
-- **Weapon keys.** The page's 1–0 keys give hand grenades slot 6, so 6–0 select one weapon later than
-  Quake 2's default layout (6 grenade launcher, 7 rocket launcher, 8 hyperblaster, 9 railgun, 0 BFG10K;
-  hand grenades had no number key). Changing it means remapping the keys in `src/main.js` and the
-  impulse numbers the tests use.
+- **Weapon keys**: done, as the demo's own `default.cfg` binds them: 1–5 blaster to chaingun, 6 grenade
+  launcher, 7 rocket launcher, 8 hyperblaster, 9 railgun, 0 BFG10K, and `G` "use grenades" (the page's
+  give-everything key moved to the console's `give all`). Choosing follows `Cmd_Use_f` and
+  `Use_Weapon`: "Out of item: Shotgun", "No Shells for Shotgun.", "Not enough Cells for BFG10K.";
+  `/` and the wheel (`weapnext`) pass over weapons without the ammo for a shot.
+- **Powerups in the inventory.** Single-player Quake 2 put a picked-up quad, invulnerability, rebreather,
+  environment suit and silencer in the inventory, used with `default.cfg`'s keys (`q`, `i`, `b`, `e`,
+  `s`) or the inventory (`TAB`, `[` `]`, `ENTER`), at most one held (two on easy and medium); here
+  they take effect on pickup, as deathmatch's instant items did.
 - **HUD.** The status bar and the main numbers, pickup messages, centre prints and the help
   computer (`F1`) are in; the inventory screen, the score board and the menu system are not.
 

@@ -274,8 +274,11 @@ Music was CD audio: `public/music/trackNN.ogg|mp3`, or a folder picked on the pa
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail,
 brightness, renderer mode, sound, music) persist in `localStorage`. Input: WASD/arrows, mouse look
-under pointer lock, digits for weapons (`impulse` 1–10), `/` or the wheel to cycle (12), `G` gives
-everything (99), `P` pauses; on touch screens the halves of the screen move and look.
+under pointer lock, `default.cfg`'s weapon keys (1–5 blaster to chaingun, 6 grenade launcher, 7 rocket
+launcher, 8 hyperblaster, 9 railgun, 0 BFG10K, `G` hand grenades) sent as impulses that are the weapons
+in item order (1 blaster … 6 hand grenades … 11 BFG10K), `/` or the wheel for the next weapon with ammo
+(12), `P` pauses; everything (99) is the console's `give all`. On touch screens the halves of the
+screen move and look.
 
 Leaving a level: `changelevel` keeps the `target_changelevel`'s map string as written in `game.next_map`.
 A string with `*` (a unit's end) starts the intermission: `begin_intermission` moves the player to an

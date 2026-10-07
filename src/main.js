@@ -77,9 +77,11 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Backquote') { e.preventDefault(); openConsole(); return; }
   if (GAME_KEYS.has(e.code)) e.preventDefault();
   keys.add(e.code);
-  if (e.code.startsWith('Digit')) impulse = e.code === 'Digit0' ? 10 : Number(e.code.slice(5));
+  // default.cfg: 1-5 blaster to chaingun, 6 grenade launcher … 0 BFG10K, G "use grenades", / weapnext
+  // (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher)
+  if (e.code.startsWith('Digit')) impulse = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5, Digit6: 7, Digit7: 8, Digit8: 9, Digit9: 10, Digit0: 11 }[e.code];
+  if (e.code === 'KeyG') impulse = 6;
   if (e.code === 'Slash') impulse = 12;
-  if (e.code === 'KeyG') impulse = 99;
   if (e.code === 'KeyP' || e.code === 'Pause') paused = !paused;
   if (e.code === 'F6') { e.preventDefault(); saveGame(); }
   if (e.code === 'F9') { e.preventDefault(); loadGame(); }

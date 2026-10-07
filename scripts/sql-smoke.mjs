@@ -394,6 +394,34 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert(grounded === 6, `walking on a floor stays on the ground every tic (${grounded} of 6:${trail})`);
 }
 
+// choosing weapons (Cmd_Use_f, Use_Weapon, Cmd_WeapNext): the impulses are the weapons in item order
+{
+  const one = async (q) => (await db.query(q)).rows[0];
+  const keep = await one('SELECT weapons, weapon, shells, bullets, cells FROM player WHERE id = 1');
+  const use = async (imp) => { await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_impulse(${imp}); END`); return one('SELECT weapon, msg FROM player WHERE id = 1'); };
+  await db.exec('UPDATE player SET weapons = 2047, weapon = 1, shells = 10, bullets = 50, cells = 100, grenades = 5, rockets = 5, slugs = 5, msg = NULL WHERE id = 1');
+  let u = await use(7);
+  assert(u.WEAPON === 64, 'impulse 7 (the page\'s 6) raises the grenade launcher');
+  u = await use(6);
+  assert(u.WEAPON === 32, 'impulse 6 (the page\'s G, "use grenades") raises the hand grenades');
+  u = await use(11);
+  assert(u.WEAPON === 1024, 'impulse 11 (the page\'s 0) raises the BFG10K');
+  await db.exec('UPDATE player SET cells = 10, shells = 0 WHERE id = 1');
+  u = await use(1); u = await use(11);
+  assert(u.WEAPON === 1 && u.MSG === 'Not enough Cells for BFG10K.', `too few cells keep the BFG down (${u.MSG})`);
+  u = await use(2);
+  assert(u.WEAPON === 1 && u.MSG === 'No Shells for Shotgun.', `no shells, no shotgun (${u.MSG})`);
+  await db.exec('UPDATE player SET weapons = 1 + 4 + 8 WHERE id = 1');
+  u = await use(2);
+  assert(u.WEAPON === 1 && u.MSG === 'Out of item: Shotgun', `a weapon not held is out of item (${u.MSG})`);
+  u = await use(12);
+  assert(u.WEAPON === 8, 'the next weapon passes over the super shotgun without shells to the machinegun');
+  await db.exec('UPDATE player SET weapons = 1 WHERE id = 1');
+  u = await use(12);
+  assert(u.WEAPON === 1, '... and with nothing else held stays on the blaster');
+  await db.exec(`UPDATE player SET weapons = ${keep.WEAPONS}, weapon = ${keep.WEAPON}, shells = ${keep.SHELLS}, bullets = ${keep.BULLETS}, cells = ${keep.CELLS}, msg = NULL WHERE id = 1`);
+}
+
 // the console's commands: god, notarget, noclip through a wall, give, kill
 {
   const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;
