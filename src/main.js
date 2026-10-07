@@ -395,7 +395,9 @@ function handleFx(rows, time) {
       case 4: renderer.spawnParticles('rail', x, y, z, 0, [x2, y2, z2]); break;
       case 5: renderer.spawnParticles('teleport', x, y, z, 0); break;
       case 6: renderer.spawnParticles('gunshot', x, y, z, 40, [0, 0, 0], 0xe0); break;
-      case 7: renderer.spawnParticles('gunshot', x, y, z, Math.min(n >> 4, 64), [0, 0, 1], [0x00, 0xe0, 0x4a, 0x70, 0xe0, 0xb0, 0x08][n & 7] ?? 0); break;
+      // TE_SPLASH: count and colour (cl_tent.c's splash_color: unknown, sparks, blue water, brown water, slime, lava, blood)
+      case 7: renderer.spawnParticles('gunshot', x, y, z, Math.min(n >> 4, 64), [x2 || 0, y2 || 0, z2 || 1], [0x00, 0xe0, 0xb0, 0x50, 0xd0, 0xe0, 0xe8][n & 7] ?? 0); break;
+      case 14: renderer.spawnParticles('bubbles', x, y, z, 0, [x2, y2, z2]); break;   // TE_BUBBLETRAIL
       case 8: renderer.spawnParticles('bfg', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_bfg3.sp2'), scale: 1 }); break;
       case 10: renderer.spawnParticles('gunshot', x, y, z, 8, [0, 0, 1], 4); break;
       case 12: beams.push({ a: [x, y, z], b: [x2, y2, z2], color: 0xd0, until: time + 0.1 }); break;

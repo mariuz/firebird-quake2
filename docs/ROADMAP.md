@@ -74,9 +74,14 @@ them.
   no longer marked as energy damage, so armour protects fully against it. The per-cause death
   messages and the means-of-death bookkeeping are left out on purpose: Quake 2 prints them only in
   deathmatch and coop, and in single player says "died." and nothing else.
-- **Water.** Swimming, drowning, lava and slime damage, water surface warping and the underwater
-  tint are in. Missing: the water-entry splash particles and bubbles, `SURF_WARP` turbulence
-  speed by contents, the swim animation of monsters.
+- **Water**: done as far as Quake 2 had it. Bullets that reach water splash at the surface in its
+  colour (`TE_SPLASH`), go on under it with twice the spread and leave a bubble trail
+  (`TE_BUBBLETRAIL`), as `fire_lead` did; the splash colours are `cl_tent.c`'s (`target_splash`'s
+  slime, lava and blood used to come out orange, blue and grey). The rest of the old entry was not
+  Quake 2: both its renderers ripple every warping surface at one speed, a player or a grenade
+  entering water makes only a sound, and no monster of the demo swims (the full game's barracuda
+  shark is in the list of missing monsters). Left: murky water's brown splash, which Quake 2 told
+  from the surface's texture name (`*brwater`), not passed through the traces here.
 - **View.** Bob, step smoothing, kick and the death roll exist; the view weapon has no bob
   animation of its own, there is no `cl_run` toggle (shift walks), and crouching is not
   implemented at all (pmove's duck state and the 32-unit box).

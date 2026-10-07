@@ -34,7 +34,16 @@ DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PREC
 DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
 DECLARE i INTEGER = 0; DECLARE r1 DOUBLE PRECISION; DECLARE r2 DOUBLE PRECISION;
 DECLARE td SMALLINT; DECLARE hp INTEGER;
+DECLARE wet SMALLINT; DECLARE inwater SMALLINT; DECLARE mask INTEGER; DECLARE water SMALLINT;
+DECLARE wsx DOUBLE PRECISION; DECLARE wsy DOUBLE PRECISION; DECLARE wsz DOUBLE PRECISION; DECLARE color SMALLINT;
+DECLARE bx DOUBLE PRECISION; DECLARE by_ DOUBLE PRECISION; DECLARE bz DOUBLE PRECISION; DECLARE bl DOUBLE PRECISION;
+DECLARE tf DOUBLE PRECISION; DECLARE tx DOUBLE PRECISION; DECLARE ty DOUBLE PRECISION; DECLARE tz DOUBLE PRECISION; DECLARE tct INTEGER;
+DECLARE c INTEGER;
 BEGIN
+  -- (fire_lead: a shot looks for water only on a map that has some; a muzzle under water fires through it)
+  SELECT g.has_water FROM game g WHERE g.id = 1 INTO wet;
+  inwater = 0;
+  IF (wet = 1) THEN BEGIN c = point_contents(ox, oy, oz); inwater = IIF(BIN_AND(c, 56) <> 0, 1, 0); END
   al = vlen(dx, dy, dz);
   IF (al = 0) THEN EXIT;
   dx = dx / al; dy = dy / al; dz = dz / al;
@@ -47,8 +56,23 @@ BEGIN
   BEGIN
     r1 = crand() * hspread; r2 = crand() * vspread;
     ax = dx * 8192 + r1 * rx + r2 * ux; ay = dy * 8192 + r1 * ry + r2 * uy; az = dz * 8192 + r1 * rz + r2 * uz;
-    EXECUTE PROCEDURE trace_move(shooter, 0, 0, 0, 0, 0, 0, ox, oy, oz, ox + ax, oy + ay, oz + az, 100663299)
+    water = inwater; wsx = ox; wsy = oy; wsz = oz;
+    mask = IIF(wet = 1 AND inwater = 0, 100663299 + 56, 100663299);
+    EXECUTE PROCEDURE trace_move(shooter, 0, 0, 0, 0, 0, 0, ox, oy, oz, ox + ax, oy + ay, oz + az, mask)
       RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+    IF (f < 1 AND BIN_AND(ct, 56) <> 0) THEN
+    BEGIN
+      -- the shot hit water: a splash in its colour (TE_SPLASH: 2 water, 4 slime, 5 lava), then on under the
+      -- surface with twice the spread, the trace ignoring water this time
+      water = 1; wsx = hx; wsy = hy; wsz = hz;
+      color = IIF(BIN_AND(ct, 32) <> 0, 2, IIF(BIN_AND(ct, 16) <> 0, 4, 5));
+      EXECUTE PROCEDURE fx(7, hx, hy, hz, nx, ny, nz, 8 * 16 + color);
+      r1 = crand() * hspread * 2; r2 = crand() * vspread * 2;
+      bl = vlen(ax, ay, az);
+      ax = ax / bl * 8192 + r1 * rx + r2 * ux; ay = ay / bl * 8192 + r1 * ry + r2 * uy; az = az / bl * 8192 + r1 * rz + r2 * uz;
+      EXECUTE PROCEDURE trace_move(shooter, 0, 0, 0, 0, 0, 0, wsx, wsy, wsz, wsx + ax, wsy + ay, wsz + az, 100663299)
+        RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+    END
     IF (f < 1) THEN
     BEGIN
       td = 0;
@@ -60,6 +84,24 @@ BEGIN
       END
       ELSE IF (BIN_AND(sf, 4) = 0) THEN
         EXECUTE PROCEDURE fx(IIF(cnt > 1, 11, 1), hx, hy, hz, nx, ny, nz, 0);
+    END
+    IF (water = 1) THEN
+    BEGIN
+      -- the bubble trail (TE_BUBBLETRAIL) from where it went in to where it stopped, or to where it left the water
+      bl = vlen(hx - wsx, hy - wsy, hz - wsz);
+      IF (bl > 0) THEN
+      BEGIN
+        bx = hx - (hx - wsx) / bl * 2; by_ = hy - (hy - wsy) / bl * 2; bz = hz - (hz - wsz) / bl * 2;
+        c = point_contents(bx, by_, bz);
+        IF (BIN_AND(c, 56) <> 0) THEN BEGIN hx = bx; hy = by_; hz = bz; END
+        ELSE
+        BEGIN
+          EXECUTE PROCEDURE trace_move(NULL, 0, 0, 0, 0, 0, 0, bx, by_, bz, wsx, wsy, wsz, 56)
+            RETURNING_VALUES tf, tx, ty, tz, nx, ny, nz, sf, tct, als, sts, hit;
+          hx = tx; hy = ty; hz = tz;
+        END
+        EXECUTE PROCEDURE fx(14, wsx, wsy, wsz, hx, hy, hz, 0);
+      END
     END
     i = i + 1;
   END

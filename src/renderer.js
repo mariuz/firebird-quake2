@@ -653,6 +653,16 @@ export class Renderer {
         add({ x: x + i + Math.random() * 4, y: y + j + Math.random() * 4, z: z + k + Math.random() * 4, vx: (j / dl) * v, vy: (i / dl) * v, vz: (k / dl) * v,
           color: 7 + Math.floor(Math.random() * 8), die: now + 0.2 + Math.random() * 0.1, type: 'slowgrav' });
       }
+    } else if (kind === 'bubbles') {
+      // CL_BubbleTrail: a grey bubble every 32 units, drifting up for about a second
+      const [x2, y2, z2] = dir;
+      const dx = x2 - x, dy = y2 - y, dz = z2 - z;
+      const len = Math.hypot(dx, dy, dz);
+      for (let i = 0; i < len; i += 32) {
+        const k = len ? i / len : 0;
+        add({ x: x + dx * k + rnd() * 2, y: y + dy * k + rnd() * 2, z: z + dz * k + rnd() * 2, vx: rnd() * 5, vy: rnd() * 5, vz: rnd() * 5 + 6,
+          color: 4 + Math.floor(Math.random() * 8), die: now + 1 / (1 + Math.random() * 0.2), type: 'still' });
+      }
     } else if (kind === 'rail') {
       // CL_RailTrail: a blue spiral around the beam, white core
       const [x2, y2, z2] = dir;

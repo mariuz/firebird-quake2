@@ -309,6 +309,29 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert(!v || v.H <= 0, 'a func_killbox kills what is inside it when used');
 }
 
+// a shot into water: a splash at the surface in the water's colour, and a bubble trail under it
+{
+  const one = async (q) => (await db.query(q)).rows[0];
+  const leaves = (await db.query('SELECT FIRST 40 id, contents c, (minx + maxx) / 2 cx, (miny + maxy) / 2 cy, maxz FROM leaves WHERE BIN_AND(contents, 56) <> 0 ORDER BY maxx - minx DESC')).rows;
+  let done = false;
+  for (const l of leaves) {
+    const sx = l.CX, sy = l.CY, sz = l.MAXZ + 24;
+    if ((await one(`SELECT point_contents(${sx}, ${sy}, ${sz}) c FROM rdb$database`)).C !== 0) continue;
+    const t = await one(`SELECT fraction f, ez, contents c FROM trace_move(NULL, 0, 0, 0, 0, 0, 0, ${sx}, ${sy}, ${sz}, ${sx}, ${sy}, ${sz - 128}, 100663355)`);
+    if (t.F >= 1 || (t.C & 56) === 0) continue;
+    const id0 = (await one('SELECT COALESCE(MAX(id), 0) m FROM fx_events')).M;
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE fire_bullets(player_ent(), 1, ${sx}, ${sy}, ${sz}, 0, 0, -1, 0, 0, 4, 2); END`);
+    const fxs = (await db.query(`SELECT kind, z, z2, n FROM fx_events WHERE id > ${id0} ORDER BY id`)).rows;
+    const splash = fxs.find((r) => r.KIND === 7), bubbles = fxs.find((r) => r.KIND === 14);
+    const want = (l.C & 32) ? 2 : (l.C & 16) ? 4 : 5;
+    assert(splash && (splash.N & 7) === want && Math.abs(splash.Z - t.EZ) < 1, `a shot into ${want === 2 ? 'water' : want === 4 ? 'slime' : 'lava'} splashes at the surface (z ${splash?.Z?.toFixed(1)})`);
+    assert(bubbles && bubbles.Z2 < bubbles.Z, '... and leaves a bubble trail down from it');
+    done = true;
+    break;
+  }
+  if (!done) console.log('     (no open water surface found for the splash check)');
+}
+
 // the console's commands: god, notarget, noclip through a wall, give, kill
 {
   const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;
