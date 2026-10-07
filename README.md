@@ -34,6 +34,7 @@ npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs d
 npm run bench          # where a tic and a frame spend their time
 npm run bench:tic      # the cost of a tic over 200 tics of play (median, p90); add --walk for a moving player
 npm run bench:calls    # how many traces, leaf lookups and links a tic makes
+npm run bench:ab -- <dir>  # A/B the SQL against another copy of sql/, tics alternating between two databases
 npm run bench:raster   # where the painter spends its time (add --cold to rebuild every surface each frame)
 npm run inspect        # what is in the pak (maps, models and their frame runs, sounds)
 ```
@@ -167,6 +168,14 @@ text). New here:
   instead of probing the box's corners again, and the step's position write carries the link position
   so the relink writes nothing. The player's water check runs only after a move, and writes the row
   only when the level changed; a map without water skips it altogether.
+- **A function nested in a condition's expression runs twice.** `IF (f(x) = 1)` calls `f` once;
+  `IF (BIN_AND(f(x), 56) <> 0)` calls it twice. The water check of every monster step walked the tree
+  twice for that reason. Timing a procedure does not show this; counting its calls does.
+- **The player's tic writes its two rows once.** Pitch, the jump latch, the view's step smoothing and the
+  air timer used to be five writes of the player row and the yaw, the velocity and the ground flag three
+  of the entity row, every tic, standing still or not; they are one write each now, and a player standing
+  on the ground with no velocity does not move at all (the floor under them is re-checked twice a second
+  rather than, as pmove does, every frame).
 - **What nobody sees can think slowly.** A standing monster out of the player's PVS cannot see the player
   either, so it thinks at 3 Hz like a patrolling one does; in sight it is back to Quake's 10 Hz. That
   halved the thinks per tic. Moving the tree walk's arithmetic into the node fetch's select list, on the
@@ -180,7 +189,7 @@ text). New here:
   per view cluster rather than parsed from strings every frame.
 
 With all that, an idle tic on the Outer Base at medium skill (31 monsters, 14 of them patrolling) costs
-about 4 ms in Node (about 6.5 with the player walking), down from 40 at first and 20 after the first round;
+about 3.5 ms in Node (about 6 with the player walking), down from 40 at first and 20 after the first round;
 the frame's queries 5 to 8 ms, down from about 18.
 
 ## Licence

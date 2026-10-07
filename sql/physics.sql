@@ -696,7 +696,11 @@ BEGIN
 
   WHILE (bump < 4) DO
   BEGIN
-    IF (vx = 0 AND vy = 0 AND vz = 0) THEN LEAVE;
+    IF (vx = 0 AND vy = 0 AND vz = 0) THEN
+    BEGIN
+      IF (bump = 0) THEN BEGIN SUSPEND; EXIT; END   -- standing still: nothing to write
+      LEAVE;
+    END
     EXECUTE PROCEDURE trace_move(eid, mnx, mny, mnz, mxx, mxy, mxz, px, py, pz,
                                  px + time_left * vx, py + time_left * vy, pz + time_left * vz, mask)
       RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sfl, cts, allsolid, startsolid, hit;
@@ -812,21 +816,20 @@ END^
 
 -- PM_StepSlideMove for the player: slide, and if a wall stopped us try again
 -- from one step (18 units) up, keeping that only if it lands on ground.
-CREATE OR ALTER PROCEDURE walk_move (eid INTEGER, dt DOUBLE PRECISION)
+CREATE OR ALTER PROCEDURE walk_move (eid INTEGER, dt DOUBLE PRECISION, oldonground SMALLINT)
 AS
 DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
 DECLARE ovx DOUBLE PRECISION; DECLARE ovy DOUBLE PRECISION; DECLARE ovz DOUBLE PRECISION;
 DECLARE nsx DOUBLE PRECISION; DECLARE nsy DOUBLE PRECISION; DECLARE nsz DOUBLE PRECISION;
 DECLARE nsvx DOUBLE PRECISION; DECLARE nsvy DOUBLE PRECISION; DECLARE nsvz DOUBLE PRECISION;
 DECLARE clip SMALLINT; DECLARE hit INTEGER;
-DECLARE oldonground SMALLINT; DECLARE flags INTEGER; DECLARE wl SMALLINT;
+DECLARE wl SMALLINT;
 DECLARE f DOUBLE PRECISION; DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
 DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE sfl INTEGER;
 BEGIN
-  SELECT e.x, e.y, e.z, e.vx, e.vy, e.vz, e.flags, e.waterlevel FROM ents e WHERE e.id = :eid
-    INTO ox, oy, oz, ovx, ovy, ovz, flags, wl;
-  oldonground = IIF(BIN_AND(flags, 512) <> 0, 1, 0);
-  UPDATE ents e SET e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :eid;
+  -- (the caller has cleared FL_ONGROUND already)
+  SELECT e.x, e.y, e.z, e.vx, e.vy, e.vz, e.waterlevel FROM ents e WHERE e.id = :eid
+    INTO ox, oy, oz, ovx, ovy, ovz, wl;
   EXECUTE PROCEDURE fly_move(eid, dt) RETURNING_VALUES clip, hit;
   IF (BIN_AND(clip, 2) = 0) THEN EXIT;                   -- move looks good
   IF (oldonground = 0 AND wl = 0) THEN EXIT;             -- don't stair up while jumping
@@ -889,8 +892,10 @@ BEGIN
       IF (f = 1) THEN
       BEGIN
         -- fly monsters don't enter water voluntarily; swim monsters don't leave it
-        IF (BIN_AND(flags, 1) <> 0 AND wl = 0 AND BIN_AND(point_contents(ex, ey, ez + mnz + 1), 56) <> 0) THEN RETURN 0;
-        IF (BIN_AND(flags, 2) <> 0 AND BIN_AND(point_contents(ex, ey, ez + mnz + 1), 56) = 0) THEN RETURN 0;
+        -- (a function nested in a condition's expression is evaluated twice: call it once)
+        cts = point_contents(ex, ey, ez + mnz + 1);
+        IF (BIN_AND(flags, 1) <> 0 AND wl = 0 AND BIN_AND(cts, 56) <> 0) THEN RETURN 0;
+        IF (BIN_AND(flags, 2) <> 0 AND BIN_AND(cts, 56) = 0) THEN RETURN 0;
         UPDATE ents e SET e.x = :ex, e.y = :ey, e.z = :ez, e.lx = :ex, e.ly = :ey, e.lz = :ez WHERE e.id = :eid;
         EXECUTE PROCEDURE link_core(eid, 0);
         RETURN 1;
@@ -914,7 +919,11 @@ BEGIN
     IF (als = 1 OR sts = 1) THEN RETURN 0;
   END
   -- don't go into water (on maps that have any)
-  IF (wl = 0 AND (SELECT g.has_water FROM game g WHERE g.id = 1) = 1 AND BIN_AND(point_contents(ex, ey, ez + mnz + 1), 56) <> 0) THEN RETURN 0;
+  IF (wl = 0 AND (SELECT g.has_water FROM game g WHERE g.id = 1) = 1) THEN
+  BEGIN
+    cts = point_contents(ex, ey, ez + mnz + 1);
+    IF (BIN_AND(cts, 56) <> 0) THEN RETURN 0;
+  END
   IF (f = 1) THEN
   BEGIN
     -- if monster had the ground pulled out, go ahead and fall

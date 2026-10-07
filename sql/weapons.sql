@@ -147,7 +147,7 @@ BEGIN
       EXECUTE PROCEDURE snd(pe, 1, 'weapons/chngnd1a.wav', vol, 1);
       UPDATE player p SET p.chaingun_spin = 0 WHERE p.id = 1;
     END
-    UPDATE player p SET p.weapon_sound = 0, p.machinegun_shots = 0 WHERE p.id = 1;
+    UPDATE player p SET p.weapon_sound = 0, p.machinegun_shots = 0 WHERE p.id = 1 AND (p.weapon_sound <> 0 OR p.machinegun_shots <> 0);
     EXIT;
   END
   IF (af > t OR w = 0) THEN EXIT;
@@ -328,13 +328,15 @@ DECLARE tdm INTEGER; DECLARE tlt DOUBLE PRECISION;
 DECLARE afin DOUBLE PRECISION; DECLARE hp INTEGER; DECLARE deadt DOUBLE PRECISION; DECLARE oldz DOUBLE PRECISION; DECLARE w INTEGER;
 DECLARE enviro DOUBLE PRECISION; DECLARE breather DOUBLE PRECISION; DECLARE ndt DOUBLE PRECISION; DECLARE ddmg INTEGER; DECLARE mhp INTEGER;
 DECLARE grav DOUBLE PRECISION;
+DECLARE ppitch DOUBLE PRECISION; DECLARE pstepz DOUBLE PRECISION; DECLARE gtic INTEGER; DECLARE stepz2 DOUBLE PRECISION; DECLARE jr2 SMALLINT; DECLARE afin2 DOUBLE PRECISION; DECLARE ddmg2 INTEGER;
 BEGIN
-  SELECT p.ent_id, p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg
-    FROM player p WHERE p.id = 1 INTO pe, jr, afin, deadt, w, enviro, breather, ndt, ddmg;
+  -- (the player and ents rows are wide: what the think decides is written back once, at the end)
+  SELECT p.ent_id, p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz
+    FROM player p WHERE p.id = 1 INTO pe, jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz;
   IF (pe IS NULL) THEN EXIT;
   SELECT e.deadflag, e.flags, e.waterlevel, e.watertype, e.yaw, e.health, e.z, e.max_health FROM ents e WHERE e.id = :pe INTO dead, flags, owl, wt, yaw, hp, oldz, mhp;
   t = now_();
-  SELECT g.gravity FROM game g WHERE g.id = 1 INTO grav;
+  SELECT g.gravity, g.tic FROM game g WHERE g.id = 1 INTO grav, gtic;
 
   IF (dead = 1) THEN
   BEGIN
@@ -347,8 +349,7 @@ BEGIN
 
   -- view angles
   yaw = anglemod(yaw + yaw_d);
-  UPDATE player p SET p.pitch = MAXVALUE(-89, MINVALUE(89, p.pitch + :pitch_d)), p.punchangle = MINVALUE(0, p.punchangle + 10 * :dt) WHERE p.id = 1 RETURNING p.pitch INTO pitch;
-  UPDATE ents e SET e.yaw = :yaw WHERE e.id = :pe;
+  pitch = MAXVALUE(-89, MINVALUE(89, ppitch + pitch_d));
   IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(imp);
 
   -- P_WorldEffects: water, slime, lava, drowning
@@ -387,7 +388,7 @@ BEGIN
       END
     END
   END
-  ELSE UPDATE player p SET p.air_finished = :t + 12, p.drown_dmg = 2 WHERE p.id = 1;
+  ELSE BEGIN afin2 = t + 12; ddmg2 = 2; END
   IF (wl > 0 AND BIN_AND(wt, 24) <> 0 AND enviro < t) THEN
   BEGIN
     SELECT p.dmg_lava_time FROM player p WHERE p.id = 1 INTO tlt;
@@ -420,11 +421,11 @@ BEGIN
       vz = vz + 270;
       flags = BIN_AND(flags, BIN_NOT(512));
       onground = 0;
-      UPDATE player p SET p.jump_released = 0 WHERE p.id = 1;
+      jr2 = 0;
       EXECUTE PROCEDURE snd(pe, 2, 'player/male/jump1.wav', 1, 1);
     END
   END
-  ELSE UPDATE player p SET p.jump_released = 1 WHERE p.id = 1;
+  ELSE jr2 = 1;
 
   -- PM_Friction
   IF (onground = 1 OR wl >= 2) THEN
@@ -499,24 +500,26 @@ BEGIN
   END
   -- gravity
   IF (onground = 0 AND wl < 2) THEN vz = vz - grav * dt;
-  UPDATE ents e SET e.vx = :vx, e.vy = :vy, e.vz = :vz, e.flags = :flags WHERE e.id = :pe;
-
-  -- move
-  IF (wl >= 2) THEN
+  IF (onground = 1 AND vx = 0 AND vy = 0 AND vz = 0 AND wl < 2 AND MOD(gtic, 10) <> 0) THEN
   BEGIN
-    UPDATE ents e SET e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :pe;
-    EXECUTE PROCEDURE fly_move(pe, dt) RETURNING_VALUES tst, tid;
+    -- standing still on the ground: nothing to move. The ground under us is re-checked twice a
+    -- second (pmove traces for it every frame; a tenth of that keeps a vanished floor honest)
+    UPDATE ents e SET e.yaw = :yaw WHERE e.id = :pe AND e.yaw <> :yaw;
   END
-  ELSE EXECUTE PROCEDURE walk_move(pe, dt);
-  IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :pe)) THEN EXIT;
-  EXECUTE PROCEDURE link_ent(pe);
+  ELSE
+  BEGIN
+    UPDATE ents e SET e.vx = :vx, e.vy = :vy, e.vz = :vz, e.flags = BIN_AND(:flags, BIN_NOT(512)), e.yaw = :yaw WHERE e.id = :pe;
+    -- move (the ground flag is cleared above; the move sets it again when it lands)
+    IF (wl >= 2) THEN EXECUTE PROCEDURE fly_move(pe, dt) RETURNING_VALUES tst, tid;
+    ELSE EXECUTE PROCEDURE walk_move(pe, dt, onground);
+    IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :pe)) THEN EXIT;
+    EXECUTE PROCEDURE link_ent(pe);
+  END
+  SELECT e.x, e.y, e.z, e.flags, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz FROM ents e WHERE e.id = :pe INTO px, py, pz, flags, mnx, mny, mnz, mxx, mxy, mxz;
   -- smooth the view over steps
-  SELECT e.z FROM ents e WHERE e.id = :pe INTO pz;
-  UPDATE player p SET p.stepz = IIF(BIN_AND((SELECT e.flags FROM ents e WHERE e.id = :pe), 512) <> 0 AND :pz - :oldz > 0 AND :pz - :oldz <= 18,
-                                     MINVALUE(p.stepz + (:pz - :oldz), 18), MAXVALUE(0, p.stepz - 160 * :dt)) WHERE p.id = 1;
+  stepz2 = IIF(BIN_AND(flags, 512) <> 0 AND pz - oldz > 0 AND pz - oldz <= 18, MINVALUE(pstepz + (pz - oldz), 18), MAXVALUE(0, pstepz - 160 * dt));
 
   -- G_TouchTriggers: triggers and items whose box we are in
-  SELECT e.x, e.y, e.z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz FROM ents e WHERE e.id = :pe INTO px, py, pz, mnx, mny, mnz, mxx, mxy, mxz;
   FOR SELECT e.id, e.classname FROM ents e
        WHERE e.solid = 1 AND e.id <> :pe
          AND e.x + e.maxx >= :px + :mnx AND e.x + e.minx <= :px + :mxx
@@ -582,6 +585,9 @@ BEGIN
     IF (tst = 1) THEN EXECUTE PROCEDURE plat_go_up(tid);
     ELSE IF (tst = 0) THEN UPDATE ents e SET e.nextthink = e.ltime + 1 WHERE e.id = :tid AND e.think = 'plat_go_down';
   END
+
+  UPDATE player p SET p.pitch = :pitch, p.punchangle = MINVALUE(0, p.punchangle + 10 * :dt), p.jump_released = :jr2, p.stepz = :stepz2,
+         p.air_finished = COALESCE(:afin2, p.air_finished), p.drown_dmg = COALESCE(:ddmg2, p.drown_dmg) WHERE p.id = 1;
 
   -- megahealth rots away above the maximum
   UPDATE player p SET p.mega_time = :t + 1 WHERE p.id = 1 AND p.mega_time < :t AND (SELECT e.health FROM ents e WHERE e.id = :pe) > :mhp;
