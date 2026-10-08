@@ -160,7 +160,8 @@ id sequence above the highest saved id (`src/savegame.js`). It takes about a fif
 
 Sound: `sound_events` rows are played with the Web Audio API, attenuated and panned from where they
 happened. The map's looped `target_speaker`s play at their origins and follow their on/off state in the
-`ents` table. Quake 2's music was CD audio, not in the pak: put `track02.ogg`…`track11.ogg` (or `.mp3`)
+`ents` table; the entities' looped sounds (a bolt's or rocket's flight, a moving door, the railgun's hum)
+are listed by each frame and follow the entities, mixed per sound as `S_AddLoopSounds` mixed them. Quake 2's music was CD audio, not in the pak: put `track02.ogg`…`track11.ogg` (or `.mp3`)
 in `public/music/`, or pick that folder in the page, and each map plays its `worldspawn` track;
 without them a synthesised drone fills in.
 

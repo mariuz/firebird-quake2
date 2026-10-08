@@ -254,6 +254,7 @@ SET TERM ^ ;
 --   5 effect after last_fx (i1 id, i2 kind, i3 n, d1..6 at/to)
 --   6 brush-model pose (i1 ent, i2 frame, d1..3 angles)
 --   7 the looped speakers that are on (lst their ids), when want_speakers = 1
+--   9 an entity's looped sound (s.sound: i1 ent, d3..5 at, s name)
 CREATE OR ALTER PROCEDURE frame_all (mode SMALLINT, last_sound INTEGER, last_fx INTEGER, want_speakers SMALLINT)
 RETURNS (kind SMALLINT, i1 INTEGER, i2 INTEGER, i3 INTEGER, i4 INTEGER, i5 INTEGER,
          d1 DOUBLE PRECISION, d2 DOUBLE PRECISION, d3 DOUBLE PRECISION, d4 DOUBLE PRECISION, d5 DOUBLE PRECISION,
@@ -418,9 +419,28 @@ BEGIN
   kind = 6; i3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL;
   FOR SELECT e.id, e.frame, e.pitch, e.yaw, e.roll FROM ents e
        WHERE e.mkind = 'B' AND (e.frame <> 0 OR e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0) INTO i1, i2, d1, d2, d3 DO SUSPEND;
+  -- the looped sounds (s.sound) the entities carry this frame, from where they are now: a missile's flight
+  -- (fire_blaster, fire_rocket, fire_bfg), a mover's middle sound while it moves and only from a team's master
+  -- (door_go_up, plat_go_down, train_next), and the player's G_SetClientSound
+  kind = 9; i2 = NULL; i3 = NULL; d1 = NULL; d2 = NULL;
+  FOR SELECT e.id, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2,
+             TRIM(CASE e.classname WHEN 'rocket' THEN 'weapons/rockfly.wav' WHEN 'bolt' THEN 'misc/lasfly.wav' ELSE 'weapons/bfg__l1a.wav' END)
+        FROM ents e WHERE e.classname IN ('rocket', 'bolt', 'bfg_ball') AND e.movetype = 9
+        INTO i1, d3, d4, d5, s DO SUSPEND;
+  FOR SELECT e.id, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2, e.noise2
+        FROM ents e WHERE e.movetype = 7 AND e.mv_done IS NOT NULL AND e.noise2 IS NOT NULL AND BIN_AND(e.flags, 2048) = 0
+        INTO i1, d3, d4, d5, s DO SUSPEND;
+  s = NULL;
+  SELECT e.id, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2,
+         TRIM(CASE WHEN e.waterlevel > 0 AND BIN_AND(e.watertype, 24) <> 0 THEN 'player/fry.wav'
+                   WHEN p.weapon = 512 THEN 'weapons/rg_hum.wav' WHEN p.weapon = 1024 THEN 'weapons/bfg_hum.wav'
+                   WHEN p.weapon_sound = 1 THEN 'weapons/hyprbl1a.wav' WHEN p.weapon_sound = 2 THEN 'weapons/chngnl1a.wav' END)
+    FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1 INTO i1, d3, d4, d5, s;
+  IF (s IS NOT NULL) THEN SUSPEND;
+  s = NULL;
   IF (want_speakers = 1) THEN
   BEGIN
-    kind = 7; i1 = NULL; i2 = NULL; d1 = NULL; d2 = NULL; d3 = NULL;
+    kind = 7; i1 = NULL; i2 = NULL; d1 = NULL; d2 = NULL; d3 = NULL; d4 = NULL; d5 = NULL;
     SELECT LIST(e.id, ',') FROM ents e WHERE e.classname = 'target_speaker' AND e.sounds = 1 INTO lst;
     SUSPEND;
   END

@@ -434,7 +434,7 @@ CREATE TABLE player (
   machinegun_shots INTEGER DEFAULT 0 NOT NULL,            -- the machine gun's climbing kick
   chaingun_spin   DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- how long the chain gun has been firing
   grenade_time    DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- a hand grenade's fuse is lit
-  weapon_sound    SMALLINT DEFAULT 0 NOT NULL,
+  weapon_sound    SMALLINT DEFAULT 0 NOT NULL,            -- the looped firing sound (client weapon_sound): 1 hyperblaster, 2 chaingun
   mega_time       DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- megahealth rot timer
   ducked          SMALLINT DEFAULT 0 NOT NULL,            -- PMF_DUCKED: the box 32 → 4 high, the eye at -2
   bobtime         DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- the walk cycle (p_view.c's bobtime)

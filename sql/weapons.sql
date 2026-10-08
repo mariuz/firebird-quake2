@@ -265,8 +265,7 @@ BEGIN
       i = i + 1;
     END
     IF (shots > 0) THEN EXECUTE PROCEDURE snd(pe, 1, 'weapons/machgf' || CAST(1 + FLOOR(RAND() * 5) AS INTEGER) || 'b.wav', vol, 1);
-    EXECUTE PROCEDURE snd(pe, 0, 'weapons/chngnl1a.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - :shots, p.punchangle = -0.5e0 * :shots, p.chaingun_spin = :spin WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - :shots, p.punchangle = -0.5e0 * :shots, p.chaingun_spin = :spin, p.weapon_sound = 2 WHERE p.id = 1;
   END
   ELSE IF (w = 32) THEN                                                  -- hand grenade: pull the pin; thrown on release
   BEGIN
@@ -295,7 +294,6 @@ BEGIN
     EXECUTE PROCEDURE launch_bolt(pe, mx, my, mz, fx_, fy, fz, 1000, 15, 64);
     EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 1000);
     IF (ws = 0) THEN EXECUTE PROCEDURE snd(pe, 1, 'weapons/hyprbf1a.wav', vol, 1);
-    EXECUTE PROCEDURE snd(pe, 0, 'weapons/hyprbl1a.wav', vol, 1);
     UPDATE player p SET p.attack_finished = :t + 0.1e0, p.cells = p.cells - 1, p.punchangle = -1, p.weapon_sound = 1 WHERE p.id = 1;
   END
   ELSE IF (w = 512) THEN                                                 -- railgun

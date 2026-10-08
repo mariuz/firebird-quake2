@@ -112,10 +112,19 @@ s = await tic([1, 0, 0, 0, 85, 1, 0, 1, 0]);
 for (let i = 0; i < 20; i++) s = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
 assert(s.HEALTH < 100, `rocket at our feet hurt us (health ${s.HEALTH})`);
 
+// the looped sounds (s.sound) a frame lists: [ent, name]
+const loopSounds = async () => (await db.query('SELECT i1, s FROM frame_all(0, 2147483647, 2147483647, 0) WHERE kind = 9', [], { rowMode: 'array' })).rows;
+
 // open the first door by using it
 const door = (await db.query("SELECT FIRST 1 id, x, y, z, mv_state FROM ents WHERE classname = 'func_door'")).rows[0];
 if (door) {
   await db.exec(`EXECUTE PROCEDURE door_use(${door.ID}, ${(await db.query('SELECT ent_id FROM player')).rows[0].ENT_ID})`);
+  await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  const master = (await db.query(`SELECT m.id, m.noise2, m.mv_done FROM ents d JOIN ents m ON m.id = COALESCE(d.linked_id, d.id) WHERE d.id = ${door.ID}`)).rows[0];
+  if (master.NOISE2 && master.MV_DONE) {
+    const loops = await loopSounds();
+    assert(loops.some(([e, n]) => e === master.ID && n === master.NOISE2), `a moving door loops its middle sound (${loops.map(([e, n]) => `${e}:${n}`).join(' ') || 'none'})`);
+  }
   for (let i = 0; i < 30; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
   const d2 = (await db.query(`SELECT x, y, z, mv_state FROM ents WHERE id = ${door.ID}`)).rows[0];
   assert(d2 && (Math.abs(d2.Z - door.Z) > 1 || Math.abs(d2.X - door.X) > 1 || Math.abs(d2.Y - door.Y) > 1), `door moved (state ${d2?.MV_STATE})`);
@@ -590,6 +599,7 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   if (dir) {
     const id0 = (await one('SELECT COALESCE(MAX(id), 0) m FROM fx_events')).M;
     await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE launch_bolt(${p.ID}, ${p.X}, ${p.Y}, ${p.Z + 16}, ${dir[0]}, ${dir[1]}, 0, 1000, 10, 8); END`);
+    assert((await loopSounds()).some(([, n]) => n === 'misc/lasfly.wav'), 'a flying bolt loops misc/lasfly.wav');
     let hit = null;
     for (let i = 0; i < 10 && !hit; i++) { await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]); hit = await one(`SELECT FIRST 1 x2, y2, z2 FROM fx_events WHERE id > ${id0} AND kind = 6`); }
     assert(hit && Math.abs(hit.X2 + dir[0]) < 0.01 && Math.abs(hit.Y2 + dir[1]) < 0.01 && Math.abs(hit.Z2) < 0.01,

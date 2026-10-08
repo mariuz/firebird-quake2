@@ -217,6 +217,7 @@ can ever face it. This re-marking is the one per-cluster-change hitch (tens of m
 | 5 | one per new effect | id, kind, count, from, to |
 | 6 | one per posed brush model | id, frame, angles |
 | 7 | one (when asked) | the looped speakers that are on |
+| 9 | one per looped entity sound | entity, position, name (`s.sound`: missiles, moving movers, the player's hum) |
 
 The world's faces are the scan of `vis_faces` with the back-face test and the frustum tests as
 expressions, `LIST()`ed into one row. The frustum is four world-space planes (`kx·f ∓ r`,
@@ -294,6 +295,14 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
 `sound_events` rows are played with the Web Audio API, attenuated and panned by Quake 2's rules
 (full volume within 80 units, then `attenuation × 0.001` per unit). The map's looped
 `target_speaker`s play at their origins and follow their on/off state from the frame's kind 7 row.
+The entities' looped sounds (Quake 2's `s.sound`) are worked out each frame from the rows as they
+stand, not kept in a column: a bolt's `misc/lasfly.wav`, a rocket's `rockfly`, the BFG ball's
+`bfg__l1a` while they fly; a door's, plat's or train's middle sound (`noise2`) while it moves
+(`mv_done` set), from a team's master only; and `G_SetClientSound` for the player (lava or slime
+fry, the railgun's or BFG's hum, the hyperblaster's or chaingun's firing loop, `player.weapon_sound`).
+The page mixes them as `S_AddLoopSounds` did: one looped channel per sound name, every entity with that
+sound adding its spatialised left and right at full volume and `ATTN_STATIC`, each side clamped.
+The loops fall silent while the game is paused or in a menu.
 Music was CD audio: `public/music/trackNN.ogg|mp3`, or a folder picked on the page, plays each map's
 `worldspawn` track; without them a synthesised drone fills in.
 

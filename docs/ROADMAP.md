@@ -190,8 +190,15 @@ them.
 ## Sound
 
 - **Sound effects list**: everything the game references exists in the pak (the smoke test
-  asserts it). Looped entity sounds (`s.sound`: a rocket's flight, the BFG's hum) are played once
-  at launch instead of following the entity; item respawn sounds are not needed in single player.
+  asserts it); item respawn sounds are not needed in single player.
+- **Looped entity sounds**: done, as `s.sound` and `S_AddLoopSounds` had them. Bolts, rockets and the
+  BFG ball carry their flight sound, doors, plats and trains their middle sound while they move (only
+  the team's master, as `FL_TEAMSLAVE` kept the others quiet), and the player the lava fry, the
+  railgun's and BFG's hum and the hyperblaster's and chaingun's firing loop, each from where the entity
+  is every frame (they used to play once at launch, or as a fresh copy every shot, piling up). A train's
+  `noise` is now its middle sound, looped while it moves, not a one-shot at each corner. Left: Quake 2
+  placed a brush model's loop at its origin, often the map's centre; here it sounds from the box's
+  middle, as the one-shot sounds already did.
 - **Music**: CD tracks are optional files; the synthesised drone is a placeholder.
 - **Attenuation of looped speakers** follows the spawn's `attenuation`; `ATTN_STATIC` (3) is
   treated like `ATTN_IDLE`.

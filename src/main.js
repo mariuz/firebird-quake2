@@ -348,6 +348,7 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   await loadStyleBase();
   const speakers = (await db.query("SELECT id, x, y, z, noise1, speed, height, sounds FROM ents WHERE classname = 'target_speaker' AND BIN_AND(spawnflags, 3) <> 0 AND noise1 IS NOT NULL", [], arr)).rows;
   audio.setSpeakers(speakers);
+  audio.stopLoops();
   audio.playMusic(Number(g.CD_TRACK ?? 0));
   const { rows } = await db.query('SELECT MAX(id) m FROM sound_events');
   lastSoundId = rows[0].M ?? 0;
@@ -384,6 +385,7 @@ const brushAngles = new Map();
 async function frame() {
   if (!running || paused || document.hidden || menu.active) {
     lastTic = performance.now();
+    audio.silenceLoops();
     if (menu.active && renderer && last && !document.hidden) { drawFrame(null, [], new Float32Array(64), last.TIME_); menu.draw(renderer, performance.now()); renderer.present(); }
     else if (paused && renderer && last) { drawFrame(null, [], new Float32Array(64), last.TIME_); hud.drawCenter(renderer, 'paused', 80); renderer.present(); }
     nextFrame();
@@ -415,7 +417,7 @@ async function frame() {
     //   r = [kind, i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, d7, d8, s, lst]
     const wantSpeakers = ++frameNo % 10 === 0;
     const rows = (await db.query(`SELECT * FROM frame_all(${settings.renderer === 'sql' ? 1 : 0}, ${lastSoundId}, ${lastFxId}, ${wantSpeakers ? 1 : 0})`, [], arr)).rows;
-    const faces = [], ents = [], sounds = [], fx = [];
+    const faces = [], ents = [], sounds = [], fx = [], loops = [];
     const styleMap = styleBase.slice();
     let speakers = null;
     brushFrames.clear(); brushAngles.clear();
@@ -429,6 +431,7 @@ async function frame() {
         case 5: fx.push([r[1], r[2], r[6], r[7], r[8], r[9], r[10], r[11], r[3]]); break;
         case 6: brushFrames.set(r[1], r[2]); if (r[6] || r[7] || r[8]) brushAngles.set(r[1], [r[6], r[7], r[8]]); break;
         case 7: speakers = r[15] ? r[15].split(',').map(Number) : []; break;
+        case 9: loops.push([r[14], r[8], r[9], r[10]]); break;
         default: break;
       }
     }
@@ -437,6 +440,7 @@ async function frame() {
     perf.rows = faces.length;
     const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
     if (sounds.length) { lastSoundId = sounds[sounds.length - 1][0]; audio.playEvents(sounds, listener); }
+    audio.setLoops(loops);
     audio.update(listener);
     if (fx.length) { lastFxId = fx[fx.length - 1][0]; handleFx(fx, last.TIME_); }
 

@@ -2,11 +2,13 @@
 // Audio buffers, attenuated and panned from where they happened (Quake 2's
 // spatialisation: full volume within 80 units, then a linear fall-off scaled
 // by the attenuation, ATTN_NONE heard everywhere). The map's looped
-// target_speakers play at their origins; the music is the CD track the
+// target_speakers play at their origins, the entities' looped sounds (a
+// rocket's flight, a moving door) where the entities are each frame; the music is the CD track the
 // worldspawn names (music/trackNN.ogg|mp3, or a folder the player picks),
 // with a synthesised drone when no track file is available.
 
 const SOUND_FULLVOLUME = 80;
+const LOOP_ATTN = 3;   // SOUND_LOOPATTENUATE: ATTN_STATIC
 
 export class Q2Audio {
   constructor() {
@@ -17,6 +19,8 @@ export class Q2Audio {
     this.musicVolume = 0.5;
     this.channels = new Map();   // `${ent}:${chan}` → source, to cut
     this.speakers = [];          // looped target_speakers: { id, name, x, y, z, vol, attn, on, src, gain, pan }
+    this.loops = new Map();      // looped entity sounds: name → { src, gain, pan }
+    this.loopRows = [];
     this.listener = { x: 0, y: 0, z: 0, yaw: 0 };
     this.musicMode = 'tracks';   // 'off' | 'tracks' | 'synth'
     this.musicFiles = new Map(); // 'track06' → File, from a picked folder
@@ -24,7 +28,7 @@ export class Q2Audio {
     this.track = 0;
   }
 
-  setPak(pak) { this.pak = pak; this.buffers.clear(); }
+  setPak(pak) { this.stopLoops(); this.pak = pak; this.buffers.clear(); }
   setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = v; }
   setMusicVolume(v) { this.musicVolume = v; if (this.musicGain) this.musicGain.gain.value = v; }
 
@@ -45,6 +49,7 @@ export class Q2Audio {
 
   suspend(hidden) {
     if (!this.ctx) return;
+    if (hidden) this.silenceLoops();
     if (hidden) this.ctx.suspend(); else this.ctx.resume();
   }
 
@@ -142,7 +147,49 @@ export class Q2Audio {
     this.speakers = [];
   }
 
-  /** Called every frame with the listener: the looped speakers follow the player. */
+  // ── looped entity sounds (s.sound) ────────────────────────────────────
+  /** This frame's [name, x, y, z] rows: a rocket's flight, a moving door, the railgun's hum. */
+  setLoops(rows) { this.loopRows = rows; }
+
+  /** The game stopped (paused, a menu, a level change): the loops fall silent until the next frame lists them. */
+  silenceLoops() {
+    this.loopRows = [];
+    for (const c of this.loops.values()) if (c.gain) c.gain.gain.value = 0;
+  }
+
+  stopLoops() {
+    for (const c of this.loops.values()) { try { c.src?.stop(); } catch { /* ended */ } }
+    this.loops.clear();
+    this.loopRows = [];
+  }
+
+  /** S_AddLoopSounds: every entity with the same sound feeds one looped channel, spatialised at full volume
+   *  with ATTN_STATIC, the left and right sums each clamped at full scale. */
+  mixLoops() {
+    const sums = new Map();
+    for (const [name, x, y, z] of this.loopRows) {
+      const { gain, pan } = this.spatialize(x, y, z, LOOP_ATTN);
+      if (gain <= 0) continue;
+      const s = sums.get(name) ?? { l: 0, r: 0 };
+      s.l += gain * (1 - pan) / 2; s.r += gain * (1 + pan) / 2;
+      sums.set(name, s);
+    }
+    for (const name of sums.keys()) {
+      if (this.loops.has(name)) continue;
+      const c = {};
+      this.loops.set(name, c);
+      this.buffer(name).then((buf) => { if (buf && this.loops.get(name) === c) Object.assign(c, this.loop(buf, this.master)); });
+    }
+    for (const [name, c] of this.loops) {
+      if (!c.gain) continue;
+      const s = sums.get(name);
+      const l = s ? Math.min(1, s.l) : 0, r = s ? Math.min(1, s.r) : 0;
+      c.gain.gain.value = l + r;
+      if (c.pan) c.pan.pan.value = l + r > 0 ? (r - l) / (l + r) : 0;
+    }
+  }
+
+  /** Called every frame with the listener: the looped speakers and entity sounds follow the player. */
   update(listener) {
     this.listener = listener;
     for (const s of this.speakers) {
@@ -151,6 +198,7 @@ export class Q2Audio {
       s.gain.gain.value = s.on ? gain * s.vol * 0.6 : 0;
       if (s.pan) s.pan.pan.value = pan;
     }
+    if (this.ctx) this.mixLoops();
   }
 
   // ── music ──────────────────────────────────────────────────────────────

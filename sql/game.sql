@@ -629,7 +629,7 @@ BEGIN
     EXECUTE PROCEDURE train_next(eid);
     EXIT;
   END
-  EXECUTE PROCEDURE snd(eid, 0, (SELECT e.noise1 FROM ents e WHERE e.id = :eid), 1, 1);
+  -- the train's noise is its middle sound (moveinfo.sound_middle), looped while it moves (FRAME_ALL)
   EXECUTE PROCEDURE calc_move(eid, cx - mnx, cy - mny, cz - mnz, (SELECT e.speed FROM ents e WHERE e.id = :eid), 'train_wait');
 END^
 
@@ -1709,7 +1709,6 @@ BEGIN
          e.vx = :dx / :dl * :spd, e.vy = :dy / :dl * :spd, e.vz = :dz / :dl * :spd,
          e.yaw = vectoyaw(:dx, :dy), e.pitch = ATAN2(:dz, vlen(:dx, :dy, 0)) * 57.29577951e0, e.dmg = :dmg, e.count_ = :radius_dmg, e.dmg_radius = :radius,
          e.think = 'remove', e.nextthink = now_() + 8000 / :spd WHERE e.id = :s;
-  EXECUTE PROCEDURE snd(s, 0, 'weapons/rockfly.wav', 1, 1);
   EXECUTE PROCEDURE link_ent(s);
 END^
 
@@ -1769,7 +1768,6 @@ BEGIN
     END
     EXECUTE PROCEDURE fx(12, x, y, z, ex, ey, ez, 0);
   END
-  EXECUTE PROCEDURE snd(eid, 0, 'weapons/bfg__l1a.wav', 1, 1);
   UPDATE ents e SET e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
 END^
 
@@ -2102,7 +2100,7 @@ BEGIN
     BEGIN
       IF (spd IS NULL OR spd = 0) THEN spd = 100;
       -- SP_func_train: 100 damage when blocked, none with TRAIN_BLOCK_STOPS (spawnflags 4)
-      UPDATE ents e SET e.solid = 4, e.movetype = 7, e.yaw = 0, e.speed = :spd, e.noise1 = :noise, e.noise3 = NULL, e.dmg = IIF(BIN_AND(:sf, 4) <> 0, 0, IIF(COALESCE(:dmg, 0) = 0, 100, :dmg)),
+      UPDATE ents e SET e.solid = 4, e.movetype = 7, e.yaw = 0, e.speed = :spd, e.noise1 = NULL, e.noise2 = :noise, e.noise3 = NULL, e.dmg = IIF(BIN_AND(:sf, 4) <> 0, 0, IIF(COALESCE(:dmg, 0) = 0, 100, :dmg)),
              e.mv_state = IIF(:tn IS NULL OR :tn = '' OR BIN_AND(:sf, 1) <> 0, 2, 1), e.think = 'train_find', e.nextthink = 0.1e0 WHERE e.id = :eid;
     END
     ELSE IF (cls = 'misc_strogg_ship') THEN
