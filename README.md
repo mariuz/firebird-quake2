@@ -145,7 +145,8 @@ surfaces ripple and flow, and with the eye under water the whole view wobbles as
 the sky is the `env/` cube map sampled by each pixel's direction. MD2 models
 are lit as ref_soft lit them (the light under the model split into ambient and shade, the shade from a fixed
 world direction by the vertex normals; items pulse, the gun never goes below a minimum), clipped
-against the near plane triangle by triangle; sprites are billboards; explosions, blood, blaster sparks
+against the near plane triangle by triangle; sprites face the view; explosions are the fireball models
+fading through their skins as `CL_AddExplosions` drew them; explosion debris, blood, blaster sparks
 and the rail trail are particles. Muzzle flashes, rockets, blaster bolts, the BFG ball and explosions are
 dynamic lights, added to the lightmaps of the faces they reach as ref_soft's `R_AddDynamicLights` did
 (those faces are rebuilt for the frame) and to the models near them. The status bar comes from `pics/`.

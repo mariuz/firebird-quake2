@@ -125,5 +125,18 @@ assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws ne
   for (let i = 0; i < mdl.numVerts; i++) { if (verts[i] > Math.min(...verts)) plus++; else minus++; }
   assert(plus > 0 && minus > 0, `the shade falls on the side facing +x, as from lightvec (-1, 0, 0) (${plus} lit, ${minus} ambient only)`);
 }
+// the explosion model as CL_AddExplosions drew it: fullbright, and translucent at 66% or 33%
+{
+  const ex = res.models.get(res.byName.get('models/objects/r_explode/tris.md2'))?.mdl;
+  const shot = (light, opts) => { r.beginFrame({ x: -120, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, fov: 90 }); r.fb.fill(40); r.drawAlias(ex, 6, 3, [0, 0, 0], [0, 30, 0], light, opts); return r.fb.slice(); };
+  const full = shot(0, { fullbright: true }), dark = shot(0, {});
+  const drawn = full.filter((p) => p !== 40).length;
+  assert(ex && ex.frames.length === 49 && ex.skins.length === 7 && drawn > 1000 && lum({ data: full.filter((p) => p !== 40) }) > lum({ data: dark.filter((p) => p !== 40) }),
+    `the r_explode model (49 frames, 7 skins) draws fullbright in the dark (${drawn} pixels)`);
+  const b66 = shot(0, { fullbright: true, alpha: 2 }), b33 = shot(0, { fullbright: true, alpha: 1 });
+  let d = 0;
+  for (let i = 0; i < b66.length; i++) if (b66[i] !== b33[i]) d++;
+  assert(d > drawn / 2, `66% and 33% translucency differ (${d} pixels)`);
+}
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

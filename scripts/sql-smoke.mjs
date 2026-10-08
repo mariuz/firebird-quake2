@@ -576,6 +576,27 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   } else console.log('     (no deep water on this map for the water level check)');
 }
 
+// a blaster bolt hitting a wall: the hit (fx 6) carries the bolt's way back as its direction, for the
+// explode model and the sparks (TE_BLASTER)
+{
+  const one = async (q) => (await db.query(q)).rows[0];
+  const p = await one('SELECT e.id, e.x, e.y, e.z FROM ents e WHERE e.id = (SELECT ent_id FROM player)');
+  let dir = null;
+  for (let yaw = 0; yaw < 360 && !dir; yaw += 30) {
+    const dx = Math.cos(yaw * Math.PI / 180), dy = Math.sin(yaw * Math.PI / 180);
+    const t = await one(`SELECT fraction f, hit_ent h FROM trace_move(${p.ID}, 0, 0, 0, 0, 0, 0, ${p.X}, ${p.Y}, ${p.Z + 16}, ${p.X + dx * 300}, ${p.Y + dy * 300}, ${p.Z + 16}, 100663299)`);
+    if (t.F < 1 && t.F > 0.1 && t.H === 0) dir = [dx, dy];
+  }
+  if (dir) {
+    const id0 = (await one('SELECT COALESCE(MAX(id), 0) m FROM fx_events')).M;
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE launch_bolt(${p.ID}, ${p.X}, ${p.Y}, ${p.Z + 16}, ${dir[0]}, ${dir[1]}, 0, 1000, 10, 8); END`);
+    let hit = null;
+    for (let i = 0; i < 10 && !hit; i++) { await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]); hit = await one(`SELECT FIRST 1 x2, y2, z2 FROM fx_events WHERE id > ${id0} AND kind = 6`); }
+    assert(hit && Math.abs(hit.X2 + dir[0]) < 0.01 && Math.abs(hit.Y2 + dir[1]) < 0.01 && Math.abs(hit.Z2) < 0.01,
+      `a bolt's hit on a wall points back along the bolt (${hit ? [hit.X2, hit.Y2, hit.Z2].map((v) => v.toFixed(2)).join(' ') : 'no hit'})`);
+  } else console.log('     (no wall near for the bolt check)');
+}
+
 // the console's commands: god, notarget, noclip through a wall, give, kill
 {
   const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;

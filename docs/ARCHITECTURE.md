@@ -277,6 +277,10 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   by sprites too. The view weapon is drawn after clearing the z-buffer, with a closer near plane.
 - **Particles and beams** are cl_fx.c's: explosions, blood, blaster sparks, the rail spiral,
   teleport fog, laser beams as particle lines.
+- **Explosions** are `CL_AddExplosions`' list in `src/main.js` (`explosions`): the `r_explode` and `explode`
+  models and the `s_bfg2` sprite, stepped at 10 frames a second, skins and translucency by frame and alpha,
+  drawn fullbright (`drawAlias`'s `fullbright`, `alpha` 1 for 33% and 2 for 66%); their lights come from the
+  same list in `frameDlights`.
 - **2D** (`src/hud.js`): `single_statusbar` from `pics/` (health, ammo, armour flashing with power
   armour, the selected item; the pickup's icon and name, the powerup timer, the help icon), the
   crosshair, centre prints, the help computer and the inventory screen (`CL_DrawInventory`), with

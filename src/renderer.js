@@ -582,7 +582,7 @@ export class Renderer {
     // RF_MINLIGHT (the view weapon), pulsing by 0.1 sin(7t) for RF_GLOW (items) but not below 0.8 of itself;
     // then ambient at most 128, ambient and shade at most 192 together, ambient at least LIGHT_MIN 5, and the
     // light from (-1, 0, 0) in the world: a vertex gains shade by how far its normal faces +x
-    let l = light * this.lightScale + (opts.dlight ?? 0);
+    let l = opts.fullbright ? 255 : light * this.lightScale + (opts.dlight ?? 0);   // RF_FULLBRIGHT: light 1.0
     if (opts.minlight && l < 25.5) l = 25.5;
     if (opts.glow) l = Math.max(l * 0.8, l + 25.5 * Math.sin((opts.time ?? 0) * 7));
     const j = Math.trunc(l * 0.9999);
@@ -706,7 +706,7 @@ export class Renderer {
         let sh = (255 - l) >> 2;
         if (sh < 0) sh = 0; else if (sh > 63) sh = 63;
         const lit = colormap[(sh << 8) | c];
-        fb[idx] = blend ? am[fb[idx] + (lit << 8)] : lit;
+        fb[idx] = blend ? (alpha === 2 ? am[(fb[idx] << 8) + lit] : am[fb[idx] + (lit << 8)]) : lit;   // 66% or 33% (R_PolysetDrawSpans8_66, _33)
       }
     }
   }

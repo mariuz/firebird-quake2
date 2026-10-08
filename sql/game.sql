@@ -1820,6 +1820,7 @@ AS
 DECLARE c1 VARCHAR(40); DECLARE c2 VARCHAR(40); DECLARE own INTEGER; DECLARE dmg INTEGER; DECLARE td2 SMALLINT;
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE hp2 INTEGER; DECLARE rad DOUBLE PRECISION; DECLARE rdmg INTEGER;
 DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION;
+DECLARE bdx DOUBLE PRECISION; DECLARE bdy DOUBLE PRECISION; DECLARE bdz DOUBLE PRECISION; DECLARE bdl DOUBLE PRECISION;
 BEGIN
   SELECT e.classname, e.owner_id, e.dmg, e.x, e.y, e.z, e.vx, e.vy, e.vz, e.dmg_radius, e.count_ FROM ents e WHERE e.id = :e1 INTO c1, own, dmg, x, y, z, vx, vy, vz, rad, rdmg;
   IF (c1 = 'func_object') THEN
@@ -1844,7 +1845,11 @@ BEGIN
     END
     ELSE
     BEGIN
-      EXECUTE PROCEDURE fx(6, x, y, z, 0, 0, 0, 0);
+      -- TE_BLASTER with a direction: the bolt's way back, for the hit's model and sparks
+      SELECT -e.vx, -e.vy, -e.vz FROM ents e WHERE e.id = :e1 INTO bdx, bdy, bdz;
+      bdl = vlen(bdx, bdy, bdz);
+      IF (bdl > 0) THEN BEGIN bdx = bdx / bdl; bdy = bdy / bdl; bdz = bdz / bdl; END ELSE BEGIN bdx = 0; bdy = 0; bdz = 1; END
+      EXECUTE PROCEDURE fx(6, x, y, z, bdx, bdy, bdz, 0);
       EXECUTE PROCEDURE snd_at(x, y, z, 'weapons/lashit.wav', 1, 1);
     END
     DELETE FROM ents e WHERE e.id = :e1;

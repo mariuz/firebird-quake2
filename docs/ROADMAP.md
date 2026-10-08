@@ -166,7 +166,14 @@ them.
   the shade falls by how far each vertex's normal faces +x, as from `lightvec` (-1, 0, 0) in the world. The
   view weapon has `RF_MINLIGHT` (at least 0.1) and is lit from the eye; items have `RF_GLOW` (`SpawnItem`:
   the light pulses by 0.1 sin 7t, never below 0.8 of itself). No shadows: ref_soft had none.
-- **Sprites**: oriented sprites (`SPR_ORIENTED`) are drawn as billboards.
+- **Sprites and explosions**: done. The old entry was Quake 1's: a Quake 2 `.sp2` has no orientation, and
+  `R_DrawSprite` always faces the view, as the painter does (each frame anchored by its origin, unlit). What
+  was off were the explosions, drawn as a generic sprite: now they are `CL_AddExplosions`'s. Rockets, barrels
+  and `target_explosion` are the `r_explode` model from frame 0 or 15 for 15 frames, grenades from frame 30
+  for 19; the skin climbs 0-4 over the first ten frames, then 5 and 6 translucent; the BFG's is the `s_bfg2`
+  sprite; a blaster's hit is the small `explode` model turned to the hit's direction (now sent with it),
+  fading over 4 frames. All fullbright, translucent at 66% or 33% by their alpha as ref_soft chose, and their
+  dynamic lights fade with them.
 - **Sky**: the cube map is sampled per pixel; the sky's rotation (`sky_rotate`, `sky_axis`) is
   stored by the loader but the painter does not turn it.
 - **Resolution and scaling**: 320×240 and 160×120 with CSS scaling; a 640×480 mode would cost

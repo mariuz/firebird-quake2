@@ -39,9 +39,8 @@ let lastSoundId = 0;
 let lastFxId = 0;
 let frameNo = 0;
 let beams = [];          // [{ a, b, color, until }]
-let explosions = [];     // [{ x, y, z, t0, spr }]
+let explosions = [];     // CL_AddExplosions' list: [{ x, y, z, t0, type, mdl | spr, base, frames, light, c, pitch, yaw }]
 let flashes = [];        // muzzle flashes' lights: [{ x, y, z, r, die }] (each lasts the frame it is seen in)
-let exLights = [];       // explosions' lights: [{ x, y, z, t0, light, frames, misc }]
 const settings = { map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90, renderer: 'fast', brightness: 1.4, alwaysRun: true,
   sensitivity: 7, invertMouse: false, crosshair: 1 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('firebird-quake2:settings') || '{}')); } catch { /* defaults */ }
@@ -338,7 +337,7 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   map = { name, bsp };
   renderer.setResources(res);
   renderer.particles = [];
-  beams = []; explosions = []; flashes = []; exLights = [];
+  beams = []; explosions = []; flashes = [];
   const g = (await db.query('SELECT sky, cd_track FROM game')).rows[0];
   renderer.setSky(g.SKY);
   await loadStyleBase();
@@ -450,6 +449,7 @@ async function frame() {
 }
 
 const sprite = (name) => res.models.get(res.byName.get(name))?.spr;
+const model = (name) => res.models.get(res.byName.get(name))?.mdl;
 
 // ── leaving a level: what the server did with the map string (SV_Map; src/levels.js) ─────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -493,17 +493,22 @@ function handleFx(rows, time) {
     switch (kind) {
       case 1: renderer.spawnParticles('gunshot', x, y, z, 40, [x2, y2, z2], 0); break;
       case 11: renderer.spawnParticles('gunshot', x, y, z, 20, [x2, y2, z2], 0); break;
-      case 2: renderer.spawnParticles('explosion', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_explod.sp2') }); exLights.push({ x, y, z, t0: time, light: 350, frames: 15 }); break;
-      case 9: renderer.spawnParticles('explosion', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_explod.sp2') }); exLights.push({ x, y, z, t0: time, light: 350, frames: 19 }); break;
+      // TE_EXPLOSION1, TE_ROCKET_EXPLOSION: the r_explode model from frame 0 or 15, 15 frames; TE_GRENADE_EXPLOSION from 30, 19
+      case 2: renderer.spawnParticles('explosion', x, y, z, 0); explosions.push({ x, y, z, t0: time, type: 'poly', mdl: model('models/objects/r_explode/tris.md2'), base: Math.random() < 0.5 ? 15 : 0, frames: 15, light: 350, pitch: 0, yaw: Math.floor(Math.random() * 360) }); break;
+      case 9: renderer.spawnParticles('explosion', x, y, z, 0); explosions.push({ x, y, z, t0: time, type: 'poly', mdl: model('models/objects/r_explode/tris.md2'), base: 30, frames: 19, light: 350, pitch: 0, yaw: Math.floor(Math.random() * 360) }); break;
       case 3: renderer.spawnParticles('blood', x, y, z, Math.min(n * 2, 60), [0, 0, 0], 0xe8); break;
       case 4: renderer.spawnParticles('rail', x, y, z, 0, [x2, y2, z2]); break;
       case 5: renderer.spawnParticles('teleport', x, y, z, 0); break;
-      case 6: renderer.spawnParticles('gunshot', x, y, z, 40, [0, 0, 0], 0xe0); exLights.push({ x, y, z, t0: time, light: 150, frames: 4, misc: true }); break;
+      // TE_BLASTER: sparks, and the small explode model turned to the direction, fading over 4 frames
+      case 6: renderer.spawnParticles('gunshot', x, y, z, 40, [x2, y2, z2], 0xe0);
+        explosions.push({ x, y, z, t0: time, type: 'misc', mdl: model('models/objects/explode/tris.md2'), base: 0, frames: 4, light: 150,
+          pitch: (Math.acos(Math.max(-1, Math.min(1, z2))) / Math.PI) * 180, yaw: x2 ? (Math.atan2(y2, x2) / Math.PI) * 180 : y2 > 0 ? 90 : y2 < 0 ? 270 : 0 }); break;
       case 15: flashes.push({ x, y, z, r: n, die: time }); break;   // a muzzle flash (MZ_*, MZ2_*)
       // TE_SPLASH: count and colour (cl_tent.c's splash_color: unknown, sparks, blue water, brown water, slime, lava, blood)
       case 7: renderer.spawnParticles('gunshot', x, y, z, Math.min(n >> 4, 64), [x2 || 0, y2 || 0, z2 || 1], [0x00, 0xe0, 0xb0, 0x50, 0xd0, 0xe0, 0xe8][n & 7] ?? 0); break;
       case 14: renderer.spawnParticles('bubbles', x, y, z, 0, [x2, y2, z2]); break;   // TE_BUBBLETRAIL
-      case 8: renderer.spawnParticles('bfg', x, y, z, 0); explosions.push({ x, y, z, t0: time, spr: sprite('sprites/s_bfg3.sp2'), scale: 1 }); exLights.push({ x, y, z, t0: time, light: 350, frames: 4, c: 1 / 3 }); break;
+      // TE_BFG_EXPLOSION: the s_bfg2 sprite, 4 frames
+      case 8: renderer.spawnParticles('bfg', x, y, z, 0); explosions.push({ x, y, z, t0: time, type: 'poly', spr: sprite('sprites/s_bfg2.sp2'), base: 0, frames: 4, light: 350, c: 1 / 3 }); break;
       case 10: renderer.spawnParticles('gunshot', x, y, z, 8, [0, 0, 1], 4); break;
       case 12: beams.push({ a: [x, y, z], b: [x2, y2, z2], color: 0xd0, until: time + 0.1 }); break;
       case 13: beams.push({ a: [x, y, z], b: [x2, y2, z2], color: n & 2 ? 0xf2 : n & 4 ? 0xd0 : n & 8 ? 0xf3 : n & 16 ? 0xdc : 0xe0, until: time + 0.12 }); break;
@@ -526,11 +531,11 @@ function frameDlights(ents, time) {
     const effects = e[10];
     if (effects & (8 | 16 | 64 | 128)) lights.push({ x: e[4], y: e[5], z: e[6], r: 200, c: effects & 128 ? 1 / 3 : 2 / 3 });
   }
-  exLights = exLights.filter((l) => {
-    const frac = 1 + (time - l.t0) * 10, f = Math.floor(frac);
-    if (f >= l.frames - 1) return false;
-    const a = l.misc ? 1 - frac / (l.frames - 1) : (16 - f) / 16;
-    if (a > 0) lights.push({ x: l.x, y: l.y, z: l.z, r: l.light * a, c: l.c });
+  explosions = explosions.filter((ex) => {
+    const frac = 1 + (time - ex.t0) * 10, f = Math.floor(frac);
+    if (f >= ex.frames - 1) return false;
+    ex.alpha = ex.type === 'misc' ? 1 - frac / (ex.frames - 1) : (16 - f) / 16;
+    if (ex.alpha > 0) lights.push({ x: ex.x, y: ex.y, z: ex.z, r: ex.light * ex.alpha, c: ex.c });
     return true;
   });
   return lights;
@@ -565,8 +570,19 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   }
   beams = beams.filter((b) => b.until > time);
   for (const b of beams) r.drawBeam(b.a, b.b, b.color);
-  explosions = explosions.filter((x) => time - x.t0 < 0.6);
-  for (const x of explosions) if (x.spr) r.drawSprite(x.spr, Math.floor((time - x.t0) * 10), [x.x, x.y, x.z]);
+  // CL_AddExplosions: fullbright, the frame stepping at 10 a second from frame 1 (the newer of the two it lerped
+  // between); ex_poly's skin climbs 0-4 over the first ten frames, then 5 and 6 translucent; ex_misc is translucent
+  // throughout; translucency by the alpha as ref_soft had it (above 0.66 opaque, above 0.33 66%, else 33%)
+  for (const ex of explosions) {
+    const frac = 1 + (time - ex.t0) * 10, f = Math.floor(frac);
+    const translucent = ex.type === 'misc' || (ex.type === 'poly' && (f >= 10 || ex.spr));
+    const blend = !translucent || ex.alpha > 0.66 ? 0 : ex.alpha > 0.33 ? 2 : 1;
+    const frame = ex.base + f + 1;
+    if (ex.mdl) {
+      const skin = ex.type === 'misc' ? 0 : f < 10 ? Math.max(0, f >> 1) : f < 13 ? 5 : 6;
+      r.drawAlias(ex.mdl, Math.min(frame, ex.mdl.frames.length - 1), Math.min(skin, ex.mdl.skins.length - 1), [ex.x, ex.y, ex.z], [ex.pitch, ex.yaw, 0], 255, { time, fullbright: true, alpha: blend });
+    } else if (ex.spr) r.drawSprite(ex.spr, frame % ex.spr.frames.length, [ex.x, ex.y, ex.z], 255, blend);
+  }
   r.runParticles(dt, time);
   r.drawParticles();
   // the weapon in hand (depth hack: drawn over everything near); none at the intermission
