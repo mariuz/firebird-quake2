@@ -541,16 +541,18 @@ DECLARE dtf DOUBLE PRECISION; DECLARE dex DOUBLE PRECISION; DECLARE dey DOUBLE P
 DECLARE dnx DOUBLE PRECISION; DECLARE dny DOUBLE PRECISION; DECLARE dnz DOUBLE PRECISION; DECLARE dsf INTEGER; DECLARE dct INTEGER;
 DECLARE dals SMALLINT; DECLARE dsts SMALLINT; DECLARE dhit INTEGER;
 DECLARE gvz DOUBLE PRECISION; DECLARE gflags INTEGER; DECLARE gsolid SMALLINT; DECLARE ghead INTEGER;
+DECLARE wcx DOUBLE PRECISION; DECLARE wcy DOUBLE PRECISION; DECLARE wcz DOUBLE PRECISION; DECLARE oldx DOUBLE PRECISION; DECLARE oldy DOUBLE PRECISION;
 DECLARE bvx DOUBLE PRECISION; DECLARE bvy DOUBLE PRECISION; DECLARE xys DOUBLE PRECISION; DECLARE bt DOUBLE PRECISION; DECLARE bts DOUBLE PRECISION;
 DECLARE bfs DOUBLE PRECISION; DECLARE bobz DOUBLE PRECISION; DECLARE bobp DOUBLE PRECISION; DECLARE bobr DOUBLE PRECISION;
 DECLARE noclip SMALLINT; DECLARE ppitch DOUBLE PRECISION; DECLARE pstepz DOUBLE PRECISION; DECLARE gtic INTEGER; DECLARE stepz2 DOUBLE PRECISION; DECLARE jr2 SMALLINT; DECLARE afin2 DOUBLE PRECISION; DECLARE ddmg2 INTEGER;
 BEGIN
   -- (the player and ents rows are wide: what the think decides is written back once, at the end)
   SELECT p.ent_id, p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz,
-         p.ducked, p.bobtime
-    FROM player p WHERE p.id = 1 INTO pe, jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz, pducked, pbobtime;
+         p.ducked, p.bobtime, p.water_x, p.water_y, p.water_z
+    FROM player p WHERE p.id = 1 INTO pe, jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz, pducked, pbobtime, wcx, wcy, wcz;
   IF (pe IS NULL) THEN EXIT;
-  SELECT e.deadflag, e.flags, e.waterlevel, e.watertype, e.yaw, e.health, e.z, e.max_health FROM ents e WHERE e.id = :pe INTO dead, flags, owl, wt, yaw, hp, oldz, mhp;
+  SELECT e.deadflag, e.flags, e.waterlevel, e.watertype, e.yaw, e.health, e.z, e.max_health, e.x, e.y FROM ents e WHERE e.id = :pe
+    INTO dead, flags, owl, wt, yaw, hp, oldz, mhp, oldx, oldy;
   t = now_();
   SELECT g.gravity, g.tic FROM game g WHERE g.id = 1 INTO grav, gtic;
 
@@ -571,8 +573,10 @@ BEGIN
   ELSE IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(imp);
 
   -- P_WorldEffects: water, slime, lava, drowning
-  IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :pe AND e.lx = e.x AND e.ly = e.y AND e.lz = e.z)) THEN wl = owl;   -- not moved since the last check
-  ELSE EXECUTE PROCEDURE check_water(pe) RETURNING_VALUES wl, wt;
+  -- (PM_CatagorizePosition's water level, worked out again wherever the player now is: moved by pmove, a
+  -- plat or a teleporter. The link position can't say so: every move relinks.)
+  IF (wcx = oldx AND wcy = oldy AND wcz = oldz) THEN wl = owl;
+  ELSE BEGIN EXECUTE PROCEDURE check_water(pe) RETURNING_VALUES wl, wt; wcx = oldx; wcy = oldy; wcz = oldz; END
   IF (owl = 0 AND wl > 0) THEN
   BEGIN
     IF (BIN_AND(wt, 8) <> 0) THEN EXECUTE PROCEDURE snd(pe, 0, 'player/lava_in.wav', 1, 1);
@@ -877,7 +881,8 @@ BEGIN
   END
   UPDATE player p SET p.pitch = :pitch, p.punchangle = MINVALUE(0, p.punchangle + 10 * :dt), p.jump_released = :jr2, p.stepz = :stepz2,
          p.ducked = :ducked2, p.view_ofs = IIF(:ducked2 = 1, -2, 22), p.bobtime = :bt, p.bob_z = :bobz, p.bob_pitch = :bobp, p.bob_roll = :bobr,
-         p.air_finished = COALESCE(:afin2, p.air_finished), p.drown_dmg = COALESCE(:ddmg2, p.drown_dmg) WHERE p.id = 1;
+         p.air_finished = COALESCE(:afin2, p.air_finished), p.drown_dmg = COALESCE(:ddmg2, p.drown_dmg),
+         p.water_x = :wcx, p.water_y = :wcy, p.water_z = :wcz WHERE p.id = 1;
 
   -- megahealth rots away above the maximum
   UPDATE player p SET p.mega_time = :t + 1 WHERE p.id = 1 AND p.mega_time < :t AND (SELECT e.health FROM ents e WHERE e.id = :pe) > :mhp;

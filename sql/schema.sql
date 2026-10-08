@@ -410,6 +410,9 @@ CREATE TABLE player (
   inv_sel         SMALLINT DEFAULT 7 NOT NULL,            -- pers.selected_item: an itemlist index (7 the blaster), -1 none
   pickup_item     SMALLINT DEFAULT 0 NOT NULL,            -- STAT_PICKUP_ICON/STRING: the itemlist index last picked up (41 health)
   pickup_time     DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- ... shown until then
+  water_x         DOUBLE PRECISION DEFAULT 1e30 NOT NULL, -- where the player's water level was last worked out (none yet: far away)
+  water_y         DOUBLE PRECISION DEFAULT 1e30 NOT NULL,
+  water_z         DOUBLE PRECISION DEFAULT 1e30 NOT NULL,
   jump_released   SMALLINT DEFAULT 1 NOT NULL,
   fly_sound_time  DOUBLE PRECISION DEFAULT 0 NOT NULL,
   swim_time       DOUBLE PRECISION DEFAULT 0 NOT NULL,

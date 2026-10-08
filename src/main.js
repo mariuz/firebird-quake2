@@ -592,6 +592,9 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   }
   prevPos = { x: last.PX, y: last.PY };
 
+  // RDF_UNDERWATER: the eye in water, slime or lava warps the view (D_WarpScreen), not the status bar
+  if (last.WATERLEVEL >= 3 && !last.INTERMISSION) r.warpScreen(time);
+
   // 2D: the status bar (with the help icon blinking while there is news on the help computer), and the
   // help computer itself on F1 and at the intermission
   last.HELP_ICON = (last.HELP_CHANGED ?? 0) > helpSeen && Math.floor(time * 10) & 8;

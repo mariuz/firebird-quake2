@@ -94,6 +94,33 @@ export class Renderer {
     this.sky = faces;
   }
 
+  // ── the underwater view (D_WarpScreen) ──────────────────────────────────
+  /**
+   * D_WarpScreen: the frame resampled through R_InitTurb's integer sine table (AMP2 3, CYCLE 128, SPEED 20).
+   * A virtual grid six pixels wider and taller than the view is laid over it; each row is shifted along by
+   * the table at that row, each column takes its row from the table at that column, the table sliding
+   * twenty steps a second. Drawn after the view weapon, before the status bar and the palette blend.
+   */
+  warpScreen(time) {
+    const { w, h, fb } = this;
+    const AMP2 = 3, CYCLE = 128, SPEED = 20;
+    let wt = this.warpTab;
+    if (!wt || wt.w !== w || wt.h !== h) {
+      const rows = new Int32Array(h + AMP2 * 2), cols = new Int32Array(w + AMP2 * 2), turb = new Int32Array(1280);
+      for (let v = 0; v < h + AMP2 * 2; v++) rows[v] = Math.trunc((v / (h + AMP2 * 2)) * h) * w;
+      for (let u = 0; u < w + AMP2 * 2; u++) cols[u] = Math.trunc((u / (w + AMP2 * 2)) * w);
+      for (let i = 0; i < 1280; i++) turb[i] = Math.trunc(AMP2 + Math.sin((i * 3.14159 * 2) / CYCLE) * AMP2);
+      wt = this.warpTab = { w, h, rows, cols, turb, src: new Uint8Array(w * h) };
+    }
+    const { rows, cols, turb, src } = wt;
+    src.set(fb);
+    const off = Math.trunc(time * SPEED) & (CYCLE - 1);
+    for (let v = 0; v < h; v++) {
+      const tv = turb[off + v], o = v * w;
+      for (let u = 0; u < w; u++) fb[o + u] = src[rows[v + turb[off + u]] + cols[u + tv]];
+    }
+  }
+
   // ── surface cache (R_DrawSurface) ───────────────────────────────────────
   surface(faceId, styles, time, frame, mip = 0) {
     const info = this.faceInfo.get(faceId);

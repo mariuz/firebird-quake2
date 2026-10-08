@@ -2,7 +2,8 @@
 // R_LightPoint): a light near a face brightens its surface by what is left of its radius, from either side
 // of the plane, a face out of reach keeps its cached surface, lit surfaces are never cached. Mip levels
 // (D_MipLevelForScale, R_DrawSurface's surfmip): the thresholds, a surface at a level, and a frame that
-// draws its far walls from smaller images.
+// draws its far walls from smaller images. The underwater warp (D_WarpScreen): pixels move by at most the
+// table's amplitude, a flat picture stays flat, the wobble moves with time.
 //   node scripts/painter-test.mjs [map]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -84,5 +85,25 @@ r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
 const levels = [0, 0, 0, 0];
 for (const k of r.surfCache.keys()) levels[k % 4]++;
 assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws near surfaces at mip 0 and far ones smaller (by level: ${levels.join(' ')})`);
+// the underwater warp
+{
+  const { w, h } = r;
+  r.fb.fill(77); r.warpScreen(0.3);
+  assert(r.fb.every((p) => p === 77), 'warping a flat picture leaves it flat');
+  let maxdu = 0, maxdv = 0, moved = 0;
+  for (let v = 0; v < h; v++) for (let u = 0; u < w; u++) r.fb[v * w + u] = u & 255;
+  r.warpScreen(0.3);
+  for (let v = 0; v < h; v++) for (let u = 0; u < 240; u++) { const d = Math.abs(r.fb[v * w + u] - u); maxdu = Math.max(maxdu, d); if (d) moved++; }
+  for (let v = 0; v < h; v++) for (let u = 0; u < w; u++) r.fb[v * w + u] = v;
+  r.warpScreen(0.3);
+  const a = r.fb.slice();
+  for (let v = 0; v < h; v++) for (let u = 0; u < w; u++) maxdv = Math.max(maxdv, Math.abs(r.fb[v * w + u] - v));
+  for (let v = 0; v < h; v++) for (let u = 0; u < w; u++) r.fb[v * w + u] = v;
+  r.warpScreen(0.6);
+  let changed = 0;
+  for (let i = 0; i < a.length; i++) if (a[i] !== r.fb[i]) changed++;
+  assert(moved > w * h / 4 && maxdu <= 7 && maxdv <= 7, `the view wobbles by a few pixels at most (columns ${maxdu}, rows ${maxdv})`);
+  assert(changed > 0, `... and the wobble moves on with time (${changed} pixels differ a third of a second later)`);
+}
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

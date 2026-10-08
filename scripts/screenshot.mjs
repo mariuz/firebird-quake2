@@ -90,6 +90,7 @@ async function shot(name) {
   const wp = WEAPONS[last.WEAPON];
   const vm = wp && res.models.get(res.byName.get(wp.view));
   if (vm) { renderer.zb.fill(0); renderer.drawAlias(vm.mdl, viewFrame(vm.mdl, last, last.TIME_), 0, [last.PX, last.PY, last.VIEW_Z], [-last.PITCH, last.YAW, 0], Math.max(lightPoint(bsp, last.PX, last.PY, last.PZ), 32), { near: 1 }); }
+  if (last.WATERLEVEL >= 3) renderer.warpScreen(last.TIME_);   // RDF_UNDERWATER
   hud.draw(renderer, last, last.TIME_);
   if (last.CPRINT) hud.drawCenter(renderer, last.CPRINT, Math.floor(H * 0.3));
   renderer.present();

@@ -92,6 +92,9 @@ short stories of what changed and what it measured; keep that.
   probes all land in solid (the fan's hub) has no cluster and must be drawn anyway.
 - Firebird evaluates `AND` left to right and short-circuits: put the cheap, selective test first.
 - The player's `pitch` lives on `player`, the yaw on `ents`; `view_setup` reads both.
+- "Not moved since the last link" (`lx = x`) is true right after every move, because the move relinks:
+  it cannot stand for "not moved since the last check". The player's water check was skipped that way
+  and swimming silently died; remember the position of the check itself (`player.water_x/y/z`).
 - Spawn points: `info_player_start` with the targetname the previous level's
   `target_changelevel` asked for (`map$spawnpoint`), else the one without a targetname.
 - A monster's `combattarget` names a `point_combat` to run to when it first sees the player, not

@@ -252,6 +252,9 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   changes. The level is chosen per polygon in `drawSurfacePoly` (`mipLevel`, `D_MipLevelForScale`:
   the nearest vertex's 1/z × `view.scale` × the texinfo's `mipadjust`); a surface at level k is
   `extents >> k` from `tex.mips[k]`, and its `ms` (1/2^k) scales the texels in `fillPolygon`.
+- **The underwater view.** `warpScreen(time)` is `D_WarpScreen`: the frame copied aside and read back
+  through the turbulence table (row offsets by column, column offsets by row); `drawFrame` calls it
+  after the view weapon when `WATERLEVEL` is 3, before the status bar.
 - **Dynamic lights.** `renderer.dlights` is the frame's lights (`frameDlights` in `src/main.js`: muzzle
   flashes from fx 15, projectiles by their effects bits, explosions fading). `faceDlights` is
   `R_MarkLights` face by face (the plane distance, the reach across the face); a face it returns lights

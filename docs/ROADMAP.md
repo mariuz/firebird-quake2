@@ -150,8 +150,16 @@ them.
   to it. Far walls no longer shimmer, and a cold frame builds faster (smaller surfaces). Warping and
   translucent surfaces stay at the full-size image, as ref_soft drew them. At 320×240 most of a room is
   drawn at mip 1 or 2, as it was in the software renderer at that size.
-- **Translucent water from inside / warp surfaces**: the underwater screen warp
-  (`D_WarpScreen`) is not done; the tint is.
+- **The underwater view**: done. With the eye in water, slime or lava (`RDF_UNDERWATER`) the frame is
+  resampled as `D_WarpScreen` did it, through `R_InitTurb`'s integer sine table (amplitude 3, a cycle of
+  128, sliding 20 steps a second): rows shift along by the table at their row, columns take their row from
+  the table at their column, over a grid six pixels larger than the view. The view weapon wobbles with
+  it; the status bar does not; the tint is laid over as before. Found on the way: the player's water level
+  had not been updated since an optimisation skipped the check when the link position matched the
+  origin, which every move's relink makes true, so swimming, drowning, the tint and the water sounds had
+  stopped working. `player_think` now remembers where it last worked the level out (`player.water_x/y/z`)
+  and works it out again wherever the player is, as `PM_CatagorizePosition` did every frame; the smoke
+  test puts the player under water and back.
 - **Entity lighting**: alias models take the lightmap value under them, the dynamic lights near them and
   Gouraud; there is no shadow (ref_soft had none either).
 - **Sprites**: oriented sprites (`SPR_ORIENTED`) are drawn as billboards.

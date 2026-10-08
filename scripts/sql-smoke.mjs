@@ -548,6 +548,34 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   await db.exec(`UPDATE player SET weapon = ${keep.WEAPON}, weapons = ${keep.WEAPONS}, bullets = ${keep.BULLETS}, silencer_shots = ${keep.SILENCER_SHOTS}, attack_finished = 0 WHERE id = 1`);
 }
 
+// the player in water: the level is worked out wherever the player is put (a regression once left it
+// at 0 for good: the check was skipped when the link position matched, and every move relinks)
+{
+  const one = async (q) => (await db.query(q)).rows[0];
+  const pe = (await one('SELECT ent_id e FROM player')).E;
+  const k0 = await one(`SELECT x, y, z FROM ents WHERE id = ${pe}`);
+  const keep = { x: k0.X, y: k0.Y, z: k0.Z };
+  const leaves = (await db.query('SELECT FIRST 20 (minx + maxx) / 2 cx, (miny + maxy) / 2 cy, maxz FROM leaves WHERE BIN_AND(contents, 32) <> 0 AND maxz - minz >= 64 ORDER BY (maxx - minx) * (maxy - miny) DESC')).rows;
+  let spot = null;
+  for (const l of leaves) {
+    const z = l.MAXZ - 40;
+    const c = await one(`SELECT point_contents(${l.CX}, ${l.CY}, ${z + 22}) c, point_contents(${l.CX}, ${l.CY}, ${z - 23}) f FROM rdb$database`);
+    if (c.C & 32 && c.F & 32) { spot = { x: l.CX, y: l.CY, z }; break; }   // water from the feet to the eyes
+  }
+  if (spot) {
+    const put = async (p) => { await db.exec(`UPDATE ents SET x = ${p.x}, y = ${p.y}, z = ${p.z}, vx = 0, vy = 0, vz = 0 WHERE id = ${pe}`); await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE link_ent(${pe}); END`); };
+    await put(spot);
+    let r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+    const st = await one(`SELECT e.flags f, e.health h, e.movetype mt, e.deadflag d, CAST(e.z AS INTEGER) z FROM ents e WHERE e.id = ${pe}`), fl = st.F;
+    assert(r.WATERLEVEL === 3 && (fl & 8), `put under water, the player is in it to the eyes at once (level ${r.WATERLEVEL}, FL_INWATER; ${JSON.stringify(st)})`);
+    for (let i = 0; i < 4; i++) r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+    assert(r.WATERLEVEL === 3, '... and stays so while it sinks and rests on the bottom');
+    await put(keep);
+    r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+    assert(r.WATERLEVEL === 0, '... and out of it once put back on dry land');
+  } else console.log('     (no deep water on this map for the water level check)');
+}
+
 // the console's commands: god, notarget, noclip through a wall, give, kill
 {
   const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;
