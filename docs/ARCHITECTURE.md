@@ -300,7 +300,7 @@ Music was CD audio: `public/music/trackNN.ogg|mp3`, or a folder picked on the pa
 ## 8. The page (`src/main.js`, `public/`)
 
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
-`pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail,
+`pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
 brightness, renderer mode, sound, music) persist in `localStorage`. Input: WASD/arrows, mouse look
 under pointer lock, `default.cfg`'s weapon keys (1–5 blaster to chaingun, 6 grenade launcher, 7 rocket
 launcher, 8 hyperblaster, 9 railgun, 0 BFG10K, `G` hand grenades) sent as impulses that are the weapons

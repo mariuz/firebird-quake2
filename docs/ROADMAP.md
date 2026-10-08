@@ -179,8 +179,13 @@ them.
   time × skyrotate degrees about the normalised axis, the view's axes turned back once a frame so the pixels
   cost the same. ref_soft kept the two values and never used them; none of the demo's maps sets them, so it
   shows in the full game's.
-- **Resolution and scaling**: 320×240 and 160×120 with CSS scaling; a 640×480 mode would cost
-  four times the raster, which the painter could now afford on a desktop.
+- **Resolution**: done: 640×480 joins 320×240 and 160×120 (the Detail setting, the video menu's video mode),
+  scaled to the page by CSS. As in ref_soft at higher resolutions the status bar, menus and text keep their
+  pixel size, centred; particles keep their size on screen (`D_DrawParticle`'s `d_pix_shift`, between
+  w/320 and w/80 pixels a side, which also makes near particles at 320×240 up to 4 pixels as they were);
+  the mip levels follow the larger projection scale. The raster costs about three times 320×240's (4.2 ms
+  warm and 6.4 cold in Node, against 1.4 and 3.1). Left: ref_soft warped an underwater view through a
+  320×240 buffer at any resolution; the painter warps at full size.
 
 ## Sound
 

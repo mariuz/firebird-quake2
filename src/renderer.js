@@ -812,6 +812,10 @@ export class Renderer {
   drawParticles() {
     const view = this.view;
     const { fb, zb, w, h } = this;
+    // D_DrawParticle: a square of (0x8000 / z) >> d_pix_shift pixels, between w / 320 and w / 80, so particles
+    // keep their size on screen at every resolution (2 a side at 100 units at 320 wide, 4 at 640)
+    const pixShift = 8 - Math.trunc(w / 320 + 0.5);
+    const pixMin = Math.max(1, Math.trunc(w / 320)), pixMax = Math.max(1, Math.trunc(w / 80 + 0.5));
     for (const p of this.particles) {
       const wx = p.x - view.x, wy = p.y - view.y, wz = p.z - view.z;
       const f = wx * view.fwd[0] + wy * view.fwd[1] + wz * view.fwd[2];
@@ -819,7 +823,8 @@ export class Renderer {
       const iz = 1 / f;
       const x = (view.cx + ((wx * view.right[0] + wy * view.right[1] + wz * view.right[2]) * view.scale) / f) | 0;
       const y = (view.cy - ((wx * view.up[0] + wy * view.up[1] + wz * view.up[2]) * view.scale) / f) | 0;
-      const size = f < 200 ? 2 : 1;
+      let size = Math.trunc(iz * 0x8000) >> pixShift;
+      if (size < pixMin) size = pixMin; else if (size > pixMax) size = pixMax;
       for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
         const px = x + dx, py = y + dy;
         if (px < 0 || py < 0 || px >= w || py >= h) continue;

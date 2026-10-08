@@ -138,8 +138,9 @@ lightmap collapsed to its brightest channel, as `Mod_LoadLighting` did), run thr
 mip level is chosen per surface as `D_MipLevelForScale` chose it (so far walls come from the smaller
 images and don't shimmer), and a
 surface is built the way `R_DrawSurfaceBlock8` did it: one row of light values interpolated per texel row,
-stepped along it, so the painter spends about 2 ms on a 320×240 frame in Node and 8 ms when every surface
-in view has to be rebuilt (a light style changed, a new area opened), down from 3 and 30.
+stepped along it, so the painter spends about 1.5 ms on a 320×240 frame in Node and 3 ms when every surface
+in view has to be rebuilt (a light style changed, a new area opened), down from 3 and 30; the 640×480 mode
+costs about three times as much.
 Translucent surfaces (`SURF_TRANS33/66`) are blended through the alpha map in the same picture; warping
 surfaces ripple and flow, and with the eye under water the whole view wobbles as `D_WarpScreen` made it;
 the sky is the `env/` cube map sampled by each pixel's direction. MD2 models

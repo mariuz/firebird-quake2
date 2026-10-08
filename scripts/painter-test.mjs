@@ -158,5 +158,19 @@ assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws ne
   assert(Math.abs(v[0]) < 1e-12 && Math.abs(v[1] - 1) < 1e-12 && Math.abs(v[2]) < 1e-12, 'the axis is normalised and the turn goes the way glRotatef turned');
   r.skyRotate = 0; r.skyAxis = [0, 0, 0];
 }
+// particles keep their size on screen at every resolution (D_DrawParticle's d_pix_shift, d_pix_min, d_pix_max)
+{
+  const dots = (w, h, dist) => {
+    r.setSize(w, h);
+    r.beginFrame({ x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, fov: 90 });
+    r.zb.fill(0); r.fb.fill(0);
+    r.particles = [{ x: dist, y: 0, z: 0, color: 7 }];
+    r.drawParticles();
+    return r.fb.filter((p) => p === 7).length;
+  };
+  const s320 = [dots(320, 240, 100), dots(320, 240, 30), dots(320, 240, 2000)], s640 = [dots(640, 480, 100), dots(640, 480, 30), dots(640, 480, 2000)];
+  assert(s320.join() === '4,16,1' && s640.join() === '25,64,4', `a particle at 100, 30 and 2000 units: ${s320.join(', ')} pixels at 320×240, ${s640.join(', ')} at 640×480`);
+  r.setSize(320, 240); r.particles = [];
+}
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

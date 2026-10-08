@@ -45,8 +45,9 @@ const settings = { map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 
   sensitivity: 7, invertMouse: false, crosshair: 1 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('firebird-quake2:settings') || '{}')); } catch { /* defaults */ }
 const saveSettings = () => { try { localStorage.setItem('firebird-quake2:settings', JSON.stringify(settings)); } catch { /* ignore */ } };
-const viewWidth = () => (settings.detail === 'high' ? 320 : 160);
-const viewHeight = () => (settings.detail === 'high' ? 240 : 120);
+const DETAIL = { low: [160, 120], high: [320, 240], ultra: [640, 480] };   // the video modes the page offers
+const viewWidth = () => (DETAIL[settings.detail] ?? DETAIL.high)[0];
+const viewHeight = () => (DETAIL[settings.detail] ?? DETAIL.high)[1];
 const audio = new Q2Audio();
 audio.setVolume(settings.sfx / 100);
 audio.setMusicVolume(settings.music / 100);

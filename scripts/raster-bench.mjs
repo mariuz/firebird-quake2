@@ -1,7 +1,7 @@
 // raster-bench.mjs – where does the painter spend its time? Renders the same
 // frames the screenshots use, many times, and reports the cost per stage.
 //
-//   node scripts/raster-bench.mjs [map] [--frames=N]
+//   node scripts/raster-bench.mjs [map] [--frames=N] [--size=640x480]
 //   node --cpu-prof --cpu-prof-dir=/tmp/prof scripts/raster-bench.mjs   (then scripts/prof-summary.mjs)
 
 import fs from 'node:fs';
@@ -18,7 +18,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const mapName = args[0] ?? 'demo1';
 const frames = Number(process.argv.find((a) => a.startsWith('--frames='))?.slice(9) ?? 40);
-const W = 320, H = 240;
+const size = process.argv.find((a) => a.startsWith('--size='))?.slice(7).split('x').map(Number);
+const W = size?.[0] || 320, H = size?.[1] || 240;
 const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));
 const stubCanvas = { width: W, height: H, getContext: () => ({ createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }), putImageData() {} }) };
 

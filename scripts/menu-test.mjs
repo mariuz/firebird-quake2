@@ -89,7 +89,7 @@ assert(calls.includes('defaults') && calls.includes('console') && !menu.active, 
 menu.mainCursor = 0; menu.main(); keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
 assert(menu.current.id === 'video', 'video opens');
 keys('ArrowRight', 'ArrowDown', 'ArrowRight', 'ArrowDown', 'ArrowRight');
-assert(settings.renderer === 'sql' && settings.detail === 'low' && settings.brightness === 1.5, 'the driver, the video mode and the brightness change');
+assert(settings.renderer === 'sql' && settings.detail === 'ultra' && settings.brightness === 1.5, 'the driver, the video mode (up to 640×480) and the brightness change');
 keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
 assert(settings.renderer === 'fast' && settings.detail === 'high' && settings.brightness === 1.4 && menu.current.id === 'main', 'cancel puts them back');
 

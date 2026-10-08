@@ -261,7 +261,7 @@ export class Menu {
     const m = this.framework({
       id: 'video', banner: 'm_banner_video', items: [
         spin('driver', 0, ['[SQL picks faces]', '[SQL projects   ]'], () => (h.get('renderer') === 'sql' ? 1 : 0), (v) => h.set('renderer', v ? 'sql' : 'fast')),
-        spin('video mode', 10, ['[320 240  ]', '[160 120  ]'], () => (h.get('detail') === 'low' ? 1 : 0), (v) => h.set('detail', v ? 'low' : 'high')),
+        spin('video mode', 10, ['[160 120  ]', '[320 240  ]', '[640 480  ]'], () => Math.max(0, ['low', 'high', 'ultra'].indexOf(h.get('detail'))), (v) => h.set('detail', ['low', 'high', 'ultra'][v])),
         slider('brightness', 30, 10, 18, () => Math.round(h.get('brightness') * 10), (v) => h.set('brightness', v / 10)),
         spin('fullscreen', 40, YESNO, () => (h.get('fullscreen') ? 1 : 0), (v) => h.set('fullscreen', !!v)),
         action('reset to defaults', 90, () => h.resetVideo()),

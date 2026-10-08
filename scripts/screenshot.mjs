@@ -2,7 +2,7 @@
 // under Node, the painter runs against a stub canvas, and the frames are
 // written as PNGs to docs/. Also a convenient end-to-end test.
 //
-//   node scripts/screenshot.mjs [map] [out-prefix] [--at=x,y,z,yaw] [--sql] [--compare] [--flash]
+//   node scripts/screenshot.mjs [map] [out-prefix] [--at=x,y,z,yaw] [--sql] [--compare] [--flash] [--size=640x480]
 // (--flash: each frame lit by a muzzle flash's dynamic light, radius 216, where the player's gun is)
 
 import fs from 'node:fs';
@@ -20,7 +20,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const mapName = args[0] ?? 'demo1';
 const prefix = args[1] ?? path.join(root, 'docs/screenshot');
-const W = 320, H = 240;
+const size = process.argv.find((a) => a.startsWith('--size='))?.slice(7).split('x').map(Number);
+const W = size?.[0] || 320, H = size?.[1] || 240;
 const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));
 
 const stubCanvas = {
