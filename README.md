@@ -143,7 +143,8 @@ in view has to be rebuilt (a light style changed, a new area opened), down from 
 Translucent surfaces (`SURF_TRANS33/66`) are blended through the alpha map in the same picture; warping
 surfaces ripple and flow, and with the eye under water the whole view wobbles as `D_WarpScreen` made it;
 the sky is the `env/` cube map sampled by each pixel's direction. MD2 models
-are drawn with the lightmap value under the entity and Gouraud light from the vertex normals, clipped
+are lit as ref_soft lit them (the light under the model split into ambient and shade, the shade from a fixed
+world direction by the vertex normals; items pulse, the gun never goes below a minimum), clipped
 against the near plane triangle by triangle; sprites are billboards; explosions, blood, blaster sparks
 and the rail trail are particles. Muzzle flashes, rockets, blaster bolts, the BFG ball and explosions are
 dynamic lights, added to the lightmaps of the faces they reach as ref_soft's `R_AddDynamicLights` did

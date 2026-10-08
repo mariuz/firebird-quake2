@@ -255,6 +255,9 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
 - **The underwater view.** `warpScreen(time)` is `D_WarpScreen`: the frame copied aside and read back
   through the turbulence table (row offsets by column, column offsets by row); `drawFrame` calls it
   after the view weapon when `WATERLEVEL` is 3, before the status bar.
+- **Model lighting.** `drawAlias(…, light, { dlight, minlight, glow })` is `R_AliasSetupLighting`: the
+  lightmap light (scaled by the brightness) plus the dynamic part, `RF_MINLIGHT` and `RF_GLOW` applied,
+  ambient and shade clamped as ref_soft clamped them, the shade by the normal's x.
 - **Dynamic lights.** `renderer.dlights` is the frame's lights (`frameDlights` in `src/main.js`: muzzle
   flashes from fx 15, projectiles by their effects bits, explosions fading). `faceDlights` is
   `R_MarkLights` face by face (the plane distance, the reach across the face); a face it returns lights

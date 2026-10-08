@@ -577,9 +577,19 @@ export class Renderer {
     const ox = origin[0] - view.x, oy = origin[1] - view.y, oz = origin[2] - view.z;
     const fwd = view.fwd, right = view.right, up = view.up;
     const fx = fwd[0], fy = fwd[1], fz = fwd[2], rx = right[0], ry = right[1], rz = right[2], ux = up[0], uy = up[1], uz = up[2];
-    const ldx = -1, ldz = 1;
-    light = Math.min(255, light * this.lightScale);
-    const ambient = Math.max(light, 8), shade = Math.max(light, 8);
+    // R_AliasSetupLighting: the light under the model (scaled by the brightness, as r_modulate scaled
+    // R_LightPoint's lightmap part; opts.dlight is the dynamic lights' part, not scaled), at least 0.1 for
+    // RF_MINLIGHT (the view weapon), pulsing by 0.1 sin(7t) for RF_GLOW (items) but not below 0.8 of itself;
+    // then ambient at most 128, ambient and shade at most 192 together, ambient at least LIGHT_MIN 5, and the
+    // light from (-1, 0, 0) in the world: a vertex gains shade by how far its normal faces +x
+    let l = light * this.lightScale + (opts.dlight ?? 0);
+    if (opts.minlight && l < 25.5) l = 25.5;
+    if (opts.glow) l = Math.max(l * 0.8, l + 25.5 * Math.sin((opts.time ?? 0) * 7));
+    const j = Math.trunc(l * 0.9999);
+    let ambient = Math.min(j, 128), shade = j;
+    if (ambient + shade > 192) shade = 192 - ambient;
+    if (ambient < 5) ambient = 5;
+    if (shade < 0) shade = 0;
     const depthHack = opts.depthHack ? 3 : 1;
     const vcx = view.cx, vcy = view.cy, sc = view.scale;
     let anyNear = false;
@@ -599,9 +609,7 @@ export class Renderer {
       const ni = Math.min(verts[i * 4 + 3], 161) * 3;
       const a0 = ANORMS[ni], a1 = ANORMS[ni + 1], a2 = ANORMS[ni + 2];
       const nx = F0 * a0 - R0 * a1 + U0 * a2;
-      const nz = F2 * a0 - R2 * a1 + U2 * a2;
-      const d = (nx * ldx + nz * ldz) * 0.7071;
-      av[o + 6] = Math.min(255, ambient + shade * Math.max(0, d));
+      av[o + 6] = Math.min(255, ambient + (nx > 0 ? shade * nx : 0));
     }
     const sk = mdl.skins[Math.min(skin, mdl.skins.length - 1)] ?? mdl.skins[0];
     const skinData = sk.data, skinW = sk.w, skinH = sk.h;

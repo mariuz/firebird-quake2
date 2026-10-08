@@ -160,8 +160,12 @@ them.
   stopped working. `player_think` now remembers where it last worked the level out (`player.water_x/y/z`)
   and works it out again wherever the player is, as `PM_CatagorizePosition` did every frame; the smoke
   test puts the player under water and back.
-- **Entity lighting**: alias models take the lightmap value under them, the dynamic lights near them and
-  Gouraud; there is no shadow (ref_soft had none either).
+- **Entity lighting**: done, as `R_AliasSetupLighting` had it. The light under the model's origin
+  (`R_LightPoint`, with the dynamic lights near it: a rocket or a bolt is bright by its own light, not by a
+  fullbright rule) splits into ambient (at most 128) and shade (at most 192 together, ambient at least 5);
+  the shade falls by how far each vertex's normal faces +x, as from `lightvec` (-1, 0, 0) in the world. The
+  view weapon has `RF_MINLIGHT` (at least 0.1) and is lit from the eye; items have `RF_GLOW` (`SpawnItem`:
+  the light pulses by 0.1 sin 7t, never below 0.8 of itself). No shadows: ref_soft had none.
 - **Sprites**: oriented sprites (`SPR_ORIENTED`) are drawn as billboards.
 - **Sky**: the cube map is sampled per pixel; the sky's rotation (`sky_rotate`, `sky_axis`) is
   stored by the loader but the painter does not turn it.

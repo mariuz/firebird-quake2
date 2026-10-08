@@ -552,10 +552,11 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
     const m = res.models.get(mid);
     if (!m) continue;
     if (kind === 'M') {
-      const glow = effects & (8 | 16 | 64 | 128) ? 255 : 0;
-      const light = glow || lightPoint(bsp, x, y, z + 8) + dlightAt(r.dlights, x, y, z) / r.lightScale;
+      // R_LightPoint at the origin, with the dynamic lights (a projectile's own light makes it bright); items glow
+      const light = lightPoint(bsp, x, y, z);
       const spin = effects & 1 ? (time * 100) % 360 : 0;   // EF_ROTATE items spin
-      r.drawAlias(m.mdl, frame, skin, [x, y, z], [pitch, yaw + spin, roll], light, { time, alpha: alpha === 1 });
+      r.drawAlias(m.mdl, frame, skin, [x, y, z], [pitch, yaw + spin, roll], light,
+        { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0 });
       if (effects & 8) r.particles.push({ x, y, z, vx: 0, vy: 0, vz: 0, color: 0xe0 + (Math.random() * 4 | 0), die: time + 0.05, type: 'still' });   // the blaster bolt's glow
       if (effects & 16) r.spawnParticles('gunshot', x, y, z, 2, [0, 0, 0], 0xe0 + 8);   // rocket smoke
     } else if (kind === 'S') {
@@ -585,9 +586,11 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
         gr += 0.1 * dy; gy += 0.2 * dy; gp += 0.2 * lag(gunPrev.pitch, last.PITCH);
       }
       gunPrev = { yaw: last.YAW, pitch: last.PITCH };
-      const light = Math.max(lightPoint(bsp, last.PX, last.PY, last.PZ), 32) + dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z) / r.lightScale;
+      // the gun: RF_MINLIGHT, lit from the eye (CL_AddViewWeapon)
+      const light = lightPoint(bsp, last.PX, last.PY, last.VIEW_Z);
       r.zb.fill(0, 0, r.w * r.h);
-      r.drawAlias(vm.mdl, viewFrame(vm.mdl, last, time), 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light, { near: 1, time });
+      r.drawAlias(vm.mdl, viewFrame(vm.mdl, last, time), 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light,
+        { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z) });
     }
   }
   prevPos = { x: last.PX, y: last.PY };

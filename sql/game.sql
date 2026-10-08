@@ -1676,7 +1676,7 @@ BEGIN
   IF (dl = 0) THEN EXIT;
   EXECUTE PROCEDURE spawn_ent('bolt', ox, oy, oz) RETURNING_VALUES s;
   EXECUTE PROCEDURE set_model(s, 'models/objects/laser/tris.md2');
-  UPDATE ents e SET e.owner_id = :owner, e.movetype = 9, e.solid = 2, e.clipmask = 100663299, e.effects = :effect, e.renderfx = 4,
+  UPDATE ents e SET e.owner_id = :owner, e.movetype = 9, e.solid = 2, e.clipmask = 100663299, e.effects = :effect, e.renderfx = 0,
          e.vx = :dx / :dl * :spd, e.vy = :dy / :dl * :spd, e.vz = :dz / :dl * :spd,
          e.yaw = vectoyaw(:dx, :dy), e.pitch = ATAN2(:dz, vlen(:dx, :dy, 0)) * 57.29577951e0, e.dmg = :dmg,
          e.think = 'remove', e.nextthink = now_() + 2 WHERE e.id = :s;
@@ -2232,7 +2232,8 @@ BEGIN
       mdl = item_model(cls);
       IF (mdl IS NULL) THEN BEGIN DELETE FROM ents e WHERE e.id = :eid; CONTINUE; END
       EXECUTE PROCEDURE set_model(eid, mdl);
-      UPDATE ents e SET e.solid = 1, e.movetype = 6, e.clipmask = 3, e.effects = 1, e.yaw = 0,
+      -- (SpawnItem: items pulse, RF_GLOW, unless they cannot be touched)
+      UPDATE ents e SET e.solid = 1, e.movetype = 6, e.clipmask = 3, e.effects = 1, e.yaw = 0, e.renderfx = IIF(BIN_AND(:sf, 2) <> 0, 0, 4),
              e.minx = -15, e.miny = -15, e.minz = -15, e.maxx = 15, e.maxy = 15, e.maxz = 15 WHERE e.id = :eid;
       -- items start a little above the floor and drop
       UPDATE ents e SET e.z = e.z + 1 WHERE e.id = :eid;

@@ -84,12 +84,12 @@ async function shot(name) {
     const [, mid, frame, skin, x, y, z, pitch, yaw, roll, effects, alpha, kind] = e;
     const m = res.models.get(mid);
     if (!m) continue;
-    if (String(kind).trim() === 'M') renderer.drawAlias(m.mdl, frame, skin, [x, y, z], [pitch, yaw + (effects & 1 ? (last.TIME_ * 100) % 360 : 0), roll], lightPoint(bsp, x, y, z + 8), { time: last.TIME_, alpha: alpha === 1 });
+    if (String(kind).trim() === 'M') renderer.drawAlias(m.mdl, frame, skin, [x, y, z], [pitch, yaw + (effects & 1 ? (last.TIME_ * 100) % 360 : 0), roll], lightPoint(bsp, x, y, z), { time: last.TIME_, alpha: alpha === 1, glow: (e[13] & 4) !== 0 });
     else if (String(kind).trim() === 'S') renderer.drawSprite(m.spr, frame, [x, y, z]);
   }
   const wp = WEAPONS[last.WEAPON];
   const vm = wp && res.models.get(res.byName.get(wp.view));
-  if (vm) { renderer.zb.fill(0); renderer.drawAlias(vm.mdl, viewFrame(vm.mdl, last, last.TIME_), 0, [last.PX, last.PY, last.VIEW_Z], [-last.PITCH, last.YAW, 0], Math.max(lightPoint(bsp, last.PX, last.PY, last.PZ), 32), { near: 1 }); }
+  if (vm) { renderer.zb.fill(0); renderer.drawAlias(vm.mdl, viewFrame(vm.mdl, last, last.TIME_), 0, [last.PX, last.PY, last.VIEW_Z], [-last.PITCH, last.YAW, 0], lightPoint(bsp, last.PX, last.PY, last.VIEW_Z), { near: 1, minlight: true }); }
   if (last.WATERLEVEL >= 3) renderer.warpScreen(last.TIME_);   // RDF_UNDERWATER
   hud.draw(renderer, last, last.TIME_);
   if (last.CPRINT) hud.drawCenter(renderer, last.CPRINT, Math.floor(H * 0.3));

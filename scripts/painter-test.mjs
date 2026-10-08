@@ -3,7 +3,8 @@
 // of the plane, a face out of reach keeps its cached surface, lit surfaces are never cached. Mip levels
 // (D_MipLevelForScale, R_DrawSurface's surfmip): the thresholds, a surface at a level, and a frame that
 // draws its far walls from smaller images. The underwater warp (D_WarpScreen): pixels move by at most the
-// table's amplitude, a flat picture stays flat, the wobble moves with time.
+// table's amplitude, a flat picture stays flat, the wobble moves with time. Model lighting
+// (R_AliasSetupLighting): ambient at most 128 and 192 with the shade, LIGHT_MIN, RF_MINLIGHT, RF_GLOW.
 //   node scripts/painter-test.mjs [map]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -104,6 +105,25 @@ assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws ne
   for (let i = 0; i < a.length; i++) if (a[i] !== r.fb[i]) changed++;
   assert(moved > w * h / 4 && maxdu <= 7 && maxdv <= 7, `the view wobbles by a few pixels at most (columns ${maxdu}, rows ${maxdv})`);
   assert(changed > 0, `... and the wobble moves on with time (${changed} pixels differ a third of a second later)`);
+}
+// model lighting
+{
+  const mdl = [...res.models.values()].find((m) => m.mdl && m.mdl.numVerts > 20)?.mdl;
+  r.beginFrame({ x: -200, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, fov: 90 });
+  const lit = (light, opts = {}) => { r.drawAlias(mdl, 0, 0, [0, 0, 0], [0, 0, 0], light, opts); return Array.from({ length: mdl.numVerts }, (_, i) => r.av[i * 7 + 6]); };
+  const span = (a) => [Math.min(...a), Math.max(...a)];
+  const [bmin, bmax] = span(lit(255));
+  assert(bmin === 128 && bmax <= 192 && bmax > 180, `a brightly lit model: ambient 128, at most 192 with the shade (${bmin}..${bmax.toFixed(0)})`);
+  const [dmin, dmax] = span(lit(0));
+  assert(dmin === 5 && dmax === 5, 'in the dark, LIGHT_MIN 5');
+  const [mmin] = span(lit(0, { minlight: true }));
+  assert(mmin === 25, `RF_MINLIGHT lifts it to 0.1 (${mmin})`);
+  const g0 = span(lit(80, { glow: true, time: 0 }))[0], g1 = span(lit(80, { glow: true, time: Math.PI / 14 }))[0], g2 = span(lit(80, { glow: true, time: 3 * Math.PI / 14 }))[0];
+  assert(g1 > g0 && g2 < g0 && g2 >= Math.trunc(80 * 1.4 * 0.8 * 0.9999), `RF_GLOW pulses (${g2} < ${g0} < ${g1}), never below 0.8 of the light`);
+  const verts = lit(120);
+  let plus = 0, minus = 0;
+  for (let i = 0; i < mdl.numVerts; i++) { if (verts[i] > Math.min(...verts)) plus++; else minus++; }
+  assert(plus > 0 && minus > 0, `the shade falls on the side facing +x, as from lightvec (-1, 0, 0) (${plus} lit, ${minus} ambient only)`);
 }
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);
