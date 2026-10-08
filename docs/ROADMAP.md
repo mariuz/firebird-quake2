@@ -174,8 +174,11 @@ them.
   sprite; a blaster's hit is the small `explode` model turned to the hit's direction (now sent with it),
   fading over 4 frames. All fullbright, translucent at 66% or 33% by their alpha as ref_soft chose, and their
   dynamic lights fade with them.
-- **Sky**: the cube map is sampled per pixel; the sky's rotation (`sky_rotate`, `sky_axis`) is
-  stored by the loader but the painter does not turn it.
+- **Sky**: done. The cube map is sampled per pixel, and a map's `skyrotate` and `skyaxis` (read from its
+  worldspawn, as `CL_SetSky` read them from the configstrings) turn it as ref_gl's `R_DrawSkyBox` did:
+  time × skyrotate degrees about the normalised axis, the view's axes turned back once a frame so the pixels
+  cost the same. ref_soft kept the two values and never used them; none of the demo's maps sets them, so it
+  shows in the full game's.
 - **Resolution and scaling**: 320×240 and 160×120 with CSS scaling; a 640×480 mode would cost
   four times the raster, which the painter could now afford on a desktop.
 

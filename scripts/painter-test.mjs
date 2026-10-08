@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak, loadColormap } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
-import { Renderer, dlightAt, mipLevel } from '../src/renderer.js';
+import { Renderer, dlightAt, mipLevel, skyTurn } from '../src/renderer.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mapName = process.argv[2] ?? 'demo1';
@@ -137,6 +137,26 @@ assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws ne
   let d = 0;
   for (let i = 0; i < b66.length; i++) if (b66[i] !== b33[i]) d++;
   assert(d > drawn / 2, `66% and 33% translucency differ (${d} pixels)`);
+}
+// the sky's turn (ref_gl's R_DrawSkyBox: time × skyrotate degrees about skyaxis)
+{
+  r.setSky('unit1_');
+  const sky = (yaw, rot, axis, time) => {
+    r.skyRotate = rot; r.skyAxis = axis;
+    r.beginFrame({ x: 0, y: 0, z: 0, yaw, pitch: 10, roll: 0, fov: 90 });
+    r.zb.fill(0); r.fb.fill(0);
+    r.fillPolygon(new Float64Array([0, 0, 1, 0, 0, 320, 0, 1, 0, 0, 320, 240, 1, 0, 0, 0, 240, 1, 0, 0]), 4, null, 2, time, 0, 0);
+    return r.fb.slice();
+  };
+  const same = (a, b) => { let d = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++; return d; };
+  const plain = sky(0, 0, [0, 0, 0], 1);
+  assert(same(sky(0, 30, [0, 0, 0], 1), plain) === 0 && same(sky(0, 0, [0, 0, 1], 1), plain) === 0, 'no skyrotate, or no skyaxis: the sky stands still');
+  const turned = sky(0, 30, [0, 0, 1], 1), back = sky(-30, 0, [0, 0, 0], 1);
+  const d = same(turned, back);
+  assert(same(turned, plain) > 10000 && d < 200, `a second at 30 degrees a second about z: the view at yaw 0 sees what yaw -30 saw (${d} pixels differ)`);
+  const v = skyTurn([0, 0, 2], 90)([1, 0, 0]);
+  assert(Math.abs(v[0]) < 1e-12 && Math.abs(v[1] - 1) < 1e-12 && Math.abs(v[2]) < 1e-12, 'the axis is normalised and the turn goes the way glRotatef turned');
+  r.skyRotate = 0; r.skyAxis = [0, 0, 0];
 }
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

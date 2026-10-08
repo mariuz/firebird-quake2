@@ -270,7 +270,8 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   scan-converts with `fillPolygon`: 1/z, s/z, t/z affine in screen space, the texel coordinates
   divided out every 16 pixels (`D_DrawSpans16`), the depth test on every pixel. Warping surfaces
   ripple with a sine table and flow; translucent surfaces are drawn last and blended through the
-  alpha map; the sky is the `env/` cube map sampled by each pixel's ray, stepped along the span.
+  alpha map; the sky is the `env/` cube map sampled by each pixel's ray, stepped along the span, the
+  view's axes first turned back by the map's sky rotation (`skyTurn`, `renderer.skyRotate`/`skyAxis`).
 - **Alias models.** `drawAlias` transforms, lights (ambient plus Gouraud from the vertex normals)
   and projects each vertex once, then draws the triangles back-face culled, clipping only those
   that cross the near plane; `triangle` is an affine-textured Gouraud triangle with z-test, used

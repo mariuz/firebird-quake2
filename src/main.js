@@ -340,6 +340,10 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   beams = []; explosions = []; flashes = [];
   const g = (await db.query('SELECT sky, cd_track FROM game')).rows[0];
   renderer.setSky(g.SKY);
+  // CL_SetSky: worldspawn's skyrotate and skyaxis (CS_SKYROTATE, CS_SKYAXIS)
+  const ws = bsp.entities.find((e) => e.classname === 'worldspawn') ?? {};
+  renderer.skyRotate = Number(ws.skyrotate) || 0;
+  renderer.skyAxis = ws.skyaxis ? ws.skyaxis.trim().split(/\s+/).map(Number).map((v) => (Number.isFinite(v) ? v : 0)) : [0, 0, 0];
   await loadStyleBase();
   const speakers = (await db.query("SELECT id, x, y, z, noise1, speed, height, sounds FROM ents WHERE classname = 'target_speaker' AND BIN_AND(spawnflags, 3) <> 0 AND noise1 IS NOT NULL", [], arr)).rows;
   audio.setSpeakers(speakers);

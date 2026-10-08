@@ -32,6 +32,8 @@ export class Renderer {
     this.sky = null;             // [6 × { w, h, data }]
     this.lightScale = 1.4;       // ref_gl's intensity: the software lightmaps are dim on their own
     this.dlights = [];           // this frame's dynamic lights: [{ x, y, z, r }] (V_AddLight)
+    this.skyRotate = 0;          // worldspawn's skyrotate (degrees a second) and skyaxis, as ref_gl turned the sky
+    this.skyAxis = [0, 0, 0];
     this.vv = new Float64Array(64 * 7);   // a polygon's vertices in view space
     this.pp = new Float64Array(64 * 5);   // ... and on screen, clipped
     this.av = new Float32Array(1024 * 7); // an alias model's transformed vertices
@@ -460,7 +462,11 @@ export class Renderer {
     if (mode === 2) {
       // the sky box, by each pixel's direction: the ray steps along the span
       const sky = this.sky;
-      const fwd = view.fwd, right = view.right, up = view.up;
+      // ref_gl's R_DrawSkyBox turned the box by time × skyrotate degrees about skyaxis: a direction sees the box
+      // turned back by as much, so the view's axes are turned back once and the pixels step along them as before
+      // (ref_soft kept the two values and never used them)
+      const turn = skyTurn(this.skyAxis, -(time * this.skyRotate));
+      const fwd = turn(view.fwd), right = turn(view.right), up = turn(view.up);
       const dk = 1 / view.scale;
       const sdx = right[0] * dk, sdy = right[1] * dk, sdz = right[2] * dk;
       for (let y = y0; y <= y1; y++) {
@@ -919,6 +925,21 @@ export function angleMatrix([pitch, yaw, roll]) {
   const sp = Math.sin((pitch * Math.PI) / 180), cp = Math.cos((pitch * Math.PI) / 180);
   const sr = Math.sin((roll * Math.PI) / 180), cr = Math.cos((roll * Math.PI) / 180);
   return [cp * cy, sr * sp * cy - cr * sy, cr * sp * cy + sr * sy, cp * sy, sr * sp * sy + cr * cy, cr * sp * sy - sr * cy, -sp, sr * cp, cr * cp];
+}
+
+/**
+ * A rotation by deg degrees about axis (normalised, as glRotatef normalised it), as a function on vectors
+ * (Rodrigues' formula); the identity for no angle or no axis.
+ */
+export function skyTurn(axis, deg) {
+  const len = Math.hypot(axis[0], axis[1], axis[2]);
+  if (!deg || !len) return (v) => v;
+  const kx = axis[0] / len, ky = axis[1] / len, kz = axis[2] / len;
+  const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+  return (v) => {
+    const d = (kx * v[0] + ky * v[1] + kz * v[2]) * (1 - c);
+    return [v[0] * c + (ky * v[2] - kz * v[1]) * s + kx * d, v[1] * c + (kz * v[0] - kx * v[2]) * s + ky * d, v[2] * c + (kx * v[1] - ky * v[0]) * s + kz * d];
+  };
 }
 
 /** The sky box: pick the face by the ray direction's major axis (R_DrawSkyBox's vec_to_st). */
