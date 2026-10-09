@@ -4,6 +4,7 @@
 SET TERM ^ ;
 
 CREATE OR ALTER PROCEDURE run_think (eid INTEGER, think VARCHAR(24)) AS BEGIN END^
+CREATE OR ALTER PROCEDURE gunner_grenade (eid INTEGER) AS BEGIN END^
 -- (mover_blocked is defined in game.sql, which loads first: a stub here used to replace it with an empty body)
 
 -- the current frame of an entity's animation
@@ -52,6 +53,8 @@ BEGIN
   UPDATE ents e SET e.enemy_id = COALESCE(e.enemy_id, :attacker), e.st = 'duck', e.aiflags = BIN_OR(e.aiflags, 4), e.maxz = e.maxz - 32,
          e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
   EXECUTE PROCEDURE set_anim(eid, 'duck');
+  -- gunner_duck_down: on hard, half the time a grenade as it goes down
+  IF (mt = 'gunner' AND (SELECT g.skill FROM game g WHERE g.id = 1) >= 2 AND RAND() > 0.5e0) THEN EXECUTE PROCEDURE gunner_grenade(eid);
 END^
 
 -- point_combat_touch: a monster reaching the point it ran to. A further point: run on to it. HOLD (spawnflags 1):
@@ -336,6 +339,24 @@ BEGIN
     EXECUTE PROCEDURE snd(eid, 1, asnd, 1, 1);
     EXECUTE PROCEDURE launch_rocket(eid, sx, sy, sz + 20, dx, dy, dz - 20, 550, 50, 50, 70);
   END
+END^
+
+-- GunnerGrenade: a grenade along the gunner's facing (monster_fire_grenade: 50 damage over 90 units, 600 units a
+-- second, 200 up and up to 10 aside, fire_grenade's 2.5 s fuse), from MZ2_GUNNER_GRENADE_1's muzzle
+CREATE OR ALTER PROCEDURE gunner_grenade (eid INTEGER)
+AS
+DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION; DECLARE vh DOUBLE PRECISION;
+DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE sx DOUBLE PRECISION; DECLARE sy DOUBLE PRECISION; DECLARE sz DOUBLE PRECISION;
+DECLARE side DOUBLE PRECISION;
+BEGIN
+  SELECT e.x, e.y, e.z, e.yaw, e.viewheight FROM ents e WHERE e.id = :eid INTO x, y, z, yaw, vh;
+  IF (x IS NULL) THEN EXIT;
+  fx_ = COS(yaw * 0.0174532925e0); fy = SIN(yaw * 0.0174532925e0);
+  sx = x + fx_ * 20 + fy * 8; sy = y + fy * 20 - fx_ * 8; sz = z + vh - 4;
+  side = crand() * 10;
+  EXECUTE PROCEDURE fx(15, sx, sy, sz, 0, 0, 0, 200 + CAST(FLOOR(RAND() * 32) AS INTEGER));
+  EXECUTE PROCEDURE snd(eid, 1, 'gunner/gunatck3.wav', 1, 1);
+  EXECUTE PROCEDURE launch_grenade(eid, sx, sy, sz, fx_ * 600 + fy * :side, fy * 600 - fx_ * :side, 200 + crand() * 10, 50, 90, 2.5e0, 0);
 END^
 
 -- the melee hit at the frame that strikes (fire_hit)
@@ -623,8 +644,14 @@ BEGIN
       IF (facing_ideal(eid) = 1) THEN
       BEGIN
         UPDATE ents e SET e.st = 'missile', e.attack_state = 1, e.nextthink = :nt WHERE e.id = :eid;
-        EXECUTE PROCEDURE set_anim(eid, missile_a);
-        IF (mt = 'gunner') THEN EXECUTE PROCEDURE snd(eid, 1, 'gunner/gunatck1.wav', 1, 1);
+        -- gunner_attack: out of melee range, half the time the grenades (attak1), else the chain gun (gunner_opengun)
+        IF (mt = 'gunner' AND RAND() <= 0.5e0 AND (SELECT vlen(n.x - :x, n.y - :y, n.z - :z) FROM ents n WHERE n.id = :enemy) >= 80) THEN
+          EXECUTE PROCEDURE set_anim(eid, 'attak1');
+        ELSE
+        BEGIN
+          EXECUTE PROCEDURE set_anim(eid, missile_a);
+          IF (mt = 'gunner') THEN EXECUTE PROCEDURE snd(eid, 1, 'gunner/gunatck1.wav', 1, 1);
+        END
       END
       EXIT;
     END
@@ -703,7 +730,11 @@ BEGIN
       EXECUTE PROCEDURE change_yaw(eid);
     END
     IF (st = 'melee' AND af = melee_f) THEN EXECUTE PROCEDURE monster_melee(eid);
-    IF (st = 'missile' AND POSITION(',' || af || ',', ',' || missile_f || ',') > 0) THEN EXECUTE PROCEDURE monster_missile(eid);
+    IF (st = 'missile' AND mt = 'gunner' AND anim = 'attak1') THEN
+    BEGIN
+      IF (af IN (4, 7, 10, 13)) THEN EXECUTE PROCEDURE gunner_grenade(eid);   -- gunner_frames_attack_grenade
+    END
+    ELSE IF (st = 'missile' AND POSITION(',' || af || ',', ',' || missile_f || ',') > 0) THEN EXECUTE PROCEDURE monster_missile(eid);
     IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.st = :st)) THEN EXIT;
     af = af + 1;
     IF (af >= fc) THEN

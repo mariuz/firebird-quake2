@@ -57,7 +57,9 @@ them.
   the monster's own facing). On medium and hard a soldier often dodges
   with its crouch-and-fire (`soldier_move_attack3`: a third of the dodges on medium, two thirds on hard,
   none on easy): down at the third frame, a shot, back for a second one while `pausetime` allows; the SS
-  holds the frame for a burst of 3 to 10 rounds instead. Left: the gunner's grenade from the duck, the exact `ai_run` sub-states (lost sight, trail following,
+  holds the frame for a burst of 3 to 10 rounds instead. The gunner throws grenades: half its attacks out of
+  melee range are `gunner_attack`'s grenade run (`attak1`, four grenades along its facing), and on hard half
+  its ducks throw one as it goes down (`gunner_duck_down`); it used to have only the chain gun. Left: the exact `ai_run` sub-states (lost sight, trail following,
   sliding), and the parasite's drain is a laser beam, not the hooked animation.
 - **Pusher edge cases**: done, against Quake 2 3.14's g_func.c. A door, plat or train blocked by
   anything but a monster or the player hurts it to death and blows it away; a train deals 100 at most

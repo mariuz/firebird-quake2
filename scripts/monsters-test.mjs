@@ -109,6 +109,30 @@ for (const m of MONSTERS) {
     assert(r.ST !== 'attack3' && r.MAXZ === box0.MAXZ && (r.AIFLAGS & 12) === 0, `... and stood up again (${r.ST})`);
   }
   if (!dodger) assert(!ducked, `${m.name} has no dodge`);
+  if (m.name === 'gunner') {
+    // gunner_attack's other half: attak1, GunnerGrenade at four of its frames
+    const seen = new Set();   // grenades that hit the player go off at once: count every one ever seen
+    const grenades = async () => { for (const g of await qa(`SELECT id FROM ents WHERE classname = 'grenade' AND owner_id = ${id}`)) seen.add(g.ID); return seen.size; };
+    await db.exec(`DELETE FROM ents WHERE classname = 'grenade'`);
+    await db.exec(`UPDATE ents SET st = 'missile', maxz = ${box0.MAXZ}, aiflags = 0 WHERE id = ${id}`);
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_anim(${id}, 'attak1'); END`);
+    let thrown = 0, st = null;
+    for (let i = 0; i < 50; i++) { await tic(); thrown = await grenades(); st = (await q1(`SELECT st FROM ents WHERE id = ${id}`)).ST; if (st !== 'missile') break; }
+    assert(thrown === 4 && st !== 'missile', `gunner throws four grenades from attak1 (${thrown}) and runs on (${st})`);
+    // gunner_duck_down on hard: half the ducks throw one
+    await db.exec('UPDATE game SET skill = 2');
+    let duckGrenade = 0;
+    for (let i = 0; i < 200 && !duckGrenade; i++) {
+      seen.clear();
+      await db.exec(`DELETE FROM ents WHERE classname = 'grenade'`);
+      await db.exec(`UPDATE ents SET st = 'run', aiflags = 0, maxz = ${box0.MAXZ} WHERE id = ${id}`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_dodge(${id}, ${pe}, 0.2); END`);
+      duckGrenade = await grenades();
+    }
+    await db.exec('UPDATE game SET skill = 1');
+    await db.exec(`UPDATE ents SET st = 'run', aiflags = 0, maxz = ${box0.MAXZ} WHERE id = ${id}`);
+    assert(duckGrenade === 1, 'on hard a ducking gunner throws a grenade as it goes down');
+  }
   // it attacks: with god mode on, damage shows as dmg_take / attack events
   let attacked = 0, dmgSeen = 0;
   await db.exec(`UPDATE ents SET flags = BIN_AND(flags, BIN_NOT(16)) WHERE id = ${pe}`);
