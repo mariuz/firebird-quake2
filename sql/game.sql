@@ -472,7 +472,7 @@ DECLARE deb DOUBLE PRECISION; DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRE
 BEGIN
   SELECT e.classname, e.mv_state, e.dmg, e.wait_, e.spawnflags, COALESCE(e.linked_id, e.id), e.attack_finished FROM ents e WHERE e.id = :eid
     INTO cls, st, dmg, wt, sf, master, deb;
-  IF (cls NOT IN ('func_door', 'func_door_rotating', 'func_water', 'func_plat', 'func_train', 'func_rotating')) THEN EXIT;
+  IF (cls NOT IN ('func_door', 'func_door_rotating', 'func_water', 'func_plat', 'func_train', 'func_rotating', 'func_door_secret')) THEN EXIT;
   IF (cls <> 'func_rotating' AND NOT EXISTS (SELECT 1 FROM ents o WHERE o.id = :other AND (o.mtype IS NOT NULL OR o.classname = 'player'))) THEN
   BEGIN
     EXECUTE PROCEDURE t_damage(other, eid, eid, 100000, 1, 0);
@@ -484,6 +484,14 @@ BEGIN
       EXECUTE PROCEDURE snd_at(ox, oy, oz, 'weapons/rocklx1a.wav', 1, 1);
       DELETE FROM ents o WHERE o.id = :other;
     END
+    EXIT;
+  END
+  -- door_secret_blocked: hurts every half second and goes on
+  IF (cls = 'func_door_secret') THEN
+  BEGIN
+    IF (now_() < deb) THEN EXIT;
+    UPDATE ents e SET e.attack_finished = now_() + 0.5e0 WHERE e.id = :eid;
+    EXECUTE PROCEDURE t_damage(other, eid, eid, dmg, 1, 0);
     EXIT;
   END
   IF (cls = 'func_train') THEN
@@ -625,6 +633,125 @@ BEGIN
   UPDATE ents e SET e.mv_state = 1, e.frame = 0, e.effects = BIN_OR(BIN_AND(e.effects, BIN_NOT(2048)), 1024) WHERE e.id = :eid;
 END^
 
+-- ── secret doors (func_door_secret): back, wait a second, aside; wait; back in, a second, home ──
+-- door_secret_use: only from where it rests (Quake compared the origin with vec3_origin, which a brush
+-- model without an origin brush rests at: here, where it was spawned). Secret doors move silently.
+CREATE OR ALTER PROCEDURE door_secret_use (eid INTEGER)
+AS
+BEGIN
+  IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.x = e.spawn_x AND e.y = e.spawn_y AND e.z = e.spawn_z AND e.mv_done IS NULL)) THEN EXIT;
+  EXECUTE PROCEDURE calc_move(eid, (SELECT e.p1x FROM ents e WHERE e.id = :eid), (SELECT e.p1y FROM ents e WHERE e.id = :eid),
+    (SELECT e.p1z FROM ents e WHERE e.id = :eid), 50, 'door_secret_move1');
+  EXECUTE PROCEDURE door_use_areaportals(eid, 1);
+END^
+
+-- door_secret_move1..6, door_secret_done: the steps, each scheduling the next (its wait: -1 stays open)
+CREATE OR ALTER PROCEDURE door_secret_step (eid INTEGER, step VARCHAR(24))
+AS
+BEGIN
+  IF (step = 'door_secret_move1') THEN
+    UPDATE ents e SET e.think = 'door_secret_move2', e.nextthink = e.ltime + 1 WHERE e.id = :eid;
+  ELSE IF (step = 'door_secret_move2') THEN
+    EXECUTE PROCEDURE calc_move(eid, (SELECT e.p2x FROM ents e WHERE e.id = :eid), (SELECT e.p2y FROM ents e WHERE e.id = :eid),
+      (SELECT e.p2z FROM ents e WHERE e.id = :eid), 50, 'door_secret_move3');
+  ELSE IF (step = 'door_secret_move3') THEN
+    UPDATE ents e SET e.think = 'door_secret_move4', e.nextthink = e.ltime + e.wait_ WHERE e.id = :eid AND e.wait_ <> -1;
+  ELSE IF (step = 'door_secret_move4') THEN
+    EXECUTE PROCEDURE calc_move(eid, (SELECT e.p1x FROM ents e WHERE e.id = :eid), (SELECT e.p1y FROM ents e WHERE e.id = :eid),
+      (SELECT e.p1z FROM ents e WHERE e.id = :eid), 50, 'door_secret_move5');
+  ELSE IF (step = 'door_secret_move5') THEN
+    UPDATE ents e SET e.think = 'door_secret_move6', e.nextthink = e.ltime + 1 WHERE e.id = :eid;
+  ELSE IF (step = 'door_secret_move6') THEN
+    EXECUTE PROCEDURE calc_move(eid, (SELECT e.spawn_x FROM ents e WHERE e.id = :eid), (SELECT e.spawn_y FROM ents e WHERE e.id = :eid),
+      (SELECT e.spawn_z FROM ents e WHERE e.id = :eid), 50, 'door_secret_done');
+  ELSE IF (step = 'door_secret_done') THEN
+  BEGIN
+    -- one with no targetname, or ALWAYS_SHOOT, can be shot open again
+    UPDATE ents e SET e.health = 0, e.takedamage = 1 WHERE e.id = :eid AND (e.targetname IS NULL OR e.targetname = '' OR BIN_AND(e.spawnflags, 1) <> 0);
+    EXECUTE PROCEDURE door_use_areaportals(eid, 0);
+  END
+END^
+
+-- ── trigger_elevator: a button names a path corner (its pathtarget); the elevator sends its train there ──
+-- trigger_elevator_init: the train it moves (movetarget), a func_train or nothing
+CREATE OR ALTER PROCEDURE elevator_init (eid INTEGER)
+AS
+BEGIN
+  UPDATE ents e SET e.goal_id = (SELECT FIRST 1 t.id FROM ents t WHERE t.targetname = e.target AND t.classname = 'func_train')
+   WHERE e.id = :eid AND e.target IS NOT NULL AND e.target <> '';
+END^
+
+-- trigger_elevator_use: not while the train moves or waits to; train_resume toward the corner
+CREATE OR ALTER PROCEDURE elevator_use (eid INTEGER, other INTEGER)
+AS
+DECLARE train INTEGER; DECLARE pt VARCHAR(40); DECLARE corner INTEGER;
+DECLARE cx DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE cz DOUBLE PRECISION;
+BEGIN
+  SELECT e.goal_id FROM ents e WHERE e.id = :eid INTO train;
+  IF (train IS NULL) THEN EXIT;
+  IF (EXISTS (SELECT 1 FROM ents t WHERE t.id = :train AND (t.nextthink IS NOT NULL OR t.mv_done IS NOT NULL))) THEN EXIT;   -- busy
+  SELECT e.pathtarget FROM ents e WHERE e.id = :other INTO pt;
+  IF (pt IS NULL OR pt = '') THEN EXIT;
+  SELECT FIRST 1 c.id, c.x, c.y, c.z FROM ents c WHERE c.targetname = :pt INTO corner, cx, cy, cz;
+  IF (corner IS NULL) THEN EXIT;
+  UPDATE ents t SET t.goal_id = :corner, t.mv_state = 2 WHERE t.id = :train;
+  EXECUTE PROCEDURE calc_move(train, cx - (SELECT t.minx FROM ents t WHERE t.id = :train), cy - (SELECT t.miny FROM ents t WHERE t.id = :train),
+    cz - (SELECT t.minz FROM ents t WHERE t.id = :train), (SELECT t.speed FROM ents t WHERE t.id = :train), 'train_wait');
+END^
+
+-- target_earthquake_think: every 0.1 s a grounded player is thrown up (speed × 100 / mass) and about
+-- (±150 a side); the rumble every half second, heard everywhere. attack_finished is when it stops,
+-- pausetime when it rumbles next.
+CREATE OR ALTER PROCEDURE earthquake_think (eid INTEGER)
+AS
+DECLARE t DOUBLE PRECISION; DECLARE pe INTEGER; DECLARE spd DOUBLE PRECISION; DECLARE until_ DOUBLE PRECISION; DECLARE lm DOUBLE PRECISION;
+DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
+BEGIN
+  t = now_();
+  SELECT e.speed, e.attack_finished, e.pausetime, e.x, e.y, e.z FROM ents e WHERE e.id = :eid INTO spd, until_, lm, x, y, z;
+  IF (COALESCE(lm, 0) < t) THEN
+  BEGIN
+    EXECUTE PROCEDURE snd_at(x, y, z, 'world/quake.wav', 1, 0);
+    UPDATE ents e SET e.pausetime = :t + 0.5e0 WHERE e.id = :eid;
+  END
+  pe = player_ent();
+  UPDATE ents e SET e.flags = BIN_AND(e.flags, BIN_NOT(512)), e.vx = e.vx + crand() * 150, e.vy = e.vy + crand() * 150,
+         e.vz = :spd * (100e0 / e.mass) WHERE e.id = :pe AND BIN_AND(e.flags, 512) <> 0 AND e.deadflag = 0;
+  IF (t < until_) THEN UPDATE ents e SET e.think = 'earthquake_think', e.nextthink = :t + 0.1e0 WHERE e.id = :eid;
+END^
+
+-- misc_viper_bomb_use: it shows up, falls (MOVETYPE_TOSS) along the viper's way at the viper's speed, a
+-- rocket's trail behind it, and goes off on touching anything
+CREATE OR ALTER PROCEDURE viper_bomb_use (eid INTEGER, activator INTEGER)
+AS
+DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE l DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION;
+BEGIN
+  IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.movetype <> 0)) THEN EXIT;   -- used once (its use is cleared)
+  -- the viper's moveinfo.dir: the way it is flying
+  SELECT FIRST 1 v.vx, v.vy, v.vz, v.speed FROM ents v WHERE v.classname = 'misc_viper' ORDER BY v.id INTO vx, vy, vz, spd;
+  l = vlen(COALESCE(vx, 0), COALESCE(vy, 0), COALESCE(vz, 0));
+  IF (l > 0) THEN BEGIN vx = vx / l; vy = vy / l; vz = vz / l; END ELSE BEGIN vx = 0; vy = 0; vz = 0; spd = 0; END
+  EXECUTE PROCEDURE set_model(eid, 'models/objects/bomb/tris.md2');
+  UPDATE ents e SET e.solid = 2, e.movetype = 6, e.clipmask = 3, e.effects = BIN_OR(e.effects, 16), e.enemy_id = :activator,
+         e.vx = :vx * :spd, e.vy = :vy * :spd, e.vz = :vz * :spd, e.dstx = :vx, e.dsty = :vy, e.dstz = :vz, e.attack_finished = now_(),
+         e.think = 'viper_bomb_think', e.nextthink = now_() WHERE e.id = :eid;
+  EXECUTE PROCEDURE link_ent(eid);
+END^
+
+-- misc_viper_bomb_prethink: it noses over as it falls (its way scaled by 1 + the time to go, which runs to
+-- -1, with that as its height) and spins about its axis
+CREATE OR ALTER PROCEDURE viper_bomb_think (eid INTEGER)
+AS
+DECLARE d DOUBLE PRECISION; DECLARE ax DOUBLE PRECISION; DECLARE ay DOUBLE PRECISION; DECLARE az DOUBLE PRECISION; DECLARE h DOUBLE PRECISION;
+BEGIN
+  SELECT MAXVALUE(e.attack_finished - now_(), -1e0), e.dstx, e.dsty FROM ents e WHERE e.id = :eid INTO d, ax, ay;
+  IF (d IS NULL) THEN EXIT;
+  ax = ax * (1 + d); ay = ay * (1 + d); az = d;
+  h = SQRT(ax * ax + ay * ay);
+  UPDATE ents e SET e.yaw = IIF(:h = 0, e.yaw, vectoyaw(:ax, :ay)), e.pitch = ATAN2(:az, :h) * 57.29577951e0, e.roll = MOD(e.roll + 5, 360),
+         e.think = 'viper_bomb_think', e.nextthink = now_() + 0.05e0 WHERE e.id = :eid;
+END^
+
 -- ── trains ──────────────────────────────────────────────────────────────
 CREATE OR ALTER PROCEDURE train_next (eid INTEGER)
 AS
@@ -651,19 +778,22 @@ END^
 
 CREATE OR ALTER PROCEDURE train_wait (eid INTEGER)
 AS
-DECLARE wt DOUBLE PRECISION; DECLARE corner INTEGER; DECLARE pt VARCHAR(40);
+DECLARE wt DOUBLE PRECISION; DECLARE corner INTEGER; DECLARE pt VARCHAR(40); DECLARE savetarget VARCHAR(40);
 BEGIN
   SELECT e.wait_, e.goal_id FROM ents e WHERE e.id = :eid INTO wt, corner;
-  -- the path corner's pathtarget fires on arrival
+  -- the path corner's pathtarget fires on arrival (its target stands in for a moment, then is put back:
+  -- a train that comes round again follows it)
   IF (corner IS NOT NULL) THEN
   BEGIN
-    SELECT e.pathtarget FROM ents e WHERE e.id = :corner INTO pt;
+    SELECT e.pathtarget, e.target FROM ents e WHERE e.id = :corner INTO pt, savetarget;
     IF (pt IS NOT NULL) THEN
     BEGIN
       UPDATE ents e SET e.target = :pt WHERE e.id = :corner;
       EXECUTE PROCEDURE use_targets(corner, player_ent());
+      UPDATE ents e SET e.target = :savetarget WHERE e.id = :corner;
     END
   END
+  IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid)) THEN EXIT;   -- killed by a killtarget
   EXECUTE PROCEDURE snd(eid, 0, (SELECT e.noise3 FROM ents e WHERE e.id = :eid), 1, 1);
   IF (wt < 0) THEN EXIT;                                        -- wait for a trigger
   UPDATE ents e SET e.think = 'train_next', e.nextthink = e.ltime + IIF(:wt > 0, :wt, 0.1e0) WHERE e.id = :eid;
@@ -708,6 +838,7 @@ BEGIN
   BEGIN
     IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :t)) THEN CONTINUE;
     IF (tcls IN ('func_door', 'func_door_rotating', 'func_water')) THEN EXECUTE PROCEDURE door_use(t, activator);
+    ELSE IF (tcls = 'func_door_secret') THEN EXECUTE PROCEDURE door_secret_use(t);
     ELSE IF (tcls = 'func_plat') THEN
     BEGIN
       SELECT e.mv_state FROM ents e WHERE e.id = :t INTO st;
@@ -813,11 +944,19 @@ BEGIN
       UPDATE ents e SET e.sounds = 1 - e.sounds WHERE e.id = :t;   -- on/off
     ELSE IF (tcls = 'misc_satellite_dish') THEN
       UPDATE ents e SET e.think = 'dish_think', e.nextthink = now_() + 0.1e0 WHERE e.id = :t;
-    ELSE IF (tcls = 'misc_strogg_ship') THEN
+    ELSE IF (tcls IN ('misc_strogg_ship', 'misc_viper')) THEN
     BEGIN
+      -- misc_strogg_ship_use, misc_viper_use: it shows up (no longer SVF_NOCLIENT), and train_use starts it
+      EXECUTE PROCEDURE set_model(t, IIF(tcls = 'misc_viper', 'models/ships/viper/tris.md2', 'models/ships/strogg1/tris.md2'));
       SELECT e.mv_state FROM ents e WHERE e.id = :t INTO st;
-      IF (st = 1) THEN BEGIN UPDATE ents e SET e.mv_state = 2, e.alpha = 0 WHERE e.id = :t; EXECUTE PROCEDURE train_next(t); END
+      IF (st = 1) THEN BEGIN UPDATE ents e SET e.mv_state = 2 WHERE e.id = :t; EXECUTE PROCEDURE train_next(t); END
     END
+    ELSE IF (tcls = 'misc_viper_bomb') THEN EXECUTE PROCEDURE viper_bomb_use(t, activator);
+    ELSE IF (tcls = 'trigger_elevator') THEN EXECUTE PROCEDURE elevator_use(t, eid);
+    ELSE IF (tcls = 'target_earthquake') THEN
+      -- target_earthquake_use: count seconds from now, the sound at once
+      UPDATE ents e SET e.attack_finished = now_() + e.count_, e.pausetime = 0, e.think = 'earthquake_think', e.nextthink = now_() + 0.1e0, e.enemy_id = :activator
+       WHERE e.id = :t;
     ELSE IF (tcls LIKE 'monster_%') THEN EXECUTE PROCEDURE monster_wake(t, activator);
     ELSE IF (tcls = 'target_crosslevel_trigger') THEN
     BEGIN
@@ -1471,6 +1610,13 @@ BEGIN
     UPDATE ents e SET e.takedamage = 0, e.health = e.max_health WHERE e.id = :targ;
     EXECUTE PROCEDURE door_use(targ, attacker);
   END
+  ELSE IF (cls = 'func_door_secret') THEN
+  BEGIN
+    -- door_secret_die (one given a health opens the same way: Quake's door_killed would have used its
+    -- missing team master)
+    UPDATE ents e SET e.takedamage = 0, e.health = e.max_health WHERE e.id = :targ;
+    EXECUTE PROCEDURE door_secret_use(targ);
+  END
   ELSE IF (cls = 'func_button') THEN
   BEGIN
     UPDATE ents e SET e.takedamage = 0 WHERE e.id = :targ;
@@ -1496,7 +1642,8 @@ DECLARE tx DOUBLE PRECISION; DECLARE ty DOUBLE PRECISION; DECLARE tz DOUBLE PREC
 BEGIN
   SELECT e.takedamage, e.classname, e.flags, e.health, e.movetype, e.mass FROM ents e WHERE e.id = :targ INTO td, cls, flags, hp, mt, mass;
   IF (td IS NULL OR td = 0) THEN EXIT;
-  IF (hp <= 0 AND cls <> 'player' AND BIN_AND(flags, 32) = 0) THEN EXIT;
+  -- (what is already dead is not killed again; a secret door takes damage at health 0 and dies of any)
+  IF (hp <= 0 AND cls <> 'player' AND BIN_AND(flags, 32) = 0 AND cls <> 'func_door_secret') THEN EXIT;
   pe = player_ent();
   IF (attacker = pe) THEN
   BEGIN
@@ -1861,6 +2008,17 @@ BEGIN
     EXIT;
   END
   IF (c1 IS NULL) THEN EXIT;
+  IF (c1 = 'misc_viper_bomb') THEN
+  BEGIN
+    -- misc_viper_bomb_touch: its targets fire, and it goes off at the bottom of its box (BecomeExplosion2)
+    EXECUTE PROCEDURE use_targets(e1, COALESCE((SELECT e.enemy_id FROM ents e WHERE e.id = :e1), player_ent()));
+    UPDATE ents e SET e.z = e.z + e.minz + 1 WHERE e.id = :e1;
+    EXECUTE PROCEDURE t_radius_damage(e1, e1, dmg, NULL, dmg + 40);
+    EXECUTE PROCEDURE snd_at(x, y, z + (SELECT e.minz FROM ents e WHERE e.id = :e1) + 1, 'weapons/grenlx1a.wav', 1, 1);
+    EXECUTE PROCEDURE fx(9, x, y, z + (SELECT e.minz FROM ents e WHERE e.id = :e1) + 1, 0, 0, 0, 0);
+    DELETE FROM ents e WHERE e.id = :e1;
+    EXIT;
+  END
   IF (e2 > 0) THEN SELECT e.classname, e.takedamage, e.health FROM ents e WHERE e.id = :e2 INTO c2, td2, hp2;
   ELSE BEGIN c2 = 'worldspawn'; td2 = 0; END
   IF (e2 = own) THEN EXIT;
@@ -1917,6 +2075,10 @@ BEGIN
     END
   END
   ELSE IF (c1 = 'player' AND c2 IN ('func_door', 'func_door_rotating', 'func_water')) THEN EXECUTE PROCEDURE door_touch(e2, e1);
+  ELSE IF (c1 = 'player' AND c2 = 'func_door_secret') THEN
+  BEGIN
+    IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :e2 AND e.targetname IS NOT NULL AND e.targetname <> '')) THEN EXECUTE PROCEDURE door_touch(e2, e1);
+  END
   ELSE IF (c1 = 'player' AND c2 = 'func_button') THEN
   BEGIN
     IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :e2 AND e.max_health = 0)) THEN EXECUTE PROCEDURE button_fire(e2, e1);
@@ -2078,6 +2240,34 @@ BEGIN
                e.p1x = e.x, e.p1y = e.y, e.p1z = e.z WHERE e.id = :eid;
       EXECUTE PROCEDURE link_ent(eid);
     END
+    ELSE IF (cls = 'func_door_secret') THEN
+    BEGIN
+      -- SP_func_door_secret: the first move is `width` aside (right, or left with 1ST_LEFT, or down with
+      -- 1ST_DOWN), the second `length` along its angle's forward; speed 50, dmg 2, wait 5 by default
+      a = COALESCE(ap, 0) * PI() / 180; b = COALESCE(ang, 0) * PI() / 180; c = COALESCE(ar, 0) * PI() / 180;
+      -- AngleVectors: forward (dx dy dz), right (e2 f2 g2), up computed where needed
+      dx = COS(a) * COS(b); dy = COS(a) * SIN(b); dz = -SIN(a);
+      e2 = -SIN(c) * SIN(a) * COS(b) + COS(c) * SIN(b); f2 = -SIN(c) * SIN(a) * SIN(b) - COS(c) * COS(b); g2 = -SIN(c) * COS(a);
+      IF (BIN_AND(sf, 4) <> 0) THEN
+      BEGIN
+        -- up = (cr·sp·cy + sr·sy, cr·sp·sy − sr·cy, cr·cp), and the first move is down it
+        e2 = -(COS(c) * SIN(a) * COS(b) + SIN(c) * SIN(b)); f2 = -(COS(c) * SIN(a) * SIN(b) - SIN(c) * COS(b)); g2 = -(COS(c) * COS(a));
+        d = ABS(e2 * sx + f2 * sy + g2 * sz);
+      END
+      ELSE
+      BEGIN
+        d = ABS(e2 * sx + f2 * sy + g2 * sz);
+        IF (BIN_AND(sf, 2) <> 0) THEN BEGIN e2 = -e2; f2 = -f2; g2 = -g2; END     -- 1ST_LEFT: side = -1
+      END
+      dist = ABS(dx * sx + dy * sy + dz * sz);
+      UPDATE ents e SET e.solid = 4, e.movetype = 7, e.yaw = 0, e.speed = 50, e.dmg = IIF(COALESCE(:dmg, 0) = 0, 2, :dmg),
+             e.wait_ = IIF(COALESCE(:wt, 0) = 0, 5, :wt), e.mv_state = 1,
+             e.p1x = e.x + :e2 * :d, e.p1y = e.y + :f2 * :d, e.p1z = e.z + :g2 * :d,
+             e.p2x = e.x + :e2 * :d + :dx * :dist, e.p2y = e.y + :f2 * :d + :dy * :dist, e.p2z = e.z + :g2 * :d + :dz * :dist,
+             e.takedamage = IIF(COALESCE(:hp, 0) > 0 OR :tn IS NULL OR :tn = '' OR BIN_AND(:sf, 1) <> 0, 1, 0)
+       WHERE e.id = :eid;
+      EXECUTE PROCEDURE link_ent(eid);
+    END
     ELSE IF (cls = 'func_door_rotating') THEN
     BEGIN
       -- rotates around its origin: X_AXIS 64 → roll, Y_AXIS 128 → pitch, else yaw; by `distance` degrees
@@ -2135,14 +2325,24 @@ BEGIN
       UPDATE ents e SET e.solid = 4, e.movetype = 7, e.yaw = 0, e.speed = :spd, e.noise1 = NULL, e.noise2 = :noise, e.noise3 = NULL, e.dmg = IIF(BIN_AND(:sf, 4) <> 0, 0, IIF(COALESCE(:dmg, 0) = 0, 100, :dmg)),
              e.mv_state = IIF(:tn IS NULL OR :tn = '' OR BIN_AND(:sf, 1) <> 0, 2, 1), e.think = 'train_find', e.nextthink = 0.1e0 WHERE e.id = :eid;
     END
-    ELSE IF (cls = 'misc_strogg_ship') THEN
+    ELSE IF (cls IN ('misc_strogg_ship', 'misc_viper')) THEN
     BEGIN
-      -- a train of one model: parked out of sight until triggered, then flies its path corners
-      EXECUTE PROCEDURE set_model(eid, 'models/ships/strogg1/tris.md2');
-      UPDATE ents e SET e.solid = 0, e.movetype = 7, e.speed = IIF(COALESCE(:spd, 0) = 0, 300, :spd), e.mv_state = 1, e.alpha = 1,
-             e.minx = -16, e.miny = -16, e.minz = 0, e.maxx = 16, e.maxy = 16, e.maxz = 32 WHERE e.id = :eid;
-      IF (BIN_AND(sf, 1) <> 0) THEN UPDATE ents e SET e.mv_state = 2, e.alpha = 0, e.think = 'train_find', e.nextthink = 0.1e0 WHERE e.id = :eid;
+      -- SP_misc_strogg_ship, SP_misc_viper: a train of one model, unseen (no model yet) until something uses it;
+      -- func_train_find puts it on its first corner, and it starts at once if nothing names it or START_ON
+      IF (tg IS NULL OR tg = '') THEN BEGIN DELETE FROM ents e WHERE e.id = :eid; CONTINUE; END
+      UPDATE ents e SET e.solid = 0, e.movetype = 7, e.speed = IIF(COALESCE(:spd, 0) = 0, 300, :spd),
+             e.mv_state = IIF(:tn IS NULL OR :tn = '' OR BIN_AND(:sf, 1) <> 0, 2, 1),
+             e.minx = -16, e.miny = -16, e.minz = 0, e.maxx = 16, e.maxy = 16, e.maxz = 32, e.think = 'train_find', e.nextthink = 0.1e0 WHERE e.id = :eid;
     END
+    ELSE IF (cls = 'misc_viper_bomb') THEN
+      -- SP_misc_viper_bomb: unseen and still until used; dmg 1000 by default
+      UPDATE ents e SET e.solid = 0, e.movetype = 0, e.minx = -8, e.miny = -8, e.minz = -8, e.maxx = 8, e.maxy = 8, e.maxz = 8,
+             e.dmg = IIF(COALESCE(:dmg, 0) = 0, 1000, :dmg) WHERE e.id = :eid;
+    ELSE IF (cls = 'trigger_elevator') THEN
+      UPDATE ents e SET e.solid = 0, e.think = 'elevator_init', e.nextthink = 0.1e0 WHERE e.id = :eid;
+    ELSE IF (cls = 'target_earthquake') THEN
+      -- SP_target_earthquake: count 5 seconds, speed (the severity) 200 by default
+      UPDATE ents e SET e.solid = 0, e.count_ = IIF(COALESCE(:cnt, 0) = 0, 5, :cnt), e.speed = IIF(COALESCE(:spd, 0) = 0, 200, :spd) WHERE e.id = :eid;
     ELSE IF (cls = 'path_corner') THEN BEGIN END
     ELSE IF (cls = 'func_timer') THEN
     BEGIN
@@ -2333,9 +2533,10 @@ BEGIN
       UPDATE ents e SET e.solid = 0, e.movetype = 6, e.clipmask = 3, e.minx = -8, e.miny = -8, e.minz = -8, e.maxx = 8, e.maxy = 8, e.maxz = 8, e.avel_yaw = crand() * 200, e.effects = 2, e.think = 'remove', e.nextthink = 30 WHERE e.id = :eid;
       EXECUTE PROCEDURE link_ent(eid);
     END
-    ELSE IF (cls = 'misc_viper' OR cls = 'misc_bigviper') THEN
+    ELSE IF (cls = 'misc_bigviper') THEN
     BEGIN
-      EXECUTE PROCEDURE set_model(eid, IIF(cls = 'misc_viper', 'models/ships/viper/tris.md2', 'models/ships/bigviper/tris.md2'));
+      -- SP_misc_bigviper: the intro's large viper, standing still
+      EXECUTE PROCEDURE set_model(eid, 'models/ships/bigviper/tris.md2');
       UPDATE ents e SET e.solid = 0 WHERE e.id = :eid;
       EXECUTE PROCEDURE link_ent(eid);
     END
@@ -2383,8 +2584,11 @@ DECLARE tgt VARCHAR(40); DECLARE cx DOUBLE PRECISION; DECLARE cy DOUBLE PRECISIO
 BEGIN
   SELECT e.target, e.mv_state FROM ents e WHERE e.id = :eid INTO tgt, st;
   SELECT FIRST 1 e.x, e.y, e.z FROM ents e WHERE e.targetname = :tgt AND e.classname = 'path_corner' INTO cx, cy, cz;
+  -- func_train_find: to the first corner, and on from it: the next move is to the corner after it (its
+  -- wait and pathtarget do not apply to the start)
   IF (cx IS NOT NULL) THEN
-    UPDATE ents e SET e.x = :cx - e.minx, e.y = :cy - e.miny, e.z = :cz - e.minz, e.think = NULL, e.nextthink = NULL WHERE e.id = :eid;
+    UPDATE ents e SET e.x = :cx - e.minx, e.y = :cy - e.miny, e.z = :cz - e.minz, e.think = NULL, e.nextthink = NULL,
+           e.target = (SELECT FIRST 1 c.target FROM ents c WHERE c.targetname = :tgt AND c.classname = 'path_corner') WHERE e.id = :eid;
   EXECUTE PROCEDURE link_ent(eid);
   IF (st = 2) THEN EXECUTE PROCEDURE train_next(eid);
 END^

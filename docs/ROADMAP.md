@@ -248,13 +248,23 @@ picker). Missing for the rest of the game:
   (boss2), Makron with Jorg (boss3), the insane marines, the commander body. Each is a row in
   `monster_types` (`src/gamedata.js`) plus whatever special attack or behaviour it has in
   `monsters.sql` (`check_attack`, `monster_missile`, `monster_melee`).
-- **Map entities** (checked against g_spawn.c's spawn table): `func_door_secret`, the turrets
+- **Map entities**: done for `func_door_secret` (back, a second, aside, its wait, and home; shot open
+  unless named, or with ALWAYS_SHOOT; silent, as its own moves never played the sounds it loaded),
+  `target_earthquake` (a grounded player thrown up and about every 0.1 s, the rumble every half second,
+  for `count` seconds), `trigger_elevator` (the train goes to the corner its user's pathtarget names, not
+  while it moves), `misc_viper` (a train like the strogg ship, unseen until used) and `misc_viper_bomb`
+  (falls along the viper's way and goes off where it lands). `scripts/entities-test.mjs` adds them to
+  demo1's lump and checks them. Missing (checked against g_spawn.c's spawn table): the turrets
   (`turret_breach`, `turret_base`, `turret_driver`), `target_actor` / `misc_actor`, `misc_insane`,
-  `target_character` and `target_string` with `func_clock`, `target_earthquake`, `trigger_elevator`,
-  `misc_viper_bomb`, `misc_blackhole`, `misc_eastertank`, `misc_easterchick` (and `2`), `light_mine1` and
-  `light_mine2`; the `misc_bigviper` flight paths, the `misc_strogg_ship` flyby, `target_spawner`
-  (recognised). `func_group` is editor-only and correctly ignored; `viewthing` is a debugging aid.
-  (`target_mal_laser`, once listed here, is the first mission pack's, not Quake 2's.)
+  `target_character` and `target_string` with `func_clock`, `misc_blackhole`, `misc_eastertank`,
+  `misc_easterchick` (and `2`), `light_mine1` and `light_mine2`, `target_spawner` (recognised).
+  `misc_bigviper` stands still, as in Quake 2. `func_group` is editor-only and correctly ignored;
+  `viewthing` is a debugging aid. (`target_mal_laser`, once listed here, is the first mission pack's.)
+- **Trains**: `func_train_find` put a train on its first corner and aimed it at the next; the port aimed
+  it at the first again, so every train (and demo1's three strogg ships) began with that corner's wait
+  and pathtarget, which Quake skipped. And `train_wait` lent a corner's target to its pathtarget without
+  giving it back, so a looping train that came round to it again followed the pathtarget. Both as in
+  g_func.c now; the ships are unseen until their trigger uses them.
 - **Cutscenes**: the intro and the unit transitions are cinematics (`.cin`); a level exit naming one
   skips it and goes on to the map after its `+` (`src/levels.js`).
 - **Coop and deathmatch**: `info_player_coop` / `info_player_deathmatch` are recognised and the
@@ -281,7 +291,8 @@ picker). Missing for the rest of the game:
   slopes, falling every tic without moving (as pmove would leave it), costs ~11 ms a tic: each of
   its traces reaches seven leaves.
 - **Tests**: the smoke tests cover movement, weapons, doors, items and the console on all three demo
-  maps; `test:monsters` every monster's sight, attacks and death; `test:walkthrough` every trigger the
+  maps; `test:monsters` every monster's sight, attacks and death; `test:entities` the full game's entities
+  that the demo lacks, put into demo1; `test:walkthrough` every trigger the
   player can walk into on the three maps (it fires, the movers it targets move), with the smoke test
   closing a door on a monster and on a barrel as `door_blocked` had it; `test:save` saves, levels left
   and come back to; `test:menu` the menus; `test:painter` the painter's dynamic lights and mip levels.

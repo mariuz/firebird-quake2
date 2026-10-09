@@ -23,7 +23,8 @@
     "test:base3": "node scripts/sql-smoke.mjs demo3",
     "test:menu": "node scripts/menu-test.mjs",
     "test:painter": "node scripts/painter-test.mjs",
-    "test:walkthrough": "node scripts/walkthrough-test.mjs"
+    "test:walkthrough": "node scripts/walkthrough-test.mjs",
+    "test:entities": "node scripts/entities-test.mjs"
   },
   "license": "MIT",
   "dependencies": {

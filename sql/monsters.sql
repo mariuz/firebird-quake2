@@ -1185,6 +1185,10 @@ BEGIN
   ELSE IF (think = 'plat_hit_top') THEN EXECUTE PROCEDURE plat_hit_top(eid);
   ELSE IF (think = 'plat_hit_bottom') THEN EXECUTE PROCEDURE plat_hit_bottom(eid);
   ELSE IF (think = 'button_wait') THEN EXECUTE PROCEDURE button_wait(eid);
+  ELSE IF (think STARTING WITH 'door_secret_') THEN EXECUTE PROCEDURE door_secret_step(eid, think);
+  ELSE IF (think = 'elevator_init') THEN EXECUTE PROCEDURE elevator_init(eid);
+  ELSE IF (think = 'earthquake_think') THEN EXECUTE PROCEDURE earthquake_think(eid);
+  ELSE IF (think = 'viper_bomb_think') THEN EXECUTE PROCEDURE viper_bomb_think(eid);
   ELSE IF (think = 'button_return') THEN EXECUTE PROCEDURE button_return(eid);
   ELSE IF (think = 'button_done') THEN EXECUTE PROCEDURE button_done(eid);
   ELSE IF (think = 'train_next') THEN EXECUTE PROCEDURE train_next(eid);

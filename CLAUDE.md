@@ -27,12 +27,13 @@ npm run test:save                     # save, play on, load: the game comes back
 npm run test:menu                     # the menus, headless: keys, slots, settings, pictures
 npm run test:painter                  # the painter headless: dynamic lights, mip levels
 npm run test:walkthrough              # every trigger the player can walk into fires, its movers move
+npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
 ```
 
-A change is done when: `sql-check` passes, the three smoke tests, the monsters, walkthrough, save, menu and painter tests say `all good`,
+A change is done when: `sql-check` passes, the three smoke tests, the monsters, walkthrough, entities, save, menu and painter tests say `all good`,
 `screenshot.mjs --compare` reports `differ in 0 of 76800 pixels` on demo1 and demo2 (and the
 viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), the page runs
 in a real browser without console errors, and CI is green. Commit messages here are written as
@@ -117,6 +118,10 @@ short stories of what changed and what it measured; keep that.
   an entity "missing", check its spawnflags.
 - `IIF`/`CASE` over string literals of different lengths pads the shorter one with spaces: `TRIM`
   the result when it is compared or shown.
+- An entity Quake kept from the client (`SVF_NOCLIENT`: the ships, the viper and its bomb until used) has
+  no model here until it shows up (`set_model` then); `alpha = 1` is translucent, not hidden.
+- `t_damage` ignores a non-monster, non-player at health 0 or less (it is dead already). Quake had no such
+  test: something that takes damage at health 0 (`func_door_secret`) needs its class let through.
 
 ## Browser testing
 
