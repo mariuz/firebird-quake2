@@ -56,8 +56,15 @@ bulk-loads it, then calls `init_map`.
 
 The WASM build binds every parameter as text. Row-by-row inserts of 90 000 rows would take
 minutes, so each table has a generated `LOAD_<table>` procedure that takes one 30 KB chunk of
-`|`-separated lines and parses it in PSQL (`loaderSql()` writes those procedures from the column
-specs in `TABLES`). The Outer Base loads in about three seconds.
+rows and parses it in PSQL (`loaderSql()` writes those procedures from the column specs in
+`TABLES`). The rows are fixed-width: `bulkLoad` pads each column to its widest value and sends the
+widths with the chunk, so a row is a single `INSERT` of `CAST(SUBSTRING(:s FROM :p + :o FOR :w))`
+at known offsets, with no scanning for separators and no per-field assignments (each a statement).
+`CAST` reads a blank-padded number as it is; only the columns marked `?` (NULL possible: the
+entity lump, the model table, a leaf's PVS, a node's leaf clusters) pay for the `TRIM` and
+`NULLIF`, which cost twice the `CAST` and were most of a row. A row of `face_verts` costs ~20 µs,
+half of it the insert into the primary key. The Outer Base loads in about three seconds in Node,
+`init_map` included (it was five and a half with `|`-separated lines).
 
 ### What the BSP becomes
 

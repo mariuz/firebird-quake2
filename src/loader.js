@@ -4,8 +4,13 @@
 // CI exercises exactly the SQL the page runs.
 //
 // Bulk loading: the WASM build binds parameters as text, so each table has a
-// generated LOAD_<table> procedure that takes a 30 KB chunk of '|'-separated
-// lines and parses it in PSQL. That is 2–3× faster than a block of INSERTs.
+// generated LOAD_<table> procedure that takes a 30 KB chunk of rows and parses
+// it in PSQL. The rows are fixed-width (each column padded to its widest value,
+// the widths sent alongside), so a row is one INSERT of SUBSTRINGs at known
+// offsets: no per-field scanning or assignments, which cost a statement each.
+// CAST takes a blank-padded number as it is; only a nullable column (`?` in its
+// spec) pays for the TRIM and NULLIF that turn an empty cell into NULL, which
+// cost twice the CAST.
 
 import { Bsp, parseVec, SURF } from './bsp.js';
 import { Md2, Sp2 } from './md2.js';
@@ -14,10 +19,10 @@ import { MONSTERS, LIGHTSTYLES, EXTRA_ANIMS } from './gamedata.js';
 
 const CHUNK = 30000;
 
-// column specs: name:type where type ∈ i (integer) d (double) s (string)
+// column specs: name:type where type ∈ i (integer) d (double) s (string), `?` when it may be NULL
 const TABLES = {
-  nodes: 'id:i nx:d ny:d nz:d dist:d ptype:i c0:i c1:i cc0:i cc1:i',
-  leaves: 'id:i contents:i cluster:i area:i minx:d miny:d minz:d maxx:d maxy:d maxz:d first_lf:i num_lf:i first_lb:i num_lb:i pvs:s',
+  nodes: 'id:i nx:d ny:d nz:d dist:d ptype:i c0:i c1:i cc0:i? cc1:i?',
+  leaves: 'id:i contents:i cluster:i area:i minx:d miny:d minz:d maxx:d maxy:d maxz:d first_lf:i num_lf:i first_lb:i num_lb:i pvs:s?',
   leaffaces: 'id:i face:i',
   areas: 'id:i num_ap:i first_ap:i',
   areaportals: 'id:i portal:i other_area:i',
@@ -27,34 +32,37 @@ const TABLES = {
   faces: 'id:i model_id:i nx:d ny:d nz:d dist:d nverts:i tex:i sx:d sy:d sz:d soff:d tx:d ty:d tz:d toff:d flags:i style0:i cx:d cy:d cz:d radius:d',
   face_verts: 'face:i seq:i x:d y:d z:d',
   textures: 'id:i name:s w:i h:i flags:i',
-  models: 'id:i name:s kind:s minx:d miny:d minz:d maxx:d maxy:d maxz:d headnode:i first_face:i num_faces:i nframes:i flags:i radius:d',
+  models: 'id:i name:s kind:s minx:d? miny:d? minz:d? maxx:d? maxy:d? maxz:d? headnode:i? first_face:i? num_faces:i? nframes:i? flags:i? radius:d?',
   anims: 'model_id:i anim:s first_frame:i frame_count:i',
-  map_ents: 'id:i classname:s targetname:s target:s killtarget:s pathtarget:s deathtarget:s combattarget:s team:s model:s ox:d oy:d oz:d angle:d apitch:d ayaw:d aroll:d spawnflags:i message:s wait_:d delay:d random_:d speed:d accel:d decel:d lip:d height:d health:i light:i style:i sounds:i dmg:i count_:i map:s noise:s item:s mass:i volume:d attenuation:d distance:d gravity:d sky:s skyrotate:d',
+  map_ents: 'id:i classname:s targetname:s? target:s? killtarget:s? pathtarget:s? deathtarget:s? combattarget:s? team:s? model:s? ox:d? oy:d? oz:d? angle:d? apitch:d? ayaw:d? aroll:d? spawnflags:i? message:s? wait_:d? delay:d? random_:d? speed:d? accel:d? decel:d? lip:d? height:d? health:i? light:i? style:i? sounds:i? dmg:i? count_:i? map:s? noise:s? item:s? mass:i? volume:d? attenuation:d? distance:d? gravity:d? sky:s? skyrotate:d?',
 };
 
 const SQL_TYPE = { i: 'INTEGER', d: 'DOUBLE PRECISION', s: 'VARCHAR(2048) CHARACTER SET ASCII' };
 
-/** The LOAD_<table> procedures, generated from the column specs. */
+/** The LOAD_<table> procedures, generated from the column specs: (s, the rows; w, the columns' widths, ',' separated). */
 export function loaderSql() {
   let out = 'SET TERM ^ ;\n';
   for (const [table, spec] of Object.entries(TABLES)) {
     const cols = spec.split(' ').map((c) => c.split(':'));
-    out += `CREATE OR ALTER PROCEDURE load_${table} (s VARCHAR(32000) CHARACTER SET ASCII) AS\n`;
-    out += 'DECLARE p INTEGER = 1; DECLARE q INTEGER; DECLARE e INTEGER; DECLARE len INTEGER; DECLARE f VARCHAR(2048) CHARACTER SET ASCII;\n';
-    for (const [name, type] of cols) out += `DECLARE v_${name} ${SQL_TYPE[type]};\n`;
-    out += 'BEGIN\n  len = CHAR_LENGTH(s);\n  WHILE (p <= len) DO BEGIN\n';
-    out += "    e = POSITION(ASCII_CHAR(10), s, p); IF (e = 0) THEN e = len + 1;\n";
-    cols.forEach(([name, type], i) => {
-      const last = i === cols.length - 1;
-      out += last
-        ? `    f = SUBSTRING(s FROM p FOR e - p);\n`
-        : `    q = POSITION('|', s, p); f = SUBSTRING(s FROM p FOR q - p); p = q + 1;\n`;
-      out += type === 's'
-        ? `    v_${name} = NULLIF(f, '');\n`
-        : `    v_${name} = CAST(NULLIF(f, '') AS ${SQL_TYPE[type]});\n`;
+    out += `CREATE OR ALTER PROCEDURE load_${table} (s VARCHAR(32000) CHARACTER SET ASCII, w VARCHAR(1000) CHARACTER SET ASCII) AS\n`;
+    out += 'DECLARE p INTEGER = 1; DECLARE q INTEGER = 1; DECLARE c INTEGER; DECLARE len INTEGER; DECLARE rl INTEGER;\n';
+    cols.forEach((_, i) => { out += `DECLARE o${i} INTEGER; DECLARE w${i} INTEGER;\n`; });
+    out += 'BEGIN\n  len = CHAR_LENGTH(s);\n';
+    // the widths, once per chunk, and each column's offset in the row
+    cols.forEach((_, i) => {
+      out += i === cols.length - 1
+        ? `  w${i} = CAST(SUBSTRING(w FROM q) AS INTEGER);\n`
+        : `  c = POSITION(',', w, q); w${i} = CAST(SUBSTRING(w FROM q FOR c - q) AS INTEGER); q = c + 1;\n`;
+      out += `  o${i} = ${i === 0 ? '0' : `o${i - 1} + w${i - 1}`};\n`;
     });
-    out += `    INSERT INTO ${table} (${cols.map((c) => c[0]).join(', ')}) VALUES (${cols.map((c) => ':v_' + c[0]).join(', ')});\n`;
-    out += '    p = e + 1;\n  END\nEND^\n';
+    out += `  rl = o${cols.length - 1} + w${cols.length - 1};\n`;
+    const val = ([, type], i) => {
+      const f = `SUBSTRING(:s FROM :p + :o${i} FOR :w${i})`, t = SQL_TYPE[type[0]], nullable = type[1] === '?';
+      if (type[0] === 's') return nullable ? `NULLIF(TRIM(TRAILING FROM ${f}), '')` : `TRIM(TRAILING FROM ${f})`;
+      return nullable ? `CAST(NULLIF(TRIM(${f}), '') AS ${t})` : `CAST(${f} AS ${t})`;
+    };
+    out += `  WHILE (p <= len) DO BEGIN\n    INSERT INTO ${table} (${cols.map((c) => c[0]).join(', ')}) VALUES (${cols.map(val).join(', ')});\n`;
+    out += '    p = p + rl;\n  END\nEND^\n';
   }
   return out + 'SET TERM ; ^\n';
 }
@@ -64,17 +72,17 @@ const str = (v) => (v === null || v === undefined ? '' : String(v).replace(/[|\n
 
 /** rows: arrays of values in column order. */
 export async function bulkLoad(db, table, rows) {
-  const lines = rows.map((r) => r.map((v) => (typeof v === 'string' ? str(v) : num(v))).join('|'));
-  let chunk = '';
-  const flush = async () => {
-    if (chunk) await db.query(`EXECUTE PROCEDURE load_${table}(?)`, [chunk]);
-    chunk = '';
-  };
-  for (const line of lines) {
-    if (chunk.length + line.length + 1 > CHUNK) await flush();
-    chunk += line + '\n';
-  }
-  await flush();
+  if (!rows.length) return;
+  const cells = rows.map((r) => r.map((v) => (typeof v === 'string' ? str(v) : num(v))));
+  // each column as wide as its widest value (at least 1), every row the same length
+  const widths = cells[0].map((_, i) => Math.max(1, ...cells.map((r) => r[i].length)));
+  const lines = cells.map((r) => r.map((v, i) => v.padEnd(widths[i])).join(''));
+  const per = Math.max(1, Math.floor(CHUNK / lines[0].length));
+  // an empty cell in a column not marked nullable would be a blank the CAST cannot read
+  const types = TABLES[table].split(' ').map((c) => c.split(':')[1]);
+  types.forEach((t, c) => { if (!t.endsWith('?') && cells.some((r) => r[c] === '')) throw new Error(`bulkLoad: ${table} column ${c} has a NULL; mark it '?'`); });
+  const w = widths.join(',');
+  for (let i = 0; i < lines.length; i += per) await db.query(`EXECUTE PROCEDURE load_${table}(?, ?)`, [lines.slice(i, i + per).join(''), w]);
 }
 
 export const SQL_FILES = ['schema', 'physics', 'game', 'weapons', 'monsters', 'render'];

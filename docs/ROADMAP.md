@@ -254,8 +254,11 @@ picker). Missing for the rest of the game:
 
 ## Engineering
 
-- **Load time**: about three seconds for a map, mostly the text bulk loader (`LOAD_<table>`
-  procedures parsing 30 KB chunks). A binary blob path would need `firebird-wasm` to bind blobs.
+- **Load time**: about three seconds for a map in Node (from five and a half: fixed-width rows,
+  one `INSERT` of `CAST(SUBSTRING(…))` per row, `TRIM`/`NULLIF` only on nullable columns). What
+  is left is the inserts themselves (`face_verts`' 37 k rows are a quarter of it, half of that
+  the primary key), `init_map` and the old map's `DELETE`s. A binary blob path would need
+  `firebird-wasm` to bind blobs.
 - **The cluster-change hitch**: `mark_faces` re-marks the PVS's faces on a cluster change
   (tens of milliseconds). Marking the next cluster ahead of time, or keeping the last few marked
   sets in their own tables, would hide it.

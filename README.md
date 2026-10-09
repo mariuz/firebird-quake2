@@ -79,7 +79,8 @@ second lookup:
 | `map_ents` | the entity lump |
 
 The WASM build binds parameters as text, so each table has a generated `LOAD_<table>` procedure that
-parses 30 KB chunks of `|`-separated lines in PSQL. The Outer Base (90 k rows) loads in about three seconds.
+parses 30 KB chunks of fixed-width rows in PSQL: one `INSERT` of `CAST(SUBSTRING(…))` per row, no `TRIM`
+where a column cannot be NULL. The Outer Base (90 k rows) loads in about three seconds.
 
 ### Collision is a recursive procedure (`sql/physics.sql`)
 
