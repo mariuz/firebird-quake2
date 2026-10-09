@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
-import { exportSave, importSave } from '../src/savegame.js';
+import { exportSave, importSave, exportLevel, importLevel } from '../src/savegame.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mapName = process.argv[2] ?? 'demo1';
@@ -62,6 +62,30 @@ check(later.M > before.M || later.N >= before.N, `new entities got ids above the
 const faces = await db.query('SELECT * FROM frame_all(0, 0, 0, 1)', [], { rowMode: 'array' });
 check(faces.rows.some((r) => r[0] === 1), `a frame renders after the load (${faces.rows.length} rows)`);
 check((await db.query('SELECT COUNT(*) n FROM ents WHERE id IN (SELECT id FROM ents GROUP BY id HAVING COUNT(*) > 1)')).rows[0].N === 0, 'entity ids are unique');
+
+// a level left by an ordinary exit and come back to (SV_WriteLevelFile, SV_ReadLevelFile): as it was left, the
+// player put in at the spawn point, the clock where the level's stopped
+{
+  const other = mapName === 'demo2' ? 'demo1' : 'demo2';
+  const mark = (await db.query('SELECT FIRST 1 id FROM ents WHERE mtype IS NOT NULL ORDER BY id')).rows[0]?.ID;
+  if (mark) await db.exec(`UPDATE ents SET health = 7 WHERE id = ${mark}`);
+  const left = await state();
+  const lv = await exportLevel(db);
+  check(lv.ents.rows.length === left.N - 1, `the level left holds its entities but the player (${lv.ents.rows.length})`);
+  await loadMap(db, pak, res, other, { skill: 2 });
+  await loadMap(db, pak, res, mapName, { skill: 2 });
+  const fresh = await state();
+  await importLevel(db, lv);
+  const back = await state();
+  check(back.monsters === left.monsters, 'coming back, every monster is as it was left');
+  check(back.movers === left.movers && back.styles === left.styles, '... every mover and light too');
+  check(back.N === left.N && back.TIC === left.TIC && back.TIME_ === left.TIME_ && back.KILLED === left.KILLED, `... the level's clock and counts (tic ${back.TIC}, killed ${back.KILLED})`);
+  check(back.X === fresh.X && back.Y === fresh.Y && back.Z === fresh.Z, 'the player comes in at the spawn point');
+  const air = (await db.query('SELECT p.air_finished a, g.time_ t FROM player p CROSS JOIN game g')).rows[0];
+  check(air.A === air.T + 12, 'with twelve seconds of air from the level\'s time');
+  for (let i = 0; i < 5; i++) await tic(1, 1, 0);
+  check((await db.query('SELECT COUNT(*) n FROM ents WHERE id IN (SELECT id FROM ents GROUP BY id HAVING COUNT(*) > 1)')).rows[0].N === 0, '... and the level runs on, ids unique');
+}
 
 console.log(failures ? `${failures} FAILED` : 'all good');
 await db.close();

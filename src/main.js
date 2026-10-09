@@ -18,7 +18,7 @@ import { createSchema, loadResources, loadMap, setView } from './loader.js';
 import { Renderer, lightPoint, dlightAt } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
 import { Menu, saveComment } from './menu.js';
-import { exportSave, importSave } from './savegame.js';
+import { exportSave, importSave, exportLevel, importLevel } from './savegame.js';
 import { parseChangeMap } from './levels.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS } from './gamedata.js';
@@ -271,6 +271,7 @@ async function loadGame(key = SAVE_KEY) {
   if (!pak.has(`maps/${save.map}.bsp`)) { setStatus(`The saved game is on ${save.map}, which is not in this pak`, true); return; }
   running = false;
   try {
+    unitLevels.clear();                              // (a save holds its own level only)
     await startMap(save.map, false, null, false);   // the map's geometry and models afresh, then the saved rows
     running = false;
     setStatus('Loading the saved game…');
@@ -363,10 +364,12 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   menu.off();
   showHelp = false;
   showInv = false;
-  if (newGame) helpSeen = 0;
+  if (newGame) { helpSeen = 0; unitLevels.clear(); }
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
   const bsp = await loadMap(db, pak, res, name, { skill: settings.skill, newGame, spawnpoint });
+  // a level of this unit left earlier comes back as it was left (SV_ReadLevelFile), the player at the spawn point
+  if (!newGame && unitLevels.has(name)) await importLevel(db, unitLevels.get(name));
   map = { name, bsp };
   renderer.setResources(res);
   renderer.particles = [];
@@ -494,8 +497,13 @@ const model = (name) => res.models.get(res.byName.get(name))?.mdl;
 
 // ── leaving a level: what the server did with the map string (SV_Map; src/levels.js) ─────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// the unit's levels left by an ordinary exit, by map name (SV_WriteLevelFile), to come back to as they were left
+const unitLevels = new Map();
 async function changeLevel(target) {
   const c = parseChangeMap(target);
+  // a unit's end forgets the unit's levels; any other exit keeps the one being left
+  if (c.unitEnd) unitLevels.clear();
+  else if (map) unitLevels.set(map.name, await exportLevel(db));
   // the unit's cross-level flags last the unit ("within the same unit", g_target.c)
   if (c.unitEnd) await db.exec('UPDATE game SET serverflags = 0 WHERE id = 1');
   if (c.kind === 'pic' && pak.has(`pics/${c.map}`)) {

@@ -1359,7 +1359,10 @@ BEGIN
   UPDATE player p SET p.weaponframe = 0, p.attack_finished = 0, p.attack_start = 0, p.pain_finished = 0, p.punchangle = 0, p.view_ofs = 22, p.dmg_take = 0, p.dmg_save = 0,
          p.dmg_time = -10, p.bonus_time = -10, p.pickup_item = 0, p.pickup_time = 0, p.msg = NULL, p.msg_time = 0, p.cprint = NULL, p.cprint_time = 0, p.dead_time = 0, p.pitch = 0, p.stepz = 0,
          p.jump_released = 1, p.air_finished = 12, p.dmg_lava_time = 0, p.next_drown_time = 0, p.drown_dmg = 2, p.weapon_sound = 0, p.machinegun_shots = 0,
-         p.chaingun_spin = 0, p.grenade_time = 0, p.mega_time = 0, p.keys = 0 WHERE p.id = 1;
+         p.chaingun_spin = 0, p.grenade_time = 0, p.mega_time = 0, p.keys = 0,
+         -- (PutClientInServer clears the client but its pers: a powerup running out does not carry into the next level,
+         -- whose clock starts again; held ones, in the inventory, do)
+         p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0 WHERE p.id = 1;
   -- keys don't carry over; neither do dead weapons
   UPDATE player p SET p.weapon = best_weapon() WHERE p.id = 1 AND (BIN_AND(p.weapons, p.weapon) = 0 OR p.weapon = 0);
   UPDATE game g SET g.has_water = IIF(EXISTS (SELECT 1 FROM leaves l WHERE BIN_AND(l.contents, 56) <> 0), 1, 0) WHERE g.id = 1;

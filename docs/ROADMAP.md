@@ -12,14 +12,18 @@ them.
   `SV_GameMap_f` copied it), the others named with the time and the level as `SV_WriteServerFile` did,
   plus the quick slot (`F6` / `F9`). Dying and pressing fire brings up the load menu (`respawn` in single
   player). `src/savegame.js`, tested by `scripts/save-test.mjs`. Left: a save holds one map's tables, so
-  returning to a map spawns it fresh (below); a save made by an older schema loads with the new columns'
+  the unit's other levels (below) are not in it and a loaded game forgets them; a save made by an older schema loads with the new columns'
   defaults, and one whose columns are gone fails (bump `SAVE_VERSION` when that matters).
 - **Cross-level state**: done. `game.serverflags` holds the unit's eight flags across maps (a new
   game clears them); a used `target_crosslevel_trigger` sets its spawnflags there and is spent; a
   `target_crosslevel_target` looks once, after its delay, and fires its targets when every flag it
-  asks for is set (`crosslevel_think`). The smoke test exercises the pair and the level change. Left:
-  per-level state when returning to a map (Quake 2 keeps each level's entities in the unit's save;
-  here a revisited map spawns fresh, so the Installation's exit opens but its monsters are back).
+  asks for is set (`crosslevel_think`). The smoke test exercises the pair and the level change. A level
+  left by an ordinary exit is kept (`exportLevel` in `src/savegame.js`, as `SV_WriteLevelFile` wrote it: its
+  entities but the player, its lights, its area portals, its clock and counts) and comes back as it was left
+  when the unit returns to it (`importLevel`, `SV_ReadLevelFile`), the player put in afresh at the spawn point
+  it came in by; a unit's end, a new game or a loaded game forgets them. The levels live in the page's memory,
+  not in the saved game. Powerups running when a level is left stop there, as `PutClientInServer` cleared them
+  (they used to run on for as long as the old level's clock had left them).
 - **Area portals**: done. The BSP's areas and portals are tables; `portal_state` says which are open,
   `area_flood` (`FloodAreaConnections`) which areas are connected, recomputed when a door opens or
   closes (`door_use_areaportals`) or a `func_areaportal` is used. Marking keeps only the leaves of the
