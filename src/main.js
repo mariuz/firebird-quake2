@@ -596,6 +596,9 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   const r = renderer;
   r.dlights = frameDlights(ents, time);
   const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? (last.DEAD ? 40 : 0), fov: settings.fov };
+  // RDF_UNDERWATER: the eye in water, slime or lava draws the view into the 320×240 warp buffer and warps it up
+  const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION;
+  if (underwater) r.beginUnderwater();
   r.beginFrame(view);
   if (faces) {
     const frames = new Map();
@@ -685,16 +688,17 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   }
   prevPos = { x: last.PX, y: last.PY };
 
-  // RDF_UNDERWATER: the eye in water, slime or lava warps the view (D_WarpScreen), not the status bar
-  if (last.WATERLEVEL >= 3 && !last.INTERMISSION) r.warpScreen(time);
+  // ... warped (D_WarpScreen) onto the screen; the status bar is drawn over that
+  if (underwater) r.warpScreen(time);
 
-  // 2D: the status bar (with the help icon blinking while there is news on the help computer), and the
-  // help computer itself on F1 and at the intermission
+  // 2D: the status bar (with the help icon blinking while there is news on the help computer; at the
+  // intermission too, as SCR_DrawStats drew it over the frozen view with no layout in single player), and the
+  // help computer itself on F1
   last.HELP_ICON = (last.HELP_CHANGED ?? 0) > helpSeen && Math.floor(time * 10) & 8;
   last.FOV = settings.fov;
   last.CROSSHAIR = settings.crosshair;
-  if (!last.INTERMISSION) hud.draw(r, last, time);
-  if (showHelp || last.INTERMISSION) hud.drawHelp(r, last);
+  hud.draw(r, last, time);
+  if (showHelp) hud.drawHelp(r, last);
   else if (showInv && !last.DEAD) hud.drawInventory(r, invItems, last.INV_SEL, performance.now() / 1000);
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
   if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);

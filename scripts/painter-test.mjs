@@ -196,5 +196,21 @@ assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws ne
     'the frame from the effects: as sent, EF_ANIM01 0/1 and EF_ANIM23 2/3 at 2 Hz, EF_ANIM_ALL at 2 Hz, EF_ANIM_ALLFAST at 10 Hz');
 }
 
+// the warp buffer: at 640×480 the underwater view is drawn at 320×240 and read back up to the screen
+{
+  r.setSize(640, 480);
+  const sw = r.beginUnderwater();
+  assert(sw && r.w === 320 && r.h === 240 && r.fb.length === 320 * 240, 'at 640×480 an underwater frame is drawn into the 320×240 warp buffer');
+  for (let v = 0; v < 240; v++) r.fb.fill(v < 120 ? 5 : 9, v * 320, (v + 1) * 320);
+  r.warpScreen(0.3);
+  let top = 0, bottom = 0;
+  for (let v = 20; v < 200; v++) for (let u = 0; u < 640; u++) if (r.fb[v * 640 + u] === 5) top++;
+  for (let v = 280; v < 460; v++) for (let u = 0; u < 640; u++) if (r.fb[v * 640 + u] === 9) bottom++;
+  assert(r.w === 640 && r.h === 480 && r.fb.length === 640 * 480 && top === 180 * 640 && bottom === 180 * 640,
+    'warping reads it back up to 640×480: the two halves fill the screen');
+  r.setSize(320, 240);
+  assert(!r.beginUnderwater() && r.w === 320, 'at 320×240 the screen is the warp buffer');
+}
+
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

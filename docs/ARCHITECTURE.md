@@ -283,7 +283,8 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   `CL_AddPacketEntities`): EF_ANIM01 0/1 and EF_ANIM23 2/3 at 2 Hz (a button at rest and pressed),
   EF_ANIM_ALL every frame at 2 Hz and EF_ANIM_ALLFAST at 10 Hz (the ANIMATED spawnflags). The
   frame query sends a brush model's frame and effects (kind 6) when either asks for something.
-- **The underwater view.** `warpScreen(time)` is `D_WarpScreen`: the frame copied aside and read back
+- **The underwater view.** At more than 320×240, `beginUnderwater()` draws the frame into a 320×240 warp
+  buffer, as `R_RenderFrame` pointed `d_viewbuffer` at `r_warpbuffer`; `warpScreen(time)` is `D_WarpScreen`: the frame (or that buffer, read up to the screen) copied aside and read back
   through the turbulence table (row offsets by column, column offsets by row); `drawFrame` calls it
   after the view weapon when `WATERLEVEL` is 3, before the status bar.
 - **Model lighting.** `drawAlias(…, light, { dlight, minlight, glow })` is `R_AliasSetupLighting`: the

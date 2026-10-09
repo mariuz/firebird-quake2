@@ -103,19 +103,38 @@ export class Renderer {
    * the table at that row, each column takes its row from the table at that column, the table sliding
    * twenty steps a second. Drawn after the view weapon, before the status bar and the palette blend.
    */
+  /**
+   * An underwater frame at more than 320×240 is drawn into ref_soft's warp buffer, 320×240 (R_RenderFrame
+   * made the view rect at most WARP_WIDTH × WARP_HEIGHT and pointed d_viewbuffer at r_warpbuffer), and
+   * warpScreen then reads it back up to the screen: the underwater view is as coarse at 640×480 as at
+   * 320×240. Call before beginFrame; warpScreen restores the screen. Returns whether it switched.
+   */
+  beginUnderwater() {
+    if (this.w <= 320 || this.full) return false;
+    this.full = { w: this.w, h: this.h, fb: this.fb, zb: this.zb, edgeL: this.edgeL, edgeR: this.edgeR };
+    const s = this.warpBuf ?? (this.warpBuf = { fb: new Uint8Array(320 * 240), zb: new Float32Array(320 * 240), edgeL: new Float32Array(240 * 5), edgeR: new Float32Array(240 * 5) });
+    this.w = 320; this.h = 240; this.fb = s.fb; this.zb = s.zb; this.edgeL = s.edgeL; this.edgeR = s.edgeR;
+    return true;
+  }
+
   warpScreen(time) {
+    // the picture read: the screen itself, or the warp buffer a bigger screen was drawn into
+    const full = this.full;
+    const sw = this.w, sh = this.h, small = this.fb;
+    if (full) { this.w = full.w; this.h = full.h; this.fb = full.fb; this.zb = full.zb; this.edgeL = full.edgeL; this.edgeR = full.edgeR; this.full = null; }
     const { w, h, fb } = this;
     const AMP2 = 3, CYCLE = 128, SPEED = 20;
     let wt = this.warpTab;
-    if (!wt || wt.w !== w || wt.h !== h) {
+    if (!wt || wt.w !== w || wt.h !== h || wt.sw !== sw || wt.sh !== sh) {
       const rows = new Int32Array(h + AMP2 * 2), cols = new Int32Array(w + AMP2 * 2), turb = new Int32Array(1280);
-      for (let v = 0; v < h + AMP2 * 2; v++) rows[v] = Math.trunc((v / (h + AMP2 * 2)) * h) * w;
-      for (let u = 0; u < w + AMP2 * 2; u++) cols[u] = Math.trunc((u / (w + AMP2 * 2)) * w);
+      for (let v = 0; v < h + AMP2 * 2; v++) rows[v] = Math.trunc((v / (h + AMP2 * 2)) * sh) * sw;
+      for (let u = 0; u < w + AMP2 * 2; u++) cols[u] = Math.trunc((u / (w + AMP2 * 2)) * sw);
       for (let i = 0; i < 1280; i++) turb[i] = Math.trunc(AMP2 + Math.sin((i * 3.14159 * 2) / CYCLE) * AMP2);
-      wt = this.warpTab = { w, h, rows, cols, turb, src: new Uint8Array(w * h) };
+      wt = this.warpTab = { w, h, sw, sh, rows, cols, turb, src: full ? null : new Uint8Array(w * h) };
     }
-    const { rows, cols, turb, src } = wt;
-    src.set(fb);
+    const { rows, cols, turb } = wt;
+    let src = small;
+    if (!full) { src = wt.src; src.set(fb); }
     const off = Math.trunc(time * SPEED) & (CYCLE - 1);
     for (let v = 0; v < h; v++) {
       const tv = turb[off + v], o = v * w;

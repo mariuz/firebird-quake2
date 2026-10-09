@@ -36,8 +36,9 @@ them.
   `info_player_intermission`, the world frozen, until fire or jump after five seconds; a `.pcx` exit
   (the demo's `victory.pcx`) shows the picture in its own palette until a key, then a new game; `a+b`
   chains. The help computer (`F1`) shows the level's counts and the two `target_help` messages, and the
-  status bar blinks its icon while there is news. Left: cinematics (`.cin`) are skipped; Quake 2 single
-  player shows nothing over the intermission view, while here the help computer's counts are drawn on it.
+  status bar blinks its icon while there is news. At the intermission the status bar is drawn over the
+  frozen view and nothing else, as `SCR_DrawStats` drew it with no layout in single player (the help
+  computer's counts used to be drawn there). Left: cinematics (`.cin`) are skipped.
 - **Teleporter in demo3**: not a bug. It and its destination carry spawnflags 1792 (not easy, not
   medium, not hard), Quake 2's mark for deathmatch-only entities, like every other entity the demo
   maps leave out in single player. Checking it found the filter skipping spawnflag 4096 as "coop
@@ -168,8 +169,10 @@ them.
   walls), adds `R_AddDynamicLights`'s term to its light samples and builds it afresh for the frame, not
   cached; models get `R_LightPoint`'s intensity less distance. Monochrome, as ref_soft was. An entity
   carrying a light comes in the frame whether in the frustum or not (the client had every entity in the PVS
-  and lit by all of them): a rocket flying past lights the wall in front. Left: brush models are lit in
-  their BSP position (a moved door or a rotating fan takes the light where it stood).
+  and lit by all of them): a rocket flying past lights the wall in front. Brush models are lit in their
+  BSP position (a moved door or a rotating fan takes the light where it stood): so did ref_soft, whose
+  `R_PushDlights` marked a brush model's faces with the light's untransformed origin (later source ports
+  moved the light into the model's space; this port keeps ref_soft's look).
 - **Mipmaps**: done, as ref_soft chose them. Each polygon's level is `D_MipLevelForScale` of the nearest
   vertex's 1/z times the projection scale times the texture's `mipadjust` (from the length of its texture
   vectors), against `d_scalemip`'s 1, 0.4 and 0.2; the surface is cached per level, built from the
@@ -218,8 +221,9 @@ them.
   pixel size, centred; particles keep their size on screen (`D_DrawParticle`'s `d_pix_shift`, between
   w/320 and w/80 pixels a side, which also makes near particles at 320×240 up to 4 pixels as they were);
   the mip levels follow the larger projection scale. The raster costs about three times 320×240's (4.2 ms
-  warm and 6.4 cold in Node, against 1.4 and 3.1). Left: ref_soft warped an underwater view through a
-  320×240 buffer at any resolution; the painter warps at full size.
+  warm and 6.4 cold in Node, against 1.4 and 3.1). An underwater view at 640×480 is drawn into ref_soft's
+  320×240 warp buffer and warped up to the screen (`R_RenderFrame` made the view rect at most
+  `WARP_WIDTH × WARP_HEIGHT`), as coarse as it was.
 
 ## Sound
 
