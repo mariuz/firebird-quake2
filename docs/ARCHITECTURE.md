@@ -187,7 +187,11 @@ moves it on, fires the point's pathtarget, or holds it there (`aiflags` 1, `AI_S
 player's bolt, rocket or BFG ball is traced along its flight (`check_dodge`) and the soldiers,
 infantry and gunners it would hit duck a quarter of the time (`monster_dodge`, `aiflags` 4); on medium
 and hard a soldier often crouches and fires instead (state `attack3`, the `attak3` frames, timed by
-`pausetime` as `monsterinfo.pausetime` timed them, `aiflags` 8 holding the SS's burst). Supported: soldier (light, shotgun, machinegun),
+`pausetime` as `monsterinfo.pausetime` timed them, `aiflags` 8 holding the SS's burst). `check_attack`
+says whether the enemy is in sight (1 attack, 0 seen, 2 not) and notes the sighting (`ls_x/y/z`,
+`trail_time`, `search_time`); out of sight, `ai_pursue` steers by `aiflags` 16/32/64 to the last sighting
+and then the `player_trail` markers that `player_trail_check` drops at 10 Hz (`move_to_goal` and
+`new_chase_dir` take a spot as well as an entity for that). Supported: soldier (light, shotgun, machinegun),
 infantry, gunner, berserker, flyer, parasite, tank; see ROADMAP.md for the rest.
 
 ## 5. Visibility and the frame (`sql/render.sql`)

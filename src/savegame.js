@@ -1,13 +1,13 @@
 // savegame.js – a saved game is the game's tables, copied out as rows and put back.
 //
-// The whole state of a level is four tables: game (the level), player (the client), ents (every
-// edict) and lightstyles (the switched lights). exportSave reads them; importSave, with the same
+// The whole state of a level is five tables: game (the level), player (the client), ents (every
+// edict), lightstyles (the switched lights) and player_trail (the spots the monsters follow). exportSave reads them; importSave, with the same
 // map freshly loaded, empties them and inserts the saved rows, then restarts the entity id
 // sequence above the highest id and forgets the frame's caches. Column names come from the
 // result's field list, so the format follows the schema.
 
 export const SAVE_VERSION = 2;   // 2: game lost next_spawn, intermission_tics and finale; gained intermission_time, help_msg2, help_changed
-const TABLES = ['game', 'player', 'ents', 'lightstyles'];
+const TABLES = ['game', 'player', 'ents', 'lightstyles', 'player_trail'];
 // per-frame caches on ents that are rebuilt rather than saved
 const SKIP = new Set(['FACES_LST', 'FL_STAMP', 'FL_X', 'FL_Y', 'FL_Z', 'FL_P', 'FL_YAW', 'FL_R', 'VIS_CL', 'VIS']);
 
@@ -28,7 +28,7 @@ export async function exportSave(db, mapName) {
 
 /**
  * Put a saved game back. The save's map must already be loaded (loadMap / init_map): the
- * geometry and the models are the pak's, only the four game tables are replaced.
+ * geometry and the models are the pak's, only the game tables are replaced.
  */
 /** A double as [mantissa, exponent] with v = m × 2^e and m an integer below 2^53 (null stays null). */
 function exactDouble(v) {
@@ -44,8 +44,9 @@ export async function importSave(db, save) {
   // the saved model ids → this load's, by name
   const byName = new Map((await db.query('SELECT id, name FROM models', [], { rowMode: 'array' })).rows.map(([id, name]) => [name, id]));
   const remap = (id) => { if (id == null) return id; const name = save.models?.[id]; const nid = name == null ? undefined : byName.get(name); return nid ?? id; };
-  await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM vis_faces; DELETE FROM lightstyles; DELETE FROM ents; DELETE FROM player; DELETE FROM game;');
+  await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM vis_faces; DELETE FROM lightstyles; DELETE FROM player_trail; DELETE FROM ents; DELETE FROM player; DELETE FROM game;');
   for (const t of TABLES) {
+    if (!save.tables[t]) continue;   // a save from before the table: it starts empty
     const { cols, rows } = save.tables[t];
     // Parameters reach Firebird as text, and its text-to-double conversion is not correctly rounded (one
     // value in six came back an ulp off). A DOUBLE PRECISION column goes over as an integer mantissa and a

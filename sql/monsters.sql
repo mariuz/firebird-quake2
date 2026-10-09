@@ -138,7 +138,8 @@ BEGIN
 END^
 
 -- SV_NewChaseDir: pick a direction toward the goal, trying the sides
-CREATE OR ALTER PROCEDURE new_chase_dir (eid INTEGER, goal INTEGER, dist DOUBLE PRECISION, iy_in DOUBLE PRECISION DEFAULT NULL)
+CREATE OR ALTER PROCEDURE new_chase_dir (eid INTEGER, goal INTEGER, dist DOUBLE PRECISION, iy_in DOUBLE PRECISION DEFAULT NULL,
+  gx DOUBLE PRECISION DEFAULT NULL, gy DOUBLE PRECISION DEFAULT NULL)
 AS
 DECLARE olddir DOUBLE PRECISION; DECLARE turnaround DOUBLE PRECISION;
 DECLARE dx DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; DECLARE d1 DOUBLE PRECISION; DECLARE d2 DOUBLE PRECISION; DECLARE tdir DOUBLE PRECISION;
@@ -147,7 +148,9 @@ BEGIN
   IF (iy_in IS NOT NULL) THEN olddir = anglemod(FLOOR(iy_in / 45) * 45);
   ELSE SELECT anglemod(FLOOR(e.ideal_yaw / 45) * 45) FROM ents e WHERE e.id = :eid INTO olddir;
   turnaround = anglemod(olddir - 180);
-  SELECT g.x - e.x, g.y - e.y FROM ents e CROSS JOIN ents g WHERE e.id = :eid AND g.id = :goal INTO dx, dy;
+  -- (gx, gy: a spot to head for instead of an entity, as ai_run's tempgoal was)
+  IF (gx IS NOT NULL) THEN SELECT :gx - e.x, :gy - e.y FROM ents e WHERE e.id = :eid INTO dx, dy;
+  ELSE SELECT g.x - e.x, g.y - e.y FROM ents e CROSS JOIN ents g WHERE e.id = :eid AND g.id = :goal INTO dx, dy;
   IF (dx IS NULL) THEN EXIT;
   d1 = IIF(dx > 10, 0, IIF(dx < -10, 180, nodir));
   d2 = IIF(dy < -10, 270, IIF(dy > 10, 90, nodir));
@@ -172,7 +175,8 @@ BEGIN
 END^
 
 -- M_MoveToGoal
-CREATE OR ALTER PROCEDURE move_to_goal (eid INTEGER, dist DOUBLE PRECISION, iy_in DOUBLE PRECISION DEFAULT NULL)
+CREATE OR ALTER PROCEDURE move_to_goal (eid INTEGER, dist DOUBLE PRECISION, iy_in DOUBLE PRECISION DEFAULT NULL,
+  gx DOUBLE PRECISION DEFAULT NULL, gy DOUBLE PRECISION DEFAULT NULL)
 AS
 DECLARE goal INTEGER; DECLARE flags INTEGER; DECLARE iy DOUBLE PRECISION; DECLARE close_ SMALLINT = 0;
 BEGIN
@@ -187,7 +191,7 @@ BEGIN
      AND g.z + g.minz <= e.z + e.maxz + :dist AND g.z + g.maxz >= e.z + e.minz - :dist INTO close_;
   IF (close_ = 1 AND EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.enemy_id = :goal)) THEN EXIT;
   IF (FLOOR(RAND() * 4) = 1 OR step_direction(eid, iy, dist) = 0) THEN
-    EXECUTE PROCEDURE new_chase_dir(eid, goal, dist, iy);
+    EXECUTE PROCEDURE new_chase_dir(eid, goal, dist, iy, gx, gy);
 END^
 
 -- FindTarget: can this monster see the player?
@@ -214,7 +218,10 @@ DECLARE s VARCHAR(64); DECLARE run_ VARCHAR(16); DECLARE ct VARCHAR(40); DECLARE
 BEGIN
   SELECT t.sight_snd, t.run_anim, e.combattarget FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO s, run_, ct;
   EXECUTE PROCEDURE snd(eid, 2, s, 1, 1);
-  UPDATE ents e SET e.enemy_id = player_ent(), e.goal_id = NULL, e.st = 'run', e.search_time = now_() + 5, e.attack_finished = now_() + 1 WHERE e.id = :eid;
+  -- FoundTarget: the sighting is noted (last_sighting, trail_time), the pursuit flags start afresh
+  UPDATE ents e SET e.enemy_id = player_ent(), e.goal_id = NULL, e.st = 'run', e.search_time = now_() + 5, e.attack_finished = now_() + 1,
+         e.ls_x = (SELECT p.x FROM ents p WHERE p.id = e.enemy_id), e.ls_y = (SELECT p.y FROM ents p WHERE p.id = e.enemy_id),
+         e.ls_z = (SELECT p.z FROM ents p WHERE p.id = e.enemy_id), e.trail_time = now_(), e.aiflags = BIN_AND(e.aiflags, BIN_NOT(16 + 32 + 64)) WHERE e.id = :eid;
   EXECUTE PROCEDURE set_anim(eid, run_);
   -- FoundTarget: with a combattarget, run to that point_combat first, ignoring the enemy (a one-shot deal:
   -- the combattarget is cleared, and the point's targetname too, since that point is ours)
@@ -246,7 +253,98 @@ BEGIN
   END
 END^
 
--- CheckAttack (M_CheckAttack): decide between melee, missile and keep running
+-- p_trail.c: PlayerTrail_PickFirst (first = 1) and PlayerTrail_PickNext: the oldest marker dropped after the
+-- monster's trail_time (all older: round to the oldest, as the ring did); PickFirst takes the one before it
+-- instead when only that one is in sight. Nothing while the trail is empty.
+CREATE OR ALTER PROCEDURE trail_pick (eid INTEGER, first SMALLINT, tt DOUBLE PRECISION)
+RETURNS (x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION, ts DOUBLE PRECISION)
+AS
+DECLARE sq INTEGER; DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
+DECLARE pyaw DOUBLE PRECISION; DECLARE pts DOUBLE PRECISION;
+BEGIN
+  SELECT FIRST 1 m.seq, m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m WHERE m.ts > :tt ORDER BY m.seq INTO sq, x, y, z, yaw, ts;
+  IF (sq IS NULL) THEN SELECT FIRST 1 m.seq, m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m ORDER BY m.seq INTO sq, x, y, z, yaw, ts;
+  IF (sq IS NULL) THEN EXIT;
+  IF (first = 1 AND visible_point(eid, x, y, z) = 0) THEN
+  BEGIN
+    SELECT FIRST 1 m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m WHERE m.seq < :sq ORDER BY m.seq DESC INTO px, py, pz, pyaw, pts;
+    IF (px IS NULL) THEN SELECT FIRST 1 m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m ORDER BY m.seq DESC INTO px, py, pz, pyaw, pts;
+    IF (visible_point(eid, px, py, pz) = 1) THEN BEGIN x = px; y = py; z = pz; yaw = pyaw; ts = pts; END
+  END
+  SUSPEND;
+END^
+
+-- PlayerTrail_Add: a marker where the player was, turned from the last marker toward it; eight kept
+CREATE OR ALTER PROCEDURE trail_add (x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION)
+AS
+DECLARE sq INTEGER; DECLARE lx DOUBLE PRECISION; DECLARE ly DOUBLE PRECISION;
+BEGIN
+  SELECT FIRST 1 m.seq, m.x, m.y FROM player_trail m ORDER BY m.seq DESC INTO sq, lx, ly;
+  sq = COALESCE(sq, 0) + 1;
+  INSERT INTO player_trail (seq, x, y, z, yaw, ts) VALUES (:sq, :x, :y, :z, IIF(:lx IS NULL, 0, vectoyaw(:x - :lx, :y - :ly)), now_());
+  DELETE FROM player_trail m WHERE m.seq <= :sq - 8;
+END^
+
+-- ClientBeginServerFrame's trail: a spot is dropped where the player was when the last marker is out of its
+-- sight. (Asked at 10 Hz, the server's rate, and only when the player has moved since it was last asked.)
+CREATE OR ALTER PROCEDURE player_trail_check
+AS
+DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
+DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
+DECLARE mx DOUBLE PRECISION; DECLARE my DOUBLE PRECISION; DECLARE mz DOUBLE PRECISION;
+BEGIN
+  SELECT p.ent_id, e.x, e.y, e.z, p.trail_x, p.trail_y, p.trail_z FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1 INTO pe, x, y, z, ox, oy, oz;
+  IF (pe IS NULL OR (x = ox AND y = oy AND z = oz)) THEN EXIT;
+  SELECT FIRST 1 m.x, m.y, m.z FROM player_trail m ORDER BY m.seq DESC INTO mx, my, mz;
+  IF (mx IS NULL OR visible_point(pe, mx, my, mz) = 0) THEN
+    EXECUTE PROCEDURE trail_add(IIF(ox > 1e29, x, ox), IIF(ox > 1e29, y, oy), IIF(ox > 1e29, z, oz));
+  UPDATE player p SET p.trail_x = :x, p.trail_y = :y, p.trail_z = :z WHERE p.id = 1;
+END^
+
+-- ai_run with the enemy out of sight: where to head (gx, gy), facing iy, this far. Run to where it was last seen,
+-- then along the player's trail marker by marker (AI_LOST_SIGHT, AI_PURSUIT_LAST_SEEN, AI_PURSUE_NEXT), five
+-- more seconds of search for each marker reached; twenty seconds past the search, straight at the enemy.
+CREATE OR ALTER PROCEDURE ai_pursue (eid INTEGER, dist_in DOUBLE PRECISION)
+RETURNS (gx DOUBLE PRECISION, gy DOUBLE PRECISION, iy DOUBLE PRECISION, dist DOUBLE PRECISION)
+AS
+DECLARE aif INTEGER; DECLARE st_ DOUBLE PRECISION; DECLARE lx DOUBLE PRECISION; DECLARE ly DOUBLE PRECISION; DECLARE lz DOUBLE PRECISION;
+DECLARE tt DOUBLE PRECISION; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE t DOUBLE PRECISION;
+DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION; DECLARE d1 DOUBLE PRECISION; DECLARE turned SMALLINT = 0;
+DECLARE mx DOUBLE PRECISION; DECLARE my DOUBLE PRECISION; DECLARE mz DOUBLE PRECISION; DECLARE myaw DOUBLE PRECISION; DECLARE mts DOUBLE PRECISION;
+BEGIN
+  t = now_(); dist = dist_in;
+  SELECT e.aiflags, e.search_time, e.ls_x, e.ls_y, e.ls_z, e.trail_time, e.x, e.y, e.z, e.ideal_yaw, n.x, n.y, n.z
+    FROM ents e JOIN ents n ON n.id = e.enemy_id WHERE e.id = :eid INTO aif, st_, lx, ly, lz, tt, x, y, z, iy, ex, ey, ez;
+  IF (x IS NULL) THEN EXIT;
+  IF (lx IS NULL) THEN BEGIN lx = ex; ly = ey; lz = ez; END       -- never sighted (woken by a trigger): where the enemy is
+  IF (st_ > 0 AND t > st_ + 20) THEN
+  BEGIN
+    UPDATE ents e SET e.search_time = 0 WHERE e.id = :eid;
+    gx = ex; gy = ey; iy = vectoyaw(ex - x, ey - y);
+    SUSPEND;
+    EXIT;
+  END
+  IF (BIN_AND(aif, 16) = 0) THEN aif = BIN_AND(BIN_OR(aif, 16 + 32), BIN_NOT(64));   -- just lost sight
+  IF (BIN_AND(aif, 64) <> 0) THEN
+  BEGIN
+    aif = BIN_AND(aif, BIN_NOT(64));
+    st_ = t + 5;                                                    -- more time, since we got this far
+    SELECT p.x, p.y, p.z, p.yaw, p.ts FROM trail_pick(:eid, IIF(BIN_AND(:aif, 32) <> 0, 1, 0), :tt) p INTO mx, my, mz, myaw, mts;
+    aif = BIN_AND(aif, BIN_NOT(32));
+    IF (mx IS NOT NULL) THEN BEGIN lx = mx; ly = my; lz = mz; tt = mts; iy = myaw; turned = 1; END
+  END
+  d1 = vlen(x - lx, y - ly, z - lz);
+  IF (d1 <= dist) THEN BEGIN aif = BIN_OR(aif, 64); dist = d1; END
+  UPDATE ents e SET e.aiflags = :aif, e.search_time = :st_, e.ls_x = :lx, e.ls_y = :ly, e.ls_z = :lz, e.trail_time = :tt,
+         e.ideal_yaw = :iy, e.yaw = IIF(:turned = 1, :iy, e.yaw) WHERE e.id = :eid;
+  gx = lx; gy = ly;
+  SUSPEND;
+END^
+
+-- ai_checkattack + CheckAttack (M_CheckAttack): is the enemy in sight (visible(): only walls hide it), and if
+-- so, melee, missile or keep running. 1: attack; 0: in sight, no attack; 2: out of sight. In sight, the
+-- sighting is noted as ai_checkattack and ai_run noted it (search_time five seconds on, last_sighting, trail_time,
+-- AI_LOST_SIGHT cleared), in the one write with the attack state.
 CREATE OR ALTER FUNCTION check_attack (eid INTEGER) RETURNS SMALLINT
 AS
 DECLARE enemy INTEGER; DECLARE r INTEGER; DECLARE has_melee SMALLINT; DECLARE has_missile SMALLINT; DECLARE af DOUBLE PRECISION;
@@ -255,38 +353,44 @@ DECLARE x1 DOUBLE PRECISION; DECLARE y1 DOUBLE PRECISION; DECLARE z1 DOUBLE PREC
 DECLARE f DOUBLE PRECISION; DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
 DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
 DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER; DECLARE d DOUBLE PRECISION;
+DECLARE vis SMALLINT; DECLARE res SMALLINT = 0; DECLARE nas SMALLINT; DECLARE naf DOUBLE PRECISION; DECLARE t DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
 BEGIN
   SELECT e.enemy_id, IIF(t.melee_anim IS NULL, 0, 1), IIF(t.missile_anim IS NULL, 0, 1), e.attack_finished, t.missile_kind, t.attack_chance, t.melee_range
     FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO enemy, has_melee, has_missile, af, mk, ac, mrange;
   IF (enemy IS NULL) THEN RETURN 0;
+  t = now_();
   -- see if any entities are in the way of the shot
   SELECT e.x, e.y, e.z + e.viewheight FROM ents e WHERE e.id = :eid INTO x1, y1, z1;
-  SELECT e.x, e.y, e.z + e.viewheight FROM ents e WHERE e.id = :enemy INTO x2, y2, z2;
+  SELECT e.x, e.y, e.z + e.viewheight, e.z FROM ents e WHERE e.id = :enemy INTO x2, y2, z2, oz;
   EXECUTE PROCEDURE trace_move(eid, 0, 0, 0, 0, 0, 0, x1, y1, z1, x2, y2, z2, 100663299)
     RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sf, ct, als, sts, hit;
-  IF (f < 1 AND hit <> enemy) THEN RETURN 0;                   -- don't have a clear shot
-  r = ent_range(eid, enemy);
-  d = vlen(x2 - x1, y2 - y1, 0);
-  IF (has_melee = 1 AND d <= mrange) THEN
+  -- a wall in the way hides the enemy too; a monster or a window only spoils the shot (one more trace says)
+  vis = 1;
+  IF (f < 1 AND hit IS DISTINCT FROM enemy) THEN
   BEGIN
-    UPDATE ents e SET e.attack_state = 3 WHERE e.id = :eid;
-    RETURN 1;
+    IF (COALESCE(hit, 0) = 0 AND BIN_AND(ct, 1) <> 0) THEN vis = 0;
+    ELSE vis = visible(eid, enemy);
   END
-  IF (has_missile = 0) THEN RETURN 0;
-  IF (now_() < af) THEN RETURN 0;
-  IF (r = 3) THEN RETURN 0;
-  IF (r = 0) THEN chance = IIF(has_melee = 1, 0, 0.4e0);
-  ELSE IF (r = 1) THEN chance = IIF(has_melee = 1, 0.2e0, 0.4e0);
-  ELSE IF (r = 2) THEN chance = IIF(has_melee = 1, 0.05e0, 0.1e0);
-  ELSE chance = 0;
-  chance = chance * ac / 0.3e0;
-  IF (RAND() < chance) THEN
+  IF (vis = 0) THEN RETURN 2;
+  IF (f = 1 OR hit = enemy) THEN                                -- a clear shot
   BEGIN
-    UPDATE ents e SET e.attack_state = 4, e.attack_finished = now_() + 2 * RAND() WHERE e.id = :eid;
-    RETURN 1;
+    r = ent_range(eid, enemy);
+    d = vlen(x2 - x1, y2 - y1, 0);
+    IF (has_melee = 1 AND d <= mrange) THEN BEGIN nas = 3; res = 1; END
+    ELSE IF (has_missile = 1 AND t >= af AND r <> 3) THEN
+    BEGIN
+      IF (r = 0) THEN chance = IIF(has_melee = 1, 0, 0.4e0);
+      ELSE IF (r = 1) THEN chance = IIF(has_melee = 1, 0.2e0, 0.4e0);
+      ELSE IF (r = 2) THEN chance = IIF(has_melee = 1, 0.05e0, 0.1e0);
+      ELSE chance = 0;
+      chance = chance * ac / 0.3e0;
+      IF (RAND() < chance) THEN BEGIN nas = 4; naf = t + 2 * RAND(); res = 1; END
+      ELSE nas = IIF(r = 2, 1, 2);
+    END
   END
-  UPDATE ents e SET e.attack_state = IIF(:r = 2, 1, 2) WHERE e.id = :eid;
-  RETURN 0;
+  UPDATE ents e SET e.search_time = :t + 5, e.ls_x = :x2, e.ls_y = :y2, e.ls_z = :oz, e.trail_time = :t, e.aiflags = BIN_AND(e.aiflags, BIN_NOT(16)),
+         e.attack_state = COALESCE(:nas, e.attack_state), e.attack_finished = COALESCE(:naf, e.attack_finished) WHERE e.id = :eid;
+  RETURN res;
 END^
 
 -- a monster's missile at the frame that fires (monster_fire_*)
@@ -469,7 +573,7 @@ DECLARE melee_a VARCHAR(16); DECLARE melee_f INTEGER; DECLARE missile_a VARCHAR(
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE gx DOUBLE PRECISION; DECLARE gy DOUBLE PRECISION; DECLARE gz DOUBLE PRECISION;
 DECLARE d DOUBLE PRECISION; DECLARE gt VARCHAR(40); DECLARE gw DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE cl INTEGER;
 DECLARE nt DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE pe INTEGER; DECLARE vis SMALLINT;
-DECLARE aif INTEGER; DECLARE itime DOUBLE PRECISION; DECLARE sflags INTEGER;
+DECLARE aif INTEGER; DECLARE itime DOUBLE PRECISION; DECLARE sflags INTEGER; DECLARE ca SMALLINT;
 BEGIN
   -- (an UPDATE of the wide ents row costs as much as a trace step: the next think time rides
   -- along with whatever else the think writes, and a path that writes nothing thinks again next tic)
@@ -660,14 +764,25 @@ BEGIN
     IF (d > 1200 AND pvs_visible((SELECT l.pvs FROM leaves l WHERE l.id = (SELECT e.leaf FROM ents e WHERE e.id = :enemy)), cl) = 0) THEN
     BEGIN
       nt = t + 0.3e0;
-      IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd * 3, iy);
+      IF (run_spd > 0) THEN
+      BEGIN
+        SELECT p.gx, p.gy, p.iy, p.dist FROM ai_pursue(:eid, :run_spd * 3) p INTO gx, gy, iy, d;
+        IF (d IS NOT NULL) THEN EXECUTE PROCEDURE move_to_goal(eid, d, iy, gx, gy);
+      END
       af = MOD(af + 1, fc);
       UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
       EXIT;
     END
-    IF (check_attack(eid) = 1) THEN EXIT;
-    IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd, iy);
-    ELSE EXECUTE PROCEDURE change_yaw(eid);
+    ca = check_attack(eid);
+    IF (ca = 1) THEN EXIT;
+    IF (run_spd <= 0) THEN EXECUTE PROCEDURE change_yaw(eid);
+    ELSE IF (ca = 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd, iy);   -- in sight: after it
+    ELSE
+    BEGIN
+      d = NULL;
+      SELECT p.gx, p.gy, p.iy, p.dist FROM ai_pursue(:eid, :run_spd) p INTO gx, gy, iy, d;
+      IF (d IS NOT NULL) THEN EXECUTE PROCEDURE move_to_goal(eid, d, iy, gx, gy);
+    END
     af = MOD(af + 1, fc);
     UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
     EXIT;
@@ -1077,6 +1192,7 @@ BEGIN
   WHILE (i < tics) DO
   BEGIN
     UPDATE game g SET g.tic = g.tic + 1, g.time_ = g.time_ + 0.05e0 WHERE g.id = 1;
+    IF (MOD(tic + i, 2) = 0) THEN EXECUTE PROCEDURE player_trail_check;
     EXECUTE PROCEDURE player_think(0.05e0, fwd, side, yaw_d / tics, pitch_d / tics, fire, jump, run, IIF(i = 0, imp, 0));
     EXECUTE PROCEDURE run_pushers(0.05e0);
     EXECUTE PROCEDURE run_physics(0.05e0);
@@ -1140,6 +1256,9 @@ BEGIN
   UPDATE player p SET p.weapon = best_weapon() WHERE p.id = 1 AND (BIN_AND(p.weapons, p.weapon) = 0 OR p.weapon = 0);
   UPDATE game g SET g.has_water = IIF(EXISTS (SELECT 1 FROM leaves l WHERE BIN_AND(l.contents, 56) <> 0), 1, 0) WHERE g.id = 1;
   UPDATE viewcfg c SET c.vis_cluster = NULL, c.vis_area = NULL, c.lv_ex = NULL, c.lv_leaf = NULL, c.world_lst = NULL WHERE c.id = 1;
+  -- PlayerTrail_Init: no trail yet
+  DELETE FROM player_trail;
+  UPDATE player p SET p.trail_x = 1e30, p.trail_y = 1e30, p.trail_z = 1e30 WHERE p.id = 1;
   -- every area portal starts closed (CM_LoadMap); the doors open them
   DELETE FROM portal_state;
   INSERT INTO portal_state (portal, open_) SELECT DISTINCT ap.portal, 0 FROM areaportals ap;

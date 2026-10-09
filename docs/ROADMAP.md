@@ -61,8 +61,13 @@ them.
   none on easy): down at the third frame, a shot, back for a second one while `pausetime` allows; the SS
   holds the frame for a burst of 3 to 10 rounds instead. The gunner throws grenades: half its attacks out of
   melee range are `gunner_attack`'s grenade run (`attak1`, four grenades along its facing), and on hard half
-  its ducks throw one as it goes down (`gunner_duck_down`); it used to have only the chain gun. Left: the exact `ai_run` sub-states (lost sight, trail following,
-  sliding), and the parasite's drain is a laser beam, not the hooked animation.
+  its ducks throw one as it goes down (`gunner_duck_down`); it used to have only the chain gun. A monster that loses sight of the player
+  no longer homes in on it through walls: it runs to where it last saw it, then along the player's trail
+  (`p_trail.c`: eight markers, one dropped each time the player moves out of sight of the last), five more
+  seconds of search for each marker reached, and twenty seconds after the search runs out goes straight for
+  the player, as `ai_run` had it; seeing is `visible()`'s, walls only (a monster in the way spoils the shot,
+  not the view). Left: `ai_run`'s detour around an obstacle on the way to a new marker (`AI_PURSUE_TEMP`),
+  `AS_SLIDING`, and the parasite's drain is a laser beam, not the hooked animation.
 - **Pusher edge cases**: done, against Quake 2 3.14's g_func.c. A door, plat or train blocked by
   anything but a monster or the player hurts it to death and blows it away; a train deals 100 at most
   every half second (none with `TRAIN_BLOCK_STOPS`), buttons none. `func_water` has the water sounds

@@ -180,6 +180,48 @@ for (const m of MONSTERS) {
   await db.exec('UPDATE game SET killed = 0');
 }
 
+// the player's trail and a monster's pursuit when it loses sight (p_trail.c, ai_run)
+{
+  console.log('── pursuit');
+  await teleport(128, -320, 32, 135);
+  const trail = () => qa('SELECT seq, x, y, z, ts FROM player_trail ORDER BY seq');
+  await db.exec("DELETE FROM player_trail; UPDATE player SET trail_x = 1e30, trail_y = 1e30, trail_z = 1e30");
+  await db.exec('EXECUTE PROCEDURE player_trail_check');
+  assert((await trail()).length === 1, 'the first check drops a marker where the player stands');
+  await teleport(128 + 40, -320, 32, 135);
+  await db.exec('EXECUTE PROCEDURE player_trail_check');
+  assert((await trail()).length === 1, '... and none while that marker is in sight');
+  await db.exec('UPDATE player_trail SET z = z - 4000');                       // a marker the player cannot see
+  await teleport(128 + 80, -320, 32, 135);
+  await db.exec('EXECUTE PROCEDURE player_trail_check');
+  const tr = await trail();
+  assert(tr.length === 2 && tr[1].X === 128 + 40, `out of sight of the last marker, a new one where the player was (${tr.map((m) => m.X).join(', ')})`);
+  for (let i = 0; i < 9; i++) { await db.exec('UPDATE player_trail SET z = z - 4000'); await teleport(300 + i * 8, -320, 32, 135); await db.exec('EXECUTE PROCEDURE player_trail_check'); }
+  assert((await trail()).length === 8, 'eight markers are kept');
+  await db.exec('UPDATE player_trail SET z = z - 4000');                       // none in the soldier's sight either
+  await teleport(128, -320, 32, 135);
+
+  const id = (await q1("SELECT * FROM spawn_monster('soldier', 220)")).ID;
+  const m0 = await q1(`SELECT x, y, z FROM ents WHERE id = ${id}`);
+  await db.exec(`UPDATE ents SET enemy_id = ${pe}, st = 'run', aiflags = 0, search_time = ${(await q1('SELECT time_ t FROM game')).T} + 5, trail_time = 0,
+                 ls_x = ${m0.X + 4}, ls_y = ${m0.Y}, ls_z = ${m0.Z}, nextthink = NULL WHERE id = ${id}`);
+  const pursue = () => q1(`SELECT gx, gy, iy, dist FROM ai_pursue(${id}, 10)`);
+  let p = await pursue();
+  let m = await q1(`SELECT aiflags a, ls_x lx FROM ents WHERE id = ${id}`);
+  assert((m.A & 112) === 112 && Math.abs(p.GX - m0.X - 4) < 1e-6 && Math.abs(p.DIST - 4) < 1e-6, `losing sight it runs to where it last saw the player, reaching it (flags ${m.A}, ${p.DIST})`);
+  const first = (await trail())[0];
+  p = await pursue();
+  m = await q1(`SELECT aiflags a, ls_x lx, ls_y ly, trail_time tt FROM ents WHERE id = ${id}`);
+  assert(m.LX === first.X && m.LY === first.Y && m.TT === first.TS && (m.A & 32) === 0, `... then takes the trail's first marker after it (${m.LX}, ${m.LY})`);
+  await db.exec(`UPDATE ents SET search_time = 1 WHERE id = ${id}`);
+  await db.exec('UPDATE game SET time_ = time_ + 30');
+  p = await pursue();
+  const pl = await q1(`SELECT x FROM ents WHERE id = ${pe}`);
+  assert(p.GX === pl.X && (await q1(`SELECT search_time s FROM ents WHERE id = ${id}`)).S === 0, 'twenty seconds past the search, straight at the enemy');
+  await db.exec('UPDATE game SET time_ = time_ - 30');
+  await db.exec(`DELETE FROM ents WHERE id = ${id}`);
+}
+
 // blast damage: the radius reaches as far as Quake's findradius and no farther; the BFG's lasers and its final blast
 {
   console.log('── blast damage');

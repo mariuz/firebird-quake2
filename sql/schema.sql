@@ -326,8 +326,10 @@ CREATE TABLE ents (
   pain_finished   DOUBLE PRECISION DEFAULT 0 NOT NULL,
   search_time     DOUBLE PRECISION DEFAULT 0 NOT NULL,
   idle_time       DOUBLE PRECISION DEFAULT 0 NOT NULL,   -- when the next idle (standing) or search (walking) sound is due
-  aiflags         INTEGER DEFAULT 0 NOT NULL,            -- 1 AI_STAND_GROUND, 2 AI_COMBAT_POINT, 4 AI_DUCKED, 8 AI_HOLD_FRAME
+  aiflags         INTEGER DEFAULT 0 NOT NULL,            -- 1 AI_STAND_GROUND, 2 AI_COMBAT_POINT, 4 AI_DUCKED, 8 AI_HOLD_FRAME, 16 AI_LOST_SIGHT, 32 AI_PURSUIT_LAST_SEEN, 64 AI_PURSUE_NEXT
   pausetime       DOUBLE PRECISION,                      -- monsterinfo.pausetime: how long a soldier's crouch-and-fire keeps firing
+  ls_x DOUBLE PRECISION, ls_y DOUBLE PRECISION, ls_z DOUBLE PRECISION,   -- monsterinfo.last_sighting: where the enemy was last seen, or the trail marker run to
+  trail_time      DOUBLE PRECISION DEFAULT 0 NOT NULL,   -- monsterinfo.trail_time: the time of the last trail marker taken (or of the last sighting)
   attack_state    SMALLINT DEFAULT 0 NOT NULL,   -- 1 straight 2 sliding 3 melee 4 missile 5 leaping
   lefty      SMALLINT DEFAULT 0 NOT NULL,
   -- placement
@@ -414,6 +416,9 @@ CREATE TABLE player (
   water_x         DOUBLE PRECISION DEFAULT 1e30 NOT NULL, -- where the player's water level was last worked out (none yet: far away)
   water_y         DOUBLE PRECISION DEFAULT 1e30 NOT NULL,
   water_z         DOUBLE PRECISION DEFAULT 1e30 NOT NULL,
+  trail_x         DOUBLE PRECISION DEFAULT 1e30 NOT NULL, -- where the player stood when the trail was last checked (none yet: far away)
+  trail_y         DOUBLE PRECISION DEFAULT 1e30 NOT NULL,
+  trail_z         DOUBLE PRECISION DEFAULT 1e30 NOT NULL,
   jump_released   SMALLINT DEFAULT 1 NOT NULL,
   fly_sound_time  DOUBLE PRECISION DEFAULT 0 NOT NULL,
   swim_time       DOUBLE PRECISION DEFAULT 0 NOT NULL,
@@ -446,6 +451,14 @@ CREATE TABLE player (
 
 -- S_StartSound: every sound the simulation makes, for the browser to play.
 CREATE SEQUENCE sound_seq;
+-- p_trail.c: the player's trail, the last eight spots it moved out of sight of the one before (seq oldest first)
+CREATE TABLE player_trail (
+  seq  INTEGER NOT NULL PRIMARY KEY,
+  x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION,
+  yaw  DOUBLE PRECISION,                    -- from the marker before to this one
+  ts   DOUBLE PRECISION                     -- level time it was dropped
+);
+
 CREATE TABLE sound_events (
   id     INTEGER NOT NULL PRIMARY KEY,
   tic    INTEGER NOT NULL,
