@@ -257,8 +257,9 @@ picker). Missing for the rest of the game:
   with many monsters in a big room the tic grows linearly. The engine's per-level cost of a tree
   descent (~16 µs) is the limit; ideas left on the table are in ARCHITECTURE.md §10.
 - **Tests**: the smoke tests cover movement, weapons and doors on demo1 and demo2; demo3 is only
-  screenshotted. There is no test of triggers and targets firing in sequence (a scripted
-  walkthrough of a map would catch regressions in `use_targets`), none of the pushers crushing,
+  screenshotted. `scripts/walkthrough-test.mjs` puts the player in every trigger it can walk into on the
+  three maps, in turn, and checks each fires and the movers it targets move (`use_targets`, `trigger_fire`,
+  the touch test); there is still no test of the pushers crushing,
   and the painter's only regression test is the two-mode pixel comparison plus the docs
   screenshots viewed by eye.
 - **`firebird-wasm` features to watch**: binding non-text parameters, batch inserts, and
