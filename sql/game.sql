@@ -26,6 +26,10 @@ CREATE OR ALTER PROCEDURE player_fire (btn SMALLINT) AS BEGIN END^
 CREATE OR ALTER PROCEDURE become_explosion (eid INTEGER, kind SMALLINT) AS BEGIN END^
 CREATE OR ALTER PROCEDURE monster_wake (eid INTEGER, activator INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE monster_dodge (eid INTEGER, attacker INTEGER, eta DOUBLE PRECISION) AS BEGIN END^
+CREATE OR ALTER PROCEDURE launch_rocket (owner INTEGER, ox DOUBLE PRECISION, oy DOUBLE PRECISION, oz DOUBLE PRECISION,
+  dx DOUBLE PRECISION, dy DOUBLE PRECISION, dz DOUBLE PRECISION, spd DOUBLE PRECISION, dmg INTEGER, radius_dmg INTEGER, radius DOUBLE PRECISION) AS BEGIN END^
+CREATE OR ALTER PROCEDURE spawn_map_ents (skill SMALLINT, spawnpoint VARCHAR(40), only_id INTEGER) AS BEGIN END^
+CREATE OR ALTER FUNCTION find_target (eid INTEGER) RETURNS SMALLINT AS BEGIN RETURN 0; END^
 
 -- ── utilities ─────────────────────────────────────────────────────────────
 CREATE OR ALTER PROCEDURE snd (eid INTEGER, chan SMALLINT, name VARCHAR(64), vol DOUBLE PRECISION, attn DOUBLE PRECISION)
@@ -472,6 +476,13 @@ DECLARE deb DOUBLE PRECISION; DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRE
 BEGIN
   SELECT e.classname, e.mv_state, e.dmg, e.wait_, e.spawnflags, COALESCE(e.linked_id, e.id), e.attack_finished FROM ents e WHERE e.id = :eid
     INTO cls, st, dmg, wt, sf, master, deb;
+  -- turret_blocked: what can be hurt is, by the team's dmg, in the driver's name (the turn is already undone)
+  IF (cls IN ('turret_breach', 'turret_base')) THEN
+  BEGIN
+    IF (EXISTS (SELECT 1 FROM ents o WHERE o.id = :other AND o.takedamage > 0)) THEN
+      EXECUTE PROCEDURE t_damage(other, eid, (SELECT COALESCE(m.owner_id, m.id) FROM ents m WHERE m.id = :master), (SELECT m.dmg FROM ents m WHERE m.id = :master), 10, 0);
+    EXIT;
+  END
   IF (cls NOT IN ('func_door', 'func_door_rotating', 'func_water', 'func_plat', 'func_train', 'func_rotating', 'func_door_secret')) THEN EXIT;
   IF (cls <> 'func_rotating' AND NOT EXISTS (SELECT 1 FROM ents o WHERE o.id = :other AND (o.mtype IS NOT NULL OR o.classname = 'player'))) THEN
   BEGIN
@@ -829,6 +840,166 @@ BEGIN
   EXECUTE PROCEDURE clock_think(eid);
 END^
 
+-- ── turrets (g_turret.c): a breach that aims, a base that turns with it, an infantry driving ──
+-- SnapToEights
+CREATE OR ALTER FUNCTION snap8 (x DOUBLE PRECISION) RETURNS DOUBLE PRECISION
+AS
+BEGIN
+  RETURN TRUNC(x * 8 + IIF(x * 8 > 0, 0.5e0, -0.5e0)) / 8e0;
+END^
+
+-- turret_breach_fire: a rocket of 100..150 from the muzzle along the breach's forward, at 550 + 50 × skill,
+-- in the driver's name
+CREATE OR ALTER PROCEDURE turret_breach_fire (eid INTEGER)
+AS
+DECLARE p DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE fx DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
+DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION; DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
+DECLARE sx DOUBLE PRECISION; DECLARE sy DOUBLE PRECISION; DECLARE sz DOUBLE PRECISION; DECLARE dmg INTEGER; DECLARE spd DOUBLE PRECISION; DECLARE own INTEGER;
+BEGIN
+  SELECT e.pitch * PI() / 180, e.yaw * PI() / 180, e.x + e.dstx * 0, e.y, e.z, COALESCE(m.owner_id, e.id)
+    FROM ents e JOIN ents m ON m.id = COALESCE(e.linked_id, e.id) WHERE e.id = :eid INTO p, y, sx, sy, sz, own;
+  -- AngleVectors (pitch positive downward)
+  fx = COS(p) * COS(y); fy = COS(p) * SIN(y); fz = -SIN(p);
+  rx = SIN(y); ry = -COS(y); rz = 0;
+  ux = SIN(p) * COS(y); uy = SIN(p) * SIN(y); uz = COS(p);
+  SELECT e.x + :fx * e.dstx + :rx * e.dsty + :ux * e.dstz, e.y + :fy * e.dstx + :ry * e.dsty + :uy * e.dstz, e.z + :fz * e.dstx + :rz * e.dsty + :uz * e.dstz
+    FROM ents e WHERE e.id = :eid INTO sx, sy, sz;
+  dmg = 100 + FLOOR(RAND() * 50);
+  SELECT 550 + 50 * g.skill FROM game g WHERE g.id = 1 INTO spd;
+  EXECUTE PROCEDURE launch_rocket(own, sx, sy, sz, fx, fy, fz, spd, dmg, dmg, 150);
+  EXECUTE PROCEDURE snd_at(sx, sy, sz, 'weapons/rocklf1a.wav', 1, 1);
+END^
+
+-- turret_breach_think, every 0.1 s: the aim clamped to its limits, the turn toward it at most `speed` degrees a
+-- second (the angular speed the pusher move applies), the base turning with it, the driver carried round
+-- (SnapToEights of its place on the breach: at move_origin's distance and angle, and its height) with the
+-- breach's angles, and a shot when the driver asked for one (spawnflag 65536)
+CREATE OR ALTER PROCEDURE turret_breach_think (eid INTEGER)
+AS
+DECLARE cp DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE mp DOUBLE PRECISION; DECLARE my DOUBLE PRECISION;
+DECLARE p1p DOUBLE PRECISION; DECLARE p1y DOUBLE PRECISION; DECLARE p2p DOUBLE PRECISION; DECLARE p2y DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION;
+DECLARE dmin DOUBLE PRECISION; DECLARE dmax DOUBLE PRECISION; DECLARE dp DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; DECLARE master INTEGER; DECLARE drv INTEGER; DECLARE sf INTEGER;
+DECLARE bx DOUBLE PRECISION; DECLARE by_ DOUBLE PRECISION; DECLARE bz DOUBLE PRECISION; DECLARE a DOUBLE PRECISION; DECLARE dd DOUBLE PRECISION; DECLARE da DOUBLE PRECISION; DECLARE dz DOUBLE PRECISION;
+BEGIN
+  SELECT anglemod(e.pitch), anglemod(e.yaw), anglemod(e.sg_x), anglemod(e.sg_y), e.p1x, e.p1y, e.p2x, e.p2y, e.speed, COALESCE(e.linked_id, e.id), e.owner_id, e.spawnflags, e.x, e.y, e.z
+    FROM ents e WHERE e.id = :eid INTO cp, cy, mp, my, p1p, p1y, p2p, p2y, spd, master, drv, sf, bx, by_, bz;
+  IF (mp > 180) THEN mp = mp - 360;
+  IF (mp > p1p) THEN mp = p1p; ELSE IF (mp < p2p) THEN mp = p2p;
+  IF (my < p1y OR my > p2y) THEN
+  BEGIN
+    dmin = ABS(p1y - my); IF (dmin < -180) THEN dmin = dmin + 360; ELSE IF (dmin > 180) THEN dmin = dmin - 360;
+    dmax = ABS(p2y - my); IF (dmax < -180) THEN dmax = dmax + 360; ELSE IF (dmax > 180) THEN dmax = dmax - 360;
+    my = IIF(ABS(dmin) < ABS(dmax), p1y, p2y);
+  END
+  dp = mp - cp; IF (dp < -180) THEN dp = dp + 360; ELSE IF (dp > 180) THEN dp = dp - 360;
+  dy = my - cy; IF (dy < -180) THEN dy = dy + 360; ELSE IF (dy > 180) THEN dy = dy - 360;
+  dp = MAXVALUE(-spd * 0.1e0, MINVALUE(spd * 0.1e0, dp)); dy = MAXVALUE(-spd * 0.1e0, MINVALUE(spd * 0.1e0, dy));
+  UPDATE ents e SET e.sg_x = :mp, e.sg_y = :my, e.avel_pitch = :dp / 0.1e0, e.avel_yaw = :dy / 0.1e0, e.think = 'turret_breach_think', e.nextthink = e.ltime + 0.1e0 WHERE e.id = :eid;
+  UPDATE ents e SET e.avel_yaw = :dy / 0.1e0 WHERE COALESCE(e.linked_id, e.id) = :master AND e.id <> :eid AND e.movetype = 7;
+  IF (drv IS NOT NULL) THEN
+  BEGIN
+    SELECT d.dstx, d.dsty, d.dstz FROM ents d WHERE d.id = :drv INTO dd, da, dz;
+    IF (dd IS NULL) THEN EXIT;
+    a = (cy + da) * PI() / 180;
+    UPDATE ents d SET d.x = snap8(:bx + COS(:a) * :dd), d.y = snap8(:by_ + SIN(:a) * :dd), d.z = snap8(:bz + :dd * TAN(:cp * PI() / 180) + :dz),
+           d.pitch = :cp, d.yaw = :cy, d.ideal_yaw = :cy WHERE d.id = :drv;
+    EXECUTE PROCEDURE link_ent(drv);
+    IF (BIN_AND(sf, 65536) <> 0) THEN
+    BEGIN
+      UPDATE ents e SET e.spawnflags = BIN_AND(e.spawnflags, BIN_NOT(65536)) WHERE e.id = :eid;
+      EXECUTE PROCEDURE turret_breach_fire(eid);
+    END
+  END
+END^
+
+-- turret_breach_finish_init: the muzzle is where its target (an info_notnull, kept in the lump) stands, as an
+-- offset from the breach; the team's dmg is the breach's
+CREATE OR ALTER PROCEDURE turret_breach_init (eid INTEGER)
+AS
+DECLARE tgt VARCHAR(40); DECLARE mx DOUBLE PRECISION; DECLARE my DOUBLE PRECISION; DECLARE mz DOUBLE PRECISION;
+BEGIN
+  SELECT e.target FROM ents e WHERE e.id = :eid INTO tgt;
+  SELECT FIRST 1 m.ox, m.oy, m.oz FROM map_ents m WHERE m.targetname = :tgt ORDER BY m.id INTO mx, my, mz;
+  IF (mx IS NOT NULL) THEN UPDATE ents e SET e.dstx = :mx - e.x, e.dsty = :my - e.y, e.dstz = :mz - e.z WHERE e.id = :eid;
+  DELETE FROM ents t WHERE t.targetname = :tgt AND t.classname = 'info_notnull';
+  UPDATE ents m SET m.dmg = (SELECT e.dmg FROM ents e WHERE e.id = :eid) WHERE m.id = (SELECT COALESCE(e.linked_id, e.id) FROM ents e WHERE e.id = :eid);
+  EXECUTE PROCEDURE turret_breach_think(eid);
+END^
+
+-- turret_driver_link: the breach it drives (its target) and the team's master get it as owner; it takes the
+-- breach's angles and remembers its place on it: the distance (dstx), the angle from the breach (dsty), the height (dstz)
+CREATE OR ALTER PROCEDURE turret_driver_link (eid INTEGER)
+AS
+DECLARE b INTEGER; DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION;
+BEGIN
+  SELECT FIRST 1 b.id FROM ents d JOIN ents b ON b.targetname = d.target AND b.classname = 'turret_breach' WHERE d.id = :eid INTO b;
+  IF (b IS NULL) THEN EXIT;
+  UPDATE ents e SET e.owner_id = :eid WHERE e.id = :b OR e.id = (SELECT COALESCE(x.linked_id, x.id) FROM ents x WHERE x.id = :b);
+  SELECT d.x - b.x, d.y - b.y, d.z - b.z FROM ents d JOIN ents b ON b.id = :b WHERE d.id = :eid INTO vx, vy, vz;
+  UPDATE ents d SET d.goal_id = :b, d.pitch = (SELECT b.pitch FROM ents b WHERE b.id = :b), d.yaw = (SELECT b.yaw FROM ents b WHERE b.id = :b),
+         d.dstx = vlen(:vx, :vy, 0), d.dsty = anglemod(vectoyaw(:vx, :vy)), d.dstz = :vz, d.think = 'turret_driver_think', d.nextthink = now_() + 0.1e0 WHERE d.id = :eid;
+END^
+
+-- turret_driver_think, every 0.1 s: an enemy found as a monster finds one and kept while seen (AI_LOST_SIGHT
+-- when not), the breach aimed at its eyes, and a shot asked for once the enemy has been seen for the
+-- reaction time (3 − skill seconds), then every reaction time + 1
+CREATE OR ALTER PROCEDURE turret_driver_think (eid INTEGER)
+AS
+DECLARE en INTEGER; DECLARE b INTEGER; DECLARE af DOUBLE PRECISION; DECLARE tt DOUBLE PRECISION; DECLARE aif INTEGER; DECLARE t DOUBLE PRECISION;
+DECLARE dx DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; DECLARE dz DOUBLE PRECISION; DECLARE react DOUBLE PRECISION;
+BEGIN
+  t = now_();
+  UPDATE ents d SET d.think = 'turret_driver_think', d.nextthink = :t + 0.1e0 WHERE d.id = :eid;
+  SELECT d.enemy_id, d.goal_id, d.attack_finished, d.trail_time, d.aiflags FROM ents d WHERE d.id = :eid INTO en, b, af, tt, aif;
+  IF (b IS NULL) THEN EXIT;
+  IF (en IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :en AND e.health > 0)) THEN en = NULL;
+  IF (en IS NULL) THEN
+  BEGIN
+    IF (find_target(eid) = 0) THEN BEGIN UPDATE ents d SET d.enemy_id = NULL WHERE d.id = :eid; EXIT; END
+    en = player_ent(); tt = t; aif = BIN_AND(aif, BIN_NOT(16));
+    UPDATE ents d SET d.enemy_id = :en, d.trail_time = :tt, d.aiflags = :aif WHERE d.id = :eid;
+  END
+  ELSE IF (visible(eid, en) = 1) THEN
+  BEGIN
+    IF (BIN_AND(aif, 16) <> 0) THEN BEGIN tt = t; UPDATE ents d SET d.trail_time = :tt, d.aiflags = BIN_AND(d.aiflags, BIN_NOT(16)) WHERE d.id = :eid; END
+  END
+  ELSE
+  BEGIN
+    UPDATE ents d SET d.aiflags = BIN_OR(d.aiflags, 16) WHERE d.id = :eid;
+    EXIT;
+  END
+  -- let the turret know where we want it to aim (vectoangles: the pitch positive downward)
+  SELECT e.x - b.x, e.y - b.y, e.z + e.viewheight - b.z FROM ents e JOIN ents b ON b.id = :b WHERE e.id = :en INTO dx, dy, dz;
+  UPDATE ents b SET b.sg_x = -ATAN2(:dz, vlen(:dx, :dy, 0)) * 57.29577951e0, b.sg_y = vectoyaw(:dx, :dy) WHERE b.id = :b;
+  IF (t < af) THEN EXIT;
+  SELECT 3 - g.skill FROM game g WHERE g.id = 1 INTO react;
+  IF (t - tt < react) THEN EXIT;
+  UPDATE ents d SET d.attack_finished = :t + :react + 1 WHERE d.id = :eid;
+  UPDATE ents b SET b.spawnflags = BIN_OR(b.spawnflags, 65536) WHERE b.id = :b;
+END^
+
+-- use_target_spawner: a fresh entity of its target's classname at its place and angle (ED_CallSpawn on a
+-- row added to the lump), anything in its box killed, off at its speed. The spawn functions schedule their
+-- first thinks from the level's start, so the new entity's is moved to now.
+CREATE OR ALTER PROCEDURE target_spawner_use (eid INTEGER)
+AS
+DECLARE cls VARCHAR(40); DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE mid INTEGER; DECLARE skill SMALLINT; DECLARE n INTEGER; DECLARE t DOUBLE PRECISION;
+BEGIN
+  SELECT e.target, e.x, e.y, e.z, e.yaw, e.p1x, e.p1y, e.p1z FROM ents e WHERE e.id = :eid INTO cls, x, y, z, yaw, vx, vy, vz;
+  IF (cls IS NULL OR cls = '') THEN EXIT;
+  SELECT COALESCE(MAX(m.id), 0) + 1 FROM map_ents m INTO mid;
+  INSERT INTO map_ents (id, classname, ox, oy, oz, angle, spawnflags) VALUES (:mid, :cls, :x, :y, :z, :yaw, 0);
+  SELECT g.skill FROM game g WHERE g.id = 1 INTO skill;
+  EXECUTE PROCEDURE spawn_map_ents(skill, NULL, mid);
+  SELECT MAX(e.id) FROM ents e WHERE e.classname = :cls INTO n;
+  IF (n IS NULL) THEN EXIT;
+  EXECUTE PROCEDURE killbox(n);
+  t = now_();
+  UPDATE ents e SET e.nextthink = e.nextthink + :t WHERE e.id = :n AND e.nextthink IS NOT NULL;
+  IF (vx <> 0 OR vy <> 0 OR vz <> 0) THEN UPDATE ents e SET e.vx = :vx, e.vy = :vy, e.vz = :vz WHERE e.id = :n;
+END^
+
 -- ── trains ──────────────────────────────────────────────────────────────
 CREATE OR ALTER PROCEDURE train_next (eid INTEGER)
 AS
@@ -1030,6 +1201,7 @@ BEGIN
     END
     ELSE IF (tcls = 'misc_viper_bomb') THEN EXECUTE PROCEDURE viper_bomb_use(t, activator);
     ELSE IF (tcls = 'misc_blackhole') THEN DELETE FROM ents e WHERE e.id = :t;     -- misc_blackhole_use
+    ELSE IF (tcls = 'target_spawner') THEN EXECUTE PROCEDURE target_spawner_use(t);
     ELSE IF (tcls = 'target_string') THEN EXECUTE PROCEDURE target_string_use(t);
     ELSE IF (tcls = 'func_clock') THEN EXECUTE PROCEDURE clock_use(t, activator);
     ELSE IF (tcls = 'trigger_elevator') THEN EXECUTE PROCEDURE elevator_use(t, eid);
@@ -1670,6 +1842,12 @@ BEGIN
   END
   IF (BIN_AND(flags, 32) <> 0) THEN
   BEGIN
+    -- turret_driver_die: the gun levels and is nobody's; then the infantry's death
+    IF (cls = 'turret_driver') THEN
+    BEGIN
+      UPDATE ents b SET b.sg_x = 0, b.owner_id = NULL WHERE b.id = (SELECT d.goal_id FROM ents d WHERE d.id = :targ);
+      UPDATE ents m SET m.owner_id = NULL WHERE m.id = (SELECT COALESCE(b.linked_id, b.id) FROM ents d JOIN ents b ON b.id = d.goal_id WHERE d.id = :targ);
+    END
     EXECUTE PROCEDURE monster_die(targ, attacker);
     EXIT;
   END
@@ -2210,8 +2388,9 @@ BEGIN
     ELSE NULL END;
 END^
 
--- spawn_map_ents: the spawn functions for every classname we know
-CREATE OR ALTER PROCEDURE spawn_map_ents (skill SMALLINT, spawnpoint VARCHAR(40))
+-- spawn_map_ents: the spawn functions for every classname we know (SpawnEntities), or, with only_id,
+-- ED_CallSpawn for that one row of map_ents (target_spawner)
+CREATE OR ALTER PROCEDURE spawn_map_ents (skill SMALLINT, spawnpoint VARCHAR(40), only_id INTEGER)
 AS
 DECLARE mid INTEGER; DECLARE cls VARCHAR(40); DECLARE tn VARCHAR(40); DECLARE tg VARCHAR(40); DECLARE kt VARCHAR(40); DECLARE mdl VARCHAR(64);
 DECLARE pt VARCHAR(40); DECLARE dt VARCHAR(40); DECLARE ct VARCHAR(40); DECLARE team VARCHAR(40);
@@ -2228,6 +2407,7 @@ DECLARE mys DOUBLE PRECISION; DECLARE stand VARCHAR(16);
 DECLARE a DOUBLE PRECISION; DECLARE b DOUBLE PRECISION; DECLARE c DOUBLE PRECISION; DECLARE e2 DOUBLE PRECISION; DECLARE f2 DOUBLE PRECISION; DECLARE g2 DOUBLE PRECISION;
 DECLARE skillbit INTEGER; DECLARE wmodel INTEGER; DECLARE startid INTEGER;
 DECLARE n1 VARCHAR(64); DECLARE n2 VARCHAR(64); DECLARE n3 VARCHAR(64);
+DECLARE minp DOUBLE PRECISION; DECLARE maxp DOUBLE PRECISION; DECLARE miny_ DOUBLE PRECISION; DECLARE maxy_ DOUBLE PRECISION;
 BEGIN
   skillbit = CASE skill WHEN 0 THEN 256 WHEN 1 THEN 512 ELSE 1024 END;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO wmodel;
@@ -2236,10 +2416,10 @@ BEGIN
   IF (startid IS NULL) THEN SELECT FIRST 1 m.id FROM map_ents m WHERE m.classname = 'info_player_start' ORDER BY m.id INTO startid;
   FOR SELECT m.id, m.classname, m.targetname, m.target, m.killtarget, m.pathtarget, m.deathtarget, m.combattarget, m.team, m.model, m.ox, m.oy, m.oz, m.angle, m.apitch, m.ayaw, m.aroll,
              m.spawnflags, m.message, m.wait_, m.delay, m.random_, m.speed, m.accel, m.decel, m.lip, m.height, m.health, m.light, m.style, m.sounds, m.dmg, m.count_, m.map, m.noise, m.item,
-             m.mass, m.volume, m.attenuation, m.distance, m.gravity, m.sky
-        FROM map_ents m ORDER BY m.id
+             m.mass, m.volume, m.attenuation, m.distance, m.gravity, m.sky, m.minpitch, m.maxpitch, m.minyaw, m.maxyaw
+        FROM map_ents m WHERE :only_id IS NULL OR m.id = :only_id ORDER BY m.id
         INTO mid, cls, tn, tg, kt, pt, dt, ct, team, mdl, ox, oy, oz, ang, ap, ay, ar, sf, msg, wt, dl, rnd, spd, accel_, decel_, lip, hgt, hp, lt, sty, snds, dmg, cnt, map_, noise, item,
-             mass, vol, attn, dist, grav, sky
+             mass, vol, attn, dist, grav, sky, minp, maxp, miny_, maxy_
   DO
   BEGIN
     IF (cls = 'worldspawn') THEN
@@ -2420,6 +2600,43 @@ BEGIN
              e.dmg = IIF(COALESCE(:dmg, 0) = 0, 1000, :dmg) WHERE e.id = :eid;
     ELSE IF (cls = 'trigger_elevator') THEN
       UPDATE ents e SET e.solid = 0, e.think = 'elevator_init', e.nextthink = 0.1e0 WHERE e.id = :eid;
+    ELSE IF (cls = 'turret_breach') THEN
+    BEGIN
+      -- SP_turret_breach: the part that pitches and yaws, at `speed` degrees a second (50), hurting what blocks it
+      -- by `dmg` (10); its pitch between minpitch and maxpitch (-30..30; p1x/p2x hold them negated, as Quake's
+      -- pos1/pos2 did, since its pitch is positive downward), its yaw between minyaw and maxyaw (0..360, p1y/p2y).
+      -- The aim (move_angles) rides in sg_x/sg_y, starting at its angle; the muzzle's offset in dstx..z once found.
+      UPDATE ents e SET e.solid = 4, e.movetype = 7, e.speed = IIF(COALESCE(:spd, 0) = 0, 50, :spd), e.dmg = IIF(COALESCE(:dmg, 0) = 0, 10, :dmg),
+             e.p1x = -IIF(COALESCE(:minp, 0) = 0, -30, :minp), e.p2x = -IIF(COALESCE(:maxp, 0) = 0, 30, :maxp),
+             e.p1y = COALESCE(:miny_, 0), e.p2y = IIF(COALESCE(:maxy_, 0) = 0, 360, :maxy_),
+             e.sg_x = 0, e.sg_y = e.yaw, e.ideal_yaw = e.yaw, e.think = 'turret_breach_init', e.nextthink = 0.1e0 WHERE e.id = :eid;
+      EXECUTE PROCEDURE link_ent(eid);
+    END
+    ELSE IF (cls = 'turret_base') THEN
+    BEGIN
+      -- SP_turret_base: the part that only yaws, on the breach's team
+      UPDATE ents e SET e.solid = 4, e.movetype = 7 WHERE e.id = :eid;
+      EXECUTE PROCEDURE link_ent(eid);
+    END
+    ELSE IF (cls = 'turret_driver') THEN
+    BEGIN
+      -- SP_turret_driver: an infantry sitting in the turret (not on its team here: the breach moves it), 100
+      -- health, no gibbing, no knockback, counted as a monster; turret_driver_link joins it to its breach
+      SELECT t.model, t.skin, t.stand_anim FROM monster_types t WHERE t.name = 'infantry' INTO mmodel, mskin, stand;
+      EXECUTE PROCEDURE set_model(eid, mmodel);
+      UPDATE ents e SET e.mtype = 'infantry', e.skin = :mskin, e.health = 100, e.max_health = 100, e.gib_health = 0, e.mass = 200, e.viewheight = 24,
+             e.solid = 3, e.takedamage = 2, e.movetype = 0, e.clipmask = 33685507, e.flags = 32 + 4096, e.aiflags = 4,
+             e.minx = -16, e.miny = -16, e.minz = -24, e.maxx = 16, e.maxy = 16, e.maxz = 32, e.st = 'stand', e.anim = :stand, e.ideal_yaw = e.yaw,
+             e.think = 'turret_driver_link', e.nextthink = 0.1e0 WHERE e.id = :eid;
+      UPDATE game g SET g.total_monsters = g.total_monsters + 1 WHERE g.id = 1;
+      EXECUTE PROCEDURE link_ent(eid);
+    END
+    ELSE IF (cls = 'target_spawner') THEN
+    BEGIN
+      -- SP_target_spawner: what it spawns (its target's classname) sets off along its angle at `speed`
+      EXECUTE PROCEDURE movedir(COALESCE(ang, 0)) RETURNING_VALUES dx, dy, dz;
+      UPDATE ents e SET e.solid = 0, e.p1x = :dx * COALESCE(:spd, 0), e.p1y = :dy * COALESCE(:spd, 0), e.p1z = :dz * COALESCE(:spd, 0) WHERE e.id = :eid;
+    END
     ELSE IF (cls = 'target_character') THEN
     BEGIN
       -- SP_target_character: a brush model showing its texture's blank frame (12) until its string is set
@@ -2676,6 +2893,7 @@ BEGIN
       ELSE IIF(BIN_AND(e.spawnflags, 2) <> 0, 4096, 0) + IIF(BIN_AND(e.spawnflags, 4) <> 0, 8192, 0) END)
    WHERE e.classname IN ('func_button', 'func_door', 'func_door_rotating', 'func_rotating', 'func_wall', 'func_object', 'func_explosive');
 
+  IF (only_id IS NOT NULL) THEN EXIT;
   -- G_FindTeams: movers with the same team move together; the first spawned is the master
   FOR SELECT e.id FROM ents e WHERE e.team IS NOT NULL AND e.team <> '' AND e.movetype = 7 ORDER BY e.id INTO eid DO
   BEGIN

@@ -241,7 +241,8 @@ CREATE TABLE map_ents (
   distance   DOUBLE PRECISION,
   gravity    DOUBLE PRECISION,
   sky        VARCHAR(32),
-  skyrotate  DOUBLE PRECISION
+  skyrotate  DOUBLE PRECISION,
+  minpitch DOUBLE PRECISION, maxpitch DOUBLE PRECISION, minyaw DOUBLE PRECISION, maxyaw DOUBLE PRECISION   -- a turret_breach's limits
 );
 CREATE INDEX map_ents_class ON map_ents (classname);
 CREATE INDEX map_ents_tname ON map_ents (targetname);

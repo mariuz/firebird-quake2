@@ -34,7 +34,7 @@ const TABLES = {
   textures: 'id:i name:s w:i h:i flags:i',
   models: 'id:i name:s kind:s minx:d? miny:d? minz:d? maxx:d? maxy:d? maxz:d? headnode:i? first_face:i? num_faces:i? nframes:i? flags:i? radius:d?',
   anims: 'model_id:i anim:s first_frame:i frame_count:i',
-  map_ents: 'id:i classname:s targetname:s? target:s? killtarget:s? pathtarget:s? deathtarget:s? combattarget:s? team:s? model:s? ox:d? oy:d? oz:d? angle:d? apitch:d? ayaw:d? aroll:d? spawnflags:i? message:s? wait_:d? delay:d? random_:d? speed:d? accel:d? decel:d? lip:d? height:d? health:i? light:i? style:i? sounds:i? dmg:i? count_:i? map:s? noise:s? item:s? mass:i? volume:d? attenuation:d? distance:d? gravity:d? sky:s? skyrotate:d?',
+  map_ents: 'id:i classname:s targetname:s? target:s? killtarget:s? pathtarget:s? deathtarget:s? combattarget:s? team:s? model:s? ox:d? oy:d? oz:d? angle:d? apitch:d? ayaw:d? aroll:d? spawnflags:i? message:s? wait_:d? delay:d? random_:d? speed:d? accel:d? decel:d? lip:d? height:d? health:i? light:i? style:i? sounds:i? dmg:i? count_:i? map:s? noise:s? item:s? mass:i? volume:d? attenuation:d? distance:d? gravity:d? sky:s? skyrotate:d? minpitch:d? maxpitch:d? minyaw:d? maxyaw:d?',
 };
 
 const SQL_TYPE = { i: 'INTEGER', d: 'DOUBLE PRECISION', s: 'VARCHAR(2048) CHARACTER SET ASCII' };
@@ -250,7 +250,7 @@ function geometryRows(bsp, res) {
 }
 
 const ENT_NUM = ['angle', 'spawnflags', 'wait', 'delay', 'random', 'speed', 'accel', 'decel', 'lip', 'height', 'health', 'light', 'style', 'sounds', 'dmg', 'count',
-  'mass', 'volume', 'attenuation', 'distance', 'gravity', 'skyrotate'];
+  'mass', 'volume', 'attenuation', 'distance', 'gravity', 'skyrotate', 'minpitch', 'maxpitch', 'minyaw', 'maxyaw'];
 
 /** SV_SpawnServer: replace the current map with `name` from the PAK. */
 export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null } = {}) {
@@ -284,7 +284,7 @@ export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, s
       e.combattarget ?? null, e.team ?? null, e.model ?? null, o[0], o[1], o[2], n('angle'), angles[0], angles[1], angles[2], n('spawnflags') ?? 0,
       e.message ?? null, n('wait'), n('delay'), n('random'), n('speed'), n('accel'), n('decel'), n('lip'), n('height'), n('health'), n('light'),
       n('style'), n('sounds'), n('dmg'), n('count'), e.map ?? null, e.noise ?? null, e.item ?? null, n('mass'), n('volume'), n('attenuation'),
-      n('distance'), n('gravity'), e.sky ?? null, n('skyrotate')];
+      n('distance'), n('gravity'), e.sky ?? null, n('skyrotate'), n('minpitch'), n('maxpitch'), n('minyaw'), n('maxyaw')];
   });
   await bulkLoad(db, 'map_ents', entRows);
 

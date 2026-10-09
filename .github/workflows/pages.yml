@@ -60,7 +60,7 @@ jobs:
         run: npm run test:walkthrough
 
       # The full game's entities the demo maps lack, added to demo1: secret doors, the earthquake, the
-      # elevator, the viper and its bomb, the ships' flybys, the string display and the clock, the decorations
+      # elevator, the viper and its bomb, the ships' flybys, the string display and the clock, the decorations, a turret, target_spawner
       - name: The full game's entities
         run: npm run test:entities
 

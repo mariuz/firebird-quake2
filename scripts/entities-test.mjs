@@ -5,7 +5,9 @@
 // the viper's way and goes off), the strogg ships' flybys (unseen until used, from their first
 // corner on, the corners' targets kept), target_string with its target_characters and func_clock (the
 // digits of a string on brush models' frames; a timer counting up to its pathtarget, the time of day),
-// and the decorations that cycle their frames (misc_blackhole, the Easter tank) or stand (light_mine).
+// the decorations that cycle their frames (misc_blackhole, the Easter tank) or stand (light_mine), a turret
+// (the breach aims at the player and turns at its speed, the base and the driver with it, the shots after the
+// reaction time; the driver's death levels the gun), and target_spawner.
 //
 //   node scripts/entities-test.mjs
 
@@ -55,12 +57,20 @@ await add('target_string', 0, -500, 24, { targetname: 'disp', team: 'disp', mess
 await add('func_clock', 0, -520, 24, { target: 'disp', pathtarget: 'hole', spawnflags: 1 + 4, count_: 3, style: 1 });
 await add('target_string', 0, -540, 24, { targetname: 'tod' });
 await add('func_clock', 0, -560, 24, { target: 'tod', style: 2 });
+// a turret in the open by the start, facing +x: the breach and base share two of the map's brush models, the
+// muzzle 32 ahead, the driver 40 units beside it
+await add('turret_breach', 60, -320, 40, { model: '*9', team: 'tur', targetname: 'tb', target: 'muz', angle: 0, dmg: 10 });
+await add('turret_base', 60, -320, 40, { model: '*10', team: 'tur' });
+await add('info_notnull', 92, -320, 48, { targetname: 'muz' });
+await add('turret_driver', 60, -280, 40, { target: 'tb' });
+await add('target_spawner', 160, -220, 40, { targetname: 'spw', target: 'misc_explobox' });
+await add('target_spawner', 160, -220, 60, { targetname: 'spw2', target: 'misc_gib_arm', angle: 90, speed: 100 });
 const world = (await q1('SELECT world_model w FROM game')).W;
 await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents');
 await db.exec(`EXECUTE PROCEDURE init_map('demo1', ${world}, 2, 1, NULL)`);
 const pe = (await q1('SELECT ent_id e FROM player')).E;
 await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16 + 64) WHERE id = ${pe}`);   // god, notarget
-await db.exec('DELETE FROM ents WHERE mtype IS NOT NULL');
+await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL AND classname <> 'turret_driver'");   // the map's monsters, not the turret's driver
 // fire a targetname as if the player's own target, with a pathtarget for the elevator
 const use = (name, pathtarget = null) => db.query(`EXECUTE BLOCK AS BEGIN
   UPDATE ents SET target = '${name}', pathtarget = ${pathtarget ? `'${pathtarget}'` : 'NULL'} WHERE id = ${pe};
@@ -167,6 +177,53 @@ const near = (a, b) => Math.abs(a - b) < 0.5;
   for (let i = 0; i < 100 && !gone; i++) { await tic(); gone = !(await q1(`SELECT COUNT(*) n FROM ents WHERE id = ${b.ID}`)).N; }
   const boom = (await q1('SELECT COUNT(*) n FROM fx_events WHERE kind = 9')).N;
   assert(gone && boom === 1, 'it goes off where it lands (TE_EXPLOSION2)');
+}
+
+// ── the turret: linked, aimed at the player once seen, turning at 50 a second, firing after the reaction time
+{
+  const b = await ent('turret_breach'), base = await ent('turret_base'), d = await ent('turret_driver');
+  assert(b.OWNER_ID === d.ID && d.GOAL_ID === b.ID && near(d.DSTX, 40) && near(d.DSTY, 90) && near(b.DSTX, 32) && near(b.DSTZ, 8),
+    `the driver drives the breach (40 units off it at 90°), the muzzle is 32 ahead and 8 up (${b.DSTX}, ${b.DSTZ})`);
+  const master = await q1(`SELECT dmg, owner_id FROM ents WHERE id = ${b.LINKED_ID ?? b.ID}`);
+  assert(b.P1X === 30 && b.P2X === -30 && b.P1Y === 0 && b.P2Y === 360 && b.SPEED === 50 && master.DMG === 10 && master.OWNER_ID === d.ID,
+    'its limits and speed by default; the team master carries the dmg and the driver');
+  assert(d.MTYPE?.trim() === 'infantry' && d.ENEMY_ID === null, 'the driver is an infantry with no enemy while the player is notarget');
+  // the player in front of the turret (FindTarget wants that at close range), 33.7° off its aim
+  await db.exec(`UPDATE ents SET x = 180, y = -240, z = 24, vx = 0, vy = 0, vz = 0, flags = BIN_AND(flags, BIN_NOT(64)) WHERE id = ${pe}`);
+  await db.exec(`EXECUTE PROCEDURE link_ent(${pe})`);
+  await db.exec("DELETE FROM sound_events");
+  for (let i = 0; i < 20; i++) await tic();
+  const b2 = await ent('turret_breach'), base2 = await ent('turret_base'), d2 = await ent('turret_driver');
+  assert(d2.ENEMY_ID === pe && Math.abs(b2.SG_Y - 33.69) < 0.5, `seen, the player is the driver's enemy and the breach aims at it (yaw ${b2.SG_Y.toFixed(1)}, pitch ${b2.SG_X.toFixed(1)})`);
+  assert(b2.YAW > 25 && b2.YAW <= 33.8 && Math.abs(base2.YAW - b2.YAW) < 6 && Math.abs(d2.YAW - b2.YAW) < 6,
+    `a second on, the breach has turned ${b2.YAW.toFixed(1)}° toward it at 50°/s, the base (${base2.YAW.toFixed(1)}) and the driver (${d2.YAW.toFixed(1)}) with it`);
+  const a = (b2.YAW + 90) * Math.PI / 180;
+  assert(Math.abs(d2.X - (60 + 40 * Math.cos(a))) < 0.2 && Math.abs(d2.Y - (-320 + 40 * Math.sin(a))) < 0.2, `the driver is carried round the breach (${d2.X.toFixed(1)}, ${d2.Y.toFixed(1)})`);
+  for (let i = 0; i < 30; i++) await tic();
+  const shots = (await q1(`SELECT COUNT(*) n FROM sound_events WHERE snd = 'weapons/rocklf1a.wav'`)).N;
+  const rockets = (await q1(`SELECT COUNT(*) n FROM ents WHERE classname = 'rocket' AND owner_id = ${d.ID}`)).N;
+  assert(shots >= 1 && shots <= 2, `after the reaction time (a second on hard) it fires a rocket in the driver's name (${shots} shots, ${rockets} in flight)`);
+  await db.exec(`UPDATE ents SET sg_x = -20 WHERE id = ${b.ID}`);
+  const k0 = (await q1('SELECT killed k FROM game')).K;
+  await db.exec(`EXECUTE PROCEDURE t_damage(${d.ID}, ${pe}, ${pe}, 150, 0, 32)`);
+  const b3 = await ent('turret_breach'), d3 = await ent('turret_driver');
+  // (gib_health 0: any death gibs it, as infantry_die would)
+  assert(!d3 && (await q1('SELECT killed k FROM game')).K === k0 + 1 && b3.OWNER_ID === null && b3.SG_X === 0, 'the driver killed dies as an infantry (gibbed, counted); the gun is nobody\'s and levels');
+  await db.exec(`UPDATE ents SET x = 128, y = -320, z = 24, flags = BIN_OR(flags, 64) WHERE id = ${pe}`);
+  await db.exec(`EXECUTE PROCEDURE link_ent(${pe})`);
+}
+
+// ── target_spawner: its target's classname spawned at its place, moving at its speed along its angle
+{
+  const n0 = (await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'misc_explobox'")).N;
+  await use('spw');
+  const box = await q1("SELECT x, y, z, health, solid FROM ents WHERE classname = 'misc_explobox' ORDER BY id DESC ROWS 1");
+  assert((await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'misc_explobox'")).N === n0 + 1 && near(box.X, 160) && near(box.Y, -220) && box.HEALTH === 10 && box.SOLID === 2,
+    'used, it spawns a barrel where it stands, spawned as the map would have');
+  await use('spw2');
+  const gib = await q1("SELECT vx, vy, nextthink nt FROM ents WHERE classname = 'misc_gib_arm' ORDER BY id DESC ROWS 1");
+  const t = (await q1('SELECT time_ t FROM game')).T;
+  assert(gib && near(gib.VX, 0) && near(gib.VY, 100) && gib.NT > t + 20, `a gib with an angle and a speed sets off that way (vy ${gib.VY}); its removal is scheduled from now`);
 }
 
 // ── the decorations: frames running at 10 Hz, the black hole translucent and gone when used

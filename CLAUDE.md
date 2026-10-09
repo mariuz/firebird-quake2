@@ -27,7 +27,7 @@ npm run test:save                     # save, play on, load: the game comes back
 npm run test:menu                     # the menus, headless: keys, slots, settings, pictures
 npm run test:painter                  # the painter headless: dynamic lights, mip levels
 npm run test:walkthrough              # every trigger the player can walk into fires, its movers move
-npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper, clock
+npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper, clock, turret
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
@@ -122,6 +122,10 @@ short stories of what changed and what it measured; keep that.
   no model here until it shows up (`set_model` then); `alpha = 1` is translucent, not hidden.
 - `t_damage` ignores a non-monster, non-player at health 0 or less (it is dead already). Quake had no such
   test: something that takes damage at health 0 (`func_door_secret`) needs its class let through.
+- The spawn functions schedule first thinks from the level's start (`nextthink = 0.1`), as `init_map` runs at
+  time 0. Something spawned later through them (`target_spawner`) gets `now_()` added to its nextthink.
+- A pusher's (movetype 7) thinks are scheduled on its own clock, `ltime`; everything else's on `now_()`.
+  Entity pitch is Quake's: positive is downward (`angleMatrix`, `AngleVectors`).
 
 ## Browser testing
 

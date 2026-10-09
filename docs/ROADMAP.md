@@ -260,10 +260,17 @@ picker). Missing for the rest of the game:
   used; else the time of day as `hh:mm:ss`); the decorations `misc_blackhole` (19 frames at 10 Hz,
   translucent, gone when used), `misc_eastertank` and `misc_easterchick`/`2` (their monsters' frame
   runs; the demo pak has no chick model, so those show nothing here) and `light_mine1`/`2`.
-  `scripts/entities-test.mjs` adds them to demo1's lump and checks them. Missing (checked against
-  g_spawn.c's spawn table): the turrets (`turret_breach`, `turret_base`, `turret_driver`),
-  `target_actor` / `misc_actor`, `misc_insane`, `target_spawner` (recognised). `misc_bigviper` stands
-  still, as in Quake 2. `func_group` is editor-only and correctly ignored;
+  The turrets (g_turret.c): `turret_breach` aims where its driver points it, clamped to its
+  minpitch/maxpitch and minyaw/maxyaw, turning at its speed as a pusher, the `turret_base` turning with it
+  and the `turret_driver` (an infantry, counted as a monster) carried round on it; the driver finds the player
+  as a monster does, keeps it while seen, and asks for a rocket after the reaction time (3 − skill seconds),
+  then every reaction time + 1, fired from the muzzle its target marked in the driver's name; killed, it
+  dies as an infantry and the gun levels; what blocks a turning part is hurt by the breach's dmg.
+  `target_spawner` spawns its target's classname at its place through the map's own spawn function
+  (`spawn_map_ents` with one row) and sets it off along its angle at its speed.
+  `scripts/entities-test.mjs` adds them all to demo1's lump and checks them. Missing (checked against
+  g_spawn.c's spawn table): `target_actor` / `misc_actor` and `misc_insane`, which need the actor and
+  insane marines' models and animation tables. `misc_bigviper` stands still, as in Quake 2. `func_group` is editor-only and correctly ignored;
   `viewthing` is a debugging aid. (`target_mal_laser`, once listed here, is the first mission pack's.)
 - **Trains**: `func_train_find` put a train on its first corner and aimed it at the next; the port aimed
   it at the first again, so every train (and demo1's three strogg ships) began with that corner's wait
