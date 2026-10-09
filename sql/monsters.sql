@@ -1206,6 +1206,9 @@ BEGIN
   ELSE IF (think = 'laser_think') THEN EXECUTE PROCEDURE laser_think(eid);
   -- misc_banner_think: the next of its 16 frames, every 0.1 s (one write: the think keeps its schedule)
   ELSE IF (think = 'banner_think') THEN UPDATE ents e SET e.frame = MOD(e.frame + 1, 16), e.nextthink = e.nextthink + 0.1e0 WHERE e.id = :eid;
+  -- the decorations' frame runs (misc_blackhole_think and the Easter ones): dstx..dsty-1, every 0.1 s
+  ELSE IF (think = 'frame_cycle') THEN UPDATE ents e SET e.frame = IIF(e.frame + 1 < e.dsty, e.frame + 1, e.dstx), e.nextthink = e.nextthink + 0.1e0 WHERE e.id = :eid;
+  ELSE IF (think = 'clock_think') THEN EXECUTE PROCEDURE clock_think(eid);
   ELSE IF (think = 'dish_think') THEN EXECUTE PROCEDURE dish_think(eid);
   ELSE IF (think = 'remove') THEN DELETE FROM ents e WHERE e.id = :eid;
   ELSE IF (think = 'drop_touchable') THEN UPDATE ents e SET e.owner_id = NULL, e.think = NULL, e.nextthink = NULL WHERE e.id = :eid;   -- drop_make_touchable
@@ -1223,7 +1226,7 @@ BEGIN
   -- thinks that are due (non-pushers)
   FOR SELECT e.id, e.think FROM ents e WHERE e.nextthink IS NOT NULL AND e.nextthink <= :t + 1e-6 AND e.movetype <> 7 AND e.think IS NOT NULL ORDER BY e.id INTO eid, think DO
   BEGIN
-    UPDATE ents e SET e.nextthink = NULL WHERE e.id = :eid AND e.think = :think AND e.think NOT IN ('monster_think', 'laser_think', 'bfg_think', 'banner_think');
+    UPDATE ents e SET e.nextthink = NULL WHERE e.id = :eid AND e.think = :think AND e.think NOT IN ('monster_think', 'laser_think', 'bfg_think', 'banner_think', 'frame_cycle');
     EXECUTE PROCEDURE run_think(eid, think);
   END
   -- toss, bounce, fly, flymissile, and monsters in the air

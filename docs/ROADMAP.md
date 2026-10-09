@@ -253,12 +253,17 @@ picker). Missing for the rest of the game:
   `target_earthquake` (a grounded player thrown up and about every 0.1 s, the rumble every half second,
   for `count` seconds), `trigger_elevator` (the train goes to the corner its user's pathtarget names, not
   while it moves), `misc_viper` (a train like the strogg ship, unseen until used) and `misc_viper_bomb`
-  (falls along the viper's way and goes off where it lands). `scripts/entities-test.mjs` adds them to
-  demo1's lump and checks them. Missing (checked against g_spawn.c's spawn table): the turrets
-  (`turret_breach`, `turret_base`, `turret_driver`), `target_actor` / `misc_actor`, `misc_insane`,
-  `target_character` and `target_string` with `func_clock`, `misc_blackhole`, `misc_eastertank`,
-  `misc_easterchick` (and `2`), `light_mine1` and `light_mine2`, `target_spawner` (recognised).
-  `misc_bigviper` stands still, as in Quake 2. `func_group` is editor-only and correctly ignored;
+  (falls along the viper's way and goes off where it lands); `target_string` with its
+  `target_character`s (the string's characters as the brush models' frames: digits, `-` 10, `:` 11,
+  blank 12, each character the `count`th) and `func_clock` (counting up or down once a second to its
+  `target_string`, its pathtarget fired past its count, MULTI_USE starting over, START_OFF waiting to be
+  used; else the time of day as `hh:mm:ss`); the decorations `misc_blackhole` (19 frames at 10 Hz,
+  translucent, gone when used), `misc_eastertank` and `misc_easterchick`/`2` (their monsters' frame
+  runs; the demo pak has no chick model, so those show nothing here) and `light_mine1`/`2`.
+  `scripts/entities-test.mjs` adds them to demo1's lump and checks them. Missing (checked against
+  g_spawn.c's spawn table): the turrets (`turret_breach`, `turret_base`, `turret_driver`),
+  `target_actor` / `misc_actor`, `misc_insane`, `target_spawner` (recognised). `misc_bigviper` stands
+  still, as in Quake 2. `func_group` is editor-only and correctly ignored;
   `viewthing` is a debugging aid. (`target_mal_laser`, once listed here, is the first mission pack's.)
 - **Trains**: `func_train_find` put a train on its first corner and aimed it at the next; the port aimed
   it at the first again, so every train (and demo1's three strogg ships) began with that corner's wait

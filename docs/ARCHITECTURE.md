@@ -393,7 +393,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `sql-smoke.mjs [map]` | end-to-end in Node: load, tics, movement, weapons, doors, all referenced sounds exist |
 | `monsters-test.mjs` | every monster of the demo: spawned, sees the player, attacks, dies, is counted |
 | `walkthrough-test.mjs` | every trigger the player can walk into on the three maps fires, and its movers move |
-| `entities-test.mjs` | the full game's entities the demo lacks, added to demo1's lump: secret doors, the earthquake, the elevator, the viper and its bomb, the ships |
+| `entities-test.mjs` | the full game's entities the demo lacks, added to demo1's lump: secret doors, the earthquake, the elevator, the viper and its bomb, the ships, the string display and the clock, the decorations |
 | `save-test.mjs` | save, play on, load: every entity, mover and light style back as it was; the game keeps running with fresh ids |
 | `screenshot.mjs [map] [prefix] [--at=x,y,z,yaw] [--sql] [--compare]` | headless frames to PNG; `--compare` asserts both renderer modes paint identical pixels |
 | `bench.mjs`, `tic-bench.mjs`, `raster-bench.mjs`, `call-counts.mjs`, `ab-bench.mjs` | where the time goes (section 10) |

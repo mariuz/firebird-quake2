@@ -752,6 +752,83 @@ BEGIN
          e.think = 'viper_bomb_think', e.nextthink = now_() + 0.05e0 WHERE e.id = :eid;
 END^
 
+-- ── target_string and target_character: a message shown by brush models (digits, '-' and ':' as their
+-- texture's frames 0..11, a blank 12), each character the `count`th of the string, all on one team ──
+-- target_string_use
+CREATE OR ALTER PROCEDURE target_string_use (eid INTEGER)
+AS
+DECLARE msg VARCHAR(400); DECLARE team VARCHAR(40); DECLARE l INTEGER; DECLARE n INTEGER; DECLARE ch VARCHAR(1); DECLARE c INTEGER; DECLARE fr INTEGER;
+BEGIN
+  SELECT COALESCE(e.message, ''), e.team FROM ents e WHERE e.id = :eid INTO msg, team;
+  l = CHAR_LENGTH(msg);
+  FOR SELECT e.id, e.count_ FROM ents e WHERE e.team = :team AND e.classname = 'target_character' AND e.count_ > 0 INTO c, n DO
+  BEGIN
+    n = n - 1;
+    ch = IIF(n < l, SUBSTRING(msg FROM n + 1 FOR 1), '');
+    fr = CASE WHEN ch BETWEEN '0' AND '9' THEN ASCII_VAL(ch) - 48 WHEN ch = '-' THEN 10 WHEN ch = ':' THEN 11 ELSE 12 END;
+    UPDATE ents e SET e.frame = :fr WHERE e.id = :c AND e.frame <> :fr;
+  END
+END^
+
+-- func_clock_format_countdown: "%2i", "%2i:%2i" or "%2i:%2i:%2i" with the minutes' and seconds' blanks made zeros
+CREATE OR ALTER FUNCTION clock_format (style INTEGER, secs INTEGER) RETURNS VARCHAR(16)
+AS
+BEGIN
+  IF (style = 0) THEN RETURN LPAD(secs, 2, ' ');
+  IF (style = 1) THEN RETURN LPAD(secs / 60, 2, ' ') || ':' || LPAD(MOD(secs, 60), 2, '0');
+  RETURN LPAD(secs / 3600, 2, ' ') || ':' || LPAD(MOD(secs / 60, 60), 2, '0') || ':' || LPAD(MOD(secs, 60), 2, '0');
+END^
+
+-- func_clock_reset: TIMER_UP counts from 0 to count, TIMER_DOWN from count to 0 (health the time, wait_ the end)
+CREATE OR ALTER PROCEDURE clock_reset (eid INTEGER)
+AS
+BEGIN
+  UPDATE ents e SET e.enemy_id = NULL,
+         e.health = IIF(BIN_AND(e.spawnflags, 2) <> 0, e.count_, 0), e.wait_ = IIF(BIN_AND(e.spawnflags, 1) <> 0, e.count_, 0) WHERE e.id = :eid;
+END^
+
+-- func_clock_think: once a second the time (counted up, down, or the time of day) goes to its target_string;
+-- a timer past its end fires its pathtarget (without its message), and only MULTI_USE starts over
+-- (START_OFF then waits to be used again)
+CREATE OR ALTER PROCEDURE clock_think (eid INTEGER)
+AS
+DECLARE sf INTEGER; DECLARE hp INTEGER; DECLARE wt DOUBLE PRECISION; DECLARE sty INTEGER; DECLARE tgt VARCHAR(40); DECLARE pt VARCHAR(40); DECLARE ts INTEGER;
+DECLARE msg VARCHAR(16); DECLARE act INTEGER; DECLARE t DOUBLE PRECISION;
+BEGIN
+  SELECT e.spawnflags, e.health, e.wait_, e.style, e.target, e.pathtarget, e.enemy_id FROM ents e WHERE e.id = :eid INTO sf, hp, wt, sty, tgt, pt, act;
+  SELECT FIRST 1 s.id FROM ents s WHERE s.targetname = :tgt AND s.classname = 'target_string' INTO ts;
+  IF (ts IS NULL) THEN EXIT;
+  t = now_();
+  IF (BIN_AND(sf, 1) <> 0) THEN BEGIN msg = clock_format(sty, hp); hp = hp + 1; END
+  ELSE IF (BIN_AND(sf, 2) <> 0) THEN BEGIN msg = clock_format(sty, hp); hp = hp - 1; END
+  ELSE msg = clock_format(2, EXTRACT(HOUR FROM CURRENT_TIME) * 3600 + EXTRACT(MINUTE FROM CURRENT_TIME) * 60 + CAST(FLOOR(EXTRACT(SECOND FROM CURRENT_TIME)) AS INTEGER));
+  UPDATE ents e SET e.health = :hp, e.message = :msg WHERE e.id = :eid;
+  UPDATE ents s SET s.message = :msg WHERE s.id = :ts;
+  EXECUTE PROCEDURE target_string_use(ts);
+  IF ((BIN_AND(sf, 1) <> 0 AND hp > wt) OR (BIN_AND(sf, 2) <> 0 AND hp < wt)) THEN
+  BEGIN
+    IF (pt IS NOT NULL AND pt <> '') THEN
+    BEGIN
+      UPDATE ents e SET e.target = :pt, e.message = NULL WHERE e.id = :eid;
+      EXECUTE PROCEDURE use_targets(eid, COALESCE(act, player_ent()));
+      UPDATE ents e SET e.target = :tgt, e.message = :msg WHERE e.id = :eid;
+    END
+    IF (BIN_AND(sf, 8) = 0) THEN EXIT;
+    EXECUTE PROCEDURE clock_reset(eid);
+    IF (BIN_AND(sf, 4) <> 0) THEN EXIT;
+  END
+  UPDATE ents e SET e.think = 'clock_think', e.nextthink = :t + 1 WHERE e.id = :eid;
+END^
+
+-- func_clock_use: a START_OFF clock starts on its first use (and, MULTI_USE, on each use after it ended)
+CREATE OR ALTER PROCEDURE clock_use (eid INTEGER, activator INTEGER)
+AS
+BEGIN
+  IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.enemy_id IS NOT NULL)) THEN EXIT;
+  UPDATE ents e SET e.enemy_id = :activator WHERE e.id = :eid;
+  EXECUTE PROCEDURE clock_think(eid);
+END^
+
 -- ── trains ──────────────────────────────────────────────────────────────
 CREATE OR ALTER PROCEDURE train_next (eid INTEGER)
 AS
@@ -952,6 +1029,9 @@ BEGIN
       IF (st = 1) THEN BEGIN UPDATE ents e SET e.mv_state = 2 WHERE e.id = :t; EXECUTE PROCEDURE train_next(t); END
     END
     ELSE IF (tcls = 'misc_viper_bomb') THEN EXECUTE PROCEDURE viper_bomb_use(t, activator);
+    ELSE IF (tcls = 'misc_blackhole') THEN DELETE FROM ents e WHERE e.id = :t;     -- misc_blackhole_use
+    ELSE IF (tcls = 'target_string') THEN EXECUTE PROCEDURE target_string_use(t);
+    ELSE IF (tcls = 'func_clock') THEN EXECUTE PROCEDURE clock_use(t, activator);
     ELSE IF (tcls = 'trigger_elevator') THEN EXECUTE PROCEDURE elevator_use(t, eid);
     ELSE IF (tcls = 'target_earthquake') THEN
       -- target_earthquake_use: count seconds from now, the sound at once
@@ -2340,6 +2420,46 @@ BEGIN
              e.dmg = IIF(COALESCE(:dmg, 0) = 0, 1000, :dmg) WHERE e.id = :eid;
     ELSE IF (cls = 'trigger_elevator') THEN
       UPDATE ents e SET e.solid = 0, e.think = 'elevator_init', e.nextthink = 0.1e0 WHERE e.id = :eid;
+    ELSE IF (cls = 'target_character') THEN
+    BEGIN
+      -- SP_target_character: a brush model showing its texture's blank frame (12) until its string is set
+      UPDATE ents e SET e.solid = 4, e.movetype = 7, e.yaw = 0, e.frame = 12 WHERE e.id = :eid;
+      EXECUTE PROCEDURE link_ent(eid);
+    END
+    ELSE IF (cls = 'target_string') THEN
+      UPDATE ents e SET e.solid = 0, e.message = COALESCE(e.message, '') WHERE e.id = :eid;
+    ELSE IF (cls = 'func_clock') THEN
+    BEGIN
+      -- SP_func_clock: it needs a target (a target_string), and a count to count down from; counting up
+      -- with none runs an hour. START_OFF waits to be used, else it starts in a second.
+      IF (tg IS NULL OR tg = '' OR (BIN_AND(sf, 2) <> 0 AND COALESCE(cnt, 0) = 0)) THEN BEGIN DELETE FROM ents e WHERE e.id = :eid; CONTINUE; END
+      UPDATE ents e SET e.solid = 0, e.count_ = IIF(BIN_AND(:sf, 1) <> 0 AND COALESCE(:cnt, 0) = 0, 3600, COALESCE(:cnt, 0)) WHERE e.id = :eid;
+      EXECUTE PROCEDURE clock_reset(eid);
+      IF (BIN_AND(sf, 4) = 0) THEN UPDATE ents e SET e.think = 'clock_think', e.nextthink = 1 WHERE e.id = :eid;
+    END
+    ELSE IF (cls IN ('misc_blackhole', 'misc_eastertank', 'misc_easterchick', 'misc_easterchick2')) THEN
+    BEGIN
+      -- the decorations that run through a stretch of frames at 10 Hz (misc_*_think): the black hole its
+      -- 19 (translucent, and gone when used), the Easter tank 254..292 and the chicks 208..246 and 248..286
+      -- of their monsters' models (dstx the first frame, dsty the one after the last)
+      EXECUTE PROCEDURE set_model(eid, CASE cls WHEN 'misc_blackhole' THEN 'models/objects/black/tris.md2'
+                                                WHEN 'misc_eastertank' THEN 'models/monsters/tank/tris.md2' ELSE 'models/monsters/bitch/tris.md2' END);
+      UPDATE ents e SET e.solid = IIF(:cls = 'misc_blackhole', 0, 2), e.renderfx = IIF(:cls = 'misc_blackhole', 2, 0),
+             e.minx = IIF(:cls = 'misc_blackhole', -64, -32), e.miny = IIF(:cls = 'misc_blackhole', -64, -32), e.minz = IIF(:cls = 'misc_eastertank', -16, 0),
+             e.maxx = IIF(:cls = 'misc_blackhole', 64, 32), e.maxy = IIF(:cls = 'misc_blackhole', 64, 32), e.maxz = IIF(:cls = 'misc_blackhole', 8, 32),
+             e.dstx = CASE :cls WHEN 'misc_blackhole' THEN 0 WHEN 'misc_eastertank' THEN 254 WHEN 'misc_easterchick' THEN 208 ELSE 248 END,
+             e.dsty = CASE :cls WHEN 'misc_blackhole' THEN 19 WHEN 'misc_eastertank' THEN 293 WHEN 'misc_easterchick' THEN 247 ELSE 287 END,
+             e.think = 'frame_cycle', e.nextthink = 0.2e0 WHERE e.id = :eid;
+      UPDATE ents e SET e.frame = e.dstx WHERE e.id = :eid;
+      EXECUTE PROCEDURE link_ent(eid);
+    END
+    ELSE IF (cls IN ('light_mine1', 'light_mine2')) THEN
+    BEGIN
+      -- SP_light_mine1/2: a lamp on a stalk, standing
+      EXECUTE PROCEDURE set_model(eid, IIF(cls = 'light_mine1', 'models/objects/minelite/light1/tris.md2', 'models/objects/minelite/light2/tris.md2'));
+      UPDATE ents e SET e.solid = 2, e.minx = -2, e.miny = -2, e.minz = -12, e.maxx = 2, e.maxy = 2, e.maxz = 12 WHERE e.id = :eid;
+      EXECUTE PROCEDURE link_ent(eid);
+    END
     ELSE IF (cls = 'target_earthquake') THEN
       -- SP_target_earthquake: count 5 seconds, speed (the severity) 200 by default
       UPDATE ents e SET e.solid = 0, e.count_ = IIF(COALESCE(:cnt, 0) = 0, 5, :cnt), e.speed = IIF(COALESCE(:spd, 0) = 0, 200, :spd) WHERE e.id = :eid;

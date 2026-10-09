@@ -2,8 +2,10 @@
 // and spawned: func_door_secret (shot open, and used; its two moves, its waits, home again),
 // target_earthquake (the player thrown about, the rumble, the end), trigger_elevator (a button's
 // pathtarget sends the train), misc_viper with misc_viper_bomb (unseen until used, the bomb falls along
-// the viper's way and goes off), and the strogg ships' flybys (unseen until used, from their first
-// corner on, the corners' targets kept).
+// the viper's way and goes off), the strogg ships' flybys (unseen until used, from their first
+// corner on, the corners' targets kept), target_string with its target_characters and func_clock (the
+// digits of a string on brush models' frames; a timer counting up to its pathtarget, the time of day),
+// and the decorations that cycle their frames (misc_blackhole, the Easter tank) or stand (light_mine).
 //
 //   node scripts/entities-test.mjs
 
@@ -44,6 +46,15 @@ await add('path_corner', 128, -320, 300, { targetname: 'vp1', target: 'vp2' });
 await add('path_corner', 2128, -320, 300, { targetname: 'vp2', target: 'vp1' });
 await add('misc_viper', 128, -320, 300, { targetname: 'vip', target: 'vp1', speed: 300 });
 await add('misc_viper_bomb', 128, -320, 150, { targetname: 'bomb', dmg: 50 });
+await add('misc_blackhole', 200, -400, 24, { targetname: 'hole' });
+await add('misc_eastertank', 300, -400, 24);
+await add('light_mine1', 100, -400, 36);
+// a display of five characters (brush models the map has, shared) and a timer counting to 3 that then uses the hole
+for (let i = 1; i <= 5; i++) await add('target_character', 0, 0, 0, { model: ['*9', '*10', '*12', '*9', '*10'][i - 1], team: 'disp', count_: i });
+await add('target_string', 0, -500, 24, { targetname: 'disp', team: 'disp', message: '12:34' });
+await add('func_clock', 0, -520, 24, { target: 'disp', pathtarget: 'hole', spawnflags: 1 + 4, count_: 3, style: 1 });
+await add('target_string', 0, -540, 24, { targetname: 'tod' });
+await add('func_clock', 0, -560, 24, { target: 'tod', style: 2 });
 const world = (await q1('SELECT world_model w FROM game')).W;
 await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents');
 await db.exec(`EXECUTE PROCEDURE init_map('demo1', ${world}, 2, 1, NULL)`);
@@ -156,6 +167,41 @@ const near = (a, b) => Math.abs(a - b) < 0.5;
   for (let i = 0; i < 100 && !gone; i++) { await tic(); gone = !(await q1(`SELECT COUNT(*) n FROM ents WHERE id = ${b.ID}`)).N; }
   const boom = (await q1('SELECT COUNT(*) n FROM fx_events WHERE kind = 9')).N;
   assert(gone && boom === 1, 'it goes off where it lands (TE_EXPLOSION2)');
+}
+
+// ── the decorations: frames running at 10 Hz, the black hole translucent and gone when used
+{
+  const h = await ent('misc_blackhole'), tk = await ent('misc_eastertank'), lm = await ent('light_mine1');
+  // (the earlier checks ticked: the runs are under way)
+  assert(h.DSTX === 0 && h.FRAME < 19 && (h.RENDERFX & 2) && tk.DSTX === 254 && tk.FRAME >= 254 && tk.FRAME < 293 && tk.SOLID === 2 && lm.MKIND?.trim() === 'M' && lm.SOLID === 2,
+    'a black hole runs its 19 frames translucent, the Easter tank its frames 254..292, a mine light stands');
+  for (let i = 0; i < 45; i++) await tic();
+  const h2 = await ent('misc_blackhole'), tk2 = await ent('misc_eastertank');
+  assert(h2.FRAME > 0 && h2.FRAME < 19 && tk2.FRAME > 254 && tk2.FRAME < 293, `2.25 s on, the hole is at frame ${h2.FRAME} (of 19, wrapped) and the tank at ${tk2.FRAME} (254..292)`);
+}
+
+// ── target_string, target_character, func_clock
+{
+  const chars = async () => (await qa("SELECT count_, frame FROM ents WHERE classname = 'target_character' ORDER BY count_")).map((c) => c.FRAME);
+  assert((await chars()).join() === '12,12,12,12,12', 'the characters start blank (frame 12)');
+  await use('disp');
+  assert((await chars()).join() === '1,2,11,3,4', `used, the string shows 12:34 (frames ${(await chars()).join(' ')})`);
+  // the timer: START_OFF, so used; then " 0:00", " 0:01", " 0:02", " 0:03" a second apart, and past its count the hole
+  const clk = await q1("SELECT id FROM ents WHERE classname = 'func_clock' AND pathtarget = 'hole'");
+  const hole = await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'misc_blackhole'");
+  assert(clk && hole.N === 1 && (await q1(`SELECT nextthink nt FROM ents WHERE id = ${clk.ID}`)).NT === null, 'a START_OFF timer waits to be used');
+  await db.exec(`UPDATE ents SET targetname = 'clk' WHERE id = ${clk.ID}`);
+  await use('clk');
+  assert((await chars()).join() === '12,0,11,0,0', `used, it shows " 0:00" at once (frames ${(await chars()).join(' ')})`);
+  for (let i = 0; i < 42; i++) await tic();
+  assert((await chars()).join() === '12,0,11,0,2' && (await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'misc_blackhole'")).N === 1,
+    `2.1 s on it shows " 0:02" (frames ${(await chars()).join(' ')}), the hole still there`);
+  for (let i = 0; i < 40; i++) await tic();
+  assert((await chars()).join() === '12,0,11,0,3' && (await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'misc_blackhole'")).N === 0,
+    `past its count of 3 it fires its pathtarget: the hole is gone; it shows " 0:03" and stops (frames ${(await chars()).join(' ')})`);
+  assert((await q1(`SELECT nextthink nt, enemy_id a FROM ents WHERE id = ${clk.ID}`)).NT === null, 'a timer without MULTI_USE runs once');
+  const tod = await q1("SELECT message FROM ents WHERE classname = 'target_string' AND targetname = 'tod'");
+  assert(/^[ 0-9][0-9]:[0-9]{2}:[0-9]{2}$/.test(tod.MESSAGE ?? ''), `a clock with no timer flag shows the time of day (${JSON.stringify(tod.MESSAGE)})`);
 }
 
 console.log(failed ? `${failed} FAILED` : 'all good');

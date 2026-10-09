@@ -27,7 +27,7 @@ npm run test:save                     # save, play on, load: the game comes back
 npm run test:menu                     # the menus, headless: keys, slots, settings, pictures
 npm run test:painter                  # the painter headless: dynamic lights, mip levels
 npm run test:walkthrough              # every trigger the player can walk into fires, its movers move
-npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper
+npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper, clock
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
