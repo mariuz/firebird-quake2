@@ -294,7 +294,8 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
 
 `sound_events` rows are played with the Web Audio API, attenuated and panned by Quake 2's rules
 (full volume within 80 units, then `attenuation × 0.001` per unit). The map's looped
-`target_speaker`s play at their origins and follow their on/off state from the frame's kind 7 row.
+`target_speaker`s sound from their origins and follow their on/off state from the frame's kind 7 row;
+as in 3.14, where a looped speaker is its `s.sound`, they are mixed with the entities' loops below.
 The entities' looped sounds (Quake 2's `s.sound`) are worked out each frame from the rows as they
 stand, not kept in a column: a bolt's `misc/lasfly.wav`, a rocket's `rockfly`, the BFG ball's
 `bfg__l1a` while they fly; a door's, plat's or train's middle sound (`noise2`) while it moves

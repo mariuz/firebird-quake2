@@ -1,9 +1,9 @@
 // audio.js – snd_dma.c, more or less: the SOUND_EVENTS rows become Web
 // Audio buffers, attenuated and panned from where they happened (Quake 2's
 // spatialisation: full volume within 80 units, then a linear fall-off scaled
-// by the attenuation, ATTN_NONE heard everywhere). The map's looped
-// target_speakers play at their origins, the entities' looped sounds (a
-// rocket's flight, a moving door) where the entities are each frame; the music is the CD track the
+// by the attenuation, ATTN_NONE heard everywhere). The looped sounds (a
+// rocket's flight, a moving door, a looped target_speaker) are mixed per
+// sound where their entities are each frame; the music is the CD track the
 // worldspawn names (music/trackNN.ogg|mp3, or a folder the player picks),
 // with a synthesised drone when no track file is available.
 
@@ -18,7 +18,7 @@ export class Q2Audio {
     this.volume = 0.7;
     this.musicVolume = 0.5;
     this.channels = new Map();   // `${ent}:${chan}` → source, to cut
-    this.speakers = [];          // looped target_speakers: { id, name, x, y, z, vol, attn, on, src, gain, pan }
+    this.speakers = [];          // looped target_speakers: { id, name, x, y, z, on }
     this.loops = new Map();      // looped entity sounds: name → { src, gain, pan }
     this.loopRows = [];
     this.listener = { x: 0, y: 0, z: 0, yaw: 0 };
@@ -41,7 +41,6 @@ export class Q2Audio {
       this.musicGain = this.ctx.createGain();
       this.musicGain.gain.value = this.musicVolume;
       this.musicGain.connect(this.ctx.destination);
-      this.startSpeakers();
       if (this.track) this.playMusic(this.track);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -107,11 +106,11 @@ export class Q2Audio {
   }
 
   // ── looped speakers ───────────────────────────────────────────────────
-  /** rows: [id, x, y, z, noise, vol, attn, on] for every looped target_speaker of the map. */
+  /** rows: [id, x, y, z, noise, on] for every looped target_speaker of the map. In 3.14 a looped speaker is
+   *  its s.sound (SP_target_speaker, Use_Target_Speaker), so it is mixed with the entities' loops below, at full
+   *  volume and ATTN_STATIC whatever its volume and attenuation keys say (those are for its one-shots). */
   setSpeakers(rows) {
-    this.stopSpeakers();
-    this.speakers = rows.map(([id, x, y, z, name, vol, attn, on]) => ({ id, x, y, z, name, vol: vol || 1, attn: attn < 0 ? 0 : attn, on: on === 1 }));
-    if (this.ctx) this.startSpeakers();
+    this.speakers = rows.map(([id, x, y, z, name, on]) => ({ id, x, y, z, name, on: on === 1 }));
   }
 
   /** The speakers that are on this frame (ids). */
@@ -130,21 +129,6 @@ export class Q2Audio {
     if (p) src.connect(g).connect(p).connect(dest); else src.connect(g).connect(dest);
     src.start(0, Math.random() * buf.duration);
     return { src, gain: g, pan: p };
-  }
-
-  async startSpeakers() {
-    if (!this.ctx) return;
-    for (const s of this.speakers) {
-      if (s.src) continue;
-      const buf = await this.buffer(s.name);
-      if (!buf) continue;
-      Object.assign(s, this.loop(buf, this.master));
-    }
-  }
-
-  stopSpeakers() {
-    for (const s of this.speakers) { if (s.src) { try { s.src.stop(); } catch { /* ended */ } } s.src = null; }
-    this.speakers = [];
   }
 
   // ── looped entity sounds (s.sound) ────────────────────────────────────
@@ -167,7 +151,8 @@ export class Q2Audio {
    *  with ATTN_STATIC, the left and right sums each clamped at full scale. */
   mixLoops() {
     const sums = new Map();
-    for (const [name, x, y, z] of this.loopRows) {
+    const rows = this.loopRows.concat(this.speakers.filter((sp) => sp.on).map((sp) => [sp.name, sp.x, sp.y, sp.z]));
+    for (const [name, x, y, z] of rows) {
       const { gain, pan } = this.spatialize(x, y, z, LOOP_ATTN);
       if (gain <= 0) continue;
       const s = sums.get(name) ?? { l: 0, r: 0 };
@@ -192,12 +177,6 @@ export class Q2Audio {
   /** Called every frame with the listener: the looped speakers and entity sounds follow the player. */
   update(listener) {
     this.listener = listener;
-    for (const s of this.speakers) {
-      if (!s.gain) continue;
-      const { gain, pan } = this.spatialize(s.x, s.y, s.z, s.attn);
-      s.gain.gain.value = s.on ? gain * s.vol * 0.6 : 0;
-      if (s.pan) s.pan.pan.value = pan;
-    }
     if (this.ctx) this.mixLoops();
   }
 

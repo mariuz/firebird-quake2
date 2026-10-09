@@ -200,8 +200,10 @@ them.
   placed a brush model's loop at its origin, often the map's centre; here it sounds from the box's
   middle, as the one-shot sounds already did.
 - **Music**: CD tracks are optional files; the synthesised drone is a placeholder.
-- **Attenuation of looped speakers** follows the spawn's `attenuation`; `ATTN_STATIC` (3) is
-  treated like `ATTN_IDLE`.
+- **Looped speakers**: done. In 3.14 a looped `target_speaker` is its `s.sound`, so it goes through
+  `S_AddLoopSounds` with the entities' loops: full volume and `ATTN_STATIC` (heard to about 410 units),
+  whatever its `volume` and `attenuation` keys say (those apply to its one-shots), and two speakers of the
+  same sound add up, each side clamped. They used to play at their own attenuation, at 0.6 of their volume.
 
 ## The full game (a registered `pak0.pak`)
 
