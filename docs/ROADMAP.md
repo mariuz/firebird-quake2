@@ -243,8 +243,7 @@ picker). Missing for the rest of the game:
   `monsters.sql` (`check_attack`, `monster_missile`, `monster_melee`).
 - **Map entities**: `target_actor` / `misc_actor`, `target_character`, `target_string`,
   `target_earthquake`, `target_mal_laser`, `misc_blackhole`, `misc_eastertank`,
-  `misc_easterchick`, `trigger_elevator`, `func_conveyor`, `func_killbox`, `misc_bigviper` flight
-  paths, the `misc_strogg_ship` flyby, `target_spawner` (recognised), `func_group` (editor-only,
+  `misc_easterchick`, `trigger_elevator`, `misc_bigviper` flight paths, the `misc_strogg_ship` flyby, `target_spawner` (recognised), `func_group` (editor-only,
   correctly ignored).
 - **Cutscenes**: the intro and the unit transitions are cinematics (`.cin`); a level exit naming one
   skips it and goes on to the map after its `+` (`src/levels.js`).
@@ -266,14 +265,18 @@ picker). Missing for the rest of the game:
   which drops the kept sets.
 - **The tic's floor**: a monster step is a three-call box trace plus a relink, about 0.7 ms;
   with many monsters in a big room the tic grows linearly. The engine's per-level cost of a tree
-  descent (~16 µs) is the limit; ideas left on the table are in ARCHITECTURE.md §10.
-- **Tests**: the smoke tests cover movement, weapons and doors on demo1 and demo2; demo3 is only
-  screenshotted. `scripts/walkthrough-test.mjs` puts the player in every trigger it can walk into on the
-  three maps, in turn, and checks each fires and the movers it targets move (`use_targets`, `trigger_fire`,
-  the touch test), and the smoke test closes a door on a monster (hurt, the door turns back) and on a barrel
-  (destroyed), as `door_blocked` had it;
-  and the painter's only regression test is the two-mode pixel comparison plus the docs
-  screenshots viewed by eye.
+  descent (~16 µs) is the limit: a trace is 23 levels and 6.6 `rhc` calls on average, and the walk
+  is nine tenths of it. Brush deduplication (`checkcount`) and a cached start node were measured on
+  replayed real traces and rejected (ARCHITECTURE.md §10). A player wedged between two steep
+  slopes, falling every tic without moving (as pmove would leave it), costs ~11 ms a tic: each of
+  its traces reaches seven leaves.
+- **Tests**: the smoke tests cover movement, weapons, doors, items and the console on all three demo
+  maps; `test:monsters` every monster's sight, attacks and death; `test:walkthrough` every trigger the
+  player can walk into on the three maps (it fires, the movers it targets move), with the smoke test
+  closing a door on a monster and on a barrel as `door_blocked` had it; `test:save` saves, levels left
+  and come back to; `test:menu` the menus; `test:painter` the painter's dynamic lights and mip levels.
+  What has no test but the docs screenshots viewed by eye: the painter's look beyond those, and the
+  sound mix.
 - **`firebird-wasm` features to watch**: binding non-text parameters, batch inserts, and
   `SharedArrayBuffer`-free builds (which would remove the COOP/COEP requirement and the service
   worker).

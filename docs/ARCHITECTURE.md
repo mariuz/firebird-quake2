@@ -440,9 +440,19 @@ leaf-planes table for a cheap "still in this leaf" test (0.8 s of load for a 1.8
 a leaf-level frustum cull before the faces (row fetches cost more than the faces skipped), a cone
 test before the planes (the square root costs more than it saves), an expression index on a
 coarse x sector for the solid-entity scan (no measurable gain), a narrow think-schedule table
-(the wide-row penalty is only ~20 µs).
+(the wide-row penalty is only ~20 µs). Two more for the trace, measured on the 2,643 traces of 300
+real tics on the Outer Base, replayed through the old and the new SQL in turn: CM_BoxTrace's
+`checkcount` (a brush lying in several leaves clipped once per trace, through a temporary table)
+came out 8 % slower, because a real trace reaches 1.4 leaves and 13.7 brush sides on average and
+the repeats it saved were about one side; and a cache of where a trace's walk may start (the
+deepest node holding a 64-unit cell grown by 64) skipped 0.9 of a trace's 23 levels, because the
+places where things move lie across the tree's top planes. A trace's time is the walk (0.76 of
+its 0.87 ms with the clipping taken out): 6.6 `rhc` calls and 23 levels.
 
-Where it stands (Node, Outer Base, hard skill, 31 monsters, 14 patrolling):
+Where it stands (Node, Outer Base, hard skill, 31 monsters, 14 patrolling; timings vary between
+machines by more than any one step: the sandbox this was last measured in gives 4.7 ms idle and
+11.5 ms walking now, and 4.9 / 9.5 ms for the SQL these figures were taken with, the difference
+being the scripted walk running since `cl_run`):
 
 | | at the start | now |
 |---|---|---|
