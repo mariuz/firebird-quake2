@@ -78,13 +78,37 @@ for (const m of MONSTERS) {
     await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE check_dodge(${pe}, ${p.X}, ${p.Y}, ${ez}, ${(mon.X - p.X) / len}, ${(mon.Y - p.Y) / len}, ${(mz - ez) / len}, 1000); END`);
     const d = await q1(`SELECT st, maxz, aiflags FROM ents WHERE id = ${id}`);
     if (d.ST === 'duck') ducked = d;
+    else if (d.ST === 'attack3') await db.exec(`UPDATE ents SET st = 'run' WHERE id = ${id}`);   // crouched fire: tried below
   }
   if (dodger) {
     assert(ducked && ducked.MAXZ === box0.MAXZ - 32 && (ducked.AIFLAGS & 4), `${m.name} ducked under a shot (box ${box0.MAXZ} → ${ducked?.MAXZ})`);
     let up;
     for (let i = 0; i < 40; i++) { await tic(); up = await q1(`SELECT st, maxz, aiflags FROM ents WHERE id = ${id}`); if (up.ST !== 'duck') break; }
     assert(up.ST !== 'duck' && up.MAXZ === box0.MAXZ && (up.AIFLAGS & 4) === 0, `${m.name} stood up again (${up.ST})`);
-  } else assert(!ducked, `${m.name} has no dodge`);
+  }
+  if (m.name.startsWith('soldier')) {
+    // soldier_dodge on medium: a third of the dodges are soldier_move_attack3, crouched fire
+    let a3 = null;
+    for (let i = 0; i < 300 && !a3; i++) {
+      await db.exec(`UPDATE ents SET st = 'run', aiflags = BIN_AND(aiflags, BIN_NOT(12)), maxz = ${box0.MAXZ} WHERE id = ${id}`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_dodge(${id}, ${pe}, 0.2); END`);
+      const d = await q1(`SELECT st, anim FROM ents WHERE id = ${id}`);
+      if (d.ST === 'attack3') a3 = d;
+    }
+    assert(a3 && a3.ANIM === 'attak3', `${m.name} crouches to fire (${a3?.ANIM})`);
+    let low = false, shots = 0, r = null, fx0 = (await q1('SELECT COALESCE(MAX(id), 0) m FROM fx_events')).M;
+    for (let i = 0; i < 80; i++) {
+      await tic();
+      for (const f of await qa(`SELECT id FROM fx_events WHERE id > ${fx0} AND kind = 15 ORDER BY id`)) { shots++; fx0 = f.ID; }
+      r = await q1(`SELECT st, maxz, aiflags FROM ents WHERE id = ${id}`);
+      if (r.MAXZ === box0.MAXZ - 32) low = true;
+      if (r.ST !== 'attack3') break;
+    }
+    const want = m.name === 'soldier_ss' ? 'a burst of 4 to 11' : 'twice';
+    assert(low && (m.name === 'soldier_ss' ? shots >= 4 && shots <= 11 : shots === 2), `... ducked and fired ${want} (${shots})`);
+    assert(r.ST !== 'attack3' && r.MAXZ === box0.MAXZ && (r.AIFLAGS & 12) === 0, `... and stood up again (${r.ST})`);
+  }
+  if (!dodger) assert(!ducked, `${m.name} has no dodge`);
   // it attacks: with god mode on, damage shows as dmg_take / attack events
   let attacked = 0, dmgSeen = 0;
   await db.exec(`UPDATE ents SET flags = BIN_AND(flags, BIN_NOT(16)) WHERE id = ${pe}`);

@@ -22,19 +22,33 @@ END^
 CREATE OR ALTER PROCEDURE monster_duck_up (eid INTEGER)
 AS
 BEGIN
-  UPDATE ents e SET e.maxz = e.maxz + 32, e.aiflags = BIN_AND(e.aiflags, BIN_NOT(4)) WHERE e.id = :eid AND BIN_AND(e.aiflags, 4) <> 0;
+  UPDATE ents e SET e.maxz = e.maxz + 32, e.aiflags = BIN_AND(e.aiflags, BIN_NOT(4 + 8)) WHERE e.id = :eid AND BIN_AND(e.aiflags, 4) <> 0;
 END^
 
 -- soldier_dodge, infantry_dodge, gunner_dodge: a quarter of the time, duck under the shot (monster_duck_down:
 -- the box 32 units lower until the duck frames end). The other monsters of the demo have no dodge.
+-- A soldier on medium crouches and fires instead (soldier_move_attack3) a third of those times, on hard two
+-- thirds; on easy it only ducks.
 CREATE OR ALTER PROCEDURE monster_dodge (eid INTEGER, attacker INTEGER, eta DOUBLE PRECISION)
 AS
-DECLARE st VARCHAR(12); DECLARE mt VARCHAR(16); DECLARE aif INTEGER; DECLARE hp INTEGER;
+DECLARE st VARCHAR(12); DECLARE mt VARCHAR(16); DECLARE aif INTEGER; DECLARE hp INTEGER; DECLARE sk SMALLINT; DECLARE r DOUBLE PRECISION;
 BEGIN
   SELECT e.st, e.mtype, e.aiflags, e.health FROM ents e WHERE e.id = :eid INTO st, mt, aif, hp;
   IF (mt IS NULL OR mt NOT IN ('soldier_light', 'soldier', 'soldier_ss', 'infantry', 'gunner')) THEN EXIT;
   IF (hp <= 0 OR st NOT IN ('stand', 'walk', 'run', 'missile', 'melee') OR BIN_AND(aif, 4) <> 0) THEN EXIT;
   IF (RAND() > 0.25e0) THEN EXIT;
+  IF (mt STARTING WITH 'soldier') THEN
+  BEGIN
+    SELECT g.skill FROM game g WHERE g.id = 1 INTO sk;
+    r = RAND();
+    IF ((sk = 1 AND r <= 0.33e0) OR (sk >= 2 AND r <= 0.66e0)) THEN
+    BEGIN
+      UPDATE ents e SET e.enemy_id = COALESCE(e.enemy_id, :attacker), e.st = 'attack3', e.pausetime = now_() + :eta + 0.3e0,
+             e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
+      EXECUTE PROCEDURE set_anim(eid, 'attak3');
+      EXIT;
+    END
+  END
   UPDATE ents e SET e.enemy_id = COALESCE(e.enemy_id, :attacker), e.st = 'duck', e.aiflags = BIN_OR(e.aiflags, 4), e.maxz = e.maxz - 32,
          e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
   EXECUTE PROCEDURE set_anim(eid, 'duck');
@@ -628,6 +642,54 @@ BEGIN
     IF (run_spd > 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd, iy);
     ELSE EXECUTE PROCEDURE change_yaw(eid);
     af = MOD(af + 1, fc);
+    UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
+    EXIT;
+  END
+
+  IF (st = 'attack3') THEN
+  BEGIN
+    -- soldier_move_attack3, crouched fire: ai_charge each frame; soldier_fire3 at the third (soldier_duck_down, which
+    -- sets pausetime a second ahead, then a shot; the machinegun holds the frame for a burst, AI_HOLD_FRAME);
+    -- soldier_attack3_refire at the sixth goes back to the third while pausetime is more than 0.4 s off;
+    -- soldier_duck_up at the seventh
+    IF (enemy IS NOT NULL) THEN
+    BEGIN
+      UPDATE ents e SET e.ideal_yaw = vectoyaw((SELECT x FROM ents n WHERE n.id = :enemy) - e.x, (SELECT y FROM ents n WHERE n.id = :enemy) - e.y) WHERE e.id = :eid;
+      EXECUTE PROCEDURE change_yaw(eid);
+    END
+    IF (af = 2) THEN
+    BEGIN
+      IF (BIN_AND(aif, 4) = 0) THEN
+      BEGIN
+        UPDATE ents e SET e.maxz = e.maxz - 32, e.aiflags = BIN_OR(e.aiflags, 4), e.pausetime = :t + 1 WHERE e.id = :eid;
+      END
+      IF (mt = 'soldier_ss') THEN
+      BEGIN
+        IF (BIN_AND(aif, 8) = 0) THEN UPDATE ents e SET e.pausetime = :t + (3 + FLOOR(RAND() * 8)) * 0.1e0 WHERE e.id = :eid;
+        EXECUTE PROCEDURE monster_missile(eid);
+        IF (t + 0.05e0 < (SELECT e.pausetime FROM ents e WHERE e.id = :eid)) THEN
+        BEGIN
+          UPDATE ents e SET e.aiflags = BIN_OR(e.aiflags, 8), e.nextthink = :nt WHERE e.id = :eid;
+          EXIT;
+        END
+        UPDATE ents e SET e.aiflags = BIN_AND(e.aiflags, BIN_NOT(8)) WHERE e.id = :eid;
+      END
+      ELSE EXECUTE PROCEDURE monster_missile(eid);
+    END
+    IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.st = :st)) THEN EXIT;
+    IF (af = 5 AND t + 0.4e0 < (SELECT e.pausetime FROM ents e WHERE e.id = :eid)) THEN af = 2;
+    ELSE
+    BEGIN
+      IF (af = 6) THEN EXECUTE PROCEDURE monster_duck_up(eid);
+      af = af + 1;
+    END
+    IF (af >= fc) THEN
+    BEGIN
+      EXECUTE PROCEDURE monster_duck_up(eid);
+      UPDATE ents e SET e.st = TRIM(IIF(e.enemy_id IS NULL, 'stand', 'run')), e.nextthink = :nt WHERE e.id = :eid;
+      EXECUTE PROCEDURE set_anim(eid, IIF(enemy IS NULL, stand_a, run_a));
+      EXIT;
+    END
     UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
     EXIT;
   END

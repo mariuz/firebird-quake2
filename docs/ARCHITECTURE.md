@@ -185,7 +185,9 @@ monster thinks at 3 Hz and a patrol strides four times as far at 2.5 Hz, with
 monster to that `point_combat` first (`aiflags` 2, `AI_COMBAT_POINT`), and `point_combat_touch`
 moves it on, fires the point's pathtarget, or holds it there (`aiflags` 1, `AI_STAND_GROUND`). A
 player's bolt, rocket or BFG ball is traced along its flight (`check_dodge`) and the soldiers,
-infantry and gunners it would hit duck a quarter of the time (`monster_dodge`, `aiflags` 4). Supported: soldier (light, shotgun, machinegun),
+infantry and gunners it would hit duck a quarter of the time (`monster_dodge`, `aiflags` 4); on medium
+and hard a soldier often crouches and fires instead (state `attack3`, the `attak3` frames, timed by
+`pausetime` as `monsterinfo.pausetime` timed them, `aiflags` 8 holding the SS's burst). Supported: soldier (light, shotgun, machinegun),
 infantry, gunner, berserker, flyer, parasite, tank; see ROADMAP.md for the rest.
 
 ## 5. Visibility and the frame (`sql/render.sql`)
