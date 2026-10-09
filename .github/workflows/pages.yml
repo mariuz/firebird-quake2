@@ -55,6 +55,10 @@ jobs:
       - name: The monsters
         run: npm run test:monsters
 
+      # Every trigger a player can walk into, on each demo map: it fires, and the movers it targets move
+      - name: The triggers
+        run: npm run test:walkthrough
+
       # Save, play on, load: the game comes back exactly and keeps running
       - name: Saved games
         run: npm run test:save
