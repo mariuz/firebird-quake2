@@ -216,7 +216,16 @@ portal opens or closes: every face of every leaf whose cluster is in the PVS, in
 to the eye's through open portals (`area_flood`), goes into `vis_faces` (`DISTINCT`, Quake's `visframe`),
 with its plane and bounding sphere copied in so the frame is a scan of that table alone. A face
 whose plane has the cluster's whole bounding box behind it is left out: no eye in the cluster
-can ever face it. This re-marking is the one per-cluster-change hitch (tens of milliseconds).
+can ever face it. The PVS's leaves are found by decoding its set bits and looking each visible
+cluster up through `leaves_cluster` into a temporary `vis_leaves`; a scan of every leaf testing its
+bit in the hex string cost three times as much (~5 µs a leaf). Their faces come in by primary key
+from a `DISTINCT` over `leaffaces`, which beat scanning every face with an `IN`. A new cluster
+costs ~17 ms (it was ~43). The last eight marked sets are kept, each in its own slot of
+`vis_faces` (primary key `slot, face`; `vis_sets` says which cluster and area a slot holds and
+when it was last used), so walking back into a recent cluster is a switch of
+`viewcfg.vis_slot` (~0.3 ms); the frame reads `WHERE v.slot = :vslot`, which costs nothing
+measurable. Anything that resets `viewcfg.vis_cluster` (a new map, a load, an area portal opening
+or closing) drops all the sets.
 
 `frame_all(mode, last_sound, last_fx, want_speakers)` returns the frame as kind-tagged rows
 (`kind`, `i1..i5`, `d1..d8`, `s`, `lst`):

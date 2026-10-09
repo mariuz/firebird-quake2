@@ -45,6 +45,7 @@ CREATE TABLE viewcfg (
   near_z DOUBLE PRECISION NOT NULL,
   vis_cluster INTEGER,                 -- the cluster VIS_FACES was marked for
   vis_area    INTEGER,                 -- ... and the area the eye was in
+  vis_slot    SMALLINT,                -- ... and the VIS_FACES slot that holds its faces
   -- the view the world's face list was last made for, and that list (reused while the view holds still)
   lv_ex DOUBLE PRECISION, lv_ey DOUBLE PRECISION, lv_ez DOUBLE PRECISION,
   lv_fx DOUBLE PRECISION, lv_fy DOUBLE PRECISION, lv_fz DOUBLE PRECISION,

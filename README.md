@@ -118,7 +118,7 @@ simulation wants heard is a row in `sound_events`; temp entities are rows in `fx
 
 `FRAME_ALL` finds the leaf and cluster the eye is in and, once per cluster, marks every face of every
 leaf whose cluster is in its PVS and whose area a closed door does not cut off into `vis_faces` (Quake's `visframe`), with each face's plane and
-bounding sphere copied in. The frame is then a scan of that table with the back-face and frustum tests
+bounding sphere copied in; the last eight clusters' sets are kept, so walking back costs nothing. The frame is then a scan of that table with the back-face and frustum tests
 as expressions, aggregated with `LIST()` into one row holding the visible face ids; each brush model in
 the PVS (doors, plats, the fan — whether its clusters are visible is decided once per view cluster and
 kept on its row) adds a row of its own faces at its origin. The same result set carries the MD2 models

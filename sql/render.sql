@@ -66,14 +66,31 @@ END^
 SET TERM ; ^
 
 -- the marked world faces (PSQL has no arrays; Quake has visframe): every face
--- of every leaf in the PVS of the cluster the eye is in, kept until the eye
--- moves to another cluster, with the plane and bounding sphere copied in so
--- the frame is a scan of this table alone
+-- of every leaf in the PVS of the cluster the eye is in, with the plane and
+-- bounding sphere copied in so the frame is a scan of this table alone. The
+-- last few clusters' sets are kept, each in its slot (VIS_SETS), so walking
+-- back into one of them costs nothing; the frame reads the eye's slot.
 CREATE TABLE vis_faces (
-  face   INTEGER NOT NULL PRIMARY KEY,
+  slot   SMALLINT NOT NULL,
+  face   INTEGER NOT NULL,
   nx DOUBLE PRECISION NOT NULL, ny DOUBLE PRECISION NOT NULL, nz DOUBLE PRECISION NOT NULL, dist DOUBLE PRECISION NOT NULL,
-  cx DOUBLE PRECISION NOT NULL, cy DOUBLE PRECISION NOT NULL, cz DOUBLE PRECISION NOT NULL, radius DOUBLE PRECISION NOT NULL
+  cx DOUBLE PRECISION NOT NULL, cy DOUBLE PRECISION NOT NULL, cz DOUBLE PRECISION NOT NULL, radius DOUBLE PRECISION NOT NULL,
+  PRIMARY KEY (slot, face)
 );
+
+-- which cluster (and area: the eye's flood) each slot of VIS_FACES holds, and when it was last used
+CREATE TABLE vis_sets (
+  slot    SMALLINT NOT NULL PRIMARY KEY,
+  cluster INTEGER NOT NULL,
+  area    INTEGER,
+  used    INTEGER NOT NULL
+);
+
+-- the leaves MARK_FACES found in the PVS (and the eye's flood of areas), their faces' range
+CREATE GLOBAL TEMPORARY TABLE vis_leaves (
+  first_lf INTEGER NOT NULL,
+  num_lf   INTEGER NOT NULL
+) ON COMMIT DELETE ROWS;
 
 -- the faces that survive this frame's back-face and frustum tests (FRAME_FACES),
 -- with the entity's origin and rotation (m00..m22: world = o + M · v)
@@ -103,16 +120,40 @@ BEGIN
 END^
 
 -- mark_faces: R_MarkLeaves, once per view cluster: every face of every leaf
--- in the PVS goes into VIS_FACES (kept until the eye moves to another cluster)
+-- in the PVS goes into VIS_FACES, in the slot it returns. The last 8 clusters'
+-- sets are kept; anything that resets VIEWCFG.VIS_CLUSTER (a new map, a load,
+-- an area portal opening or closing) drops them all.
 CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER, vleaf INTEGER)
+RETURNS (slot SMALLINT)
 AS
 DECLARE cur INTEGER; DECLARE world INTEGER; DECLARE curarea INTEGER; DECLARE varea INTEGER; DECLARE eflood INTEGER;
 DECLARE bminx DOUBLE PRECISION; DECLARE bminy DOUBLE PRECISION; DECLARE bminz DOUBLE PRECISION;
 DECLARE bmaxx DOUBLE PRECISION; DECLARE bmaxy DOUBLE PRECISION; DECLARE bmaxz DOUBLE PRECISION;
+DECLARE i INTEGER; DECLARE len INTEGER; DECLARE d INTEGER; DECLARE k INTEGER; DECLARE c INTEGER; DECLARE used INTEGER;
 BEGIN
   SELECT l.area FROM leaves l WHERE l.id = :vleaf INTO varea;
-  SELECT c.vis_cluster, c.vis_area FROM viewcfg c WHERE c.id = 1 INTO cur, curarea;
-  IF (cur IS NOT DISTINCT FROM vcluster AND curarea IS NOT DISTINCT FROM varea) THEN EXIT;
+  SELECT c.vis_cluster, c.vis_area, c.vis_slot FROM viewcfg c WHERE c.id = 1 INTO cur, curarea, slot;
+  IF (cur IS NOT DISTINCT FROM vcluster AND curarea IS NOT DISTINCT FROM varea AND slot IS NOT NULL) THEN EXIT;
+  IF (cur IS NULL) THEN DELETE FROM vis_sets;
+  SELECT COALESCE(MAX(s.used), 0) + 1 FROM vis_sets s INTO used;
+  -- a set kept from before: switch to it
+  slot = NULL;
+  SELECT s.slot FROM vis_sets s WHERE s.cluster = :vcluster AND s.area IS NOT DISTINCT FROM :varea INTO slot;
+  IF (slot IS NOT NULL) THEN
+  BEGIN
+    UPDATE vis_sets s SET s.used = :used WHERE s.slot = :slot;
+    UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.vis_area = :varea, c.vis_slot = :slot, c.world_lst = NULL WHERE c.id = 1;
+    EXIT;
+  END
+  -- else a free slot, or the one used longest ago
+  k = 0;
+  WHILE (k < 8 AND slot IS NULL) DO
+  BEGIN
+    IF (NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.slot = :k)) THEN slot = k;
+    k = k + 1;
+  END
+  IF (slot IS NULL) THEN SELECT FIRST 1 s.slot FROM vis_sets s ORDER BY s.used INTO slot;
+  DELETE FROM vis_sets s WHERE s.slot = :slot;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
   -- the areas the eye's area is connected to through open portals (CM_WriteAreaBits)
   SELECT f.flood FROM area_flood f WHERE f.area = :varea INTO eflood;
@@ -120,19 +161,48 @@ BEGIN
   SELECT MIN(l.minx), MIN(l.miny), MIN(l.minz), MAX(l.maxx), MAX(l.maxy), MAX(l.maxz) FROM leaves l WHERE l.cluster = :vcluster
     INTO bminx, bminy, bminz, bmaxx, bmaxy, bmaxz;
   IF (bminx IS NULL) THEN BEGIN bminx = -1e9; bminy = -1e9; bminz = -1e9; bmaxx = 1e9; bmaxy = 1e9; bmaxz = 1e9; END
-  DELETE FROM vis_faces;
-  INSERT INTO vis_faces (face, nx, ny, nz, dist, cx, cy, cz, radius)
-  SELECT f.id, f.nx, f.ny, f.nz, f.dist, f.cx, f.cy, f.cz, f.radius
-    FROM faces f
+  -- the leaves in the PVS: its set bits, cluster by cluster through the cluster index (a scan of
+  -- every leaf testing its bit cost three times as much); no PVS, every leaf
+  DELETE FROM vis_leaves;
+  IF (pvs = '') THEN
+    INSERT INTO vis_leaves (first_lf, num_lf)
+    SELECT l.first_lf, l.num_lf FROM leaves l
+     WHERE l.cluster >= 0 AND l.num_lf > 0
+       AND (:eflood IS NULL OR l.area IN (SELECT f.area FROM area_flood f WHERE f.flood = :eflood));
+  ELSE
+  BEGIN
+    i = 1; len = CHAR_LENGTH(pvs);
+    WHILE (i <= len) DO
+    BEGIN
+      d = POSITION(SUBSTRING(pvs FROM i FOR 1), '0123456789abcdef') - 1;
+      IF (d > 0) THEN
+      BEGIN
+        k = 0;
+        WHILE (k < 4) DO
+        BEGIN
+          IF (BIN_AND(d, BIN_SHL(1, k)) <> 0) THEN
+          BEGIN
+            c = (i - 1) * 4 + k;
+            INSERT INTO vis_leaves (first_lf, num_lf)
+            SELECT l.first_lf, l.num_lf FROM leaves l
+             WHERE l.cluster = :c AND l.num_lf > 0
+               AND (:eflood IS NULL OR l.area IN (SELECT f.area FROM area_flood f WHERE f.flood = :eflood));
+          END
+          k = k + 1;
+        END
+      END
+      i = i + 1;
+    END
+  END
+  DELETE FROM vis_faces v WHERE v.slot = :slot;
+  INSERT INTO vis_faces (slot, face, nx, ny, nz, dist, cx, cy, cz, radius)
+  SELECT :slot, f.id, f.nx, f.ny, f.nz, f.dist, f.cx, f.cy, f.cz, f.radius
+    FROM (SELECT DISTINCT lf.face FROM vis_leaves v JOIN leaffaces lf ON lf.id >= v.first_lf AND lf.id < v.first_lf + v.num_lf) m
+    JOIN faces f ON f.id = m.face
    WHERE f.model_id = :world AND BIN_AND(f.flags, 128) = 0
-     AND IIF(f.nx > 0, f.nx * :bmaxx, f.nx * :bminx) + IIF(f.ny > 0, f.ny * :bmaxy, f.ny * :bminy) + IIF(f.nz > 0, f.nz * :bmaxz, f.nz * :bminz) - f.dist > 0
-     AND f.id IN (SELECT lf.face
-                    FROM leaves l
-                    JOIN leaffaces lf ON lf.id >= l.first_lf AND lf.id < l.first_lf + l.num_lf
-                   WHERE l.cluster >= 0 AND l.num_lf > 0
-                     AND (:eflood IS NULL OR l.area IN (SELECT f.area FROM area_flood f WHERE f.flood = :eflood))
-                     AND (:pvs = '' OR BIN_AND(POSITION(SUBSTRING(:pvs FROM BIN_SHR(l.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(l.cluster, 3))) <> 0));
-  UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.vis_area = :varea, c.world_lst = NULL WHERE c.id = 1;
+     AND IIF(f.nx > 0, f.nx * :bmaxx, f.nx * :bminx) + IIF(f.ny > 0, f.ny * :bmaxy, f.ny * :bminy) + IIF(f.nz > 0, f.nz * :bmaxz, f.nz * :bminz) - f.dist > 0;
+  INSERT INTO vis_sets (slot, cluster, area, used) VALUES (:slot, :vcluster, :varea, :used);
+  UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.vis_area = :varea, c.vis_slot = :slot, c.world_lst = NULL WHERE c.id = 1;
 END^
 
 -- FRAME_FACES: the same faces, projected vertex by vertex in SQL.
@@ -152,19 +222,19 @@ DECLARE emid INTEGER; DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; 
 DECLARE c2 INTEGER; DECLARE c3 INTEGER; DECLARE cl INTEGER; DECLARE ep DOUBLE PRECISION; DECLARE eyaw DOUBLE PRECISION; DECLARE er DOUBLE PRECISION;
 DECLARE m00 DOUBLE PRECISION; DECLARE m01 DOUBLE PRECISION; DECLARE m02 DOUBLE PRECISION;
 DECLARE m10 DOUBLE PRECISION; DECLARE m11 DOUBLE PRECISION; DECLARE m12 DOUBLE PRECISION;
-DECLARE m20 DOUBLE PRECISION; DECLARE m21 DOUBLE PRECISION; DECLARE m22 DOUBLE PRECISION;
+DECLARE m20 DOUBLE PRECISION; DECLARE m21 DOUBLE PRECISION; DECLARE m22 DOUBLE PRECISION; DECLARE vslot SMALLINT;
 BEGIN
   EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
   hw = w / 2e0; hh = h / 2e0;
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
-  EXECUTE PROCEDURE mark_faces(pvs, vcl, vleaf);
+  EXECUTE PROCEDURE mark_faces(pvs, vcl, vleaf) RETURNING_VALUES vslot;
 
   -- the faces that face the eye and whose sphere is in the frustum
   DELETE FROM sel_faces;
   INSERT INTO sel_faces (face, ent_id, ox, oy, oz)
   SELECT v.face, 0, 0, 0, 0
     FROM vis_faces v
-   WHERE v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
+   WHERE v.slot = :vslot AND v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
      AND (v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz + v.radius >= :nearz
      AND ABS((v.cx - :ex) * :rx + (v.cy - :ey) * :ry + (v.cz - :ez) * :rz)
          <= ((v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz) * :kx + v.radius * :qx
@@ -277,7 +347,7 @@ DECLARE nlx DOUBLE PRECISION; DECLARE nly DOUBLE PRECISION; DECLARE nlz DOUBLE P
 DECLARE ntx DOUBLE PRECISION; DECLARE nty DOUBLE PRECISION; DECLARE ntz DOUBLE PRECISION; DECLARE ent DOUBLE PRECISION;
 DECLARE nbx DOUBLE PRECISION; DECLARE nby DOUBLE PRECISION; DECLARE nbz DOUBLE PRECISION; DECLARE enb DOUBLE PRECISION;
 DECLARE stamp INTEGER; DECLARE held SMALLINT; DECLARE fl_stamp INTEGER; DECLARE pose_ok SMALLINT; DECLARE eflood INTEGER;
-DECLARE bcx DOUBLE PRECISION; DECLARE bcy DOUBLE PRECISION; DECLARE bcz DOUBLE PRECISION; DECLARE brad DOUBLE PRECISION; DECLARE bcf DOUBLE PRECISION;
+DECLARE bcx DOUBLE PRECISION; DECLARE bcy DOUBLE PRECISION; DECLARE bcz DOUBLE PRECISION; DECLARE brad DOUBLE PRECISION; DECLARE bcf DOUBLE PRECISION; DECLARE vslot SMALLINT;
 BEGIN
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
   pe = player_ent();
@@ -301,7 +371,7 @@ BEGIN
   END
   ELSE
   BEGIN
-    EXECUTE PROCEDURE mark_faces(pvs, vcl, vleaf);
+    EXECUTE PROCEDURE mark_faces(pvs, vcl, vleaf) RETURNING_VALUES vslot;
     kind = 1; i2 = 0; d1 = 0; d2 = 0; d3 = 0;
     -- the world's list holds while the eye holds still: the last one is kept on viewcfg
     SELECT c.view_stamp, IIF(c.lv_ex = :ex AND c.lv_ey = :ey AND c.lv_ez = :ez
@@ -313,7 +383,7 @@ BEGIN
       stamp = stamp + 1;
       SELECT LIST(v.face, ',')
         FROM vis_faces v
-       WHERE v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
+       WHERE v.slot = :vslot AND v.nx * :ex + v.ny * :ey + v.nz * :ez - v.dist > 0
          AND v.cx * :nrx + v.cy * :nry + v.cz * :nrz - :enr + v.radius * :qx >= 0
          AND v.cx * :nlx + v.cy * :nly + v.cz * :nlz - :enl + v.radius * :qx >= 0
          AND v.cx * :ntx + v.cy * :nty + v.cz * :ntz - :ent + v.radius * :qy >= 0

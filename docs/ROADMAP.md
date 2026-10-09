@@ -259,9 +259,11 @@ picker). Missing for the rest of the game:
   is left is the inserts themselves (`face_verts`' 37 k rows are a quarter of it, half of that
   the primary key), `init_map` and the old map's `DELETE`s. A binary blob path would need
   `firebird-wasm` to bind blobs.
-- **The cluster-change hitch**: `mark_faces` re-marks the PVS's faces on a cluster change
-  (tens of milliseconds). Marking the next cluster ahead of time, or keeping the last few marked
-  sets in their own tables, would hide it.
+- **The cluster-change hitch**: smaller. Marking a new cluster went from ~43 to ~17 ms (the
+  PVS's clusters looked up by index instead of every leaf's bit tested), and the last eight marked
+  sets are kept, so walking back into one costs ~0.3 ms. Left: marking the next cluster ahead of
+  time (the page would need an idle moment in the worker to spend on it), and a door's re-mark,
+  which drops the kept sets.
 - **The tic's floor**: a monster step is a three-call box trace plus a relink, about 0.7 ms;
   with many monsters in a big room the tic grows linearly. The engine's per-level cost of a tree
   descent (~16 µs) is the limit; ideas left on the table are in ARCHITECTURE.md §10.
