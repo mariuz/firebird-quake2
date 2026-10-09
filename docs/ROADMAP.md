@@ -71,9 +71,10 @@ them.
   up to 256 units and no steeper than 30 degrees, 5 damage as it strikes and 2 a frame for ten frames more,
   with the launch, impact, suck and reel-in sounds (it used to be one bite of 12). A flyer that does not fire slides around its enemy three times
   in ten (`M_CheckAttack`'s `AS_SLIDING`, `ai_run_slide`: square to it, the other way when blocked); the port
-  used to set an attack state of its own by range for every monster. Left: `ai_run`'s detour
-  around an obstacle on the way to a new marker (`AI_PURSUE_TEMP`), and the parasite's drain is
-  still started as a melee attack within 200 units, not by `M_CheckAttack`'s chances as its `attack` was.
+  used to set an attack state of its own by range for every monster. The drain is the parasite's attack, as
+  `parasite_attack` was, chosen by the attack chances like any monster's missile (it used to be a melee
+  started at 200 units). Left: `ai_run`'s detour around an obstacle on the way to a new marker
+  (`AI_PURSUE_TEMP`).
 - **Pusher edge cases**: done, against Quake 2 3.14's g_func.c. A door, plat or train blocked by
   anything but a monster or the player hurts it to death and blows it away; a train deals 100 at most
   every half second (none with `TRAIN_BLOCK_STOPS`), buttons none. `func_water` has the water sounds

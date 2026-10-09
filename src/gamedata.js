@@ -89,10 +89,10 @@ export const MONSTERS = [
     name: 'parasite', model: 'models/monsters/parasite/tris.md2', skin: 0, health: 175, gib_health: -50, mass: 250,
     run_speed: 25, walk_speed: 10, yaw_speed: 30,
     stand_anim: 'stand', walk_anim: 'run', run_anim: 'run', pain_anims: 'pain1', death_anims: 'death1',
-    melee_anim: 'drain', melee_frame: 5, melee_range: 200, melee_dmg: 12,
-    attack_chance: 0, pain_chance: 1,
+    // no melee: the drain is its attack (parasite_attack), chosen by M_CheckAttack's chances; parasite_drain runs it
+    missile_anim: 'drain', attack_chance: 0.3, pain_chance: 1,
     sight_snd: 'parasite/parsght1.wav', idle_snd: 'parasite/paridle1.wav', search_snd: 'parasite/parsrch1.wav', pain_snd: 'parasite/parpain1.wav',
-    death_snd: 'parasite/pardeth1.wav', melee_snd: 'parasite/paratck1.wav',
+    death_snd: 'parasite/pardeth1.wav',
   },
   {
     name: 'tank', model: 'models/monsters/tank/tris.md2', skin: 0, health: 750, gib_health: -200, mass: 500,

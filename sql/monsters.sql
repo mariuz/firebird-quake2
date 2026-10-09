@@ -901,7 +901,7 @@ BEGIN
       UPDATE ents e SET e.ideal_yaw = vectoyaw((SELECT x FROM ents n WHERE n.id = :enemy) - e.x, (SELECT y FROM ents n WHERE n.id = :enemy) - e.y) WHERE e.id = :eid;
       EXECUTE PROCEDURE change_yaw(eid);
     END
-    IF (st = 'melee' AND mt = 'parasite') THEN EXECUTE PROCEDURE parasite_drain(eid, af);
+    IF (st = 'missile' AND mt = 'parasite') THEN EXECUTE PROCEDURE parasite_drain(eid, af);
     ELSE IF (st = 'melee' AND af = melee_f) THEN EXECUTE PROCEDURE monster_melee(eid);
     IF (st = 'missile' AND mt = 'gunner' AND anim = 'attak1') THEN
     BEGIN
