@@ -354,9 +354,10 @@ DECLARE f DOUBLE PRECISION; DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECI
 DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
 DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER; DECLARE d DOUBLE PRECISION;
 DECLARE vis SMALLINT; DECLARE res SMALLINT = 0; DECLARE nas SMALLINT; DECLARE naf DOUBLE PRECISION; DECLARE t DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
+DECLARE fl INTEGER;
 BEGIN
-  SELECT e.enemy_id, IIF(t.melee_anim IS NULL, 0, 1), IIF(t.missile_anim IS NULL, 0, 1), e.attack_finished, t.missile_kind, t.attack_chance, t.melee_range
-    FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO enemy, has_melee, has_missile, af, mk, ac, mrange;
+  SELECT e.enemy_id, IIF(t.melee_anim IS NULL, 0, 1), IIF(t.missile_anim IS NULL, 0, 1), e.attack_finished, t.missile_kind, t.attack_chance, t.melee_range, e.flags
+    FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO enemy, has_melee, has_missile, af, mk, ac, mrange, fl;
   IF (enemy IS NULL) THEN RETURN 0;
   t = now_();
   -- see if any entities are in the way of the shot
@@ -385,7 +386,8 @@ BEGIN
       ELSE chance = 0;
       chance = chance * ac / 0.3e0;
       IF (RAND() < chance) THEN BEGIN nas = 4; naf = t + 2 * RAND(); res = 1; END
-      ELSE nas = IIF(r = 2, 1, 2);
+      -- no missile this time: a flyer slides around its enemy three times in ten (AS_SLIDING), else comes straight
+      ELSE IF (BIN_AND(fl, 1) <> 0) THEN nas = IIF(RAND() < 0.3e0, 2, 1);
     END
   END
   UPDATE ents e SET e.search_time = :t + 5, e.ls_x = :x2, e.ls_y = :y2, e.ls_z = :oz, e.trail_time = :t, e.aiflags = BIN_AND(e.aiflags, BIN_NOT(16)),
@@ -614,7 +616,7 @@ DECLARE melee_a VARCHAR(16); DECLARE melee_f INTEGER; DECLARE missile_a VARCHAR(
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE gx DOUBLE PRECISION; DECLARE gy DOUBLE PRECISION; DECLARE gz DOUBLE PRECISION;
 DECLARE d DOUBLE PRECISION; DECLARE gt VARCHAR(40); DECLARE gw DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE cl INTEGER;
 DECLARE nt DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE pe INTEGER; DECLARE vis SMALLINT;
-DECLARE aif INTEGER; DECLARE itime DOUBLE PRECISION; DECLARE sflags INTEGER; DECLARE ca SMALLINT;
+DECLARE aif INTEGER; DECLARE itime DOUBLE PRECISION; DECLARE sflags INTEGER; DECLARE ca SMALLINT; DECLARE lf SMALLINT;
 BEGIN
   -- (an UPDATE of the wide ents row costs as much as a trace step: the next think time rides
   -- along with whatever else the think writes, and a path that writes nothing thinks again next tic)
@@ -817,6 +819,20 @@ BEGIN
     ca = check_attack(eid);
     IF (ca = 1) THEN EXIT;
     IF (run_spd <= 0) THEN EXECUTE PROCEDURE change_yaw(eid);
+    ELSE IF (ca = 0 AND BIN_AND(flags, 1) <> 0 AND (SELECT e.attack_state FROM ents e WHERE e.id = :eid) = 2) THEN
+    BEGIN
+      -- ai_run_slide: face the enemy and step sideways, the other way when that side is blocked (lefty)
+      UPDATE ents e SET e.ideal_yaw = :iy WHERE e.id = :eid;
+      EXECUTE PROCEDURE change_yaw(eid);
+      SELECT e.lefty FROM ents e WHERE e.id = :eid INTO lf;
+      d = iy + IIF(lf = 1, 90, -90);
+      IF (move_step(eid, COS(d * 0.0174532925e0) * run_spd, SIN(d * 0.0174532925e0) * run_spd, 0) = 0) THEN
+      BEGIN
+        UPDATE ents e SET e.lefty = 1 - e.lefty WHERE e.id = :eid;
+        d = iy - IIF(lf = 1, 90, -90);
+        lf = move_step(eid, COS(d * 0.0174532925e0) * run_spd, SIN(d * 0.0174532925e0) * run_spd, 0);
+      END
+    END
     ELSE IF (ca = 0) THEN EXECUTE PROCEDURE move_to_goal(eid, run_spd, iy);   -- in sight: after it
     ELSE
     BEGIN

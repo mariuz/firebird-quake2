@@ -231,6 +231,25 @@ for (const m of MONSTERS) {
   await db.exec(`DELETE FROM ents WHERE id = ${id}`);
 }
 
+// AS_SLIDING: a flyer that did not fire may slide around its enemy (ai_run_slide), stepping square to it
+{
+  console.log('── sliding');
+  await teleport(128, -320, 32, 135);
+  const id = (await q1("SELECT * FROM spawn_monster('flyer', 220)")).ID;
+  const t0 = (await q1('SELECT time_ t FROM game')).T;
+  let moved = 0, along = 0;
+  for (let i = 0; i < 10 && !moved; i++) {
+    await db.exec(`UPDATE ents SET enemy_id = ${pe}, st = 'run', attack_state = 2, attack_finished = ${t0} + 100, nextthink = NULL WHERE id = ${id}`);
+    const a = await q1(`SELECT e.x, e.y, p.x px, p.y py FROM ents e CROSS JOIN ents p WHERE e.id = ${id} AND p.id = ${pe}`);
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_think(${id}); END`);
+    const b = await q1(`SELECT x, y FROM ents WHERE id = ${id}`);
+    const mx = b.X - a.X, my = b.Y - a.Y, tx = a.PX - a.X, ty = a.PY - a.Y, tl = Math.hypot(tx, ty);
+    moved = Math.hypot(mx, my); along = Math.abs((mx * tx + my * ty) / tl);
+  }
+  assert(moved > 0 && along < moved * 0.5, `a sliding flyer steps sideways around the player (moved ${moved.toFixed(1)}, ${along.toFixed(1)} of it toward)`);
+  await db.exec(`DELETE FROM ents WHERE id = ${id}`);
+}
+
 // blast damage: the radius reaches as far as Quake's findradius and no farther; the BFG's lasers and its final blast
 {
   console.log('── blast damage');

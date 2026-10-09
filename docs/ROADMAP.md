@@ -69,8 +69,10 @@ them.
   not the view). The parasite drains as `parasite_drain_attack` did:
   its tongue (`TE_PARASITE_ATTACK`, the segment model strung every 30 units as `CL_AddBeams` drew it) reaches
   up to 256 units and no steeper than 30 degrees, 5 damage as it strikes and 2 a frame for ten frames more,
-  with the launch, impact, suck and reel-in sounds (it used to be one bite of 12). Left: `ai_run`'s detour
-  around an obstacle on the way to a new marker (`AI_PURSUE_TEMP`), `AS_SLIDING`, and the parasite's drain is
+  with the launch, impact, suck and reel-in sounds (it used to be one bite of 12). A flyer that does not fire slides around its enemy three times
+  in ten (`M_CheckAttack`'s `AS_SLIDING`, `ai_run_slide`: square to it, the other way when blocked); the port
+  used to set an attack state of its own by range for every monster. Left: `ai_run`'s detour
+  around an obstacle on the way to a new marker (`AI_PURSUE_TEMP`), and the parasite's drain is
   still started as a melee attack within 200 units, not by `M_CheckAttack`'s chances as its `attack` was.
 - **Pusher edge cases**: done, against Quake 2 3.14's g_func.c. A door, plat or train blocked by
   anything but a monster or the player hurts it to death and blows it away; a train deals 100 at most
@@ -97,8 +99,9 @@ them.
   slime, lava and blood used to come out orange, blue and grey). The rest of the old entry was not
   Quake 2: both its renderers ripple every warping surface at one speed, a player or a grenade
   entering water makes only a sound, and no monster of the demo swims (the full game's barracuda
-  shark is in the list of missing monsters). Left: murky water's brown splash, which Quake 2 told
-  from the surface's texture name (`*brwater`), not passed through the traces here.
+  shark is in the list of missing monsters). Murky water's brown splash is not a gap either:
+  `fire_lead` tells it by the surface name `*brwater`, a Quake 1 name that no Quake 2 texture (they carry
+  their directory, `e1u1/…`, and no `*`) can match, so 3.14 splashed blue there too, as the port does.
 - **View**: done. `C` crouches as pmove's `PM_CheckDuck` did: on the ground the box drops to 4 units
   high, the eye to -2 and the speed to 100, and a ducked player stands up only where the full box fits
   (under a low ceiling it stays ducked); crouching in water swims down. The view bobs as
