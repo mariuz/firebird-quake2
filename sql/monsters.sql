@@ -463,6 +463,47 @@ BEGIN
   EXECUTE PROCEDURE launch_grenade(eid, sx, sy, sz, fx_ * 600 + fy * :side, fy * 600 - fx_ * :side, 200 + crand() * 10, 50, 90, 2.5e0, 0);
 END^
 
+-- parasite_drain_attack and its frames (m_parasite.c), af the drain frame: the launch sound at the first, the
+-- tongue from 24 ahead and 6 up of the origin to the enemy at the third to the thirteenth (5 damage and the impact
+-- sound at the third, 2 and the sucking sound at the fourth, 2 after), no knockback; parasite_drain_attack_ok: not
+-- past 256 units nor steeper than 30 degrees, tried at the enemy's origin, top and bottom; then the trace must
+-- reach the enemy. The tongue is TE_PARASITE_ATTACK (fx 16, n the parasite). The reel-in sound at the fourteenth.
+CREATE OR ALTER PROCEDURE parasite_drain (eid INTEGER, af INTEGER)
+AS
+DECLARE enemy INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+DECLARE sx DOUBLE PRECISION; DECLARE sy DOUBLE PRECISION; DECLARE sz DOUBLE PRECISION;
+DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION; DECLARE emn DOUBLE PRECISION; DECLARE emx DOUBLE PRECISION;
+DECLARE ok SMALLINT; DECLARE k SMALLINT; DECLARE tz DOUBLE PRECISION; DECLARE dl DOUBLE PRECISION;
+DECLARE f DOUBLE PRECISION; DECLARE hx DOUBLE PRECISION; DECLARE hy DOUBLE PRECISION; DECLARE hz DOUBLE PRECISION;
+DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
+DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+BEGIN
+  IF (af = 0) THEN BEGIN EXECUTE PROCEDURE snd(eid, 1, 'parasite/paratck1.wav', 1, 1); EXIT; END     -- parasite_launch
+  IF (af = 13) THEN BEGIN EXECUTE PROCEDURE snd(eid, 1, 'parasite/paratck4.wav', 1, 1); EXIT; END    -- parasite_reel_in
+  IF (af < 2 OR af > 12) THEN EXIT;
+  SELECT e.enemy_id, e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = :eid INTO enemy, x, y, z, yaw;
+  IF (enemy IS NULL) THEN EXIT;
+  SELECT n.x, n.y, n.z, n.minz, n.maxz FROM ents n WHERE n.id = :enemy INTO ex, ey, ez, emn, emx;
+  IF (ex IS NULL) THEN EXIT;
+  sx = x + COS(yaw * 0.0174532925e0) * 24; sy = y + SIN(yaw * 0.0174532925e0) * 24; sz = z + 6;
+  ok = 0; k = 0;
+  WHILE (k < 3 AND ok = 0) DO
+  BEGIN
+    tz = CASE k WHEN 0 THEN ez WHEN 1 THEN ez + emx - 8 ELSE ez + emn + 8 END;
+    dl = vlen(sx - ex, sy - ey, sz - tz);
+    IF (dl <= 256 AND ABS(ATAN2(sz - tz, vlen(sx - ex, sy - ey, 0))) * 57.29577951e0 <= 30) THEN ok = 1;
+    k = k + 1;
+  END
+  IF (ok = 0) THEN EXIT;
+  EXECUTE PROCEDURE trace_move(eid, 0, 0, 0, 0, 0, 0, sx, sy, sz, ex, ey, ez, 100663299)
+    RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+  IF (f = 1 OR hit IS DISTINCT FROM enemy) THEN EXIT;
+  IF (af = 2) THEN EXECUTE PROCEDURE snd(enemy, 0, 'parasite/paratck2.wav', 1, 1);
+  ELSE IF (af = 3) THEN EXECUTE PROCEDURE snd(eid, 1, 'parasite/paratck3.wav', 1, 1);
+  EXECUTE PROCEDURE fx(16, sx, sy, sz, ex, ey, ez, eid);
+  EXECUTE PROCEDURE t_damage(enemy, eid, eid, IIF(af = 2, 5, 2), 0, 0);
+END^
+
 -- the melee hit at the frame that strikes (fire_hit)
 CREATE OR ALTER PROCEDURE monster_melee (eid INTEGER)
 AS
@@ -844,7 +885,8 @@ BEGIN
       UPDATE ents e SET e.ideal_yaw = vectoyaw((SELECT x FROM ents n WHERE n.id = :enemy) - e.x, (SELECT y FROM ents n WHERE n.id = :enemy) - e.y) WHERE e.id = :eid;
       EXECUTE PROCEDURE change_yaw(eid);
     END
-    IF (st = 'melee' AND af = melee_f) THEN EXECUTE PROCEDURE monster_melee(eid);
+    IF (st = 'melee' AND mt = 'parasite') THEN EXECUTE PROCEDURE parasite_drain(eid, af);
+    ELSE IF (st = 'melee' AND af = melee_f) THEN EXECUTE PROCEDURE monster_melee(eid);
     IF (st = 'missile' AND mt = 'gunner' AND anim = 'attak1') THEN
     BEGIN
       IF (af IN (4, 7, 10, 13)) THEN EXECUTE PROCEDURE gunner_grenade(eid);   -- gunner_frames_attack_grenade

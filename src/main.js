@@ -39,6 +39,7 @@ let lastSoundId = 0;
 let lastFxId = 0;
 let frameNo = 0;
 let beams = [];          // [{ a, b, color, until }]
+const tongues = new Map(); // TE_PARASITE_ATTACK by parasite: { a, b, until } (CL_ParseBeam: one per entity, 0.2 s)
 let explosions = [];     // CL_AddExplosions' list: [{ x, y, z, t0, type, mdl | spr, base, frames, light, c, pitch, yaw }]
 let flashes = [];        // muzzle flashes' lights: [{ x, y, z, r, die }] (each lasts the frame it is seen in)
 const settings = { map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90, renderer: 'fast', brightness: 1.4, alwaysRun: true,
@@ -369,7 +370,7 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   map = { name, bsp };
   renderer.setResources(res);
   renderer.particles = [];
-  beams = []; explosions = []; flashes = [];
+  beams = []; explosions = []; flashes = []; tongues.clear();
   const g = (await db.query('SELECT sky, cd_track FROM game')).rows[0];
   renderer.setSky(g.SKY);
   // CL_SetSky: worldspawn's skyrotate and skyaxis (CS_SKYROTATE, CS_SKYAXIS)
@@ -551,6 +552,7 @@ function handleFx(rows, time) {
       case 8: renderer.spawnParticles('bfg', x, y, z, 0); explosions.push({ x, y, z, t0: time, type: 'poly', spr: sprite('sprites/s_bfg2.sp2'), base: 0, frames: 4, light: 350, c: 1 / 3 }); break;
       case 10: renderer.spawnParticles('gunshot', x, y, z, 8, [0, 0, 1], 4); break;
       case 12: beams.push({ a: [x, y, z], b: [x2, y2, z2], color: 0xd0, until: time + 0.1 }); break;
+      case 16: tongues.set(n, { a: [x, y, z], b: [x2, y2, z2], until: time + 0.2 }); break;   // TE_PARASITE_ATTACK
       case 13: beams.push({ a: [x, y, z], b: [x2, y2, z2], color: n & 2 ? 0xf2 : n & 4 ? 0xd0 : n & 8 ? 0xf3 : n & 16 ? 0xdc : 0xe0, until: time + 0.12 }); break;
       default: break;
     }
@@ -610,6 +612,27 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   }
   beams = beams.filter((b) => b.until > time);
   for (const b of beams) r.drawBeam(b.a, b.b, b.color);
+  // CL_AddBeams: the parasite's segment model every 30 units from the mouth toward the end, turned along the
+  // tongue, each at a random roll, lit where it hangs
+  const seg = model('models/monsters/parasite/segment/tris.md2');
+  for (const [id, b] of tongues) {
+    if (b.until <= time) { tongues.delete(id); continue; }
+    if (!seg) continue;
+    const dx = b.b[0] - b.a[0], dy = b.b[1] - b.a[1], dz = b.b[2] - b.a[2];
+    let d = Math.hypot(dx, dy, dz);
+    if (!d) continue;
+    const yaw = dx || dy ? (Math.atan2(dy, dx) * 180) / Math.PI : 0;
+    const pitch = dx || dy ? (Math.atan2(dz, Math.hypot(dx, dy)) * 180) / Math.PI : dz > 0 ? 90 : -90;
+    const steps = Math.ceil(d / 30), len = steps > 1 ? (d - 30) / (steps - 1) : 0;
+    const ux = dx / d, uy = dy / d, uz = dz / d;
+    const o = b.a.slice();
+    while (d > 0) {
+      r.drawAlias(seg, 0, 0, o.slice(), [pitch, yaw, Math.floor(Math.random() * 360)], lightPoint(bsp, o[0], o[1], o[2]),
+        { time, alpha: false, dlight: dlightAt(r.dlights, o[0], o[1], o[2]), glow: false });
+      o[0] += ux * len; o[1] += uy * len; o[2] += uz * len;
+      d -= 30;
+    }
+  }
   // CL_AddExplosions: fullbright, the frame stepping at 10 a second from frame 1 (the newer of the two it lerped
   // between); ex_poly's skin climbs 0-4 over the first ten frames, then 5 and 6 translucent; ex_misc is translucent
   // throughout; translucency by the alpha as ref_soft had it (above 0.66 opaque, above 0.33 66%, else 33%)

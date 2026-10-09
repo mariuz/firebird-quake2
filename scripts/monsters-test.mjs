@@ -145,6 +145,13 @@ for (const m of MONSTERS) {
   assert(attacked, `${m.name} attacked (state ${e.ST}, anim ${e.ANIM})`);
   for (let i = 0; i < 80 && !dmgSeen; i++) { s = await tic(); if (s.HEALTH < 100) dmgSeen = 1; }
   assert(dmgSeen, `${m.name} hurt the player (health ${s.HEALTH})`);
+  if (m.name === 'parasite') {
+    // parasite_drain_attack: the launch, the tongue's impact and the drain, each heard; the tongue drawn (fx 16)
+    for (let i = 0; i < 40 && !(await sounds('parasite/paratck3.wav')); i++) await tic();
+    const tongue = (await q1(`SELECT COUNT(*) n FROM fx_events WHERE kind = 16 AND n = ${id}`)).N;
+    assert((await sounds('parasite/paratck1.wav')) && (await sounds('parasite/paratck2.wav')) && (await sounds('parasite/paratck3.wav')) && tongue > 0,
+      `the parasite's tongue reaches out, strikes and drains (${tongue} tongue frames)`);
+  }
   if (m.missile_kind) {
     // (one that closed in for melee instead counts too, and a gunner that threw grenades rather than firing its chain gun)
     const atk = (m.attack_snd ? await sounds(m.attack_snd) : 1) || (m.melee_snd ? await sounds(m.melee_snd) : 0) ||

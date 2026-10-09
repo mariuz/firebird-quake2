@@ -66,8 +66,12 @@ them.
   (`p_trail.c`: eight markers, one dropped each time the player moves out of sight of the last), five more
   seconds of search for each marker reached, and twenty seconds after the search runs out goes straight for
   the player, as `ai_run` had it; seeing is `visible()`'s, walls only (a monster in the way spoils the shot,
-  not the view). Left: `ai_run`'s detour around an obstacle on the way to a new marker (`AI_PURSUE_TEMP`),
-  `AS_SLIDING`, and the parasite's drain is a laser beam, not the hooked animation.
+  not the view). The parasite drains as `parasite_drain_attack` did:
+  its tongue (`TE_PARASITE_ATTACK`, the segment model strung every 30 units as `CL_AddBeams` drew it) reaches
+  up to 256 units and no steeper than 30 degrees, 5 damage as it strikes and 2 a frame for ten frames more,
+  with the launch, impact, suck and reel-in sounds (it used to be one bite of 12). Left: `ai_run`'s detour
+  around an obstacle on the way to a new marker (`AI_PURSUE_TEMP`), `AS_SLIDING`, and the parasite's drain is
+  still started as a melee attack within 200 units, not by `M_CheckAttack`'s chances as its `attack` was.
 - **Pusher edge cases**: done, against Quake 2 3.14's g_func.c. A door, plat or train blocked by
   anything but a monster or the player hurts it to death and blows it away; a train deals 100 at most
   every half second (none with `TRAIN_BLOCK_STOPS`), buttons none. `func_water` has the water sounds
