@@ -690,6 +690,21 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   await cmd('give', 'quad damage');
   const g2 = (await db.query("SELECT p.inv_quad q, (SELECT COUNT(*) FROM ents WHERE classname = 'item_quad' AND x = e.x AND y = e.y) n FROM player p JOIN ents e ON e.id = p.ent_id")).rows[0];
   assert(g2.Q === 1 && g2.N === 0, `give by pickup name picks it up and leaves nothing behind (quad ${g2.Q})`);
+  // drop (Cmd_Drop_f): an ammo's pickup thrown ahead, not back to its dropper for a second; not the weapon in hand; not health
+  const pmsg = async () => (await db.query('SELECT msg FROM player')).rows[0].MSG;
+  await cmd('give', 'shells 25');
+  await cmd('drop', 'shells');
+  const dr = (await db.query("SELECT p.shells s, (SELECT FIRST 1 d.count_ FROM ents d WHERE d.classname = 'ammo_shells' AND d.owner_id = p.ent_id AND BIN_AND(d.spawnflags, 65536) <> 0) c FROM player p")).rows[0];
+  assert(dr.S === 15 && dr.C === 10, `drop shells throws a box of 10 (shells ${dr.S}, box ${dr.C})`);
+  for (let i = 0; i < 24; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  const dr2 = (await db.query("SELECT (SELECT COUNT(*) FROM ents d WHERE d.classname = 'ammo_shells' AND BIN_AND(d.spawnflags, 65536) <> 0 AND d.owner_id IS NULL) n, p.shells s FROM player p")).rows[0];
+  // (lying free, or, had it bounced back against a wall, taken up again)
+  assert(dr2.N === 1 || dr2.S === 25, `... which anyone may take a second later (${dr2.N ? 'lying free' : 'taken back'})`);
+  const wcur = (await db.query('SELECT weapon w FROM player')).rows[0].W;
+  const wname = { 2: 'shotgun', 4: 'super shotgun', 8: 'machinegun', 16: 'chaingun', 64: 'grenade launcher', 128: 'rocket launcher', 256: 'hyperblaster', 512: 'railgun', 1024: 'bfg10k' }[wcur];
+  if (wname) { await cmd('drop', wname); assert((await pmsg()) === "Can't drop current weapon", `the weapon in hand stays (${wname})`); }
+  await cmd('drop', 'health');
+  assert((await pmsg()) === 'Item is not dropable.', 'health is not dropable');
   await cmd('god');
   await cmd('kill');
   const dead = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);

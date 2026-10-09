@@ -44,7 +44,9 @@ them.
   (spawned on the player and touched; an ammo adds one pickup's worth, `give shells 20` or `give health 50`
   sets the count), `use <item>`, `kill` (godmode or not), `map <name>` (a new game), `fov <degrees>` (1 to
   160), `save`, `load` (`player_command` in weapons.sql for the game's part). Up and down step through the
-  lines typed, Tab completes a command's name. Left: `drop`, which single player only needs for nothing.
+  lines typed, Tab completes a command's name. `drop <item>` is `Cmd_Drop_f`: ammo a pickup's worth, a weapon
+  not in hand, a powerup, power armour (off with the last), thrown ahead and not back to its dropper for a
+  second; a dropped weapon carries no ammo.
 - **Demo playback / recording** (the `.dm2` files in the pak) is out of scope for now.
 
 ## Fidelity gaps in what exists

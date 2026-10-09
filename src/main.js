@@ -185,7 +185,7 @@ function closeConsole() {
   canvas.focus();
 }
 // the lines typed before (Key_Console's history: up and down step through it) and the commands Tab completes
-const COMMANDS = ['fov', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'use'];
+const COMMANDS = ['drop', 'fov', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'use'];
 const history = [];
 let histPos = 0;
 cmdline.addEventListener('keydown', async (e) => {

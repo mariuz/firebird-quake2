@@ -1202,6 +1202,7 @@ BEGIN
   ELSE IF (think = 'laser_think') THEN EXECUTE PROCEDURE laser_think(eid);
   ELSE IF (think = 'dish_think') THEN EXECUTE PROCEDURE dish_think(eid);
   ELSE IF (think = 'remove') THEN DELETE FROM ents e WHERE e.id = :eid;
+  ELSE IF (think = 'drop_touchable') THEN UPDATE ents e SET e.owner_id = NULL, e.think = NULL, e.nextthink = NULL WHERE e.id = :eid;   -- drop_make_touchable
   ELSE IF (think = 'monster_think') THEN EXECUTE PROCEDURE monster_think(eid);
 END^
 

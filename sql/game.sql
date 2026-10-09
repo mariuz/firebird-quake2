@@ -1202,10 +1202,10 @@ AS
 DECLARE cls VARCHAR(40); DECLARE hp INTEGER; DECLARE mhp INTEGER;
 DECLARE t DOUBLE PRECISION; DECLARE w INTEGER; DECLARE have INTEGER; DECLARE n INTEGER; DECLARE sk SMALLINT;
 DECLARE av INTEGER; DECLARE atype SMALLINT; DECLARE newtype SMALLINT; DECLARE base INTEGER; DECLARE mx INTEGER; DECLARE kbit INTEGER;
-DECLARE cnt INTEGER; DECLARE ak SMALLINT; DECLARE oldcount INTEGER;
+DECLARE cnt INTEGER; DECLARE ak SMALLINT; DECLARE oldcount INTEGER; DECLARE isf INTEGER;
 BEGIN
   taken = 0;
-  SELECT e.classname, e.count_ FROM ents e WHERE e.id = :item INTO cls, cnt;
+  SELECT e.classname, e.count_, e.spawnflags FROM ents e WHERE e.id = :item INTO cls, cnt, isf;
   SELECT e.health, e.max_health FROM ents e WHERE e.id = :other INTO hp, mhp;
   SELECT p.weapons, p.armor, p.armor_type FROM player p WHERE p.id = 1 INTO have, av, atype;
   idx = item_class_index(cls);
@@ -1286,11 +1286,11 @@ BEGIN
                  WHEN 'weapon_grenadelauncher' THEN 64 WHEN 'weapon_rocketlauncher' THEN 128 WHEN 'weapon_hyperblaster' THEN 256 WHEN 'weapon_railgun' THEN 512
                  WHEN 'weapon_bfg' THEN 1024 ELSE 0 END;
     IF (w = 0) THEN EXIT;
-    -- Pickup_Weapon in single player: always taken, with its ammo (as much as fits); the first one of its kind is
-    -- raised at once, whatever is in hand
+    -- Pickup_Weapon in single player: always taken, with its ammo (as much as fits) unless it was dropped
+    -- (DROPPED_ITEM); the first one of its kind is raised at once, whatever is in hand
     ak = weapon_ammo(w);
     n = CASE ak WHEN 1 THEN 10 WHEN 2 THEN 50 WHEN 3 THEN 5 WHEN 4 THEN 5 WHEN 5 THEN 50 WHEN 6 THEN 10 ELSE 0 END;
-    n = add_ammo(ak, n);
+    IF (BIN_AND(COALESCE(isf, 0), 65536) = 0) THEN n = add_ammo(ak, n);
     IF (BIN_AND(have, w) = 0) THEN
       UPDATE player p SET p.weapons = BIN_OR(p.weapons, :w), p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
              p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.id = 1;

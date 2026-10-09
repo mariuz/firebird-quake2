@@ -451,6 +451,71 @@ BEGIN
                     WHEN 20 THEN 'environment suit' ELSE 'power shield' END));
 END^
 
+-- Cmd_Drop_f and the itemlist's drop functions. Ammo drops a pickup's worth or what is left (Drop_Ammo; not the
+-- last grenades while they are in hand); a weapon but not the one in hand (Drop_Weapon; the blaster has no drop);
+-- powerups as they are (Drop_General); power armour switches off when the last one goes (Drop_PowerArmor).
+-- Drop_Item: the item 24 ahead of and 16 below the origin along the view (as far as a trace lets it), tossed at
+-- 100 forward and 300 up, glowing, DROPPED_ITEM; its dropper cannot take it back for a second (drop_temp_touch).
+CREATE OR ALTER PROCEDURE drop_cmd (typed VARCHAR(64))
+AS
+DECLARE idx SMALLINT; DECLARE n INTEGER; DECLARE cnt INTEGER; DECLARE w INTEGER; DECLARE cur INTEGER; DECLARE pa SMALLINT;
+DECLARE pe INTEGER; DECLARE cls VARCHAR(40); DECLARE it INTEGER;
+DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
+DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION; DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
+DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION; DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
+DECLARE f DOUBLE PRECISION; DECLARE hx DOUBLE PRECISION; DECLARE hy DOUBLE PRECISION; DECLARE hz DOUBLE PRECISION; DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
+DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+BEGIN
+  idx = item_index(typed);
+  IF (idx = 0) THEN BEGIN EXECUTE PROCEDURE sprint('unknown item: ' || typed); EXIT; END
+  IF (NOT (idx IN (5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27))) THEN
+  BEGIN EXECUTE PROCEDURE sprint('Item is not dropable.'); EXIT; END
+  n = inv_count(idx);
+  IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('Out of item: ' || typed); EXIT; END
+  SELECT p.weapon, p.power_armor FROM player p WHERE p.id = 1 INTO cur, pa;
+  cnt = 0;
+  IF (idx IN (12, 18, 19, 20, 21, 22)) THEN
+  BEGIN
+    cnt = MINVALUE(n, CASE idx WHEN 12 THEN 5 WHEN 18 THEN 10 WHEN 19 THEN 50 WHEN 20 THEN 50 WHEN 21 THEN 5 ELSE 10 END);
+    IF (idx = 12 AND cur = 32 AND n - cnt <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('Can''t drop current weapon'); EXIT; END
+    UPDATE player p SET p.grenades = p.grenades - IIF(:idx = 12, :cnt, 0), p.shells = p.shells - IIF(:idx = 18, :cnt, 0),
+           p.bullets = p.bullets - IIF(:idx = 19, :cnt, 0), p.cells = p.cells - IIF(:idx = 20, :cnt, 0),
+           p.rockets = p.rockets - IIF(:idx = 21, :cnt, 0), p.slugs = p.slugs - IIF(:idx = 22, :cnt, 0) WHERE p.id = 1;
+  END
+  ELSE IF (idx BETWEEN 8 AND 17) THEN
+  BEGIN
+    w = CASE idx WHEN 8 THEN 2 WHEN 9 THEN 4 WHEN 10 THEN 8 WHEN 11 THEN 16 WHEN 13 THEN 64 WHEN 14 THEN 128 WHEN 15 THEN 256 WHEN 16 THEN 512 ELSE 1024 END;
+    IF (cur = w) THEN BEGIN EXECUTE PROCEDURE sprint('Can''t drop current weapon'); EXIT; END
+    UPDATE player p SET p.weapons = BIN_AND(p.weapons, BIN_NOT(:w)) WHERE p.id = 1;
+  END
+  ELSE
+  BEGIN
+    IF (idx IN (5, 6) AND pa = 1 AND n = 1) THEN
+    BEGIN
+      UPDATE player p SET p.power_armor = 0 WHERE p.id = 1;
+      EXECUTE PROCEDURE snd(player_ent(), 0, 'misc/power2.wav', 1, 1);
+    END
+    UPDATE player p SET p.inv_screen = p.inv_screen - IIF(:idx = 5, 1, 0), p.inv_shield = p.inv_shield - IIF(:idx = 6, 1, 0),
+           p.inv_quad = p.inv_quad - IIF(:idx = 23, 1, 0), p.inv_invuln = p.inv_invuln - IIF(:idx = 24, 1, 0),
+           p.inv_silencer = p.inv_silencer - IIF(:idx = 25, 1, 0), p.inv_breather = p.inv_breather - IIF(:idx = 26, 1, 0),
+           p.inv_enviro = p.inv_enviro - IIF(:idx = 27, 1, 0) WHERE p.id = 1;
+    EXECUTE PROCEDURE inv_validate;
+  END
+  -- Drop_Item
+  pe = player_ent();
+  cls = item_classname(idx);
+  SELECT e.x, e.y, e.z FROM ents e WHERE e.id = :pe INTO ox, oy, oz;
+  EXECUTE PROCEDURE view_vectors RETURNING_VALUES ex, ey, ez, fx_, fy, fz, rx, ry, rz, ux, uy, uz;
+  EXECUTE PROCEDURE trace_move(pe, -15, -15, -15, 15, 15, 15, ox, oy, oz, ox + fx_ * 24, oy + fy * 24, oz + fz * 24 - 16, 1)
+    RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+  EXECUTE PROCEDURE spawn_ent(cls, hx, hy, hz) RETURNING_VALUES it;
+  EXECUTE PROCEDURE set_model(it, item_model(cls));
+  UPDATE ents e SET e.solid = 1, e.movetype = 6, e.clipmask = 3, e.effects = 1, e.renderfx = 4, e.spawnflags = 65536, e.owner_id = :pe,
+         e.count_ = :cnt, e.minx = -15, e.miny = -15, e.minz = -15, e.maxx = 15, e.maxy = 15, e.maxz = 15,
+         e.vx = :fx_ * 100, e.vy = :fy * 100, e.vz = 300, e.think = 'drop_touchable', e.nextthink = now_() + 1 WHERE e.id = :it;
+  EXECUTE PROCEDURE link_ent(it);
+END^
+
 -- ClientThink + Pmove + ClientEndServerFrame for one tic
 -- The console's commands and cheats (g_cmds.c: Cmd_God_f, Cmd_Notarget_f, Cmd_Noclip_f, Cmd_Give_f,
 -- Cmd_Kill_f). The answer goes to the top-left message line, as gi.cprintf did, and out.
@@ -538,6 +603,7 @@ BEGIN
     END
   END
   ELSE IF (cmd = 'use') THEN EXECUTE PROCEDURE use_item(item_index(arg), arg);
+  ELSE IF (cmd = 'drop') THEN EXECUTE PROCEDURE drop_cmd(arg);
   ELSE IF (cmd = 'invuse') THEN EXECUTE PROCEDURE inv_impulse(13);
   ELSE IF (cmd = 'invnext') THEN EXECUTE PROCEDURE inv_impulse(14);
   ELSE IF (cmd = 'invprev') THEN EXECUTE PROCEDURE inv_impulse(15);
@@ -878,7 +944,11 @@ BEGIN
         EXECUTE PROCEDURE t_damage(pe, tid, tid, tdm, 0, IIF(BIN_AND(:tsf, 8) <> 0, 32, 0));
       END
     END
-    ELSE IF (tcls LIKE 'item_%' OR tcls LIKE 'weapon_%' OR tcls LIKE 'ammo_%' OR tcls LIKE 'key_%') THEN EXECUTE PROCEDURE item_touch(tid, pe);
+    ELSE IF (tcls LIKE 'item_%' OR tcls LIKE 'weapon_%' OR tcls LIKE 'ammo_%' OR tcls LIKE 'key_%') THEN
+    BEGIN
+      -- (drop_temp_touch: not by its dropper for the first second)
+      IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :tid AND e.owner_id = :pe)) THEN EXECUTE PROCEDURE item_touch(tid, pe);
+    END
   END
 
   -- door trigger fields: 60 units around a team of untargeted doors (Think_SpawnDoorTrigger)
