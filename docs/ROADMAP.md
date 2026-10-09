@@ -205,6 +205,13 @@ them.
   time × skyrotate degrees about the normalised axis, the view's axes turned back once a frame so the pixels
   cost the same. ref_soft kept the two values and never used them; none of the demo's maps sets them, so it
   shows in the full game's.
+- **Texture animation on brush models**: done, as `R_TextureAnimation` and `CL_AddPacketEntities` had
+  it. A button's lights blink between its texture's first two frames and, pressed, its last two
+  (`SP_func_button`, `button_wait` and `button_done` switch EF_ANIM01 and EF_ANIM23); doors, rotating doors,
+  rotators, walls, objects and explosives with their ANIMATED or ANIMATED_FAST spawnflag cycle every frame
+  at 2 or 10 Hz (demo3 has one such door). Before, every brush model's animated texture ran through its
+  whole chain with the time, and a frame past the chain's end showed its first picture. `misc_banner`
+  waves: `misc_banner_think` moves it to its next frame every 0.1 s (it stood still at a random one).
 - **Resolution**: done: 640×480 joins 320×240 and 160×120 (the Detail setting, the video menu's video mode),
   scaled to the page by CSS. As in ref_soft at higher resolutions the status bar, menus and text keep their
   pixel size, centred; particles keep their size on screen (`D_DrawParticle`'s `d_pix_shift`, between
@@ -241,10 +248,13 @@ picker). Missing for the rest of the game:
   (boss2), Makron with Jorg (boss3), the insane marines, the commander body. Each is a row in
   `monster_types` (`src/gamedata.js`) plus whatever special attack or behaviour it has in
   `monsters.sql` (`check_attack`, `monster_missile`, `monster_melee`).
-- **Map entities**: `target_actor` / `misc_actor`, `target_character`, `target_string`,
-  `target_earthquake`, `target_mal_laser`, `misc_blackhole`, `misc_eastertank`,
-  `misc_easterchick`, `trigger_elevator`, `misc_bigviper` flight paths, the `misc_strogg_ship` flyby, `target_spawner` (recognised), `func_group` (editor-only,
-  correctly ignored).
+- **Map entities** (checked against g_spawn.c's spawn table): `func_door_secret`, the turrets
+  (`turret_breach`, `turret_base`, `turret_driver`), `target_actor` / `misc_actor`, `misc_insane`,
+  `target_character` and `target_string` with `func_clock`, `target_earthquake`, `trigger_elevator`,
+  `misc_viper_bomb`, `misc_blackhole`, `misc_eastertank`, `misc_easterchick` (and `2`), `light_mine1` and
+  `light_mine2`; the `misc_bigviper` flight paths, the `misc_strogg_ship` flyby, `target_spawner`
+  (recognised). `func_group` is editor-only and correctly ignored; `viewthing` is a debugging aid.
+  (`target_mal_laser`, once listed here, is the first mission pack's, not Quake 2's.)
 - **Cutscenes**: the intro and the unit transitions are cinematics (`.cin`); a level exit naming one
   skips it and goes on to the map after its `+` (`src/levels.js`).
 - **Coop and deathmatch**: `info_player_coop` / `info_player_deathmatch` are recognised and the

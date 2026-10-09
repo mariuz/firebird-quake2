@@ -276,6 +276,13 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   changes. The level is chosen per polygon in `drawSurfacePoly` (`mipLevel`, `D_MipLevelForScale`:
   the nearest vertex's 1/z × `view.scale` × the texinfo's `mipadjust`); a surface at level k is
   `extents >> k` from `tex.mips[k]`, and its `ms` (1/2^k) scales the texels in `fillPolygon`.
+- **Texture animation.** A texture's `.wal` names the next picture of its animation (`animname`);
+  `animChain` follows them round once, and `surface()` takes the picture at the frame modulo the
+  chain's length (`R_TextureAnimation`). The world's frame is the time at 2 Hz; a brush model's is its
+  entity's frame, which the server sets and the client cycles by the effects (`entityFrame`,
+  `CL_AddPacketEntities`): EF_ANIM01 0/1 and EF_ANIM23 2/3 at 2 Hz (a button at rest and pressed),
+  EF_ANIM_ALL every frame at 2 Hz and EF_ANIM_ALLFAST at 10 Hz (the ANIMATED spawnflags). The
+  frame query sends a brush model's frame and effects (kind 6) when either asks for something.
 - **The underwater view.** `warpScreen(time)` is `D_WarpScreen`: the frame copied aside and read back
   through the turbulence table (row offsets by column, column offsets by row); `drawFrame` calls it
   after the view weapon when `WATERLEVEL` is 3, before the status bar.

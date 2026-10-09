@@ -594,7 +594,7 @@ BEGIN
   SELECT e.mv_state FROM ents e WHERE e.id = :eid INTO st;
   IF (st IN (2, 0)) THEN EXIT;
   EXECUTE PROCEDURE snd(eid, 0, (SELECT e.noise1 FROM ents e WHERE e.id = :eid), 1, 2);
-  UPDATE ents e SET e.mv_state = 2, e.frame = 1, e.enemy_id = :activator WHERE e.id = :eid;
+  UPDATE ents e SET e.mv_state = 2, e.enemy_id = :activator WHERE e.id = :eid;
   EXECUTE PROCEDURE calc_move(eid, (SELECT e.p2x FROM ents e WHERE e.id = :eid), (SELECT e.p2y FROM ents e WHERE e.id = :eid),
     (SELECT e.p2z FROM ents e WHERE e.id = :eid), (SELECT e.speed FROM ents e WHERE e.id = :eid), 'button_wait');
 END^
@@ -604,7 +604,8 @@ AS
 DECLARE act INTEGER;
 BEGIN
   SELECT e.enemy_id FROM ents e WHERE e.id = :eid INTO act;
-  UPDATE ents e SET e.mv_state = 0, e.frame = 1 WHERE e.id = :eid;
+  -- pressed: the texture's frames 2 and 3 (EF_ANIM23) instead of 0 and 1
+  UPDATE ents e SET e.mv_state = 0, e.frame = 1, e.effects = BIN_OR(BIN_AND(e.effects, BIN_NOT(1024)), 2048) WHERE e.id = :eid;
   EXECUTE PROCEDURE use_targets(eid, COALESCE(act, player_ent()));
   UPDATE ents e SET e.think = 'button_return', e.nextthink = e.ltime + e.wait_ WHERE e.id = :eid AND e.wait_ >= 0;
 END^
@@ -621,7 +622,7 @@ END^
 CREATE OR ALTER PROCEDURE button_done (eid INTEGER)
 AS
 BEGIN
-  UPDATE ents e SET e.mv_state = 1, e.frame = 0 WHERE e.id = :eid;
+  UPDATE ents e SET e.mv_state = 1, e.frame = 0, e.effects = BIN_OR(BIN_AND(e.effects, BIN_NOT(2048)), 1024) WHERE e.id = :eid;
 END^
 
 -- ── trains ──────────────────────────────────────────────────────────────
@@ -2316,7 +2317,8 @@ BEGIN
     ELSE IF (cls = 'misc_banner') THEN
     BEGIN
       EXECUTE PROCEDURE set_model(eid, 'models/objects/banner/tris.md2');
-      UPDATE ents e SET e.solid = 0, e.effects = 524288, e.frame = FLOOR(RAND() * 16) WHERE e.id = :eid;   -- EF_ANIM_ALLFAST
+      -- SP_misc_banner: a random frame to start, and misc_banner_think moves it on every 0.1 s
+      UPDATE ents e SET e.solid = 0, e.frame = FLOOR(RAND() * 16), e.think = 'banner_think', e.nextthink = 0.1 WHERE e.id = :eid;
       EXECUTE PROCEDURE link_ent(eid);
     END
     ELSE IF (cls = 'misc_satellite_dish') THEN
@@ -2340,6 +2342,18 @@ BEGIN
     ELSE
       UPDATE ents e SET e.solid = 0 WHERE e.id = :eid;
   END
+
+  -- the texture animations the spawn functions asked of the client: a button cycles its first two
+  -- frames (SP_func_button's EF_ANIM01), and a door, rotating door, rotator, wall, object or explosive
+  -- with its ANIMATED or ANIMATED_FAST spawnflag all of them, at 2 or 10 Hz (EF_ANIM_ALL, EF_ANIM_ALLFAST)
+  UPDATE ents e SET e.effects = BIN_OR(e.effects, CASE e.classname
+      WHEN 'func_button' THEN 1024
+      WHEN 'func_door' THEN IIF(BIN_AND(e.spawnflags, 16) <> 0, 4096, 0) + IIF(BIN_AND(e.spawnflags, 64) <> 0, 8192, 0)
+      WHEN 'func_door_rotating' THEN IIF(BIN_AND(e.spawnflags, 16) <> 0, 4096, 0)
+      WHEN 'func_rotating' THEN IIF(BIN_AND(e.spawnflags, 64) <> 0, 4096, 0) + IIF(BIN_AND(e.spawnflags, 128) <> 0, 8192, 0)
+      WHEN 'func_wall' THEN IIF(BIN_AND(e.spawnflags, 8) <> 0, 4096, 0) + IIF(BIN_AND(e.spawnflags, 16) <> 0, 8192, 0)
+      ELSE IIF(BIN_AND(e.spawnflags, 2) <> 0, 4096, 0) + IIF(BIN_AND(e.spawnflags, 4) <> 0, 8192, 0) END)
+   WHERE e.classname IN ('func_button', 'func_door', 'func_door_rotating', 'func_rotating', 'func_wall', 'func_object', 'func_explosive');
 
   -- G_FindTeams: movers with the same team move together; the first spawned is the master
   FOR SELECT e.id FROM ents e WHERE e.team IS NOT NULL AND e.team <> '' AND e.movetype = 7 ORDER BY e.id INTO eid DO

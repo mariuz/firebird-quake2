@@ -130,6 +130,43 @@ if (door) {
   assert(d2 && (Math.abs(d2.Z - door.Z) > 1 || Math.abs(d2.X - door.X) > 1 || Math.abs(d2.Y - door.Y) > 1), `door moved (state ${d2?.MV_STATE})`);
 }
 
+// the texture animations the client ran from the effects (CL_AddPacketEntities): a button at rest cycles its
+// texture's frames 0 and 1 (EF_ANIM01), pressed 2 and 3 (EF_ANIM23), and back once it has returned
+const btn = (await db.query("SELECT FIRST 1 id, effects, wait_ FROM ents WHERE classname = 'func_button' AND mv_state = 1 ORDER BY IIF(wait_ BETWEEN 0 AND 10, 0, 1), id")).rows[0];
+if (btn) {
+  assert((btn.EFFECTS & 3072) === 1024, `a button at rest has EF_ANIM01 (effects ${btn.EFFECTS})`);
+  const pe0 = (await db.query('SELECT ent_id e FROM player')).rows[0].E;
+  await db.exec(`EXECUTE PROCEDURE button_fire(${btn.ID}, ${pe0})`);
+  const fx = async () => (await db.query(`SELECT effects FROM ents WHERE id = ${btn.ID}`)).rows[0].EFFECTS;
+  // (one with wait -1 stays in; the rest come back after their wait)
+  const returns = btn.WAIT_ >= 0 && btn.WAIT_ <= 10;
+  let pressed = 0, back = 0;
+  for (let i = 0; i < (returns ? 300 : 10) && !back; i++) {
+    await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+    const e = await fx();
+    if (!pressed && (e & 3072) === 2048) {
+      pressed = i + 1;
+      const row = (await db.query(`SELECT i3 FROM frame_all(0, 2147483647, 2147483647, 0) WHERE kind = 6 AND i1 = ${btn.ID}`)).rows[0];
+      assert(row && (row.I3 & 2048), `the frame lists the pressed button with its effects (${row?.I3})`);
+    }
+    if (pressed && (e & 3072) === 1024) back = i + 1;
+  }
+  assert(pressed > 0, `pressed, it has EF_ANIM23 (after ${pressed} tics)`);
+  if (returns) assert(back > pressed, `returned, EF_ANIM01 again (after ${back} tics)`);
+  // what the press fired (a door, a level's end) is not what this is about
+  await db.exec('UPDATE game SET exit_kind = 0, next_map = NULL, intermission_time = NULL WHERE id = 1');
+}
+// SP_misc_banner: misc_banner_think moves it to its next frame every 0.1 s
+const banner = (await db.query("SELECT FIRST 1 id, frame FROM ents WHERE classname = 'misc_banner'")).rows[0];
+if (banner) {
+  for (let i = 0; i < 4; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  const f2 = (await db.query(`SELECT frame FROM ents WHERE id = ${banner.ID}`)).rows[0].FRAME;
+  assert(f2 === (banner.FRAME + 2) % 16, `a banner waves: frame ${banner.FRAME} → ${f2} in 0.2 s`);
+}
+// a door with the ANIMATED spawnflag cycles all its texture's frames (EF_ANIM_ALL)
+const adoor = (await db.query("SELECT FIRST 1 id, effects FROM ents WHERE classname = 'func_door' AND BIN_AND(spawnflags, 16) <> 0")).rows[0];
+if (adoor) assert((adoor.EFFECTS & 4096) !== 0, `an ANIMATED door has EF_ANIM_ALL (effects ${adoor.EFFECTS})`);
+
 // every sound we queued exists in the pak
 const snds = (await db.query('SELECT DISTINCT snd FROM sound_events')).rows.map((r) => r.SND);
 const missing = snds.filter((n) => !pak.has('sound/' + n));

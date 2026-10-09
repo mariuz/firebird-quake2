@@ -322,7 +322,7 @@ SET TERM ^ ;
 --   3 light styles that animate or that the map has switched (lst as style:letter pairs; the rest hold their resting letter)
 --   4 sound after last_sound (i1 id, i2 ent, i3 chan, d1 vol, d2 attn, d3..5 at, s name)
 --   5 effect after last_fx (i1 id, i2 kind, i3 n, d1..6 at/to)
---   6 brush-model pose (i1 ent, i2 frame, d1..3 angles)
+--   6 brush-model pose (i1 ent, i2 frame, i3 effects: the EF_ANIM ones cycle the frame on the page, d1..3 angles)
 --   7 the looped speakers that are on (lst their ids), when want_speakers = 1
 --   9 an entity's looped sound (s.sound: i1 ent, d3..5 at, s name)
 CREATE OR ALTER PROCEDURE frame_all (mode SMALLINT, last_sound INTEGER, last_fx INTEGER, want_speakers SMALLINT)
@@ -486,9 +486,11 @@ BEGIN
   kind = 5; s = NULL;
   FOR SELECT fe.id, fe.kind, fe.n, fe.x, fe.y, fe.z, fe.x2, fe.y2, fe.z2 FROM fx_events fe WHERE fe.id > :last_fx ORDER BY fe.id
         INTO i1, i2, i3, d1, d2, d3, d4, d5, d6 DO SUSPEND;
-  kind = 6; i3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL;
-  FOR SELECT e.id, e.frame, e.pitch, e.yaw, e.roll FROM ents e
-       WHERE e.mkind = 'B' AND (e.frame <> 0 OR e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0) INTO i1, i2, d1, d2, d3 DO SUSPEND;
+  kind = 6; d4 = NULL; d5 = NULL; d6 = NULL;
+  FOR SELECT e.id, e.frame, e.effects, e.pitch, e.yaw, e.roll FROM ents e
+       WHERE e.mkind = 'B' AND (e.frame <> 0 OR BIN_AND(e.effects, 15360) <> 0 OR e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0)
+        INTO i1, i2, i3, d1, d2, d3 DO SUSPEND;
+  i3 = NULL;
   -- the looped sounds (s.sound) the entities carry this frame, from where they are now: a missile's flight
   -- (fire_blaster, fire_rocket, fire_bfg), a mover's middle sound while it moves and only from a team's master
   -- (door_go_up, plat_go_down, train_next), and the player's G_SetClientSound

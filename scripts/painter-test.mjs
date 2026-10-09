@@ -4,7 +4,9 @@
 // (D_MipLevelForScale, R_DrawSurface's surfmip): the thresholds, a surface at a level, and a frame that
 // draws its far walls from smaller images. The underwater warp (D_WarpScreen): pixels move by at most the
 // table's amplitude, a flat picture stays flat, the wobble moves with time. Model lighting
-// (R_AliasSetupLighting): ambient at most 128 and 192 with the shade, LIGHT_MIN, RF_MINLIGHT, RF_GLOW.
+// (R_AliasSetupLighting): ambient at most 128 and 192 with the shade, LIGHT_MIN, RF_MINLIGHT, RF_GLOW. Texture
+// animation (R_TextureAnimation, CL_AddPacketEntities): the frame picks along the chain modulo its length, and
+// the EF_ANIM effects make the frame on the client.
 //   node scripts/painter-test.mjs [map]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak, loadColormap } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
-import { Renderer, dlightAt, mipLevel, skyTurn } from '../src/renderer.js';
+import { Renderer, dlightAt, mipLevel, skyTurn, entityFrame } from '../src/renderer.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mapName = process.argv[2] ?? 'demo1';
@@ -172,5 +174,27 @@ assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws ne
   assert(s320.join() === '4,16,1' && s640.join() === '25,64,4', `a particle at 100, 30 and 2000 units: ${s320.join(', ')} pixels at 320×240, ${s640.join(', ')} at 640×480`);
   r.setSize(320, 240); r.particles = [];
 }
+// texture animation: a face whose texture has an animname chain (a button's lights, a computer screen)
+{
+  r.dlights = [];
+  let af = null;
+  for (const [fid, info] of r.faceInfo) {
+    if (info.f.flags & 0x3c) continue;
+    const tex = r.texture(info.ti.texture);
+    if (tex.animname) { af = { fid, chain: r.animChain(tex) }; break; }
+  }
+  assert(af && af.chain.length >= 2, `an animated texture's chain (${af?.chain.map((t) => t.name).join(' → ')})`);
+  if (af) {
+    const n = af.chain.length;
+    const at0 = r.surface(af.fid, styles, 0, 0), atn = r.surface(af.fid, styles, 0, n), at1 = r.surface(af.fid, styles, 0, 1);
+    assert(at0 === atn && at1 !== at0, `frame ${n} is frame 0 again (modulo the chain of ${n}), frame 1 is the next picture`);
+    assert(r.surface(af.fid, styles, 7.3, 0) === at0, 'a frame stays put whatever the time: only the world turns time into frames');
+  }
+  const fr = (e, t) => entityFrame(5, e, t);
+  assert(fr(0, 3.2) === 5 && fr(0x400, 0.2) === 0 && fr(0x400, 0.7) === 1 && fr(0x800, 0.2) === 2 && fr(0x800, 0.7) === 3
+    && fr(0x1000, 3.2) === 6 && fr(0x2000, 3.27) === 32,
+    'the frame from the effects: as sent, EF_ANIM01 0/1 and EF_ANIM23 2/3 at 2 Hz, EF_ANIM_ALL at 2 Hz, EF_ANIM_ALLFAST at 10 Hz');
+}
+
 console.log(failed ? `${failed} FAILED` : 'all good');
 process.exit(failed ? 1 : 0);

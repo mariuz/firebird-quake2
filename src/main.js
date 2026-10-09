@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMap, setView } from './loader.js';
-import { Renderer, lightPoint, dlightAt } from './renderer.js';
+import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
 import { Menu, saveComment } from './menu.js';
 import { exportSave, importSave, exportLevel, importLevel } from './savegame.js';
@@ -464,7 +464,7 @@ async function frame() {
         case 3: if (r[15]) for (const kv of r[15].split(',')) { const i = kv.indexOf(':'); const st = +kv.slice(0, i); if (st < 64) styleMap[st] = (kv.charCodeAt(i + 1) - 97) / 12.5; } break;
         case 4: sounds.push([r[1], 0, r[2], r[3], r[14], r[6], r[7], r[8], r[9], r[10]]); break;
         case 5: fx.push([r[1], r[2], r[6], r[7], r[8], r[9], r[10], r[11], r[3]]); break;
-        case 6: brushFrames.set(r[1], r[2]); if (r[6] || r[7] || r[8]) brushAngles.set(r[1], [r[6], r[7], r[8]]); break;
+        case 6: brushFrames.set(r[1], [r[2], r[3] ?? 0]); if (r[6] || r[7] || r[8]) brushAngles.set(r[1], [r[6], r[7], r[8]]); break;
         case 7: speakers = r[15] ? r[15].split(',').map(Number) : []; break;
         case 9: loops.push([r[14], r[8], r[9], r[10]]); break;
         default: break;
@@ -597,8 +597,10 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? (last.DEAD ? 40 : 0), fov: settings.fov };
   r.beginFrame(view);
   if (faces) {
-    if (settings.renderer === 'sql') r.drawFaces(faces, styles, time, brushFrames);
-    else r.drawFaceList(faces, styles, time, brushFrames, brushAngles);
+    const frames = new Map();
+    for (const [id, [f, eff]] of brushFrames) frames.set(id, entityFrame(f, eff, time));
+    if (settings.renderer === 'sql') r.drawFaces(faces, styles, time, frames);
+    else r.drawFaceList(faces, styles, time, frames, brushAngles);
   }
   const bsp = map.bsp;
   for (const e of ents) {

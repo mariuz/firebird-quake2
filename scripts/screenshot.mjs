@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak, loadColormap } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
-import { Renderer, lightPoint } from '../src/renderer.js';
+import { Renderer, lightPoint, entityFrame } from '../src/renderer.js';
 import { Hud, viewFrame } from '../src/hud.js';
 import { WEAPONS } from '../src/gamedata.js';
 import { png } from './png.mjs';
@@ -62,12 +62,12 @@ async function shot(name) {
   const faces = (await db.query(useSql ? 'SELECT * FROM frame_faces' : 'SELECT * FROM frame_faces_fast', [], arr)).rows;
   const facesFast = compare ? (await db.query('SELECT * FROM frame_faces_fast', [], arr)).rows : null;
   const ents = (await db.query('SELECT * FROM frame_ents', [], arr)).rows;
-  const bents = (await db.query("SELECT e.id, e.frame, e.pitch, e.yaw, e.roll FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B'", [], arr)).rows;
+  const bents = (await db.query("SELECT e.id, e.frame, e.pitch, e.yaw, e.roll, e.effects FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B'", [], arr)).rows;
   const styles = new Float32Array(64);
   for (const [s, v] of (await db.query('SELECT * FROM frame_lightstyles', [], arr)).rows) if (s < 64) styles[s] = v;
   const t1 = performance.now();
   const entFrames = new Map(), entAngles = new Map();
-  for (const [id, f, p, y, r] of bents) { entFrames.set(id, f); if (p || y || r) entAngles.set(id, [p, y, r]); }
+  for (const [id, f, p, y, r, eff] of bents) { entFrames.set(id, entityFrame(f, eff, last.TIME_)); if (p || y || r) entAngles.set(id, [p, y, r]); }
   const ya = last.YAW * Math.PI / 180;
   renderer.dlights = flash ? [{ x: last.PX + Math.cos(ya) * 18 + Math.sin(ya) * 16, y: last.PY + Math.sin(ya) * 18 - Math.cos(ya) * 16, z: last.PZ, r: 216 }] : [];
   renderer.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? 0, fov: 90 });

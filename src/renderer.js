@@ -123,23 +123,28 @@ export class Renderer {
     }
   }
 
+  /** A texture's animation frames, from it along the animnames until they come back to it (at most 16). */
+  animChain(tex) {
+    const chain = [tex];
+    for (let t = tex; t.animname && chain.length < 16;) {
+      t = this.texture(t.animname);
+      if (t.name === tex.name) break;
+      chain.push(t);
+    }
+    return chain;
+  }
+
   // ── surface cache (R_DrawSurface) ───────────────────────────────────────
   surface(faceId, styles, time, frame, mip = 0) {
     const info = this.faceInfo.get(faceId);
     if (!info) return null;
     const { bsp, f, ti } = info;
     let tex = this.texture(ti.texture);
-    // texture animation: the .wal's animname chain, 2 Hz for the world
+    // R_TextureAnimation: the .wal's animname chain, frame modulo its length (the world's frame is the
+    // time at 2 Hz, a brush model's its entity frame)
     if (tex.animname) {
-      let n = (frame ? frame : Math.floor(time * 2)) % 16;
-      let t = tex;
-      const start = tex.name;
-      while (n-- > 0) {
-        if (!t.animname) break;
-        t = this.texture(t.animname);
-        if (t.name === start) { tex = t; break; }
-      }
-      tex = t;
+      const chain = tex.chain ?? (tex.chain = this.animChain(tex));
+      tex = chain[frame % chain.length];
     }
     // a face a dynamic light reaches is built afresh for this frame and not cached (ref_soft did the same)
     if (this.dlights.length && !(f.flags & (SURF.SKY | SURF.WARP))) {
@@ -417,7 +422,7 @@ export class Renderer {
         for (let k = 0; k < n; k++) { const iz = 1 / poly[k * 5 + 2]; if (iz > nearzi) nearzi = iz; }
         mip = mipLevel(nearzi * this.view.scale * mipAdjust(info.ti));
       }
-      const s = this.surface(face, styles, time, entFrames.get(ent) ?? 0, mip);
+      const s = this.surface(face, styles, time, ent ? entFrames.get(ent) ?? 0 : Math.floor(time * 2), mip);
       const scroll = flags & SURF.FLOWING ? -128 * ((time * 0.77) % 1) : 0;
       if (s) this.fillPolygon(poly, n, s, 0, time, blend, scroll);
     }
@@ -925,6 +930,20 @@ export class Renderer {
 }
 
 /** AngleVectors as a matrix with the columns forward, -right, up (the game's convention for brush models). */
+/**
+ * CL_AddPacketEntities: the frame an entity is drawn with. The EF_ANIM effects cycle it on the client,
+ * whatever the server's frame: frames 0 and 1 at 2 Hz (a button at rest), 2 and 3 (one pressed), all of
+ * them at 2 Hz or at 10 Hz (the ANIMATED and ANIMATED_FAST spawnflags of doors, walls and rotators).
+ */
+export function entityFrame(frame, effects, time) {
+  const autoanim = Math.floor(time * 2);
+  if (effects & 0x400) return autoanim & 1;          // EF_ANIM01
+  if (effects & 0x800) return 2 + (autoanim & 1);    // EF_ANIM23
+  if (effects & 0x1000) return autoanim;             // EF_ANIM_ALL
+  if (effects & 0x2000) return Math.floor(time * 10); // EF_ANIM_ALLFAST
+  return frame;
+}
+
 export function angleMatrix([pitch, yaw, roll]) {
   const sy = Math.sin((yaw * Math.PI) / 180), cy = Math.cos((yaw * Math.PI) / 180);
   const sp = Math.sin((pitch * Math.PI) / 180), cp = Math.cos((pitch * Math.PI) / 180);
