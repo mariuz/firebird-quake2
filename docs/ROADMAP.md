@@ -40,9 +40,11 @@ them.
   five filter bits are now cleared after filtering, as `SpawnEntities` did.
 - **Cheats and console commands**: done. The backquote opens a command line over the view:
   `god`, `notarget`, `noclip` (flies where the view points, through walls, touching nothing),
-  `give all|health|weapons|ammo|armor|keys`, `kill` (godmode or not), `map <name>` (a new game),
-  `save`, `load` (`player_command` in weapons.sql for the game's part). Left: `give` of a single
-  named item, `fov`, `use`/`drop`, command history and completion.
+  `give all|health|weapons|ammo|armor|keys`, `give <item>` by its pickup name as `Cmd_Give_f` had it
+  (spawned on the player and touched; an ammo adds one pickup's worth, `give shells 20` or `give health 50`
+  sets the count), `use <item>`, `kill` (godmode or not), `map <name>` (a new game), `fov <degrees>` (1 to
+  160), `save`, `load` (`player_command` in weapons.sql for the game's part). Up and down step through the
+  lines typed, Tab completes a command's name. Left: `drop`, which single player only needs for nothing.
 - **Demo playback / recording** (the `.dm2` files in the pak) is out of scope for now.
 
 ## Fidelity gaps in what exists

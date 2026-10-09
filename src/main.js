@@ -176,18 +176,40 @@ function openConsole() {
   keys.clear();
   cmdline.hidden = false;
   cmdline.value = '';
+  histPos = history.length;
   cmdline.focus();
 }
 function closeConsole() {
   cmdline.hidden = true;
   canvas.focus();
 }
+// the lines typed before (Key_Console's history: up and down step through it) and the commands Tab completes
+const COMMANDS = ['fov', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'use'];
+const history = [];
+let histPos = 0;
 cmdline.addEventListener('keydown', async (e) => {
   if (e.key === 'Escape' || e.code === 'Backquote') { e.preventDefault(); closeConsole(); return; }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    histPos = Math.max(0, Math.min(history.length, histPos + (e.key === 'ArrowUp' ? -1 : 1)));
+    cmdline.value = history[histPos] ?? '';
+    return;
+  }
+  if (e.key === 'Tab') {
+    // Cmd_CompleteCommand: the first command that starts with what is typed
+    e.preventDefault();
+    const typed = cmdline.value.trim().toLowerCase();
+    const hit = typed && !typed.includes(' ') && COMMANDS.find((c) => c.startsWith(typed));
+    if (hit) cmdline.value = hit + ' ';
+    return;
+  }
   if (e.key !== 'Enter') return;
   e.preventDefault();
   const line = cmdline.value.trim();
   closeConsole();
+  if (line && history[history.length - 1] !== line) history.push(line);
+  if (history.length > 32) history.shift();
+  histPos = history.length;
   if (line) await runCommand(line);
 });
 async function runCommand(line) {
@@ -201,6 +223,14 @@ async function runCommand(line) {
       return;
     }
     case 'inven': showInv = !showInv; showHelp = false; return;
+    case 'fov': {
+      // the client's fov, clamped as ClientUserinfoChanged clamped it (1-160); no argument shows it
+      const v = Number(arg);
+      if (!arg || !Number.isFinite(v)) { setStatus(`"fov" is "${settings.fov}"`); setTimeout(() => setStatus(''), 2500); return; }
+      settings.fov = Math.max(1, Math.min(160, Math.round(v))); saveSettings();
+      await setView(db, viewWidth(), viewHeight(), settings.fov);
+      return;
+    }
     case 'save': return saveGame();
     case 'load': return loadGame();
     default:

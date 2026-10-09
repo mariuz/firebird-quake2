@@ -638,6 +638,18 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   const inv = (await db.query('SELECT weapons w, bullets b, max_bullets mb, armor a FROM player')).rows[0];
   assert(inv.W === 2047 && inv.B === inv.MB && inv.A === 200, 'give weapons, ammo and armor fill them');
   assert((await cmd('give', 'banana')).startsWith('unknown item'), 'give refuses what it does not know');
+  await cmd('give', 'shells 7');
+  await cmd('give', 'health 42');
+  const g1 = (await db.query('SELECT p.shells s, e.health h FROM player p JOIN ents e ON e.id = p.ent_id')).rows[0];
+  assert(g1.S === 7 && g1.H === 42, `give with a count sets it (shells ${g1.S}, health ${g1.H})`);
+  await cmd('give', 'rockets');
+  const r0 = (await db.query('SELECT rockets r FROM player')).rows[0].R;
+  await cmd('give', 'rockets');
+  assert((await db.query('SELECT rockets r FROM player')).rows[0].R === r0 + 5, 'give an ammo adds one pickup of it');
+  await db.exec('UPDATE player SET inv_quad = 0');
+  await cmd('give', 'quad damage');
+  const g2 = (await db.query("SELECT p.inv_quad q, (SELECT COUNT(*) FROM ents WHERE classname = 'item_quad' AND x = e.x AND y = e.y) n FROM player p JOIN ents e ON e.id = p.ent_id")).rows[0];
+  assert(g2.Q === 1 && g2.N === 0, `give by pickup name picks it up and leaves nothing behind (quad ${g2.Q})`);
   await cmd('god');
   await cmd('kill');
   const dead = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);

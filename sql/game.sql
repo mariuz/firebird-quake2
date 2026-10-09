@@ -1116,6 +1116,22 @@ BEGIN
     WHEN 'key_commander_head' THEN 39 WHEN 'key_airstrike_target' THEN 40 ELSE 41 END;
 END^
 
+-- an item's classname by its itemlist index (the inverse of item_class_index; health: the plain +10 one)
+CREATE OR ALTER FUNCTION item_classname (idx SMALLINT) RETURNS VARCHAR(40)
+AS
+BEGIN
+  RETURN TRIM(CASE idx WHEN 1 THEN 'item_armor_body' WHEN 2 THEN 'item_armor_combat' WHEN 3 THEN 'item_armor_jacket' WHEN 4 THEN 'item_armor_shard'
+    WHEN 5 THEN 'item_power_screen' WHEN 6 THEN 'item_power_shield' WHEN 7 THEN 'weapon_blaster' WHEN 8 THEN 'weapon_shotgun'
+    WHEN 9 THEN 'weapon_supershotgun' WHEN 10 THEN 'weapon_machinegun' WHEN 11 THEN 'weapon_chaingun' WHEN 12 THEN 'ammo_grenades'
+    WHEN 13 THEN 'weapon_grenadelauncher' WHEN 14 THEN 'weapon_rocketlauncher' WHEN 15 THEN 'weapon_hyperblaster' WHEN 16 THEN 'weapon_railgun'
+    WHEN 17 THEN 'weapon_bfg' WHEN 18 THEN 'ammo_shells' WHEN 19 THEN 'ammo_bullets' WHEN 20 THEN 'ammo_cells' WHEN 21 THEN 'ammo_rockets'
+    WHEN 22 THEN 'ammo_slugs' WHEN 23 THEN 'item_quad' WHEN 24 THEN 'item_invulnerability' WHEN 25 THEN 'item_silencer'
+    WHEN 26 THEN 'item_breather' WHEN 27 THEN 'item_enviro' WHEN 28 THEN 'item_ancient_head' WHEN 29 THEN 'item_adrenaline'
+    WHEN 30 THEN 'item_bandolier' WHEN 31 THEN 'item_pack' WHEN 32 THEN 'key_data_cd' WHEN 33 THEN 'key_power_cube' WHEN 34 THEN 'key_pyramid'
+    WHEN 35 THEN 'key_data_spinner' WHEN 36 THEN 'key_pass' WHEN 37 THEN 'key_blue_key' WHEN 38 THEN 'key_red_key'
+    WHEN 39 THEN 'key_commander_head' WHEN 40 THEN 'key_airstrike_target' WHEN 41 THEN 'item_health' ELSE '' END);
+END^
+
 -- SelectNextItem / SelectPrevItem (dir 1 / -1): the next usable item held, round the itemlist; -1 when none
 CREATE OR ALTER PROCEDURE inv_select (dir SMALLINT)
 AS

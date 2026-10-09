@@ -458,6 +458,8 @@ CREATE OR ALTER PROCEDURE player_command (cmd VARCHAR(32), arg VARCHAR(64))
 RETURNS (msg VARCHAR(80))
 AS
 DECLARE pe INTEGER; DECLARE fl INTEGER; DECLARE mt SMALLINT; DECLARE hp INTEGER;
+DECLARE sp INTEGER; DECLARE a1 VARCHAR(64); DECLARE a2 VARCHAR(64); DECLARE num INTEGER; DECLARE idx SMALLINT; DECLARE it INTEGER;
+DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
 BEGIN
   cmd = LOWER(TRIM(COALESCE(cmd, ''))); arg = LOWER(TRIM(COALESCE(arg, '')));
   pe = player_ent();
@@ -490,8 +492,38 @@ BEGIN
   END
   ELSE IF (cmd = 'give') THEN
   BEGIN
+    -- Cmd_Give_f: all, or a kind of thing, or one item by its pickup name; a count after health or an ammo sets it
     IF (arg = '') THEN arg = 'all';
-    IF (arg NOT IN ('all', 'health', 'weapons', 'ammo', 'armor', 'keys')) THEN msg = 'unknown item ' || arg;
+    sp = POSITION(' ' IN arg);
+    a1 = IIF(sp > 0, SUBSTRING(arg FROM 1 FOR sp - 1), arg);
+    a2 = IIF(sp > 0, TRIM(SUBSTRING(arg FROM sp + 1)), '');
+    num = IIF(a2 SIMILAR TO '[0-9]{1,6}', CAST(a2 AS INTEGER), NULL);
+    IF (a1 = 'health' AND num IS NOT NULL) THEN UPDATE ents e SET e.health = :num WHERE e.id = :pe;
+    ELSE IF (arg NOT IN ('all', 'health', 'weapons', 'ammo', 'armor', 'keys')) THEN
+    BEGIN
+      -- FindItem on the whole line, else on its first word
+      idx = item_index(arg);
+      IF (idx = 0) THEN idx = item_index(a1);
+      IF (idx = 0) THEN msg = 'unknown item';
+      ELSE IF (idx IN (12, 18, 19, 20, 21, 22)) THEN
+      BEGIN
+        -- IT_AMMO: the count given, else one pickup's quantity on top, unclamped as Cmd_Give_f left it
+        IF (idx = 12) THEN UPDATE player p SET p.grenades = COALESCE(:num, p.grenades + 5) WHERE p.id = 1;
+        ELSE IF (idx = 18) THEN UPDATE player p SET p.shells = COALESCE(:num, p.shells + 10) WHERE p.id = 1;
+        ELSE IF (idx = 19) THEN UPDATE player p SET p.bullets = COALESCE(:num, p.bullets + 50) WHERE p.id = 1;
+        ELSE IF (idx = 20) THEN UPDATE player p SET p.cells = COALESCE(:num, p.cells + 50) WHERE p.id = 1;
+        ELSE IF (idx = 21) THEN UPDATE player p SET p.rockets = COALESCE(:num, p.rockets + 5) WHERE p.id = 1;
+        ELSE UPDATE player p SET p.slugs = COALESCE(:num, p.slugs + 10) WHERE p.id = 1;
+      END
+      ELSE
+      BEGIN
+        -- anything else is spawned on the player and touched (SpawnItem, Touch_Item); left over if not taken, then freed
+        SELECT e.x, e.y, e.z FROM ents e WHERE e.id = :pe INTO px, py, pz;
+        EXECUTE PROCEDURE spawn_ent(item_classname(idx), px, py, pz) RETURNING_VALUES it;
+        EXECUTE PROCEDURE item_touch(it, pe);
+        DELETE FROM ents e WHERE e.id = :it;
+      END
+    END
     ELSE
     BEGIN
       IF (arg IN ('all', 'health')) THEN UPDATE ents e SET e.health = e.max_health WHERE e.id = :pe AND e.health < e.max_health;
