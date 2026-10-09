@@ -607,6 +607,46 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   } else console.log('     (no wall near for the bolt check)');
 }
 
+// pushers crushing (mover_blocked): a closing door that meets a monster hurts it and turns back; anything else
+// in its way (a barrel) is destroyed outright
+{
+  const one = async (q) => (await db.query(q)).rows[0];
+  // a plain sliding door, alone in its team, that hurts and comes back
+  const door = await one(`SELECT FIRST 1 d.id, d.p1x, d.p1y, d.p1z, d.p2x, d.p2y, d.p2z, d.minx, d.miny, d.minz, d.maxx, d.maxy, d.maxz, d.dmg FROM ents d
+    WHERE d.classname = 'func_door' AND d.dmg > 0 AND d.wait_ >= 0 AND BIN_AND(d.spawnflags, 4 + 1) = 0 AND d.linked_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM ents o WHERE o.linked_id = d.id) AND d.targetname IS NULL
+      AND ABS(d.p1x - d.p2x) + ABS(d.p1y - d.p2y) + ABS(d.p1z - d.p2z) >= 48 ORDER BY d.id`);
+  if (door) {
+    const crush = async (victim) => {
+      // the door open, then closing on the victim, which stands where the door shuts
+      await db.query(`EXECUTE BLOCK AS BEGIN UPDATE ents e SET e.x = e.p2x, e.y = e.p2y, e.z = e.p2z, e.mv_state = 0, e.mv_done = NULL, e.vx = 0, e.vy = 0, e.vz = 0,
+        e.think = NULL, e.nextthink = NULL WHERE e.id = ${door.ID}; EXECUTE PROCEDURE link_ent(${door.ID}); EXECUTE PROCEDURE door_go_down(${door.ID}); END`);
+      const v = await one(`SELECT minz, maxz FROM ents WHERE id = ${victim}`);
+      const cx = door.P1X + (door.MINX + door.MAXX) / 2, cy = door.P1Y + (door.MINY + door.MAXY) / 2, cz = door.P1Z + (door.MINZ + door.MAXZ) / 2;
+      await db.query(`EXECUTE BLOCK AS BEGIN UPDATE ents e SET e.x = ${cx}, e.y = ${cy}, e.z = ${cz - (v.MINZ + v.MAXZ) / 2}, e.vx = 0, e.vy = 0, e.vz = 0,
+        e.nextthink = NULL WHERE e.id = ${victim}; EXECUTE PROCEDURE link_ent(${victim}); END`);
+      let st = null;
+      for (let i = 0; i < 80; i++) {
+        await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+        st = await one(`SELECT d.mv_state ds, (SELECT COUNT(*) FROM ents v WHERE v.id = ${victim}) n, (SELECT v.health FROM ents v WHERE v.id = ${victim}) hp
+          FROM ents d WHERE d.id = ${door.ID}`);
+        if (st.DS === 2 || st.N === 0) break;
+      }
+      return st;
+    };
+    const mon = (await one(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN SELECT id FROM spawn_monster('soldier', 64) INTO id; SUSPEND; END`)).ID;
+    await db.exec(`UPDATE ents SET health = 1000, max_health = 1000 WHERE id = ${mon}`);
+    const c1 = await crush(mon);
+    assert(c1.N === 1 && c1.HP < 1000 && c1.DS === 2, `a closing door that meets a monster hurts it (${1000 - c1.HP}) and turns back (state ${c1.DS})`);
+    await db.exec(`DELETE FROM ents WHERE id = ${mon}`);
+    const box = (await one("SELECT FIRST 1 id FROM ents WHERE classname = 'misc_explobox' ORDER BY id"))?.ID;
+    if (box) {
+      const c2 = await crush(box);
+      assert(c2.N === 0, 'a barrel in its way is destroyed');
+    } else console.log('     (no barrel on this map for the crush check)');
+  } else console.log('     (no plain door on this map for the crush check)');
+}
+
 // the console's commands: god, notarget, noclip through a wall, give, kill
 {
   const cmd = async (c, a = '') => (await db.query('SELECT msg FROM player_command(?, ?)', [c, a])).rows[0].MSG;

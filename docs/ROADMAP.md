@@ -259,7 +259,8 @@ picker). Missing for the rest of the game:
 - **Tests**: the smoke tests cover movement, weapons and doors on demo1 and demo2; demo3 is only
   screenshotted. `scripts/walkthrough-test.mjs` puts the player in every trigger it can walk into on the
   three maps, in turn, and checks each fires and the movers it targets move (`use_targets`, `trigger_fire`,
-  the touch test); there is still no test of the pushers crushing,
+  the touch test), and the smoke test closes a door on a monster (hurt, the door turns back) and on a barrel
+  (destroyed), as `door_blocked` had it;
   and the painter's only regression test is the two-mode pixel comparison plus the docs
   screenshots viewed by eye.
 - **`firebird-wasm` features to watch**: binding non-text parameters, batch inserts, and
