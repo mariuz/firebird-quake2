@@ -190,7 +190,8 @@ and hard a soldier often crouches and fires instead (state `attack3`, the `attak
 `pausetime` as `monsterinfo.pausetime` timed them, `aiflags` 8 holding the SS's burst). `check_attack`
 says whether the enemy is in sight (1 attack, 0 seen, 2 not) and notes the sighting (`ls_x/y/z`,
 `trail_time`, `search_time`); out of sight, `ai_pursue` steers by `aiflags` 16/32/64 to the last sighting
-and then the `player_trail` markers that `player_trail_check` drops at 10 Hz (`move_to_goal` and
+(detouring by a spot to one side, `aiflags` 128 and `sg_x/y/z`, when the box cannot go straight) and then
+the `player_trail` markers that `player_trail_check` drops at 10 Hz (`move_to_goal` and
 `new_chase_dir` take a spot as well as an entity for that). Supported: soldier (light, shotgun, machinegun),
 infantry, gunner, berserker, flyer, parasite, tank; see ROADMAP.md for the rest.
 

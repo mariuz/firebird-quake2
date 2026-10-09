@@ -221,7 +221,7 @@ BEGIN
   -- FoundTarget: the sighting is noted (last_sighting, trail_time), the pursuit flags start afresh
   UPDATE ents e SET e.enemy_id = player_ent(), e.goal_id = NULL, e.st = 'run', e.search_time = now_() + 5, e.attack_finished = now_() + 1,
          e.ls_x = (SELECT p.x FROM ents p WHERE p.id = e.enemy_id), e.ls_y = (SELECT p.y FROM ents p WHERE p.id = e.enemy_id),
-         e.ls_z = (SELECT p.z FROM ents p WHERE p.id = e.enemy_id), e.trail_time = now_(), e.aiflags = BIN_AND(e.aiflags, BIN_NOT(16 + 32 + 64)) WHERE e.id = :eid;
+         e.ls_z = (SELECT p.z FROM ents p WHERE p.id = e.enemy_id), e.trail_time = now_(), e.aiflags = BIN_AND(e.aiflags, BIN_NOT(16 + 32 + 64 + 128)) WHERE e.id = :eid;
   EXECUTE PROCEDURE set_anim(eid, run_);
   -- FoundTarget: with a combattarget, run to that point_combat first, ignoring the enemy (a one-shot deal:
   -- the combattarget is cleared, and the point's targetname too, since that point is ours)
@@ -303,7 +303,9 @@ END^
 
 -- ai_run with the enemy out of sight: where to head (gx, gy), facing iy, this far. Run to where it was last seen,
 -- then along the player's trail marker by marker (AI_LOST_SIGHT, AI_PURSUIT_LAST_SEEN, AI_PURSUE_NEXT), five
--- more seconds of search for each marker reached; twenty seconds past the search, straight at the enemy.
+-- more seconds of search for each marker reached; twenty seconds past the search, straight at the enemy. A new
+-- target that the monster's box cannot reach straight is detoured: a spot 16 units to one side, part of the way,
+-- whichever side goes further (AI_PURSUE_TEMP), the real target kept in saved_goal until the spot is reached.
 CREATE OR ALTER PROCEDURE ai_pursue (eid INTEGER, dist_in DOUBLE PRECISION)
 RETURNS (gx DOUBLE PRECISION, gy DOUBLE PRECISION, iy DOUBLE PRECISION, dist DOUBLE PRECISION)
 AS
@@ -311,10 +313,18 @@ DECLARE aif INTEGER; DECLARE st_ DOUBLE PRECISION; DECLARE lx DOUBLE PRECISION; 
 DECLARE tt DOUBLE PRECISION; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE t DOUBLE PRECISION;
 DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION; DECLARE d1 DOUBLE PRECISION; DECLARE turned SMALLINT = 0;
 DECLARE mx DOUBLE PRECISION; DECLARE my DOUBLE PRECISION; DECLARE mz DOUBLE PRECISION; DECLARE myaw DOUBLE PRECISION; DECLARE mts DOUBLE PRECISION;
+DECLARE new_ SMALLINT = 0; DECLARE sgx DOUBLE PRECISION; DECLARE sgy DOUBLE PRECISION; DECLARE sgz DOUBLE PRECISION;
+DECLARE mnx DOUBLE PRECISION; DECLARE mny DOUBLE PRECISION; DECLARE mnz DOUBLE PRECISION; DECLARE mxx DOUBLE PRECISION; DECLARE mxy DOUBLE PRECISION; DECLARE mxz DOUBLE PRECISION;
+DECLARE f DOUBLE PRECISION; DECLARE fl DOUBLE PRECISION; DECLARE fr DOUBLE PRECISION; DECLARE center DOUBLE PRECISION; DECLARE d2 DOUBLE PRECISION;
+DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION;
+DECLARE hx DOUBLE PRECISION; DECLARE hy DOUBLE PRECISION; DECLARE hz DOUBLE PRECISION; DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
+DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
 BEGIN
   t = now_(); dist = dist_in;
-  SELECT e.aiflags, e.search_time, e.ls_x, e.ls_y, e.ls_z, e.trail_time, e.x, e.y, e.z, e.ideal_yaw, n.x, n.y, n.z
-    FROM ents e JOIN ents n ON n.id = e.enemy_id WHERE e.id = :eid INTO aif, st_, lx, ly, lz, tt, x, y, z, iy, ex, ey, ez;
+  SELECT e.aiflags, e.search_time, e.ls_x, e.ls_y, e.ls_z, e.trail_time, e.x, e.y, e.z, e.ideal_yaw, n.x, n.y, n.z,
+         e.sg_x, e.sg_y, e.sg_z, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz
+    FROM ents e JOIN ents n ON n.id = e.enemy_id WHERE e.id = :eid
+    INTO aif, st_, lx, ly, lz, tt, x, y, z, iy, ex, ey, ez, sgx, sgy, sgz, mnx, mny, mnz, mxx, mxy, mxz;
   IF (x IS NULL) THEN EXIT;
   IF (lx IS NULL) THEN BEGIN lx = ex; ly = ey; lz = ez; END       -- never sighted (woken by a trigger): where the enemy is
   IF (st_ > 0 AND t > st_ + 20) THEN
@@ -324,19 +334,58 @@ BEGIN
     SUSPEND;
     EXIT;
   END
-  IF (BIN_AND(aif, 16) = 0) THEN aif = BIN_AND(BIN_OR(aif, 16 + 32), BIN_NOT(64));   -- just lost sight
+  IF (BIN_AND(aif, 16) = 0) THEN BEGIN aif = BIN_AND(BIN_OR(aif, 16 + 32), BIN_NOT(64 + 128)); new_ = 1; END   -- just lost sight
   IF (BIN_AND(aif, 64) <> 0) THEN
   BEGIN
     aif = BIN_AND(aif, BIN_NOT(64));
     st_ = t + 5;                                                    -- more time, since we got this far
-    SELECT p.x, p.y, p.z, p.yaw, p.ts FROM trail_pick(:eid, IIF(BIN_AND(:aif, 32) <> 0, 1, 0), :tt) p INTO mx, my, mz, myaw, mts;
-    aif = BIN_AND(aif, BIN_NOT(32));
-    IF (mx IS NOT NULL) THEN BEGIN lx = mx; ly = my; lz = mz; tt = mts; iy = myaw; turned = 1; END
+    IF (BIN_AND(aif, 128) <> 0) THEN
+    BEGIN
+      -- the detour's spot reached: on to the target it stood in for
+      aif = BIN_AND(aif, BIN_NOT(128));
+      lx = sgx; ly = sgy; lz = sgz; new_ = 1;
+    END
+    ELSE
+    BEGIN
+      SELECT p.x, p.y, p.z, p.yaw, p.ts FROM trail_pick(:eid, IIF(BIN_AND(:aif, 32) <> 0, 1, 0), :tt) p INTO mx, my, mz, myaw, mts;
+      aif = BIN_AND(aif, BIN_NOT(32));
+      IF (mx IS NOT NULL) THEN BEGIN lx = mx; ly = my; lz = mz; tt = mts; iy = myaw; turned = 1; new_ = 1; END
+    END
   END
   d1 = vlen(x - lx, y - ly, z - lz);
   IF (d1 <= dist) THEN BEGIN aif = BIN_OR(aif, 64); dist = d1; END
+  IF (new_ = 1 AND d1 > 0) THEN
+  BEGIN
+    -- can the box go straight there (MASK_PLAYERSOLID)? if not, try a spot to each side
+    EXECUTE PROCEDURE trace_move(eid, mnx, mny, mnz, mxx, mxy, mxz, x, y, z, lx, ly, lz, 33619971)
+      RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+    IF (f < 1) THEN
+    BEGIN
+      center = f;
+      d2 = d1 * ((center + 1) / 2);
+      iy = vectoyaw(lx - x, ly - y); turned = 1;
+      fx_ = COS(iy * 0.0174532925e0); fy = SIN(iy * 0.0174532925e0); rx = fy; ry = -fx_;
+      EXECUTE PROCEDURE trace_move(eid, mnx, mny, mnz, mxx, mxy, mxz, x, y, z, x + fx_ * d2 - rx * 16, y + fy * d2 - ry * 16, z, 33619971)
+        RETURNING_VALUES fl, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+      EXECUTE PROCEDURE trace_move(eid, mnx, mny, mnz, mxx, mxy, mxz, x, y, z, x + fx_ * d2 + rx * 16, y + fy * d2 + ry * 16, z, 33619971)
+        RETURNING_VALUES fr, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+      center = (d1 * center) / d2;
+      IF ((fl >= center AND fl > fr) OR (fr >= center AND fr > fl)) THEN
+      BEGIN
+        -- the side that goes further; short of a full step, half way along what it allows
+        f = IIF(fl > fr, fl, fr);
+        d2 = IIF(f < 1, d2 * f * 0.5e0, d2);
+        sgx = lx; sgy = ly; sgz = lz;
+        aif = BIN_OR(aif, 128);
+        IF (fl > fr) THEN BEGIN lx = x + fx_ * d2 - rx * 16; ly = y + fy * d2 - ry * 16; END
+        ELSE BEGIN lx = x + fx_ * d2 + rx * 16; ly = y + fy * d2 + ry * 16; END
+        lz = z;
+        iy = vectoyaw(lx - x, ly - y);
+      END
+    END
+  END
   UPDATE ents e SET e.aiflags = :aif, e.search_time = :st_, e.ls_x = :lx, e.ls_y = :ly, e.ls_z = :lz, e.trail_time = :tt,
-         e.ideal_yaw = :iy, e.yaw = IIF(:turned = 1, :iy, e.yaw) WHERE e.id = :eid;
+         e.sg_x = :sgx, e.sg_y = :sgy, e.sg_z = :sgz, e.ideal_yaw = :iy, e.yaw = IIF(:turned = 1, :iy, e.yaw) WHERE e.id = :eid;
   gx = lx; gy = ly;
   SUSPEND;
 END^

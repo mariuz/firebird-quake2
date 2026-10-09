@@ -326,10 +326,11 @@ CREATE TABLE ents (
   pain_finished   DOUBLE PRECISION DEFAULT 0 NOT NULL,
   search_time     DOUBLE PRECISION DEFAULT 0 NOT NULL,
   idle_time       DOUBLE PRECISION DEFAULT 0 NOT NULL,   -- when the next idle (standing) or search (walking) sound is due
-  aiflags         INTEGER DEFAULT 0 NOT NULL,            -- 1 AI_STAND_GROUND, 2 AI_COMBAT_POINT, 4 AI_DUCKED, 8 AI_HOLD_FRAME, 16 AI_LOST_SIGHT, 32 AI_PURSUIT_LAST_SEEN, 64 AI_PURSUE_NEXT
+  aiflags         INTEGER DEFAULT 0 NOT NULL,            -- 1 AI_STAND_GROUND, 2 AI_COMBAT_POINT, 4 AI_DUCKED, 8 AI_HOLD_FRAME, 16 AI_LOST_SIGHT, 32 AI_PURSUIT_LAST_SEEN, 64 AI_PURSUE_NEXT, 128 AI_PURSUE_TEMP
   pausetime       DOUBLE PRECISION,                      -- monsterinfo.pausetime: how long a soldier's crouch-and-fire keeps firing
   ls_x DOUBLE PRECISION, ls_y DOUBLE PRECISION, ls_z DOUBLE PRECISION,   -- monsterinfo.last_sighting: where the enemy was last seen, or the trail marker run to
   trail_time      DOUBLE PRECISION DEFAULT 0 NOT NULL,   -- monsterinfo.trail_time: the time of the last trail marker taken (or of the last sighting)
+  sg_x DOUBLE PRECISION, sg_y DOUBLE PRECISION, sg_z DOUBLE PRECISION,   -- monsterinfo.saved_goal: the pursuit target a detour stands in for
   attack_state    SMALLINT DEFAULT 0 NOT NULL,   -- 1 straight 2 sliding 3 melee 4 missile 5 leaping
   lefty      SMALLINT DEFAULT 0 NOT NULL,
   -- placement

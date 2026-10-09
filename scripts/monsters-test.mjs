@@ -220,8 +220,18 @@ for (const m of MONSTERS) {
   assert((m.A & 112) === 112 && Math.abs(p.GX - m0.X - 4) < 1e-6 && Math.abs(p.DIST - 4) < 1e-6, `losing sight it runs to where it last saw the player, reaching it (flags ${m.A}, ${p.DIST})`);
   const first = (await trail())[0];
   p = await pursue();
-  m = await q1(`SELECT aiflags a, ls_x lx, ls_y ly, trail_time tt FROM ents WHERE id = ${id}`);
-  assert(m.LX === first.X && m.LY === first.Y && m.TT === first.TS && (m.A & 32) === 0, `... then takes the trail's first marker after it (${m.LX}, ${m.LY})`);
+  m = await q1(`SELECT aiflags a, ls_x lx, ls_y ly, sg_x sx, sg_y sy, trail_time tt FROM ents WHERE id = ${id}`);
+  // (a marker the box cannot reach straight is detoured: then it waits in saved_goal behind a spot to one side)
+  const tx = m.A & 128 ? m.SX : m.LX, ty = m.A & 128 ? m.SY : m.LY;
+  assert(tx === first.X && ty === first.Y && m.TT === first.TS && (m.A & 32) === 0,
+    `... then takes the trail's first marker after it (${tx}, ${ty}${m.A & 128 ? `, by way of ${m.LX.toFixed(0)}, ${m.LY.toFixed(0)}` : ''})`);
+  if (m.A & 128) {
+    // AI_PURSUE_TEMP: reaching the spot puts the marker back as the target
+    await db.exec(`UPDATE ents SET x = ls_x, y = ls_y WHERE id = ${id}`);
+    await pursue(); await pursue();
+    const m2 = await q1(`SELECT aiflags a, ls_x lx, sg_x sx FROM ents WHERE id = ${id}`);
+    assert((m2.A & 128 ? m2.SX : m2.LX) === first.X, '... and once at the detour, on to the marker');
+  }
   await db.exec(`UPDATE ents SET search_time = 1 WHERE id = ${id}`);
   await db.exec('UPDATE game SET time_ = time_ + 30');
   p = await pursue();

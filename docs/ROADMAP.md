@@ -73,8 +73,9 @@ them.
   in ten (`M_CheckAttack`'s `AS_SLIDING`, `ai_run_slide`: square to it, the other way when blocked); the port
   used to set an attack state of its own by range for every monster. The drain is the parasite's attack, as
   `parasite_attack` was, chosen by the attack chances like any monster's missile (it used to be a melee
-  started at 200 units). Left: `ai_run`'s detour around an obstacle on the way to a new marker
-  (`AI_PURSUE_TEMP`).
+  started at 200 units). A new pursuit target the monster's box cannot reach straight is detoured as
+  `ai_run` detoured it (`AI_PURSUE_TEMP`): a spot 16 units to whichever side goes further, part of the way,
+  the real target kept in `saved_goal` until the spot is reached.
 - **Pusher edge cases**: done, against Quake 2 3.14's g_func.c. A door, plat or train blocked by
   anything but a monster or the player hurts it to death and blows it away; a train deals 100 at most
   every half second (none with `TRAIN_BLOCK_STOPS`), buttons none. `func_water` has the water sounds
