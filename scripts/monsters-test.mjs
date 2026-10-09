@@ -146,9 +146,10 @@ for (const m of MONSTERS) {
   for (let i = 0; i < 80 && !dmgSeen; i++) { s = await tic(); if (s.HEALTH < 100) dmgSeen = 1; }
   assert(dmgSeen, `${m.name} hurt the player (health ${s.HEALTH})`);
   if (m.missile_kind) {
-    // (one that closed in for melee instead counts too)
-    const atk = (m.attack_snd ? await sounds(m.attack_snd) : 1) || (m.melee_snd ? await sounds(m.melee_snd) : 0);
-    assert(atk > 0, `${m.name} fired or struck (${m.attack_snd})`);
+    // (one that closed in for melee instead counts too, and a gunner that threw grenades rather than firing its chain gun)
+    const atk = (m.attack_snd ? await sounds(m.attack_snd) : 1) || (m.melee_snd ? await sounds(m.melee_snd) : 0) ||
+      (m.name === 'gunner' ? await sounds('gunner/gunatck3.wav') : 0);
+    assert(atk > 0, `${m.name} fired or struck (${m.attack_snd}${m.name === 'gunner' ? ' or gunner/gunatck3.wav' : ''})`);
   }
   // kill it with the railgun: 150 a shot
   await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16), health = 100 WHERE id = ${pe}`);
@@ -196,8 +197,9 @@ for (const m of MONSTERS) {
   await db.exec('EXECUTE PROCEDURE player_trail_check');
   const tr = await trail();
   assert(tr.length === 2 && tr[1].X === 128 + 40, `out of sight of the last marker, a new one where the player was (${tr.map((m) => m.X).join(', ')})`);
-  for (let i = 0; i < 9; i++) { await db.exec('UPDATE player_trail SET z = z - 4000'); await teleport(300 + i * 8, -320, 32, 135); await db.exec('EXECUTE PROCEDURE player_trail_check'); }
-  assert((await trail()).length === 8, 'eight markers are kept');
+  for (let i = 0; i < 9; i++) { await db.exec('UPDATE player_trail SET z = z - 4000'); await teleport(128 + i * 8, -300, 32, 135); await db.exec('EXECUTE PROCEDURE player_trail_check'); }
+  const n8 = (await trail()).length;
+  assert(n8 === 8, `eight markers are kept (${n8})`);
   await db.exec('UPDATE player_trail SET z = z - 4000');                       // none in the soldier's sight either
   await teleport(128, -320, 32, 135);
 
