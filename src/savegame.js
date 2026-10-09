@@ -11,8 +11,12 @@ const TABLES = ['game', 'player', 'ents', 'lightstyles', 'player_trail'];
 // per-frame caches on ents that are rebuilt rather than saved
 const SKIP = new Set(['FACES_LST', 'FL_STAMP', 'FL_X', 'FL_Y', 'FL_Z', 'FL_P', 'FL_YAW', 'FL_R', 'VIS_CL', 'VIS']);
 
-/** Read the saved-game tables. Returns a plain object fit for JSON. */
-export async function exportSave(db, mapName) {
+/**
+ * Read the saved-game tables. Returns a plain object fit for JSON. `levels` (a Map by map name of levels
+ * left within the unit, from exportLevel) ride along, as Quake 2's save directory held every level's
+ * .sav beside the game's (SV_WriteServerFile copied them in).
+ */
+export async function exportSave(db, mapName, levels = null) {
   const tables = {};
   for (const t of TABLES) {
     const r = await db.query(`SELECT * FROM ${t}`, [], { rowMode: 'array' });
@@ -23,7 +27,12 @@ export async function exportSave(db, mapName) {
   // model ids by name: a reloaded map's models may get other ids, so the save carries the names
   const models = {};
   for (const [id, name] of (await db.query('SELECT id, name FROM models', [], { rowMode: 'array' })).rows) models[id] = name;
-  return { version: SAVE_VERSION, map: mapName, when: Date.now(), models, tables };
+  return { version: SAVE_VERSION, map: mapName, when: Date.now(), models, tables, levels: levels ? Object.fromEntries(levels) : {} };
+}
+
+/** The unit's levels a save carries (but the save's own map, which the save itself holds), as a Map by name. */
+export function savedLevels(save) {
+  return new Map(Object.entries(save.levels ?? {}).filter(([name]) => name !== save.map));
 }
 
 /**

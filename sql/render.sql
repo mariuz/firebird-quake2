@@ -452,15 +452,19 @@ BEGIN
   -- the alias models and sprites in the frustum and the PVS, with their pose. Both tests are
   -- expressions of the cursor (the PVS one on the eye's leaf row, joined in), so only the
   -- entities drawn reach PSQL; the sphere is the model's radius plus a margin for any monster's box.
+  -- One that carries a light (EF_BLASTER, EF_ROCKET, EF_HYPERBLASTER, EF_BFG: 216) comes whether in
+  -- the frustum or not, as the client had every entity in the PVS and lit the walls by all of them
+  -- (CL_AddPacketEntities, V_AddLight): a rocket flying past the view lights the wall in front.
   kind = 2;
   FOR SELECT e.id, e.model_id, e.frame, e.skin, e.effects, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.alpha, e.renderfx, e.mkind
         FROM ents e CROSS JOIN leaves l
        WHERE l.id = :vleaf AND e.mkind IN ('M', 'S') AND e.id <> :pe
-         AND e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64 >= :nearz
-         AND e.x * :nrx + e.y * :nry + e.z * :nrz - :enr + (e.mradius + 64) * :qx >= 0
-         AND e.x * :nlx + e.y * :nly + e.z * :nlz - :enl + (e.mradius + 64) * :qx >= 0
-         AND e.x * :ntx + e.y * :nty + e.z * :ntz - :ent + (e.mradius + 64) * :qy >= 0
-         AND e.x * :nbx + e.y * :nby + e.z * :nbz - :enb + (e.mradius + 64) * :qy >= 0
+         AND (BIN_AND(e.effects, 216) <> 0
+              OR (e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64 >= :nearz
+                  AND e.x * :nrx + e.y * :nry + e.z * :nrz - :enr + (e.mradius + 64) * :qx >= 0
+                  AND e.x * :nlx + e.y * :nly + e.z * :nlz - :enl + (e.mradius + 64) * :qx >= 0
+                  AND e.x * :ntx + e.y * :nty + e.z * :ntz - :ent + (e.mradius + 64) * :qy >= 0
+                  AND e.x * :nbx + e.y * :nby + e.z * :nbz - :enb + (e.mradius + 64) * :qy >= 0))
          AND (l.pvs = ''
               OR ((e.cluster IS NULL OR e.cluster < 0) AND e.cl2 IS NULL AND e.cl3 IS NULL)
               OR (e.cluster >= 0 AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cluster, 3))) <> 0)

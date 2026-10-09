@@ -111,6 +111,27 @@ for (let i = 0; i < 7; i++) s = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
 s = await tic([1, 0, 0, 0, 85, 1, 0, 1, 0]);
 for (let i = 0; i < 20; i++) s = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
 assert(s.HEALTH < 100, `rocket at our feet hurt us (health ${s.HEALTH})`);
+// a rocket flying behind the view is in the frame all the same (the client had every entity in the PVS, and its
+// light reached the walls in front); a monster behind it is not
+{
+  const pe = (await db.query('SELECT ent_id e FROM player')).rows[0].E;
+  const p = (await db.query(`SELECT x, y, z, yaw FROM ents WHERE id = ${pe}`)).rows[0];
+  const bx = -Math.cos(p.YAW * Math.PI / 180), by = -Math.sin(p.YAW * Math.PI / 180);
+  // far enough back to be outside the frustum's margin (the model's sphere plus 64), in the open and in
+  // the eye's sight (so in its PVS: a spot round a corner would not be sent, as Quake 2 would not have)
+  let d = 0;
+  for (const dd of [240, 200, 160]) {
+    const q = (await db.query(`SELECT point_contents(${p.X + bx * dd}, ${p.Y + by * dd}, ${p.Z + 10}) c, visible_point(${pe}, ${p.X + bx * dd}, ${p.Y + by * dd}, ${p.Z + 10}) v FROM rdb$database`)).rows[0];
+    if (q.C === 0 && q.V === 1) { d = dd; break; }
+  }
+  if (d) {
+    await db.exec(`EXECUTE PROCEDURE launch_rocket(${pe}, ${p.X + bx * d}, ${p.Y + by * d}, ${p.Z + 10}, ${bx}, ${by}, 0, 1, 100, 100, 120)`);   // (crawling: a speed of 0 is no rocket)
+    const rows = (await db.query('SELECT i1, i5 FROM frame_all(0, 2147483647, 2147483647, 0) WHERE kind = 2', [], { rowMode: 'array' })).rows;
+    const r = (await db.query("SELECT MAX(id) m FROM ents WHERE classname = 'rocket'")).rows[0].M;
+    assert(rows.some(([id, fx]) => id === r && (fx & 16)), `a rocket ${d} units behind the view is in the frame for its light (${rows.length} entities)`);
+    await db.exec(`DELETE FROM ents WHERE id = ${r}`);
+  } else console.log('(no open spot behind the start to put a rocket: not checked here)');
+}
 
 // the looped sounds (s.sound) a frame lists: [ent, name]
 const loopSounds = async () => (await db.query('SELECT i1, s FROM frame_all(0, 2147483647, 2147483647, 0) WHERE kind = 9', [], { rowMode: 'array' })).rows;

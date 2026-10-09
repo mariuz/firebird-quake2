@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
-import { exportSave, importSave, exportLevel, importLevel } from '../src/savegame.js';
+import { exportSave, importSave, exportLevel, importLevel, savedLevels } from '../src/savegame.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mapName = process.argv[2] ?? 'demo1';
@@ -85,6 +85,14 @@ check((await db.query('SELECT COUNT(*) n FROM ents WHERE id IN (SELECT id FROM e
   check(air.A === air.T + 12, 'with twelve seconds of air from the level\'s time');
   for (let i = 0; i < 5; i++) await tic(1, 1, 0);
   check((await db.query('SELECT COUNT(*) n FROM ents WHERE id IN (SELECT id FROM ents GROUP BY id HAVING COUNT(*) > 1)')).rows[0].N === 0, '... and the level runs on, ids unique');
+  // a save made here carries that level (SV_WriteServerFile copied the unit's .sav files beside the game's): through
+  // JSON and back, the level comes out as it went in, and the save's own map is not among them
+  const lv2 = await exportLevel(db);
+  const withLevels = JSON.parse(JSON.stringify(await exportSave(db, mapName, new Map([[mapName, lv], ['elsewhere', lv2]]))));
+  const back2 = savedLevels(withLevels);
+  check(back2.size === 1 && !back2.has(mapName) && back2.get('elsewhere').ents.rows.length === lv2.ents.rows.length
+    && JSON.stringify(back2.get('elsewhere')) === JSON.stringify(lv2), `a save carries the unit's other levels (${back2.get('elsewhere').ents.rows.length} entities of one), not its own map's`);
+  check(savedLevels({ map: mapName, version: 2 }).size === 0, 'a save from before has none');
 }
 
 console.log(failures ? `${failures} FAILED` : 'all good');

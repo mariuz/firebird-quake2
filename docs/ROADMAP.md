@@ -11,8 +11,9 @@ them.
   (`F3`, `F2`), save0 the autosave written as each map starts ("ENTERING Outer Base", as
   `SV_GameMap_f` copied it), the others named with the time and the level as `SV_WriteServerFile` did,
   plus the quick slot (`F6` / `F9`). Dying and pressing fire brings up the load menu (`respawn` in single
-  player). `src/savegame.js`, tested by `scripts/save-test.mjs`. Left: a save holds one map's tables, so
-  the unit's other levels (below) are not in it and a loaded game forgets them; a save made by an older schema loads with the new columns'
+  player). `src/savegame.js`, tested by `scripts/save-test.mjs`. A save carries the unit's other levels
+  as they were left (below), as `SV_WriteServerFile` copied every level's `.sav` beside the game's, and a
+  loaded game comes back to them as left. Left: a save made by an older schema loads with the new columns'
   defaults, and one whose columns are gone fails (bump `SAVE_VERSION` when that matters).
 - **Cross-level state**: done. `game.serverflags` holds the unit's eight flags across maps (a new
   game clears them); a used `target_crosslevel_trigger` sets its spawnflags there and is spent; a
@@ -89,8 +90,7 @@ them.
   that drops, at once or when used), `func_killbox` and `func_conveyor` (solid; its speed only
   scrolls textures) are spawned and tested on synthetic entities, as none of the demo maps has one.
   Testing it found `mover_blocked` had never run: a forward-declaration stub in monsters.sql, which
-  loads after game.sql, replaced its body with an empty one. Left: `func_clock`, which needs
-  `target_string`'s digits. (The roadmap used to list `movewith`
+  loads after game.sql, replaced its body with an empty one. (The roadmap used to list `movewith`
   and `WATER_SMART`: those come from later mods, not from Quake 2.)
 - **Damage effects**: done, against g_combat.c and g_weapon.c. Blast damage reaches as far as
   `findradius` (the radius, measured to the middle of the target) and no farther, and `CanDamage`
@@ -166,9 +166,10 @@ them.
   hitting a wall 150). The painter marks a face lit when a light's reach, less its distance to the plane,
   leaves the minimum 32 and overlaps the face (from either side, as Quake 2's lights shone through thin
   walls), adds `R_AddDynamicLights`'s term to its light samples and builds it afresh for the frame, not
-  cached; models get `R_LightPoint`'s intensity less distance. Monochrome, as ref_soft was. Left: brush
-  models are lit in their BSP position (a moved door or a rotating fan takes the light where it stood), and
-  only lights carried by drawn entities count (one behind the view does not light the wall in front).
+  cached; models get `R_LightPoint`'s intensity less distance. Monochrome, as ref_soft was. An entity
+  carrying a light comes in the frame whether in the frustum or not (the client had every entity in the PVS
+  and lit by all of them): a rocket flying past lights the wall in front. Left: brush models are lit in
+  their BSP position (a moved door or a rotating fan takes the light where it stood).
 - **Mipmaps**: done, as ref_soft chose them. Each polygon's level is `D_MipLevelForScale` of the nearest
   vertex's 1/z times the projection scale times the texture's `mipadjust` (from the length of its texture
   vectors), against `d_scalemip`'s 1, 0.4 and 0.2; the surface is cached per level, built from the

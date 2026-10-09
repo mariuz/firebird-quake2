@@ -18,7 +18,7 @@ import { createSchema, loadResources, loadMap, setView } from './loader.js';
 import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
 import { Menu, saveComment } from './menu.js';
-import { exportSave, importSave, exportLevel, importLevel } from './savegame.js';
+import { exportSave, importSave, exportLevel, importLevel, savedLevels } from './savegame.js';
 import { parseChangeMap } from './levels.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS } from './gamedata.js';
@@ -241,7 +241,7 @@ async function runCommand(line) {
   }
 }
 
-// ── saved games: the four game tables as JSON in localStorage (F6 saves, F9 loads) ─────────
+// ── saved games: the game tables and the unit's other levels as JSON in localStorage (F6 saves, F9 loads) ─────────
 const SAVE_KEY = 'firebird-quake2:save:quick';
 /** The save's comment: the level's name (the worldspawn message) after "ENTERING " or the time. */
 async function levelName() {
@@ -249,7 +249,7 @@ async function levelName() {
   return (g?.LEVEL_MSG ?? '').trim() || map.name;
 }
 async function writeSave(key, autosave) {
-  const save = await exportSave(db, map.name);
+  const save = await exportSave(db, map.name, unitLevels);   // (with the unit's other levels, as left)
   save.comment = saveComment(await levelName(), autosave);
   const json = JSON.stringify(save);
   localStorage.setItem(key, json);
@@ -271,11 +271,12 @@ async function loadGame(key = SAVE_KEY) {
   if (!pak.has(`maps/${save.map}.bsp`)) { setStatus(`The saved game is on ${save.map}, which is not in this pak`, true); return; }
   running = false;
   try {
-    unitLevels.clear();                              // (a save holds its own level only)
+    unitLevels.clear();
     await startMap(save.map, false, null, false);   // the map's geometry and models afresh, then the saved rows
     running = false;
     setStatus('Loading the saved game…');
     await importSave(db, save);
+    for (const [name, lv] of savedLevels(save)) unitLevels.set(name, lv);   // the unit's other levels, as the save left them
     await loadStyleBase();
     brushFrames.clear(); brushAngles.clear();
     const { rows } = await db.query('SELECT MAX(id) m FROM sound_events');

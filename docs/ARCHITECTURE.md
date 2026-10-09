@@ -290,7 +290,8 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   lightmap light (scaled by the brightness) plus the dynamic part, `RF_MINLIGHT` and `RF_GLOW` applied,
   ambient and shade clamped as ref_soft clamped them, the shade by the normal's x.
 - **Dynamic lights.** `renderer.dlights` is the frame's lights (`frameDlights` in `src/main.js`: muzzle
-  flashes from fx 15, projectiles by their effects bits, explosions fading). `faceDlights` is
+  flashes from fx 15, projectiles by their effects bits, explosions fading; the frame sends a projectile
+  in the PVS whether it is in the frustum or not, so one flying past lights what is in view). `faceDlights` is
   `R_MarkLights` face by face (the plane distance, the reach across the face); a face it returns lights
   for is built by `buildSurface` with `R_AddDynamicLights`'s term added to the samples and is not
   cached. `dlightAt` is `R_LightPoint`'s dynamic part for models and the view weapon.
@@ -371,9 +372,10 @@ no tics. The page's `host` object gives the menus what they act on: new games, t
 settings, which go through the page's own controls so both agree. `scripts/menu-test.mjs` drives it
 headless.
 
-Saved games (`src/savegame.js`): `F6` reads the four game tables (`game`, `player`, `ents`,
-`lightstyles`) as rows, with the column names from the result's field list and the model ids' names,
-and keeps them as JSON in `localStorage`; `F9` reloads the map, empties the four tables, inserts the
+Saved games (`src/savegame.js`): `F6` reads the game tables (`game`, `player`, `ents`,
+`lightstyles`, `player_trail`) as rows, with the column names from the result's field list and the
+model ids' names, and the unit's other levels as they were left (`exportLevel`'s objects, `savedLevels`
+gets them back), and keeps them as JSON in `localStorage`; `F9` reloads the map, empties the four tables, inserts the
 saved rows with model ids remapped by name, restarts `ent_seq` above the highest id and resets the
 frame's caches. The per-frame cache columns of `ents` are not saved. `DOUBLE PRECISION` columns are
 inserted as `CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)` from an integer mantissa and an exponent:
