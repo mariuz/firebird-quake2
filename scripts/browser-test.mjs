@@ -104,6 +104,40 @@ try {
     assert(m3 !== m4, 'Escape again closes it and the game goes on');
   }
 
+  // a touch screen: the on-screen buttons show, and taps on them and on the view's halves reach the game
+  if (ready) {
+    const touchCtx = await browser.newContext({ hasTouch: true, viewport: { width: 800, height: 600 } });
+    const tp = await touchCtx.newPage();
+    tp.on('console', (m) => { if (m.type() === 'error') errors.push('touch: ' + m.text()); });
+    tp.on('pageerror', (e) => errors.push(`touch pageerror: ${e.message}`));
+    tp.on('response', (r) => { if (r.status() === 404) missing.push(new URL(r.url()).pathname); });
+    await tp.goto(base, { waitUntil: 'load' });
+    const tstats = () => tp.evaluate(() => document.getElementById('stats')?.textContent ?? '').catch(() => '');
+    const t1 = Date.now();
+    let tready = false;
+    while (Date.now() - t1 < 300_000) { const s = await tstats(); if (/q2_tic \d+ ms/.test(s) && !/^0\.0 fps/.test(s)) { tready = true; break; } await sleep(1000); }
+    assert(tready, 'with a touch screen the game loads too');
+    if (tready) {
+      const shown = await tp.evaluate(() => { const t = document.getElementById('touch'); return !!t && !t.hidden && getComputedStyle(t).display !== 'none'; });
+      assert(shown, 'the on-screen buttons show on a touch screen');
+      const box = await tp.locator('#screen').boundingBox();
+      await tp.touchscreen.tap(box.x + box.width * 0.25, box.y + box.height * 0.5);   // the move half: a tap jumps
+      await tp.touchscreen.tap(box.x + box.width * 0.75, box.y + box.height * 0.5);   // the look half: a tap fires
+      for (const act of ['jump', 'weapon', 'fire']) await tp.locator(`#touch button[data-act="${act}"]`).tap();
+      await sleep(1000);
+      assert(/q2_tic \d+ ms/.test(await tstats()), 'the game runs on after the taps');
+      await tp.locator('#touch button[data-act="menu"]').tap();
+      await sleep(600);
+      const m1 = await tstats(); await sleep(700); const m2 = await tstats();
+      assert(m1 === m2, 'the menu button opens the menu and the game pauses');
+      await tp.locator('#touch button[data-act="menu"]').tap();
+      await sleep(600);
+      const m3 = await tstats(); await sleep(700); const m4 = await tstats();
+      assert(m3 !== m4, 'and again closes it');
+    }
+    await touchCtx.close();
+  }
+
   // nothing optional is loud: only the music tracks and the favicon may be missing
   const unexpected = missing.filter((p) => !/\/music\/|favicon/.test(p));
   assert(unexpected.length === 0, `no unexpected 404s (${missing.length} optional: ${[...new Set(missing)].join(', ') || 'none'})`);

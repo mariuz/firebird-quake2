@@ -22,6 +22,13 @@
         <div id="status" class="status">Loading…</div>
         <input id="cmdline" class="cmdline" type="text" autocomplete="off" spellcheck="false" hidden
                placeholder="god · noclip · notarget · give all|health|weapons|ammo|armor|keys · kill · map demo2 · save · load" aria-label="Console">
+        <!-- on-screen buttons, shown on touch screens: the halves of the view move and look, these fire and jump -->
+        <div id="touch" class="touch" hidden>
+          <button type="button" data-act="menu" aria-label="Menu">≡</button>
+          <button type="button" data-act="weapon" aria-label="Next weapon">⟳</button>
+          <button type="button" data-act="jump" aria-label="Jump">▲</button>
+          <button type="button" data-act="fire" aria-label="Fire">●</button>
+        </div>
       </div>
       <div id="stats" class="stats">&nbsp;</div>
       <div class="controls">
@@ -66,7 +73,8 @@
         <kbd>Ctrl</kbd> or click fires · <kbd>Space</kbd> jumps · <kbd>C</kbd> crouches · <kbd>Shift</kbd> walks (or runs: the Run setting) ·
         <kbd>1</kbd>–<kbd>0</kbd> weapons · <kbd>G</kbd> hand grenades · <kbd>/</kbd> or wheel cycles · <kbd>Tab</kbd> inventory (<kbd>[</kbd> <kbd>]</kbd> select, <kbd>Enter</kbd> use) · <kbd>Q</kbd> quad · <kbd>I</kbd> invulnerability · <kbd>B</kbd> rebreather · <kbd>E</kbd> environment suit · <kbd>F1</kbd> help computer · <kbd>`</kbd> console (god, noclip, notarget, give, use, kill, map) · <kbd>P</kbd> pause ·
         <kbd>Esc</kbd> menu (<kbd>F2</kbd> save, <kbd>F3</kbd> load, <kbd>F10</kbd> quit) · <kbd>F6</kbd> quick save · <kbd>F9</kbd> quick load (saves live in this browser).
-        On touch screens the left half moves, the right half looks, a tap fires.</p>
+        On touch screens the left half of the view moves, the right half looks, a tap fires, and the buttons fire, jump, change weapon and open the menu.
+        A gamepad works too: left stick moves, right stick looks, RT fires, A jumps, B crouches, LB/RB change weapon, Start opens the menu (the d-pad, A and B drive it).</p>
     </section>
 
     <section class="console">

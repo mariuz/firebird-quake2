@@ -23,6 +23,7 @@ import { packSave, unpackSave, saveHeader } from './savestore.js';
 import { parseChangeMap } from './levels.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS } from './gamedata.js';
+import { readPad, padImpulse, padMenuKeys, firstPad, BUTTON, TURN, LOOK } from './gamepad.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('screen');
@@ -68,6 +69,9 @@ function setStatus(msg, isError = false) {
 const keys = new Set();
 let mouseYaw = 0, mousePitch = 0;
 let fireClick = false;
+// the gamepad, read every frame: the buttons held at the last read (a press counts once) and the stick as a d-pad
+const padState = { held: new Set(), stick: { x: 0, y: 0 } };
+const pollPad = () => { const pad = readPad(firstPad(navigator.getGamepads?.()), padState.held); if (pad) padState.held = pad.held; return pad; };
 let impulse = 0;
 const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
   'BracketLeft', 'BracketRight', 'Enter',
@@ -349,25 +353,57 @@ canvas.addEventListener('touchend', (e) => {
   e.preventDefault();
 }, { passive: false });
 
+// on-screen buttons for touch screens (the halves of the view move and look): fire and jump while held, the next
+// weapon, the menu. Shown where the browser reports touch points or a coarse pointer.
+const touchBar = $('touch');
+if (touchBar) {
+  if (navigator.maxTouchPoints > 0 || matchMedia('(pointer: coarse)').matches) touchBar.hidden = false;
+  for (const b of touchBar.querySelectorAll('button')) {
+    const act = b.dataset.act;
+    const press = (on) => {
+      if (act === 'fire') { if (on) keys.add('TouchFire'); else keys.delete('TouchFire'); }
+      else if (act === 'jump') { if (on) keys.add('Space'); else keys.delete('Space'); }
+      else if (on && act === 'weapon') impulse = 12;
+      else if (on && act === 'menu') { if (anyKey) { const go = anyKey; anyKey = null; go(); } else if (menu.active) menu.key('Escape'); else if (running) escape(); }
+    };
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); press(true); });
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, () => press(false));
+    b.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+}
+
 function readInput(tics) {
   const k = (c) => keys.has(c);
+  const pad = pollPad();
+  if (pad) {
+    const pi = padImpulse(pad);
+    if (pi) impulse = pi;
+    if (pad.pressed.has(BUTTON.START)) { escape(); }
+  }
   let fwd = (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0);
   let side = (k('KeyD') || k('Period') ? 1 : 0) - (k('KeyA') || k('Comma') ? 1 : 0);
   const turnKeys = (k('ArrowLeft') ? 1 : 0) - (k('ArrowRight') ? 1 : 0);
   const lookKeys = (k('PageDown') ? 1 : 0) - (k('PageUp') ? 1 : 0);
   const shift = k('ShiftLeft') || k('ShiftRight');
-  const run = settings.alwaysRun ? (shift ? 0 : 1) : (shift ? 1 : 0);    // cl_run: always run with shift to walk, or the other way
+  let run = settings.alwaysRun ? (shift ? 0 : 1) : (shift ? 1 : 0);    // cl_run: always run with shift to walk, or the other way
   if (touch.move) {
     fwd = Math.max(-1, Math.min(1, -touch.move.dy / 40));
     side = Math.max(-1, Math.min(1, touch.move.dx / 40));
   }
-  const yaw = turnKeys * 7 * tics + mouseYaw;
-  const pitch = lookKeys * 5 * tics + mousePitch;
+  let padTurn = 0, padLook = 0;
+  if (pad && (pad.fwd || pad.side)) { fwd = pad.fwd; side = pad.side; run = settings.alwaysRun || pad.run ? 1 : 0; }
+  if (pad) {
+    // the right stick at the keyboard's turning speed at full throw, scaled by the mouse sensitivity (7 is 1×)
+    padTurn = pad.turn * TURN * tics * settings.sensitivity / 7;
+    padLook = pad.look * LOOK * tics * settings.sensitivity / 7 * (settings.invertMouse ? -1 : 1);
+  }
+  const yaw = turnKeys * 7 * tics + mouseYaw + padTurn;
+  const pitch = lookKeys * 5 * tics + mousePitch + padLook;
   mouseYaw = 0; mousePitch = 0;
-  const fire = k('ControlLeft') || k('ControlRight') || k('KeyF') || fireClick ? 1 : 0;
+  const fire = k('ControlLeft') || k('ControlRight') || k('KeyF') || k('TouchFire') || fireClick || pad?.fire ? 1 : 0;
   if (fireClick === 'tap') fireClick = false;
   // Quake's upmove: jump up, crouch (C) down, both nothing
-  const jump = (k('Space') || k('TapJump') ? 1 : 0) - (k('KeyC') ? 1 : 0);
+  const jump = (k('Space') || k('TapJump') || pad?.jump ? 1 : 0) - (k('KeyC') || pad?.crouch ? 1 : 0);
   keys.delete('TapJump');
   const imp = impulse;
   impulse = 0;
@@ -437,6 +473,10 @@ async function frame() {
   if (!running || paused || document.hidden || menu.active) {
     lastTic = performance.now();
     audio.silenceLoops();
+    const pad = pollPad();
+    if (pad && pad.pressed.size && anyKey) { const go = anyKey; anyKey = null; go(); }
+    else if (pad && menu.active) { const mk = padMenuKeys(pad, padState.stick); padState.stick = mk.stick; for (const key of mk.keys) menu.key(key); }
+    else if (pad && paused && pad.pressed.has(BUTTON.START)) paused = false;
     if (menu.active && renderer && last && !document.hidden) { drawFrame(null, [], new Float32Array(64), last.TIME_); menu.draw(renderer, performance.now()); renderer.present(); }
     else if (paused && renderer && last) { drawFrame(null, [], new Float32Array(64), last.TIME_); hud.drawCenter(renderer, 'paused', 80); renderer.present(); }
     nextFrame();

@@ -26,7 +26,8 @@
     "test:walkthrough": "node scripts/walkthrough-test.mjs",
     "test:entities": "node scripts/entities-test.mjs",
     "test:browser": "node scripts/browser-test.mjs",
-    "test:replay": "node scripts/replay-test.mjs"
+    "test:replay": "node scripts/replay-test.mjs",
+    "test:input": "node scripts/input-test.mjs"
   },
   "license": "MIT",
   "dependencies": {

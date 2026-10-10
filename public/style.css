@@ -56,6 +56,32 @@ kbd {
   font-size: 13px;
 }
 .status.error { border-left-color: #ff4040; color: #ffb0b0; }
+/* the touch buttons: over the view's bottom right, big enough for thumbs, out of the way of the status line */
+.touch {
+  position: absolute;
+  right: 12px;
+  bottom: 48px;
+  display: flex;
+  gap: 10px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.touch[hidden] { display: none; }
+.touch button {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.touch button:active { background: var(--accent); }
+.touch button[data-act="fire"] { width: 72px; height: 72px; font-size: 32px; }
 .cmdline {
   position: absolute;
   inset: 12px 12px auto 12px;

@@ -80,6 +80,10 @@ jobs:
       - name: Replays
         run: npm run test:replay
 
+      # A gamepad read as Quake's usercmd: dead zones, the run, a press once, the menu keys
+      - name: Gamepad input
+        run: npm run test:input
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # service worker isolates, the pak downloads, Firebird runs in its worker, keys, a quick save
       # and load, the menu, no console errors

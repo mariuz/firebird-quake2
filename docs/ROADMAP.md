@@ -346,9 +346,15 @@ picker). Missing for the rest of the game:
   and schedules the non-pusher thinks from it (the eleven of them: monsters, turret drivers, lasers,
   timers, clocks, banners, decorations, gibs, `always_fire`, `crosslevel_think`, `elevator_init`);
   the pushers keep `ltime`; the spawner shifts nothing.
-- **Phone and gamepad**: the page takes keys and the mouse only. Touch controls (a stick for moving, a
-  drag for looking, buttons for fire and jump) and the Gamepad API would make the demo playable on a
-  phone, where the WASM engine already runs; the view at 160×120 is the detail setting for it.
+- **Phone and gamepad**: done. The view's halves already moved and looked on a touch screen, with a
+  tap firing; now on-screen buttons (shown where the browser reports touch points or a coarse
+  pointer) fire and jump while held, change weapon and open the menu, and a gamepad works through
+  the Gamepad API's standard mapping (`src/gamepad.js`): left stick moves, a run at its edge, right
+  stick looks at the keyboard's turning speed scaled by the mouse sensitivity, RT or X fires, A
+  jumps, B crouches, LB/RB change weapon, Start opens the menu, and in a menu the d-pad, the stick,
+  A and B do what the keys do; a press counts once. `test:input` checks the reading in Node, and
+  the browser test's touch phase taps the halves and every button on an emulated touch screen. The
+  view at 160×120 is the detail setting for a phone.
 - **Code health**: `src/main.js` is 839 lines: the loop, input, settings, the menus' `host` object, the
   console and the page's wiring in one file. The `host` object and the loop could stand apart from the
   DOM, so the headless tests could drive the page's logic as `menu-test.mjs` drives the menus.
