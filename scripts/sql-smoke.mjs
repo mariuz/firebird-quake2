@@ -210,6 +210,28 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
     await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE door_use(${d}, player_ent()); END`);
     const open = await floods();
     assert(open < closed, `the door opening joins the areas it separates (${closed} → ${open} groups)`);
+    // the kept face sets outlive a door elsewhere: a portal between areas the eye's are not joined to leaves the
+    // eye's set (and VIEWCFG's cluster) as it was; one in the eye's own group of areas drops it
+    await db.query('SELECT COUNT(*) FROM frame_all(0, 2147483647, 2147483647, 0)');
+    const eye0 = (await db.query('SELECT vis_cluster c, vis_slot s FROM viewcfg')).rows[0];
+    const eyeFlood = `(SELECT f0.flood FROM area_flood f0 JOIN leaves l0 ON l0.area = f0.area JOIN ents e0 ON e0.leaf = l0.id JOIN player p0 ON p0.ent_id = e0.id)`;
+    const portalIn = (inside) => db.query(`SELECT FIRST 1 ap.portal p FROM areaportals ap WHERE ${inside ? '' : 'NOT'} EXISTS (SELECT 1 FROM areas ar JOIN areaportals ap2 ON ap2.id >= ar.first_ap AND ap2.id < ar.first_ap + ar.num_ap
+      JOIN area_flood f ON f.area = ar.id WHERE ap2.portal = ap.portal AND f.flood = ${eyeFlood})`).then((r) => r.rows[0]?.P);
+    const far = await portalIn(false), near = await portalIn(true);
+    const state = (p) => db.query(`SELECT COALESCE((SELECT open_ FROM portal_state WHERE portal = ${p}), 0) o FROM rdb$database`).then((r) => r.rows[0].O);
+    if (far != null && eye0.C != null) {
+      const o = await state(far);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${far}, ${1 - o}); END`);
+      const eye1 = (await db.query('SELECT vis_cluster c, vis_slot s FROM viewcfg')).rows[0];
+      assert(eye1.C === eye0.C && eye1.S === eye0.S, `a portal elsewhere (${far}) leaves the eye's marked set (slot ${eye0.S})`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${far}, ${o}); END`);
+    } else console.log('     (no portal outside the eye\'s group of areas to test the kept sets with)');
+    if (near != null && eye0.C != null) {
+      const o = await state(near);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${near}, ${1 - o}); END`);
+      assert((await db.query('SELECT vis_cluster c FROM viewcfg')).rows[0].C === null, `a portal in the eye's group (${near}) drops its set: marked afresh`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${near}, ${o}); END`);
+    }
     assert((await db.query('SELECT vis_cluster FROM viewcfg')).rows[0].VIS_CLUSTER === null, 'the marked view is forgotten when a portal changes');
     assert((await db.query('SELECT COUNT(*) n FROM frame_all(0, 0, 0, 0) WHERE kind = 1')).rows[0].N > 0, 'the frame marks and draws again');
     await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE door_hit_bottom(${d}); END`);

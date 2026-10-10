@@ -224,8 +224,9 @@ costs ~17 ms (it was ~43). The last eight marked sets are kept, each in its own 
 `vis_faces` (primary key `slot, face`; `vis_sets` says which cluster and area a slot holds and
 when it was last used), so walking back into a recent cluster is a switch of
 `viewcfg.vis_slot` (~0.3 ms); the frame reads `WHERE v.slot = :vslot`, which costs nothing
-measurable. Anything that resets `viewcfg.vis_cluster` (a new map, a load, an area portal opening
-or closing) drops all the sets.
+measurable. A new map or a load (`viewcfg.vis_cluster` reset) drops all the sets; a portal opening
+or closing (`flood_areas`) only those whose area's connections changed, each set keeping the areas
+its flood joined when it was marked, and the eye's set going means marking afresh.
 
 `frame_all(mode, last_sound, last_fx, want_speakers)` returns the frame as kind-tagged rows
 (`kind`, `i1..i5`, `d1..d8`, `s`, `lst`):

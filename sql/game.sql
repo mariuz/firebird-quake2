@@ -354,7 +354,11 @@ BEGIN
       END
     END
   END
-  UPDATE viewcfg c SET c.vis_cluster = NULL, c.world_lst = NULL WHERE c.id = 1;
+  -- the kept face sets whose area's connections changed are stale; if the eye's own went, it is marked afresh
+  DELETE FROM vis_sets s
+   WHERE s.areas IS DISTINCT FROM (SELECT LIST(x.area, ',') FROM (SELECT f2.area FROM area_flood f2
+                                     WHERE f2.flood = (SELECT f1.flood FROM area_flood f1 WHERE f1.area = s.area) ORDER BY f2.area) x);
+  UPDATE viewcfg c SET c.vis_cluster = NULL, c.world_lst = NULL WHERE c.id = 1 AND NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.slot = c.vis_slot);
 END^
 
 -- gi.SetAreaPortalState

@@ -78,14 +78,6 @@ CREATE TABLE vis_faces (
   PRIMARY KEY (slot, face)
 );
 
--- which cluster (and area: the eye's flood) each slot of VIS_FACES holds, and when it was last used
-CREATE TABLE vis_sets (
-  slot    SMALLINT NOT NULL PRIMARY KEY,
-  cluster INTEGER NOT NULL,
-  area    INTEGER,
-  used    INTEGER NOT NULL
-);
-
 -- the leaves MARK_FACES found in the PVS (and the eye's flood of areas), their faces' range
 CREATE GLOBAL TEMPORARY TABLE vis_leaves (
   first_lf INTEGER NOT NULL,
@@ -121,15 +113,16 @@ END^
 
 -- mark_faces: R_MarkLeaves, once per view cluster: every face of every leaf
 -- in the PVS goes into VIS_FACES, in the slot it returns. The last 8 clusters'
--- sets are kept; anything that resets VIEWCFG.VIS_CLUSTER (a new map, a load,
--- an area portal opening or closing) drops them all.
+-- sets are kept, each with the areas its flood joined; a new map or a load
+-- (VIEWCFG.VIS_CLUSTER reset) drops them all, a portal opening or closing only
+-- those whose area's connections changed (flood_areas).
 CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER, vleaf INTEGER)
 RETURNS (slot SMALLINT)
 AS
 DECLARE cur INTEGER; DECLARE world INTEGER; DECLARE curarea INTEGER; DECLARE varea INTEGER; DECLARE eflood INTEGER;
 DECLARE bminx DOUBLE PRECISION; DECLARE bminy DOUBLE PRECISION; DECLARE bminz DOUBLE PRECISION;
 DECLARE bmaxx DOUBLE PRECISION; DECLARE bmaxy DOUBLE PRECISION; DECLARE bmaxz DOUBLE PRECISION;
-DECLARE i INTEGER; DECLARE len INTEGER; DECLARE d INTEGER; DECLARE k INTEGER; DECLARE c INTEGER; DECLARE used INTEGER;
+DECLARE i INTEGER; DECLARE len INTEGER; DECLARE d INTEGER; DECLARE k INTEGER; DECLARE c INTEGER; DECLARE used INTEGER; DECLARE sig VARCHAR(1000);
 BEGIN
   SELECT l.area FROM leaves l WHERE l.id = :vleaf INTO varea;
   SELECT c.vis_cluster, c.vis_area, c.vis_slot FROM viewcfg c WHERE c.id = 1 INTO cur, curarea, slot;
@@ -201,7 +194,8 @@ BEGIN
     JOIN faces f ON f.id = m.face
    WHERE f.model_id = :world AND BIN_AND(f.flags, 128) = 0
      AND IIF(f.nx > 0, f.nx * :bmaxx, f.nx * :bminx) + IIF(f.ny > 0, f.ny * :bmaxy, f.ny * :bminy) + IIF(f.nz > 0, f.nz * :bmaxz, f.nz * :bminz) - f.dist > 0;
-  INSERT INTO vis_sets (slot, cluster, area, used) VALUES (:slot, :vcluster, :varea, :used);
+  SELECT LIST(x.area, ',') FROM (SELECT f.area FROM area_flood f WHERE f.flood = :eflood ORDER BY f.area) x INTO sig;
+  INSERT INTO vis_sets (slot, cluster, area, used, areas) VALUES (:slot, :vcluster, :varea, :used, :sig);
   UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.vis_area = :varea, c.vis_slot = :slot, c.world_lst = NULL WHERE c.id = 1;
 END^
 

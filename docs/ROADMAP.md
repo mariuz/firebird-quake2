@@ -297,9 +297,11 @@ picker). Missing for the rest of the game:
   `firebird-wasm` to bind blobs.
 - **The cluster-change hitch**: smaller. Marking a new cluster went from ~43 to ~17 ms (the
   PVS's clusters looked up by index instead of every leaf's bit tested), and the last eight marked
-  sets are kept, so walking back into one costs ~0.3 ms. Left: marking the next cluster ahead of
-  time (the page would need an idle moment in the worker to spend on it), and a door's re-mark,
-  which drops the kept sets.
+  sets are kept, so walking back into one costs ~0.3 ms. A door opening or closing drops only the
+  sets whose area's connections changed (each set keeps the areas its flood joined), so the others
+  outlive it. Left: marking the next cluster ahead of time (the page would need an idle moment in
+  the worker to spend on it); the eye's own re-mark when a door in its group of areas moves is
+  the one hitch that stays, since what it sees changes.
 - **The tic's floor**: a monster step is a three-call box trace plus a relink, about 0.7 ms;
   with many monsters in a big room the tic grows linearly. The engine's per-level cost of a tree
   descent (~16 µs) is the limit: a trace is 23 levels and 6.6 `rhc` calls on average, and the walk

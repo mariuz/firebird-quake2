@@ -37,6 +37,17 @@ CREATE TABLE game (
   help_changed   INTEGER DEFAULT 0 NOT NULL             -- counts target_help uses (the page blinks the help icon until F1)
 );
 
+-- which cluster and area each kept slot of VIS_FACES (render.sql) holds, when it was last used, and the
+-- areas the eye's area was joined to through open portals when it was marked (the flood): a door
+-- opening or closing drops only the sets whose area's connections changed (FLOOD_AREAS)
+CREATE TABLE vis_sets (
+  slot    SMALLINT NOT NULL PRIMARY KEY,
+  cluster INTEGER NOT NULL,
+  area    INTEGER,
+  used    INTEGER NOT NULL,
+  areas   VARCHAR(1000)
+);
+
 CREATE TABLE viewcfg (
   id     SMALLINT NOT NULL PRIMARY KEY,
   w      INTEGER NOT NULL,
