@@ -379,10 +379,11 @@ Saved games (`src/savegame.js`): `F6` reads the game tables (`game`, `player`, `
 model ids' names, and the unit's other levels as they were left (`exportLevel`'s objects, `savedLevels`
 gets them back), and keeps them as JSON in `localStorage`; `F9` reloads the map, empties the four tables, inserts the
 saved rows with model ids remapped by name, restarts `ent_seq` above the highest id and resets the
-frame's caches. The per-frame cache columns of `ents` are not saved. `DOUBLE PRECISION` columns are
-inserted as `CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)` from an integer mantissa and an exponent:
-firebird-wasm passes every parameter as text, and Firebird's text-to-double conversion is not
-correctly rounded.
+frame's caches. The per-frame cache columns of `ents` are not saved. Each table's rows go in as one
+`execBatch`, and a `DOUBLE PRECISION` column gets the saved double bit for bit: since firebird-wasm
+0.4.0 a number is bound in binary. (Before, every parameter was text, Firebird's text-to-double
+conversion was off by an ulp for one value in six, and doubles went over as
+`CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)` from an integer mantissa and an exponent.)
 
 The loop: compute the tics owed (one or two), `q2_tic`, then one `frame_all`, split its rows by
 kind, play sounds and effects, draw the frame, the view weapon and the HUD, and present. A hidden

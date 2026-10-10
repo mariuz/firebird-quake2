@@ -124,8 +124,9 @@ them.
   now zero as in pmove (a knockback's small downward push used to sink the box into the floor a few
   thousandths at a time until the player was stuck), and the standing-still shortcut writes the speed
   friction has just taken away (the row kept 12 units a second forever). And a saved game now comes
-  back exactly: a double passed as a query parameter goes to Firebird as text, whose conversion lost the
-  last bit of one value in six, so `importSave` sends doubles as an integer and a power of two.
+  back exactly: a double passed as a query parameter went to Firebird as text, whose conversion lost the
+  last bit of one value in six, so `importSave` sent doubles as an integer and a power of two until
+  firebird-wasm 0.4.0 bound numbers in binary.
 - **Weapon keys**: done, as the demo's own `default.cfg` binds them: 1–5 blaster to chaingun, 6 grenade
   launcher, 7 rocket launcher, 8 hyperblaster, 9 railgun, 0 BFG10K, and `G` "use grenades" (the page's
   give-everything key moved to the console's `give all`). Choosing follows `Cmd_Use_f` and
@@ -290,11 +291,43 @@ picker). Missing for the rest of the game:
 
 ## Engineering
 
-- **Load time**: about three seconds for a map in Node (from five and a half: fixed-width rows,
-  one `INSERT` of `CAST(SUBSTRING(…))` per row, `TRIM`/`NULLIF` only on nullable columns). What
+- **Load time**: about two and a half seconds for a map in Node (from five and a half: fixed-width
+  rows, one `INSERT` of `CAST(SUBSTRING(…))` per row, `TRIM`/`NULLIF` only on nullable columns). What
   is left is the inserts themselves (`face_verts`' 37 k rows are a quarter of it, half of that
-  the primary key), `init_map` and the old map's `DELETE`s. A binary blob path would need
-  `firebird-wasm` to bind blobs.
+  the primary key), `init_map` and the old map's `DELETE`s. firebird-wasm 0.4.0's `execBatch` was
+  measured against the chunk procedures with both in one process, alternating (`face_verts`, `faces`
+  and every other table): 13 % slower, because each row is still a statement execute inside the
+  engine while the procedure's `INSERT` is a node of one compiled request. The loaders stay until
+  firebird-wasm's batch is built on Firebird's `IBatch` (every row in one request), which should take
+  the load under two seconds. Then: `face_verts` is read only by the painter's surface builds, so it
+  could load after the first frame is up (about a quarter of the load), and the old map's `DELETE`s
+  could go into the loading plaque's first tic.
+- **Saves and `localStorage`**: a save is JSON, uncompressed; a demo3 save carrying two levels left
+  is 495 KB (46 KB gzipped), and fifteen slots plus the autosave share an origin's ~5 MB. Compress
+  with `CompressionStream('gzip')` on the way in (and accept both forms on the way out), or move the
+  slots to IndexedDB, which has no such budget.
+- **A browser test in CI**: every test runs the SQL in Node through `DirectTransport`; the page
+  itself (the worker, the service worker's cross-origin isolation, the canvas, the input) is checked
+  by hand. A Playwright run against `scripts/build.mjs --serve --coi` that loads demo1, plays a few
+  tics and reads the stats line would catch what the Node tests cannot.
+- **Deterministic replays**: the SQL draws its chances from Firebird's `RAND()`, so a bug seen once
+  cannot be played again. A seeded generator in SQL (an LCG kept in `game`, the seed saved with the
+  game and printed by the console) would make a replay of the inputs reproduce the run, and would let
+  the tests assert exact outcomes where they now assert ranges.
+- **`run_think`**: a chain of 38 `IF (think = '…')` string comparisons, walked for every think of
+  every entity every tic. A think code (an integer column set with the name, `CASE` over it) or
+  `EXECUTE STATEMENT` are the two ways out; the chain's cost should be measured with
+  `call-counts.mjs` before either, as the tic's floor is the trace, not this.
+- **Spawn-time thinks**: spawn functions schedule first thinks from the level's start (`nextthink =
+  0.1`), as `init_map` runs at time 0, and `target_spawner` adds `now_()` for an entity spawned later.
+  Scheduling every spawn relative to `now_()` would remove the special case and the trap for the next
+  spawner-like entity.
+- **Phone and gamepad**: the page takes keys and the mouse only. Touch controls (a stick for moving, a
+  drag for looking, buttons for fire and jump) and the Gamepad API would make the demo playable on a
+  phone, where the WASM engine already runs; the view at 160×120 is the detail setting for it.
+- **Code health**: `src/main.js` is 839 lines: the loop, input, settings, the menus' `host` object, the
+  console and the page's wiring in one file. The `host` object and the loop could stand apart from the
+  DOM, so the headless tests could drive the page's logic as `menu-test.mjs` drives the menus.
 - **The cluster-change hitch**: smaller. Marking a new cluster went from ~43 to ~17 ms (the
   PVS's clusters looked up by index instead of every leaf's bit tested), and the last eight marked
   sets are kept, so walking back into one costs ~0.3 ms. A door opening or closing drops only the
@@ -317,6 +350,9 @@ picker). Missing for the rest of the game:
   and come back to; `test:menu` the menus; `test:painter` the painter's dynamic lights and mip levels.
   What has no test but the docs screenshots viewed by eye: the painter's look beyond those, and the
   sound mix.
-- **`firebird-wasm` features to watch**: binding non-text parameters, batch inserts, and
-  `SharedArrayBuffer`-free builds (which would remove the COOP/COEP requirement and the service
-  worker).
+- **`firebird-wasm`**: 0.4.0 binds a number in binary where the column is a number (a double
+  arrives exactly: the save's mantissa-and-exponent trick is gone) and has `execBatch` (one statement,
+  many rows, one call; see *Load time* for why the map load does not use it yet). Still to come
+  there: a batch on Firebird's `IBatch`, and a `SharedArrayBuffer`-free build, which would remove
+  the COOP/COEP requirement and the service worker that exists only to supply it (planned in
+  firebird-wasm's `docs/plans/sab-free-build.md`: the engine starts threads, so it is not a flag).

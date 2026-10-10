@@ -39,31 +39,22 @@ export function savedLevels(save) {
  * Put a saved game back. The save's map must already be loaded (loadMap / init_map): the
  * geometry and the models are the pak's, only the game tables are replaced.
  */
-/** A double as [mantissa, exponent] with v = m × 2^e and m an integer below 2^53 (null stays null). */
-function exactDouble(v) {
-  if (v == null) return [null, 0];
-  if (Number.isInteger(v) && Math.abs(v) < 2 ** 53) return [v, 0];
-  let e = Math.floor(Math.log2(Math.abs(v))) - 52;
-  while (e > -1074 && !Number.isInteger(v / 2 ** e)) e--;
-  return [v / 2 ** e, e];
-}
-
-/** Insert saved rows into a table, model ids remapped (and any other column's values by fix(col, value)). */
+/**
+ * Insert saved rows into a table, model ids remapped (and any other column's values by fix(col, value)).
+ * One batch: since firebird-wasm 0.4.0 a number is bound in binary, so a DOUBLE PRECISION column gets
+ * the saved double bit for bit (before, every parameter was text and Firebird's text-to-double conversion
+ * was off by an ulp for one value in six: doubles went over as a mantissa and a power of two).
+ */
 async function insertRows(db, t, { cols, rows }, remap, fix = null) {
-  // Parameters reach Firebird as text, and its text-to-double conversion is not correctly rounded (one
-  // value in six came back an ulp off). A DOUBLE PRECISION column goes over as an integer mantissa and a
-  // power of two instead, which converts exactly.
-  const dbl = new Set((await db.query(`SELECT TRIM(rf.rdb$field_name) FROM rdb$relation_fields rf JOIN rdb$fields f ON f.rdb$field_name = rf.rdb$field_source
-     WHERE rf.rdb$relation_name = ? AND f.rdb$field_type = 27`, [t.toUpperCase()], { rowMode: 'array' })).rows.map(([n]) => n));
-  const isDbl = cols.map((c) => dbl.has(c));
-  const sql = `INSERT INTO ${t} (${cols.join(', ')}) VALUES (${isDbl.map((d) => d ? 'CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)' : '?').join(', ')})`;
+  if (!rows.length) return;
+  const sql = `INSERT INTO ${t} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;
   const mi = cols.indexOf(t === 'game' ? 'WORLD_MODEL' : 'MODEL_ID');
-  for (let row of rows) {
-    row = row.slice();
+  await db.execBatch(sql, rows.map((r) => {
+    const row = r.slice();
     if (mi >= 0) row[mi] = remap(row[mi]);
     if (fix) for (let i = 0; i < cols.length; i++) row[i] = fix(cols[i], row[i]);
-    await db.query(sql, row.flatMap((v, i) => isDbl[i] ? exactDouble(v) : [v]));
-  }
+    return row;
+  }));
 }
 
 /** Read one table's rows (the frame caches left out). */
@@ -119,9 +110,9 @@ export async function importLevel(db, lv) {
   await insertRows(db, 'portal_state', lv.portals, remap);
   await db.exec(`ALTER SEQUENCE ent_seq RESTART WITH ${newPe + 1}`);
   const g = lv.game;
-  await db.query(`UPDATE game SET tic = ${g.TIC}, time_ = CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?), total_monsters = ${g.TOTAL_MONSTERS},
+  await db.query(`UPDATE game SET tic = ${g.TIC}, time_ = ?, total_monsters = ${g.TOTAL_MONSTERS},
     killed = ${g.KILLED}, total_secrets = ${g.TOTAL_SECRETS}, found_secrets = ${g.FOUND_SECRETS}, total_goals = ${g.TOTAL_GOALS},
-    found_goals = ${g.FOUND_GOALS} WHERE id = 1`, exactDouble(g.TIME_));
+    found_goals = ${g.FOUND_GOALS} WHERE id = 1`, [g.TIME_]);
   // the player put in afresh at the level's time (PutClientInServer: air for twelve seconds), relinked; the
   // areas joined as the portals now stand; the frame's caches forgotten
   await db.query(`EXECUTE BLOCK AS BEGIN

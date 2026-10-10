@@ -75,9 +75,15 @@ short stories of what changed and what it measured; keep that.
 9. In Bash on this Windows machine, long heredocs that contain `'` sometimes fail to parse;
    write the edit script to a file (the scratchpad) and run it. `python -` falls into a REPL;
    `cat > file` without a heredoc blocks on stdin.
-10. firebird-wasm sends every query parameter as text, and Firebird's text-to-double conversion is
-    off by an ulp for about one value in six. Where a double must arrive exactly (the save's load),
-    send `m` and `e` with `v = m × 2^e` and insert `CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)`.
+10. Since firebird-wasm 0.4.0 a JS number binds in binary where the column is a number (a double
+    for `DOUBLE PRECISION`, an INT64 for `INTEGER`), so a double arrives exactly; a `NUMERIC`,
+    `VARCHAR` or date column still gets the text. Before 0.4.0 every parameter was text and
+    Firebird's text-to-double conversion was off by an ulp for about one value in six (the save
+    used to send `m` and `e` with `v = m × 2^e`). `db.execBatch(sql, rows)` runs one INSERT for
+    many rows in one call, but each row is still a statement execute inside the engine: for the
+    map load it measured 13 % slower than the `LOAD_<table>` PSQL chunk procedures, whose INSERT
+    runs as a node of one compiled request. The loaders stay until firebird-wasm's batch uses
+    Firebird's `IBatch`.
 
 - A forward-declaration stub (`CREATE OR ALTER PROCEDURE x (...) AS BEGIN END^`) must sit in the same
   file as the real body or an earlier one: the files load in order, and a stub in a later file

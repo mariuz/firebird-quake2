@@ -78,9 +78,12 @@ second lookup:
 | `models`, `anims` | the world, its submodels (`*N`), every `.md2` with its frame runs, the `.sp2` sprites |
 | `map_ents` | the entity lump |
 
-The WASM build binds parameters as text, so each table has a generated `LOAD_<table>` procedure that
-parses 30 KB chunks of fixed-width rows in PSQL: one `INSERT` of `CAST(SUBSTRING(…))` per row, no `TRIM`
-where a column cannot be NULL. The Outer Base (90 k rows) loads in about three seconds.
+Each table has a generated `LOAD_<table>` procedure that parses 30 KB chunks of fixed-width rows in
+PSQL: one `INSERT` of `CAST(SUBSTRING(…))` per row, no `TRIM` where a column cannot be NULL. The Outer
+Base (90 k rows) loads in about two and a half seconds. firebird-wasm 0.4.0's `execBatch` (one
+statement, many rows, one call) measured 13 % slower than the procedures here, as each row is still
+a statement execute inside the engine; the procedures stay until the batch is built on Firebird's
+`IBatch`.
 
 ### Collision is a recursive procedure (`sql/physics.sql`)
 
@@ -170,7 +173,7 @@ without them a synthesised drone fills in.
 
 The ones from Firebird Quake still hold (join the marked set rather than `IN (subquery)`; arithmetic in
 the select list is cheap, PSQL statements are not; rows are the cost; keep what does not change; bind as
-text). New here:
+text, which since firebird-wasm 0.4.0 means in binary for a number). New here:
 
 - **Brush collision is more work than clipnodes, and most of the work is visiting leaves.** A player-sized
   box straddles many split planes, so the walk reaches dozens of leaves, nearly all of them empty. The
