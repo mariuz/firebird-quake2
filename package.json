@@ -27,7 +27,8 @@
     "test:entities": "node scripts/entities-test.mjs",
     "test:browser": "node scripts/browser-test.mjs",
     "test:replay": "node scripts/replay-test.mjs",
-    "test:input": "node scripts/input-test.mjs"
+    "test:input": "node scripts/input-test.mjs",
+    "test:console": "node scripts/console-test.mjs"
   },
   "license": "MIT",
   "dependencies": {

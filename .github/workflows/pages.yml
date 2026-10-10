@@ -84,6 +84,10 @@ jobs:
       - name: Gamepad input
         run: npm run test:input
 
+      # The console line headless: the page's commands, player_command, the history, Tab
+      - name: The console
+        run: npm run test:console
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # service worker isolates, the pak downloads, Firebird runs in its worker, keys, a quick save
       # and load, the menu, no console errors

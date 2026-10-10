@@ -25,6 +25,7 @@ import { Q2Audio } from './audio.js';
 import { WEAPONS } from './gamedata.js';
 import { padMenuKeys, BUTTON } from './gamepad.js';
 import { Input, GAME_KEYS } from './input.js';
+import { Console } from './console.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('screen');
@@ -159,89 +160,38 @@ function quitGame() {
 }
 
 // ── the console: Quake's commands on a line (backquote opens it, Enter runs, Escape closes) ─────────
+// src/console.js runs the commands and keeps the history; this is the input element around it
 const cmdline = $('cmdline');
+const con = new Console({
+  get db() { return db; }, get pak() { return pak; }, settings, saveSettings, setStatus,
+  startMap: (name) => startMap(name, true),
+  setView: (fov) => setView(db, viewWidth(), viewHeight(), fov),
+  saveGame: () => saveGame(), loadGame: () => loadGame(),
+  toggleInventory: () => { showInv = !showInv; showHelp = false; },
+  isRunning: () => running,
+});
 function openConsole() {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
   input.clear();
   cmdline.hidden = false;
   cmdline.value = '';
-  histPos = history.length;
+  con.reset();
   cmdline.focus();
 }
 function closeConsole() {
   cmdline.hidden = true;
   canvas.focus();
 }
-// the lines typed before (Key_Console's history: up and down step through it) and the commands Tab completes
-const COMMANDS = ['drop', 'fov', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'seed', 'use'];
-const history = [];
-let histPos = 0;
 cmdline.addEventListener('keydown', async (e) => {
   if (e.key === 'Escape' || e.code === 'Backquote') { e.preventDefault(); closeConsole(); return; }
-  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-    e.preventDefault();
-    histPos = Math.max(0, Math.min(history.length, histPos + (e.key === 'ArrowUp' ? -1 : 1)));
-    cmdline.value = history[histPos] ?? '';
-    return;
-  }
-  if (e.key === 'Tab') {
-    // Cmd_CompleteCommand: the first command that starts with what is typed
-    e.preventDefault();
-    const typed = cmdline.value.trim().toLowerCase();
-    const hit = typed && !typed.includes(' ') && COMMANDS.find((c) => c.startsWith(typed));
-    if (hit) cmdline.value = hit + ' ';
-    return;
-  }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); cmdline.value = con.historyStep(e.key === 'ArrowUp' ? -1 : 1); return; }
+  if (e.key === 'Tab') { e.preventDefault(); const done = con.complete(cmdline.value); if (done) cmdline.value = done; return; }
   if (e.key !== 'Enter') return;
   e.preventDefault();
-  const line = cmdline.value.trim();
+  const line = cmdline.value;
   closeConsole();
-  if (line && history[history.length - 1] !== line) history.push(line);
-  if (history.length > 32) history.shift();
-  histPos = history.length;
-  if (line) await runCommand(line);
+  await con.submit(line);
 });
-async function runCommand(line) {
-  const [cmd, ...rest] = line.split(/\s+/);
-  const arg = rest.join(' ');
-  switch (cmd.toLowerCase()) {
-    case 'map': {
-      const name = arg.toLowerCase();
-      if (!pak.has(`maps/${name}.bsp`)) { setStatus(`no map "${name}" in this pak`, true); setTimeout(() => setStatus(''), 2500); return; }
-      await startMap(name, true);
-      return;
-    }
-    case 'inven': showInv = !showInv; showHelp = false; return;
-    case 'fov': {
-      // the client's fov, clamped as ClientUserinfoChanged clamped it (1-160); no argument shows it
-      const v = Number(arg);
-      if (!arg || !Number.isFinite(v)) { setStatus(`"fov" is "${settings.fov}"`); setTimeout(() => setStatus(''), 2500); return; }
-      settings.fov = Math.max(1, Math.min(160, Math.round(v))); saveSettings();
-      await setView(db, viewWidth(), viewHeight(), settings.fov);
-      return;
-    }
-    case 'seed': {
-      // the game's chances come from a seeded generator (rnd() in game.sql): no argument shows the seed this game
-      // began with and the generator's state now; a number seeds the next new game, so a run can be played again
-      if (!arg) {
-        const g = (await db.query("SELECT g.rng_seed s, RDB$GET_CONTEXT('USER_SESSION', 'rng') r FROM game g WHERE g.id = 1")).rows[0];
-        setStatus(`seed ${g?.S ?? '?'} (the generator is at ${g?.R ?? '?'})`); setTimeout(() => setStatus(''), 4000);
-        return;
-      }
-      const v = Number(arg);
-      if (!Number.isFinite(v)) { setStatus('seed takes a number', true); setTimeout(() => setStatus(''), 2500); return; }
-      await db.query("SELECT RDB$SET_CONTEXT('USER_SESSION', 'rng', ?) FROM rdb$database", [Math.floor(v) >>> 0]);
-      setStatus(`the next new game starts from seed ${Math.floor(v) >>> 0}`); setTimeout(() => setStatus(''), 2500);
-      return;
-    }
-    case 'save': return saveGame();
-    case 'load': return loadGame();
-    default:
-      if (!running) return;
-      try { await db.query('SELECT msg FROM player_command(?, ?)', [cmd, arg]); }
-      catch (err) { console.error(err); setStatus(`${cmd}: ${err.message}`, true); }
-  }
-}
 
 // ── saved games: the game tables and the unit's other levels, gzipped JSON in localStorage (F6 saves, F9 loads) ─────
 const SAVE_KEY = 'firebird-quake2:save:quick';
