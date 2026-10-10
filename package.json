@@ -28,7 +28,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "firebird-wasm": "^0.4.0"
+    "firebird-wasm": "^0.4.1"
   },
   "devDependencies": {
     "esbuild-wasm": "^0.25.0"

@@ -291,17 +291,16 @@ picker). Missing for the rest of the game:
 
 ## Engineering
 
-- **Load time**: about two and a half seconds for a map in Node (from five and a half: fixed-width
-  rows, one `INSERT` of `CAST(SUBSTRING(…))` per row, `TRIM`/`NULLIF` only on nullable columns). What
-  is left is the inserts themselves (`face_verts`' 37 k rows are a quarter of it, half of that
-  the primary key), `init_map` and the old map's `DELETE`s. firebird-wasm 0.4.0's `execBatch` was
-  measured against the chunk procedures with both in one process, alternating (`face_verts`, `faces`
-  and every other table): 13 % slower, because each row is still a statement execute inside the
-  engine while the procedure's `INSERT` is a node of one compiled request. The loaders stay until
-  firebird-wasm's batch is built on Firebird's `IBatch` (every row in one request), which should take
-  the load under two seconds. Then: `face_verts` is read only by the painter's surface builds, so it
-  could load after the first frame is up (about a quarter of the load), and the old map's `DELETE`s
-  could go into the loading plaque's first tic.
+- **Load time**: about two and a half seconds for a map in Node, 2.3 on a good run. The map's
+  rows go in through firebird-wasm's `execBatch`, since 0.4.1 one `IBatch` request to the engine
+  per 8,192 rows. Measured with both loaders in one process, alternating, demo1 four times each:
+  the `LOAD_<table>` PSQL chunk procedures 2753 ms, `execBatch` 2331 ms (0.4.0's batch, a
+  statement execute per row inside the engine, had been 13 % slower than the procedures). What is
+  left is the inserts themselves (`face_verts`' 37 k rows at ~12 µs each, mostly the primary key),
+  `init_map` and, on a reload, the old map's `DELETE`s (half a second). Next: drop the primary keys
+  before the load and create them after (an index built in one pass is cheaper than 37 k index
+  inserts), load `face_verts` after the first frame is up (only the painter's surface builds read
+  it), and put the `DELETE`s into the loading plaque's first tic.
 - **Saves and `localStorage`**: a save is JSON, uncompressed; a demo3 save carrying two levels left
   is 495 KB (46 KB gzipped), and fifteen slots plus the autosave share an origin's ~5 MB. Compress
   with `CompressionStream('gzip')` on the way in (and accept both forms on the way out), or move the
@@ -352,7 +351,7 @@ picker). Missing for the rest of the game:
   sound mix.
 - **`firebird-wasm`**: 0.4.0 binds a number in binary where the column is a number (a double
   arrives exactly: the save's mantissa-and-exponent trick is gone) and has `execBatch` (one statement,
-  many rows, one call; see *Load time* for why the map load does not use it yet). Still to come
-  there: a batch on Firebird's `IBatch`, and a `SharedArrayBuffer`-free build, which would remove
-  the COOP/COEP requirement and the service worker that exists only to supply it (planned in
+  many rows, one call); 0.4.1 runs the batch as one `IBatch` request, and the map load uses it (see
+  *Load time*). Still to come there: a `SharedArrayBuffer`-free build, which would remove the
+  COOP/COEP requirement and the service worker that exists only to supply it (planned in
   firebird-wasm's `docs/plans/sab-free-build.md`: the engine starts threads, so it is not a flag).

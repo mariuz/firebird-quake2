@@ -78,12 +78,11 @@ second lookup:
 | `models`, `anims` | the world, its submodels (`*N`), every `.md2` with its frame runs, the `.sp2` sprites |
 | `map_ents` | the entity lump |
 
-Each table has a generated `LOAD_<table>` procedure that parses 30 KB chunks of fixed-width rows in
-PSQL: one `INSERT` of `CAST(SUBSTRING(…))` per row, no `TRIM` where a column cannot be NULL. The Outer
-Base (90 k rows) loads in about two and a half seconds. firebird-wasm 0.4.0's `execBatch` (one
-statement, many rows, one call) measured 13 % slower than the procedures here, as each row is still
-a statement execute inside the engine; the procedures stay until the batch is built on Firebird's
-`IBatch`.
+Each table goes in as one `INSERT` run for every row by firebird-wasm's `execBatch`: one `IBatch`
+request to the engine for thousands of rows, the numbers bound in binary. The Outer Base (90 k rows)
+loads in about two and a half seconds. (It used to be generated `LOAD_<table>` procedures parsing 30 KB
+chunks of fixed-width rows in PSQL, which beat 0.4.0's batch, a statement execute per row, by 13 %;
+0.4.1's `IBatch` beats them by 15 %.)
 
 ### Collision is a recursive procedure (`sql/physics.sql`)
 

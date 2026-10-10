@@ -80,10 +80,10 @@ short stories of what changed and what it measured; keep that.
     `VARCHAR` or date column still gets the text. Before 0.4.0 every parameter was text and
     Firebird's text-to-double conversion was off by an ulp for about one value in six (the save
     used to send `m` and `e` with `v = m × 2^e`). `db.execBatch(sql, rows)` runs one INSERT for
-    many rows in one call, but each row is still a statement execute inside the engine: for the
-    map load it measured 13 % slower than the `LOAD_<table>` PSQL chunk procedures, whose INSERT
-    runs as a node of one compiled request. The loaders stay until firebird-wasm's batch uses
-    Firebird's `IBatch`.
+    many rows in one call; since 0.4.1 the rows are one `IBatch` request inside the engine, and
+    the map load uses it (`bulkLoad`). 0.4.0's batch was a statement execute per row and measured
+    13 % slower than the old `LOAD_<table>` PSQL chunk procedures, whose INSERT was a node of one
+    compiled request; a PSQL loop beats per-row executes, an `IBatch` beats the loop by 15 %.
 
 - A forward-declaration stub (`CREATE OR ALTER PROCEDURE x (...) AS BEGIN END^`) must sit in the same
   file as the real body or an earlier one: the files load in order, and a stub in a later file

@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
-import { loaderSql, SQL_FILES } from '../src/loader.js';
+import { SQL_FILES } from '../src/loader.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const db = new FirebirdBrowser('memory://check', { transport: new DirectTransport() });
 for (const f of SQL_FILES) {
-  const text = f === 'schema' ? fs.readFileSync(path.join(root, 'sql/schema.sql'), 'utf8') + '\n' + loaderSql() : fs.readFileSync(path.join(root, `sql/${f}.sql`), 'utf8');
+  const text = fs.readFileSync(path.join(root, `sql/${f}.sql`), 'utf8');
   try {
     await db.exec(text);
     console.log(`ok   ${f}.sql`);

@@ -54,17 +54,21 @@ bulk-loads it, then calls `init_map`.
 
 ### Bulk loading
 
-The WASM build binds every parameter as text. Row-by-row inserts of 90 000 rows would take
-minutes, so each table has a generated `LOAD_<table>` procedure that takes one 30 KB chunk of
-rows and parses it in PSQL (`loaderSql()` writes those procedures from the column specs in
-`TABLES`). The rows are fixed-width: `bulkLoad` pads each column to its widest value and sends the
-widths with the chunk, so a row is a single `INSERT` of `CAST(SUBSTRING(:s FROM :p + :o FOR :w))`
-at known offsets, with no scanning for separators and no per-field assignments (each a statement).
-`CAST` reads a blank-padded number as it is; only the columns marked `?` (NULL possible: the
-entity lump, the model table, a leaf's PVS, a node's leaf clusters) pay for the `TRIM` and
-`NULLIF`, which cost twice the `CAST` and were most of a row. A row of `face_verts` costs ~20 µs,
-half of it the insert into the primary key. The Outer Base loads in about three seconds in Node,
-`init_map` included (it was five and a half with `|`-separated lines).
+Each table is one `INSERT … VALUES (?, …)` run for every row by firebird-wasm's `execBatch`, 8,192
+rows a call (`bulkLoad`; the column specs in `TABLES` give the names and which columns may be
+NULL). Since firebird-wasm 0.4.1 a batch is one `IBatch` request to the engine for all its rows,
+and since 0.4.0 a number crosses in binary where the column is a number, so the engine parses no
+text and the BSP's coordinates arrive exactly. A row of `face_verts` costs ~12 µs, mostly the
+insert into the primary key. The Outer Base loads in about two and a half seconds in Node,
+`init_map` included.
+
+How it got here: row-by-row `exec()` of 90 000 rows took minutes, and the WASM build bound every
+parameter as text, so each table had a generated `LOAD_<table>` procedure that parsed one 30 KB
+chunk of fixed-width rows in PSQL, one `INSERT` of `CAST(SUBSTRING(:s FROM :p + :o FOR :w))` per
+row, `TRIM`/`NULLIF` only on nullable columns (five and a half seconds, then three). 0.4.0's
+`execBatch`, a statement execute per row inside the engine, measured 13 % slower than those
+procedures, whose `INSERT` is a node of one compiled request; 0.4.1's `IBatch` measured 15 %
+faster, and the generated PSQL is gone.
 
 ### What the BSP becomes
 
