@@ -222,7 +222,7 @@ const ENT_NUM = ['angle', 'spawnflags', 'wait', 'delay', 'random', 'speed', 'acc
   'mass', 'volume', 'attenuation', 'distance', 'gravity', 'skyrotate', 'minpitch', 'maxpitch', 'minyaw', 'maxyaw'];
 
 /** SV_SpawnServer: replace the current map with `name` from the PAK. */
-export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null } = {}) {
+export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null, seed = null } = {}) {
   const bsp = new Bsp(pak.buffer(`maps/${name}.bsp`), `maps/${name}.bsp`);
   await db.exec(`DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents; DELETE FROM map_ents; DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL;
     DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM leaffaces; DELETE FROM leafbrushes; DELETE FROM areas; DELETE FROM areaportals; DELETE FROM portal_state; DELETE FROM area_flood;
@@ -257,6 +257,8 @@ export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, s
   });
   await bulkLoad(db, 'map_ents', entRows);
 
+  // the game's chances come from rnd(), seeded here for a replay (a new game records its seed in game.rng_seed)
+  if (seed != null) await db.query("SELECT RDB$SET_CONTEXT('USER_SESSION', 'rng', ?) FROM rdb$database", [Math.floor(Number(seed)) >>> 0]);
   await db.exec(`EXECUTE PROCEDURE init_map('${name}', ${geo.modelIds[0]}, ${skill}, ${newGame ? 1 : 0}, ${spawnpoint ? "'" + String(spawnpoint).replace(/'/g, '') + "'" : 'NULL'})`);
   return bsp;
 }

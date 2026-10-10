@@ -217,7 +217,7 @@ BEGIN
     SELECT e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = :pe INTO fl_x, fl_y, fl_z, fl_yaw;
     fl_yaw = fl_yaw * 0.0174532925e0;
     EXECUTE PROCEDURE fx(15, fl_x + COS(fl_yaw) * 18 + SIN(fl_yaw) * 16, fl_y + SIN(fl_yaw) * 18 - COS(fl_yaw) * 16, fl_z, 0, 0, 0,
-      IIF(sil > 0, 100, 200) + CAST(FLOOR(RAND() * 32) AS INTEGER));
+      IIF(sil > 0, 100, 200) + CAST(FLOOR(rnd() * 32) AS INTEGER));
   END
 
   IF (w = 1) THEN                                                        -- blaster
@@ -249,8 +249,8 @@ BEGIN
     SELECT p.machinegun_shots FROM player p WHERE p.id = 1 INTO shots;
     EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE fire_bullets(pe, 1, mx, my, mz, fx_ + crand() * 0.01e0 * shots, fy + crand() * 0.01e0 * shots, fz + 0.005e0 * shots, 300, 500, 8, 2);
-    EXECUTE PROCEDURE snd(pe, 1, 'weapons/machgf' || CAST(1 + FLOOR(RAND() * 5) AS INTEGER) || 'b.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - 1, p.punchangle = -0.5e0 - 0.5e0 * RAND(), p.machinegun_shots = MINVALUE(9, p.machinegun_shots + 1) WHERE p.id = 1;
+    EXECUTE PROCEDURE snd(pe, 1, 'weapons/machgf' || CAST(1 + FLOOR(rnd() * 5) AS INTEGER) || 'b.wav', vol, 1);
+    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - 1, p.punchangle = -0.5e0 - 0.5e0 * rnd(), p.machinegun_shots = MINVALUE(9, p.machinegun_shots + 1) WHERE p.id = 1;
   END
   ELSE IF (w = 16) THEN                                                  -- chaingun: spins up to three barrels a tic
   BEGIN
@@ -264,7 +264,7 @@ BEGIN
       EXECUTE PROCEDURE fire_bullets(pe, 1, mx + rx * (i - 1) * 4, my + ry * (i - 1) * 4, mz, fx_, fy, fz, 300, 500, 6, 2);
       i = i + 1;
     END
-    IF (shots > 0) THEN EXECUTE PROCEDURE snd(pe, 1, 'weapons/machgf' || CAST(1 + FLOOR(RAND() * 5) AS INTEGER) || 'b.wav', vol, 1);
+    IF (shots > 0) THEN EXECUTE PROCEDURE snd(pe, 1, 'weapons/machgf' || CAST(1 + FLOOR(rnd() * 5) AS INTEGER) || 'b.wav', vol, 1);
     UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - :shots, p.punchangle = -0.5e0 * :shots, p.chaingun_spin = :spin, p.weapon_sound = 2 WHERE p.id = 1;
   END
   ELSE IF (w = 32) THEN                                                  -- hand grenade: pull the pin; thrown on release
@@ -282,7 +282,7 @@ BEGIN
   ELSE IF (w = 128) THEN                                                 -- rocket launcher
   BEGIN
     EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
-    EXECUTE PROCEDURE launch_rocket(pe, mx, my, mz, fx_, fy, fz, 650, 100 + FLOOR(RAND() * 20), 120, 120);
+    EXECUTE PROCEDURE launch_rocket(pe, mx, my, mz, fx_, fy, fz, 650, 100 + FLOOR(rnd() * 20), 120, 120);
     EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 650);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/rocklf1a.wav', vol, 1);
     UPDATE player p SET p.attack_finished = :t + 0.8e0, p.rockets = p.rockets - 1, p.punchangle = -2 WHERE p.id = 1;
@@ -701,7 +701,7 @@ BEGIN
       BEGIN
         ddmg = MINVALUE(15, ddmg + 2);
         UPDATE player p SET p.next_drown_time = :t + 1, p.drown_dmg = :ddmg WHERE p.id = 1;
-        EXECUTE PROCEDURE snd(pe, 2, IIF(hp <= ddmg, 'player/drown1.wav', 'player/male/gurp' || CAST(1 + FLOOR(RAND() * 2) AS INTEGER) || '.wav'), 1, 1);
+        EXECUTE PROCEDURE snd(pe, 2, IIF(hp <= ddmg, 'player/drown1.wav', 'player/male/gurp' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav'), 1, 1);
         EXECUTE PROCEDURE t_damage(pe, 0, 0, ddmg, 0, 2 + 32);
       END
     END
@@ -715,7 +715,7 @@ BEGIN
       UPDATE player p SET p.dmg_lava_time = :t + 0.1e0 WHERE p.id = 1;
       IF (BIN_AND(wt, 8) <> 0) THEN
       BEGIN
-        IF (RAND() < 0.1e0) THEN EXECUTE PROCEDURE snd(pe, 2, 'player/burn' || CAST(1 + FLOOR(RAND() * 2) AS INTEGER) || '.wav', 1, 1);
+        IF (rnd() < 0.1e0) THEN EXECUTE PROCEDURE snd(pe, 2, 'player/burn' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav', 1, 1);
         EXECUTE PROCEDURE t_damage(pe, 0, 0, 3 * wl, 0, 2 + 32);
       END
       ELSE EXECUTE PROCEDURE t_damage(pe, 0, 0, 1 * wl, 0, 2 + 32);

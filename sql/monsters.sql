@@ -37,11 +37,11 @@ BEGIN
   SELECT e.st, e.mtype, e.aiflags, e.health FROM ents e WHERE e.id = :eid INTO st, mt, aif, hp;
   IF (mt IS NULL OR mt NOT IN ('soldier_light', 'soldier', 'soldier_ss', 'infantry', 'gunner')) THEN EXIT;
   IF (hp <= 0 OR st NOT IN ('stand', 'walk', 'run', 'missile', 'melee') OR BIN_AND(aif, 4) <> 0) THEN EXIT;
-  IF (RAND() > 0.25e0) THEN EXIT;
+  IF (rnd() > 0.25e0) THEN EXIT;
   IF (mt STARTING WITH 'soldier') THEN
   BEGIN
     SELECT g.skill FROM game g WHERE g.id = 1 INTO sk;
-    r = RAND();
+    r = rnd();
     IF ((sk = 1 AND r <= 0.33e0) OR (sk >= 2 AND r <= 0.66e0)) THEN
     BEGIN
       UPDATE ents e SET e.enemy_id = COALESCE(e.enemy_id, :attacker), e.st = 'attack3', e.pausetime = now_() + :eta + 0.3e0,
@@ -54,7 +54,7 @@ BEGIN
          e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
   EXECUTE PROCEDURE set_anim(eid, 'duck');
   -- gunner_duck_down: on hard, half the time a grenade as it goes down
-  IF (mt = 'gunner' AND (SELECT g.skill FROM game g WHERE g.id = 1) >= 2 AND RAND() > 0.5e0) THEN EXECUTE PROCEDURE gunner_grenade(eid);
+  IF (mt = 'gunner' AND (SELECT g.skill FROM game g WHERE g.id = 1) >= 2 AND rnd() > 0.5e0) THEN EXECUTE PROCEDURE gunner_grenade(eid);
 END^
 
 -- point_combat_touch: a monster reaching the point it ran to. A further point: run on to it. HOLD (spawnflags 1):
@@ -159,11 +159,11 @@ BEGIN
     tdir = IIF(d1 = 0, IIF(d2 = 90, 45, 315), IIF(d2 = 90, 135, 215));
     IF (tdir <> turnaround AND step_direction(eid, tdir, dist) = 1) THEN EXIT;
   END
-  IF (RAND() < 0.5e0 OR ABS(dy) > ABS(dx)) THEN BEGIN tdir = d1; d1 = d2; d2 = tdir; END
+  IF (rnd() < 0.5e0 OR ABS(dy) > ABS(dx)) THEN BEGIN tdir = d1; d1 = d2; d2 = tdir; END
   IF (d1 <> nodir AND d1 <> turnaround AND step_direction(eid, d1, dist) = 1) THEN EXIT;
   IF (d2 <> nodir AND d2 <> turnaround AND step_direction(eid, d2, dist) = 1) THEN EXIT;
   IF (olddir <> nodir AND step_direction(eid, olddir, dist) = 1) THEN EXIT;
-  tdir = IIF(RAND() < 0.5e0, 0, 315);
+  tdir = IIF(rnd() < 0.5e0, 0, 315);
   d1 = 0;
   WHILE (d1 < 8) DO
   BEGIN
@@ -190,7 +190,7 @@ BEGIN
      AND g.y + g.miny <= e.y + e.maxy + :dist AND g.y + g.maxy >= e.y + e.miny - :dist
      AND g.z + g.minz <= e.z + e.maxz + :dist AND g.z + g.maxz >= e.z + e.minz - :dist INTO close_;
   IF (close_ = 1 AND EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.enemy_id = :goal)) THEN EXIT;
-  IF (FLOOR(RAND() * 4) = 1 OR step_direction(eid, iy, dist) = 0) THEN
+  IF (FLOOR(rnd() * 4) = 1 OR step_direction(eid, iy, dist) = 0) THEN
     EXECUTE PROCEDURE new_chase_dir(eid, goal, dist, iy, gx, gy);
 END^
 
@@ -434,9 +434,9 @@ BEGIN
       ELSE IF (r = 2) THEN chance = IIF(has_melee = 1, 0.05e0, 0.1e0);
       ELSE chance = 0;
       chance = chance * ac / 0.3e0;
-      IF (RAND() < chance) THEN BEGIN nas = 4; naf = t + 2 * RAND(); res = 1; END
+      IF (rnd() < chance) THEN BEGIN nas = 4; naf = t + 2 * rnd(); res = 1; END
       -- no missile this time: a flyer slides around its enemy three times in ten (AS_SLIDING), else comes straight
-      ELSE IF (BIN_AND(fl, 1) <> 0) THEN nas = IIF(RAND() < 0.3e0, 2, 1);
+      ELSE IF (BIN_AND(fl, 1) <> 0) THEN nas = IIF(rnd() < 0.3e0, 2, 1);
     END
   END
   UPDATE ents e SET e.search_time = :t + 5, e.ls_x = :x2, e.ls_y = :y2, e.ls_z = :oz, e.trail_time = :t, e.aiflags = BIN_AND(e.aiflags, BIN_NOT(16)),
@@ -463,7 +463,7 @@ BEGIN
   dx = x2 - sx; dy = y2 - sy; dz = z2 - sz; dl = vlen(dx, dy, dz);
   IF (dl = 0) THEN EXIT;
   -- the muzzle flash (MZ2_*): CL_ParseMuzzleFlash2 lit 200 + 0..31 units at the flash for a frame
-  EXECUTE PROCEDURE fx(15, sx, sy, sz, 0, 0, 0, 200 + CAST(FLOOR(RAND() * 32) AS INTEGER));
+  EXECUTE PROCEDURE fx(15, sx, sy, sz, 0, 0, 0, 200 + CAST(FLOOR(rnd() * 32) AS INTEGER));
   IF (mk = 'blaster') THEN
   BEGIN
     EXECUTE PROCEDURE snd(eid, 1, asnd, 1, 1);
@@ -509,7 +509,7 @@ BEGIN
   fx_ = COS(yaw * 0.0174532925e0); fy = SIN(yaw * 0.0174532925e0);
   sx = x + fx_ * 20 + fy * 8; sy = y + fy * 20 - fx_ * 8; sz = z + vh - 4;
   side = crand() * 10;
-  EXECUTE PROCEDURE fx(15, sx, sy, sz, 0, 0, 0, 200 + CAST(FLOOR(RAND() * 32) AS INTEGER));
+  EXECUTE PROCEDURE fx(15, sx, sy, sz, 0, 0, 0, 200 + CAST(FLOOR(rnd() * 32) AS INTEGER));
   EXECUTE PROCEDURE snd(eid, 1, 'gunner/gunatck3.wav', 1, 1);
   EXECUTE PROCEDURE launch_grenade(eid, sx, sy, sz, fx_ * 600 + fy * :side, fy * 600 - fx_ * :side, 200 + crand() * 10, 50, 90, 2.5e0, 0);
 END^
@@ -566,7 +566,7 @@ BEGIN
   SELECT vlen(a.x - b.x, a.y - b.y, a.z - b.z) FROM ents a CROSS JOIN ents b WHERE a.id = :eid AND b.id = :enemy INTO d;
   IF (d IS NULL OR d > mrange + 16) THEN EXIT;
   IF (ms IS NOT NULL) THEN EXECUTE PROCEDURE snd(eid, 1, ms, 1, 1);
-  dmg = CAST(dmg * (0.7e0 + 0.6e0 * RAND()) AS INTEGER);
+  dmg = CAST(dmg * (0.7e0 + 0.6e0 * rnd()) AS INTEGER);
   EXECUTE PROCEDURE t_damage(enemy, eid, eid, dmg, IIF(mt = 'berserk', 400, 50), 0);
   EXECUTE PROCEDURE fx(3, (SELECT e.x FROM ents e WHERE e.id = :enemy), (SELECT e.y FROM ents e WHERE e.id = :enemy), (SELECT e.z + 10 FROM ents e WHERE e.id = :enemy), 0, 0, 0, dmg);
 END^
@@ -585,11 +585,11 @@ BEGIN
   IF (hp < mhp / 2) THEN UPDATE ents e SET e.skin = BIN_OR(e.skin, 1) WHERE e.id = :eid;
   IF (pf > now_()) THEN EXIT;
   UPDATE ents e SET e.pain_finished = now_() + 3 WHERE e.id = :eid;
-  IF (RAND() > pc) THEN EXIT;
+  IF (rnd() > pc) THEN EXIT;
   EXECUTE PROCEDURE snd(eid, 2, ps, 1, 1);
   n = 1; p = 1;
   WHILE (POSITION(',', anims, p) > 0) DO BEGIN n = n + 1; p = POSITION(',', anims, p) + 1; END
-  i = FLOOR(RAND() * n); p = 1;
+  i = FLOOR(rnd() * n); p = 1;
   WHILE (i > 0) DO BEGIN p = POSITION(',', anims, p) + 1; i = i - 1; END
   q = POSITION(',', anims, p);
   pick = IIF(q = 0, SUBSTRING(anims FROM p), SUBSTRING(anims FROM p FOR q - p));
@@ -644,7 +644,7 @@ BEGIN
   -- one of the death animations
   n = 1; p = 1;
   WHILE (POSITION(',', anims, p) > 0) DO BEGIN n = n + 1; p = POSITION(',', anims, p) + 1; END
-  i = FLOOR(RAND() * n); p = 1;
+  i = FLOOR(rnd() * n); p = 1;
   WHILE (i > 0) DO BEGIN p = POSITION(',', anims, p) + 1; i = i - 1; END
   q = POSITION(',', anims, p);
   pick = IIF(q = 0, SUBSTRING(anims FROM p), SUBSTRING(anims FROM p FOR q - p));
@@ -764,9 +764,9 @@ BEGIN
       BEGIN
         IF (st = 'stand' AND BIN_AND(sflags, 1) = 0 AND idle_s IS NOT NULL) THEN EXECUTE PROCEDURE snd(eid, 2, idle_s, 1, 2);
         ELSE IF (st = 'walk' AND search_s IS NOT NULL) THEN EXECUTE PROCEDURE snd(eid, 2, search_s, 1, 1);
-        UPDATE ents e SET e.idle_time = :t + 15 + RAND() * 15 WHERE e.id = :eid;
+        UPDATE ents e SET e.idle_time = :t + 15 + rnd() * 15 WHERE e.id = :eid;
       END
-      ELSE UPDATE ents e SET e.idle_time = :t + RAND() * 15 WHERE e.id = :eid;
+      ELSE UPDATE ents e SET e.idle_time = :t + rnd() * 15 WHERE e.id = :eid;
     END
     af = af + 1;
     IF (af >= fc) THEN af = 0;
@@ -841,7 +841,7 @@ BEGIN
       BEGIN
         UPDATE ents e SET e.st = 'missile', e.attack_state = 1, e.nextthink = :nt WHERE e.id = :eid;
         -- gunner_attack: out of melee range, half the time the grenades (attak1), else the chain gun (gunner_opengun)
-        IF (mt = 'gunner' AND RAND() <= 0.5e0 AND (SELECT vlen(n.x - :x, n.y - :y, n.z - :z) FROM ents n WHERE n.id = :enemy) >= 80) THEN
+        IF (mt = 'gunner' AND rnd() <= 0.5e0 AND (SELECT vlen(n.x - :x, n.y - :y, n.z - :z) FROM ents n WHERE n.id = :enemy) >= 80) THEN
           EXECUTE PROCEDURE set_anim(eid, 'attak1');
         ELSE
         BEGIN
@@ -913,7 +913,7 @@ BEGIN
       END
       IF (mt = 'soldier_ss') THEN
       BEGIN
-        IF (BIN_AND(aif, 8) = 0) THEN UPDATE ents e SET e.pausetime = :t + (3 + FLOOR(RAND() * 8)) * 0.1e0 WHERE e.id = :eid;
+        IF (BIN_AND(aif, 8) = 0) THEN UPDATE ents e SET e.pausetime = :t + (3 + FLOOR(rnd() * 8)) * 0.1e0 WHERE e.id = :eid;
         EXECUTE PROCEDURE monster_missile(eid);
         IF (t + 0.05e0 < (SELECT e.pausetime FROM ents e WHERE e.id = :eid)) THEN
         BEGIN
@@ -1352,9 +1352,13 @@ END^
 -- SpawnEntities + the client's spawn
 CREATE OR ALTER PROCEDURE init_map (map_name VARCHAR(32), world_model INTEGER, skill SMALLINT, new_game SMALLINT, spawnpoint VARCHAR(40))
 AS
-DECLARE i INTEGER;
+DECLARE i INTEGER; DECLARE seed BIGINT;
 BEGIN
+  -- the generator's state: seeded by the caller for a replay, else from wherever RAND() lands; a new game records it
+  seed = CAST(RDB$GET_CONTEXT('USER_SESSION', 'rng') AS BIGINT);
+  IF (seed IS NULL) THEN BEGIN seed = CAST(FLOOR(RAND() * 4294967296) AS BIGINT); RDB$SET_CONTEXT('USER_SESSION', 'rng', seed); END
   UPDATE game g SET g.tic = 0, g.time_ = 0, g.map_name = :map_name, g.next_map = NULL, g.exit_kind = 0, g.skill = :skill, g.world_model = :world_model,
+         g.rng_seed = IIF(:new_game = 1, :seed, g.rng_seed),
          g.total_monsters = 0, g.killed = 0, g.total_secrets = 0, g.found_secrets = 0, g.total_goals = 0, g.found_goals = 0, g.level_msg = NULL,
          g.intermission_time = NULL, g.gravity = 800 WHERE g.id = 1;
   -- switchable lights back to their patterns

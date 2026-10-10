@@ -186,7 +186,7 @@ function closeConsole() {
   canvas.focus();
 }
 // the lines typed before (Key_Console's history: up and down step through it) and the commands Tab completes
-const COMMANDS = ['drop', 'fov', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'use'];
+const COMMANDS = ['drop', 'fov', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'seed', 'use'];
 const history = [];
 let histPos = 0;
 cmdline.addEventListener('keydown', async (e) => {
@@ -231,6 +231,20 @@ async function runCommand(line) {
       if (!arg || !Number.isFinite(v)) { setStatus(`"fov" is "${settings.fov}"`); setTimeout(() => setStatus(''), 2500); return; }
       settings.fov = Math.max(1, Math.min(160, Math.round(v))); saveSettings();
       await setView(db, viewWidth(), viewHeight(), settings.fov);
+      return;
+    }
+    case 'seed': {
+      // the game's chances come from a seeded generator (rnd() in game.sql): no argument shows the seed this game
+      // began with and the generator's state now; a number seeds the next new game, so a run can be played again
+      if (!arg) {
+        const g = (await db.query("SELECT g.rng_seed s, RDB$GET_CONTEXT('USER_SESSION', 'rng') r FROM game g WHERE g.id = 1")).rows[0];
+        setStatus(`seed ${g?.S ?? '?'} (the generator is at ${g?.R ?? '?'})`); setTimeout(() => setStatus(''), 4000);
+        return;
+      }
+      const v = Number(arg);
+      if (!Number.isFinite(v)) { setStatus('seed takes a number', true); setTimeout(() => setStatus(''), 2500); return; }
+      await db.query("SELECT RDB$SET_CONTEXT('USER_SESSION', 'rng', ?) FROM rdb$database", [Math.floor(v) >>> 0]);
+      setStatus(`the next new game starts from seed ${Math.floor(v) >>> 0}`); setTimeout(() => setStatus(''), 2500);
       return;
     }
     case 'save': return saveGame();

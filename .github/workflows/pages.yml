@@ -76,6 +76,10 @@ jobs:
       - name: The painter
         run: npm run test:painter
 
+      # The same seed and the same inputs give the same game, twice; another seed does not
+      - name: Replays
+        run: npm run test:replay
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # service worker isolates, the pak downloads, Firebird runs in its worker, keys, a quick save
       # and load, the menu, no console errors

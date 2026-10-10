@@ -48,7 +48,8 @@ them.
   `god`, `notarget`, `noclip` (flies where the view points, through walls, touching nothing),
   `give all|health|weapons|ammo|armor|keys`, `give <item>` by its pickup name as `Cmd_Give_f` had it
   (spawned on the player and touched; an ammo adds one pickup's worth, `give shells 20` or `give health 50`
-  sets the count), `use <item>`, `kill` (godmode or not), `map <name>` (a new game), `fov <degrees>` (1 to
+  sets the count), `use <item>`, `kill` (godmode or not), `map <name>` (a new game), `seed [n]` (the game's
+  seed and the generator's state, or the next new game's seed: see *Deterministic replays*), `fov <degrees>` (1 to
   160), `save`, `load` (`player_command` in weapons.sql for the game's part). Up and down step through the
   lines typed, Tab completes a command's name. `drop <item>` is `Cmd_Drop_f`: ammo a pickup's worth, a weapon
   not in hand, a powerup, power armour (off with the last), thrown ahead and not back to its dropper for a
@@ -319,10 +320,17 @@ picker). Missing for the rest of the game:
   error or missing but the music tracks and the favicon. The Pages workflow runs it after the Node
   suites. Every other test still runs the SQL in Node through `DirectTransport`, which is where a
   failure is easiest to read; this one is for what only the page can break.
-- **Deterministic replays**: the SQL draws its chances from Firebird's `RAND()`, so a bug seen once
-  cannot be played again. A seeded generator in SQL (an LCG kept in `game`, the seed saved with the
-  game and printed by the console) would make a replay of the inputs reproduce the run, and would let
-  the tests assert exact outcomes where they now assert ranges.
+- **Deterministic replays**: done. The SQL drew its chances from Firebird's `RAND()`, so a bug seen
+  once could not be played again. Every draw now comes from `rnd()` (game.sql), a 32-bit linear
+  congruential generator whose state lives in the session context: a game is a function of its seed
+  and its inputs. `init_map` seeds it if nothing has and records the seed a new game starts with in
+  `game.rng_seed`; `loadMap` takes a `seed`; the console's `seed` shows the game's seed and the
+  generator's state, `seed <n>` sets the next new game's; a save carries the state, so a loaded game
+  goes on with the chances it would have had. `scripts/replay-test.mjs` plays 120 tics twice from one
+  seed and compares every entity, the game row and the sounds (ids left out: the sequences run on
+  across loads), then from another seed, then the second half again from a save. The cost is within
+  the noise (`ab-bench`: idle 4.19 → 4.26 ms, walking 10.00 → 10.05). Left: the tests still assert
+  ranges where they could now assert exact outcomes.
 - **`run_think`**: measured, and the cheap fix taken. The chain of 38 `IF (think = '…')` string
   comparisons is walked 6 times a tic on demo1 (a counter in each branch: 4.6 of them
   `monster_think`, 1 `banner_think`, the rest timers and trains), and `monster_think` was the last

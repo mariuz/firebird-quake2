@@ -122,10 +122,25 @@ BEGIN
 END^
 
 -- crandom(): -1..1
+-- Every chance the game takes comes from here, not from RAND(): a linear congruential generator (Numerical
+-- Recipes' 32-bit one) whose state lives in the session context, so a game is a function of its seed and its
+-- inputs and can be played again. The state rides in a save (src/savegame.js); the seed a new game started
+-- with is kept on the game row (init_map) and shown by the console's `seed`. Unseeded, it starts anywhere.
+CREATE OR ALTER FUNCTION rnd () RETURNS DOUBLE PRECISION
+AS
+DECLARE x BIGINT;
+BEGIN
+  x = CAST(RDB$GET_CONTEXT('USER_SESSION', 'rng') AS BIGINT);
+  IF (x IS NULL) THEN x = CAST(FLOOR(RAND() * 4294967296) AS BIGINT);
+  x = MOD(x * 1664525 + 1013904223, 4294967296);
+  RDB$SET_CONTEXT('USER_SESSION', 'rng', x);
+  RETURN x / 4294967296e0;
+END^
+
 CREATE OR ALTER FUNCTION crand () RETURNS DOUBLE PRECISION
 AS
 BEGIN
-  RETURN RAND() * 2 - 1;
+  RETURN rnd() * 2 - 1;
 END^
 
 -- the distance between two entities, classified as range(): 0 melee 1 near 2 mid 3 far
@@ -868,7 +883,7 @@ BEGIN
   ux = SIN(p) * COS(y); uy = SIN(p) * SIN(y); uz = COS(p);
   SELECT e.x + :fx * e.dstx + :rx * e.dsty + :ux * e.dstz, e.y + :fy * e.dstx + :ry * e.dsty + :uy * e.dstz, e.z + :fz * e.dstx + :rz * e.dsty + :uz * e.dstz
     FROM ents e WHERE e.id = :eid INTO sx, sy, sz;
-  dmg = 100 + FLOOR(RAND() * 50);
+  dmg = 100 + FLOOR(rnd() * 50);
   SELECT 550 + 50 * g.skill FROM game g WHERE g.id = 1 INTO spd;
   EXECUTE PROCEDURE launch_rocket(own, sx, sy, sz, fx, fy, fz, spd, dmg, dmg, 150);
   EXECUTE PROCEDURE snd_at(sx, sy, sz, 'weapons/rocklf1a.wav', 1, 1);
@@ -1338,7 +1353,7 @@ BEGIN
   SELECT COUNT(*) FROM map_ents m WHERE m.classname = 'info_player_intermission' INTO n;
   IF (n > 0) THEN
   BEGIN
-    k = MOD(CAST(FLOOR(RAND() * 4) AS INTEGER), n);
+    k = MOD(CAST(FLOOR(rnd() * 4) AS INTEGER), n);
     SELECT FIRST 1 SKIP (:k) m.ox, m.oy, m.oz, COALESCE(m.apitch, 0), COALESCE(m.ayaw, m.angle, 0)
       FROM map_ents m WHERE m.classname = 'info_player_intermission' ORDER BY m.id INTO x, y, z, pitch, yaw;
   END
@@ -1771,8 +1786,8 @@ BEGIN
   -- VelocityForDamage
   spd = IIF(dmg < 50, 0.7e0, 1.2e0);
   UPDATE ents e SET e.movetype = IIF(:kind = 1, 6, 10), e.solid = 0, e.clipmask = 3, e.effects = 2,
-         e.vx = 100 * crand() * :spd * 2, e.vy = 100 * crand() * :spd * 2, e.vz = (RAND() * 200 + 200) * :spd,
-         e.avel_yaw = RAND() * 600, e.avel_pitch = RAND() * 600, e.think = 'remove', e.nextthink = now_() + 10 + RAND() * 10, e.frame = 0 WHERE e.id = :g;
+         e.vx = 100 * crand() * :spd * 2, e.vy = 100 * crand() * :spd * 2, e.vz = (rnd() * 200 + 200) * :spd,
+         e.avel_yaw = rnd() * 600, e.avel_pitch = rnd() * 600, e.think = 'remove', e.nextthink = now_() + 10 + rnd() * 10, e.frame = 0 WHERE e.id = :g;
 END^
 
 CREATE OR ALTER PROCEDURE throw_head (eid INTEGER, model VARCHAR(64), dmg INTEGER)
@@ -1781,8 +1796,8 @@ BEGIN
   EXECUTE PROCEDURE set_model(eid, model);
   UPDATE ents e SET e.movetype = 10, e.solid = 0, e.takedamage = 0, e.frame = 0, e.anim = NULL, e.st = 'dead', e.skin = 0, e.effects = 2,
          e.minx = -16, e.miny = -16, e.minz = 0, e.maxx = 16, e.maxy = 16, e.maxz = 16, e.z = e.z + 32,
-         e.vx = 100 * crand(), e.vy = 100 * crand(), e.vz = RAND() * 200 + 200,
-         e.avel_yaw = RAND() * 600, e.think = 'remove', e.nextthink = now_() + 20, e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :eid;
+         e.vx = 100 * crand(), e.vy = 100 * crand(), e.vz = rnd() * 200 + 200,
+         e.avel_yaw = rnd() * 600, e.think = 'remove', e.nextthink = now_() + 20, e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :eid;
 END^
 
 -- gibs: ThrowGib × n and the head
@@ -1813,8 +1828,8 @@ BEGIN
   BEGIN
     EXECUTE PROCEDURE spawn_ent('debris', x + crand() * sx / 2, y + crand() * sy / 2, z + crand() * sz / 2) RETURNING_VALUES g;
     EXECUTE PROCEDURE set_model(g, 'models/objects/debris' || (1 + MOD(:i, 3)) || '/tris.md2');
-    UPDATE ents e SET e.movetype = 10, e.solid = 0, e.clipmask = 3, e.vx = crand() * 200, e.vy = crand() * 200, e.vz = 100 + RAND() * 200,
-           e.avel_yaw = crand() * 600, e.avel_pitch = crand() * 600, e.think = 'remove', e.nextthink = now_() + 5 + RAND() * 5 WHERE e.id = :g;
+    UPDATE ents e SET e.movetype = 10, e.solid = 0, e.clipmask = 3, e.vx = crand() * 200, e.vy = crand() * 200, e.vz = 100 + rnd() * 200,
+           e.avel_yaw = crand() * 600, e.avel_pitch = crand() * 600, e.think = 'remove', e.nextthink = now_() + 5 + rnd() * 5 WHERE e.id = :g;
     i = i + 1;
   END
   EXECUTE PROCEDURE fx(2, x, y, z, 0, 0, 0, 0);
@@ -1839,7 +1854,7 @@ BEGIN
       EXECUTE PROCEDURE snd(targ, 2, 'misc/udeath.wav', 1, 1);
       EXECUTE PROCEDURE fx(3, (SELECT e.x FROM ents e WHERE e.id = :targ), (SELECT e.y FROM ents e WHERE e.id = :targ), (SELECT e.z FROM ents e WHERE e.id = :targ), 0, 0, 0, 60);
     END
-    ELSE EXECUTE PROCEDURE snd(targ, 2, 'player/male/death' || CAST(1 + FLOOR(RAND() * 4) AS INTEGER) || '.wav', 1, 1);
+    ELSE EXECUTE PROCEDURE snd(targ, 2, 'player/male/death' || CAST(1 + FLOOR(rnd() * 4) AS INTEGER) || '.wav', 1, 1);
     EXIT;
   END
   IF (BIN_AND(flags, 32) <> 0) THEN
@@ -2008,7 +2023,7 @@ BEGIN
     SELECT p.pain_finished FROM player p WHERE p.id = 1 INTO pf;
     IF (pf < now_() AND take > 0) THEN
     BEGIN
-      EXECUTE PROCEDURE snd(targ, 2, 'player/male/pain' || CASE WHEN hp < 25 THEN '25' WHEN hp < 50 THEN '50' WHEN hp < 75 THEN '75' ELSE '100' END || '_' || CAST(1 + FLOOR(RAND() * 2) AS INTEGER) || '.wav', 1, 1);
+      EXECUTE PROCEDURE snd(targ, 2, 'player/male/pain' || CASE WHEN hp < 25 THEN '25' WHEN hp < 50 THEN '50' WHEN hp < 75 THEN '75' ELSE '100' END || '_' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav', 1, 1);
       UPDATE player p SET p.pain_finished = now_() + 0.7e0, p.punchangle = -2 WHERE p.id = 1;
     END
     EXIT;
@@ -2095,7 +2110,7 @@ DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PREC
 DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER; DECLARE mx DOUBLE PRECISION; DECLARE fr SMALLINT;
 BEGIN
   SELECT g.skill FROM game g WHERE g.id = 1 INTO sk;
-  IF (sk = 0 AND RAND() > 0.25e0) THEN EXIT;
+  IF (sk = 0 AND rnd() > 0.25e0) THEN EXIT;
   EXECUTE PROCEDURE trace_move(shooter, 0, 0, 0, 0, 0, 0, ox, oy, oz, ox + dx * 8192, oy + dy * 8192, oz + dz * 8192, 100663299)
     RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sfl, cts, als, sts, hit;
   IF (hit IS NULL OR hit = 0) THEN EXIT;
@@ -2689,7 +2704,7 @@ BEGIN
     BEGIN
       IF (wt IS NULL OR wt = 0) THEN wt = 1;
       UPDATE ents e SET e.solid = 0, e.wait_ = :wt WHERE e.id = :eid;
-      IF (BIN_AND(sf, 1) <> 0) THEN UPDATE ents e SET e.think = 'timer_think', e.nextthink = :t0 + 1 + RAND() * :wt WHERE e.id = :eid;   -- START_ON
+      IF (BIN_AND(sf, 1) <> 0) THEN UPDATE ents e SET e.think = 'timer_think', e.nextthink = :t0 + 1 + rnd() * :wt WHERE e.id = :eid;   -- START_ON
     END
     ELSE IF (cls = 'func_rotating') THEN
     BEGIN
@@ -2827,8 +2842,8 @@ BEGIN
       UPDATE ents e SET e.mtype = :mname, e.skin = :mskin, e.health = :mhp, e.max_health = :mhp, e.gib_health = :mgh, e.mass = :mmass, e.solid = 3, e.takedamage = 2,
              e.movetype = IIF(BIN_AND(:mflags, 3) <> 0, 5, 4), e.clipmask = 33685507, e.flags = BIN_OR(32, :mflags), e.yaw_speed = :mys,
              e.minx = :a, e.miny = :b, e.minz = :c, e.maxx = :e2, e.maxy = :f2, e.maxz = :g2, e.viewheight = :g2 - 8,
-             e.st = 'stand', e.anim = :stand, e.anim_frame = FLOOR(RAND() * 4), e.ideal_yaw = e.yaw,
-             e.think = 'monster_think', e.nextthink = :t0 + 0.1e0 + RAND() * 0.5e0 WHERE e.id = :eid;
+             e.st = 'stand', e.anim = :stand, e.anim_frame = FLOOR(rnd() * 4), e.ideal_yaw = e.yaw,
+             e.think = 'monster_think', e.nextthink = :t0 + 0.1e0 + rnd() * 0.5e0 WHERE e.id = :eid;
       UPDATE game g SET g.total_monsters = g.total_monsters + 1 WHERE g.id = 1;
       IF (BIN_AND(sf, 2) <> 0) THEN
         -- TRIGGER_SPAWN: nowhere until used
@@ -2859,7 +2874,7 @@ BEGIN
     BEGIN
       EXECUTE PROCEDURE set_model(eid, 'models/objects/banner/tris.md2');
       -- SP_misc_banner: a random frame to start, and misc_banner_think moves it on every 0.1 s
-      UPDATE ents e SET e.solid = 0, e.frame = FLOOR(RAND() * 16), e.think = 'banner_think', e.nextthink = :t0 + 0.1 WHERE e.id = :eid;
+      UPDATE ents e SET e.solid = 0, e.frame = FLOOR(rnd() * 16), e.think = 'banner_think', e.nextthink = :t0 + 0.1 WHERE e.id = :eid;
       EXECUTE PROCEDURE link_ent(eid);
     END
     ELSE IF (cls = 'misc_satellite_dish') THEN

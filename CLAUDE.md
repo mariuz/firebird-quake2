@@ -28,6 +28,7 @@ npm run test:menu                     # the menus, headless: keys, slots, settin
 npm run test:painter                  # the painter headless: dynamic lights, mip levels
 npm run test:walkthrough              # every trigger the player can walk into fires, its movers move
 npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper, clock, turret
+npm run test:replay                   # the same seed and inputs give the same game twice; a save carries the chances on
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)
@@ -135,6 +136,10 @@ short stories of what changed and what it measured; keep that.
   to get `now_()` added to its nextthink, which was wrong for a spawned pusher.
 - A pusher's (movetype 7) thinks are scheduled on its own clock, `ltime`; everything else's on `now_()`.
   Entity pitch is Quake's: positive is downward (`angleMatrix`, `AngleVectors`).
+- Every chance comes from `rnd()` (game.sql), never `RAND()`: a seeded generator in the session context,
+  so a game is a function of its seed and its inputs (`test:replay` holds it to that). Seed with
+  `loadMap(…, { seed })` or the console's `seed <n>`; `game.rng_seed` records a new game's; a save carries
+  the state.
 
 ## Browser testing
 

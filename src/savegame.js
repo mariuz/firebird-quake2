@@ -27,7 +27,9 @@ export async function exportSave(db, mapName, levels = null) {
   // model ids by name: a reloaded map's models may get other ids, so the save carries the names
   const models = {};
   for (const [id, name] of (await db.query('SELECT id, name FROM models', [], { rowMode: 'array' })).rows) models[id] = name;
-  return { version: SAVE_VERSION, map: mapName, when: Date.now(), models, tables, levels: levels ? Object.fromEntries(levels) : {} };
+  // rnd()'s state, so the game goes on from the load with the chances it would have had
+  const rng = (await db.query("SELECT RDB$GET_CONTEXT('USER_SESSION', 'rng') r FROM rdb$database")).rows[0].R;
+  return { version: SAVE_VERSION, map: mapName, when: Date.now(), models, tables, rng: rng == null ? null : Number(rng), levels: levels ? Object.fromEntries(levels) : {} };
 }
 
 /** The unit's levels a save carries (but the save's own map, which the save itself holds), as a Map by name. */
@@ -135,6 +137,7 @@ export async function importSave(db, save) {
   }
   const maxId = (await db.query('SELECT MAX(id) m FROM ents')).rows[0].M ?? 0;
   await db.exec(`ALTER SEQUENCE ent_seq RESTART WITH ${maxId + 1}`);
+  if (save.rng != null) await db.query("SELECT RDB$SET_CONTEXT('USER_SESSION', 'rng', ?) FROM rdb$database", [Math.floor(save.rng)]);
   // the frame's caches describe a view and a cluster that are gone
   await db.exec('UPDATE viewcfg SET vis_cluster = NULL, lv_ex = NULL, lv_leaf = NULL, world_lst = NULL, view_stamp = view_stamp + 1;');
 }
