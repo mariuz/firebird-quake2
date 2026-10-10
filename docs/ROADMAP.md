@@ -297,18 +297,26 @@ picker). Missing for the rest of the game:
   the `LOAD_<table>` PSQL chunk procedures 2753 ms, `execBatch` 2331 ms (0.4.0's batch, a
   statement execute per row inside the engine, had been 13 % slower than the procedures). What is
   left is the inserts themselves (`face_verts`' 37 k rows at ~12 µs each, mostly the primary key),
-  `init_map` and, on a reload, the old map's `DELETE`s (half a second). Next: drop the primary keys
-  before the load and create them after (an index built in one pass is cheaper than 37 k index
-  inserts), load `face_verts` after the first frame is up (only the painter's surface builds read
-  it), and put the `DELETE`s into the loading plaque's first tic.
+  `init_map` and, on a reload, the old map's `DELETE`s (half a second). Dropping the geometry
+  tables' primary keys before the load and adding them back before `init_map` was measured
+  (alternating with the plain load, four each) and rejected: 2384 ms against 2000, because the
+  rows went in no faster without their keys and the eight index builds cost 290 ms; the per-row
+  cost is the record itself, not the key. (A compiled procedure whose plan uses a dropped index
+  fails with error 260 until the index is back: the keys must return before `init_map`.) Left:
+  load `face_verts` after the first frame is up (only the painter's surface builds read it), and
+  put the `DELETE`s into the loading plaque's first tic.
 - **Saves and `localStorage`**: a save is JSON, uncompressed; a demo3 save carrying two levels left
   is 495 KB (46 KB gzipped), and fifteen slots plus the autosave share an origin's ~5 MB. Compress
   with `CompressionStream('gzip')` on the way in (and accept both forms on the way out), or move the
   slots to IndexedDB, which has no such budget.
-- **A browser test in CI**: every test runs the SQL in Node through `DirectTransport`; the page
-  itself (the worker, the service worker's cross-origin isolation, the canvas, the input) is checked
-  by hand. A Playwright run against `scripts/build.mjs --serve --coi` that loads demo1, plays a few
-  tics and reads the stats line would catch what the Node tests cannot.
+- **A browser test in CI**: done. `scripts/browser-test.mjs` (`npm run test:browser`) serves the
+  build without COOP/COEP, as Pages does, and drives it in a headless Chromium through Playwright:
+  the service worker isolates the page and reloads it once, the pak downloads, Firebird starts in
+  its worker and the first frames come (7 s here), the stats line keeps changing, `W` walks, `F6`
+  saves and `F9` loads, Escape pauses the loop and again resumes it, and nothing is logged as an
+  error or missing but the music tracks and the favicon. The Pages workflow runs it after the Node
+  suites. Every other test still runs the SQL in Node through `DirectTransport`, which is where a
+  failure is easiest to read; this one is for what only the page can break.
 - **Deterministic replays**: the SQL draws its chances from Firebird's `RAND()`, so a bug seen once
   cannot be played again. A seeded generator in SQL (an LCG kept in `game`, the seed saved with the
   game and printed by the console) would make a replay of the inputs reproduce the run, and would let

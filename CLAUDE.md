@@ -28,6 +28,7 @@ npm run test:menu                     # the menus, headless: keys, slots, settin
 npm run test:painter                  # the painter headless: dynamic lights, mip levels
 npm run test:walkthrough              # every trigger the player can walk into fires, its movers move
 npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper, clock, turret
+npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
@@ -35,8 +36,8 @@ npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring
 
 A change is done when: `sql-check` passes, the three smoke tests, the monsters, walkthrough, entities, save, menu and painter tests say `all good`,
 `screenshot.mjs --compare` reports `differ in 0 of 76800 pixels` on demo1 and demo2 (and the
-viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), the page runs
-in a real browser without console errors, and CI is green. Commit messages here are written as
+viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), `test:browser`
+says `all good` (the page in a real Chromium, served as Pages serves it), and CI is green. Commit messages here are written as
 short stories of what changed and what it measured; keep that.
 
 ## How to measure (do this before optimising anything)
