@@ -31,6 +31,7 @@ npm run test:entities                 # the full game's entities, added to demo1
 npm run test:replay                   # the same seed and inputs give the same game twice; a save carries the chances on
 npm run test:input                    # the page's input as the usercmd: keys, mouse, touches, buttons, a gamepad
 npm run test:console                  # the console line headless: the page's commands, player_command, history, Tab
+npm run test:settings                 # the settings: defaults, storage round trip, bad stored values back to defaults
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)

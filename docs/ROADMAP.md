@@ -374,8 +374,11 @@ picker). Missing for the rest of the game:
   left `jump_released` NULL. The console followed: `src/console.js` runs the commands (`map`, `fov`,
   `seed`, `save`, `load`, `inven` against a host object, the rest through `player_command`), keeps
   the history and completes on Tab, and `test:console` drives it with a fake host; the page keeps
-  the input element. `main.js` is 760 lines, from 899: the loop, the settings, the menus' `host`
-  object, the saves and the page's wiring. The `host` object and the loop could stand apart from
+  the input element. The settings went next: `src/settings.js` has the defaults, the video modes, the
+  menus' resets and the storage round trip, and checks what storage hands back (a hand-edited
+  `fov: 500` or `detail: 'bogus'` used to reach the game as it was); `test:settings` covers it.
+  `main.js` is 760 lines, from 899: the loop, the menus' `host` object, the saves and the page's
+  wiring. The `host` object and the loop could stand apart from
   the DOM next, so the headless tests could drive the page's logic as `menu-test.mjs` drives the
   menus.
 - **The cluster-change hitch**: smaller. Marking a new cluster went from ~43 to ~17 ms (the

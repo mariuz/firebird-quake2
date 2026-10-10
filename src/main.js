@@ -26,6 +26,7 @@ import { WEAPONS } from './gamedata.js';
 import { padMenuKeys, BUTTON } from './gamepad.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Console } from './console.js';
+import { loadSettings, saveSettings as saveSettingsTo, viewSize, OPTIONS_RESET, VIDEO_RESET } from './settings.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('screen');
@@ -46,13 +47,12 @@ let beams = [];          // [{ a, b, color, until }]
 const tongues = new Map(); // TE_PARASITE_ATTACK by parasite: { a, b, until } (CL_ParseBeam: one per entity, 0.2 s)
 let explosions = [];     // CL_AddExplosions' list: [{ x, y, z, t0, type, mdl | spr, base, frames, light, c, pitch, yaw }]
 let flashes = [];        // muzzle flashes' lights: [{ x, y, z, r, die }] (each lasts the frame it is seen in)
-const settings = { map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90, renderer: 'fast', brightness: 1.4, alwaysRun: true,
-  sensitivity: 7, invertMouse: false, crosshair: 1 };
-try { Object.assign(settings, JSON.parse(localStorage.getItem('firebird-quake2:settings') || '{}')); } catch { /* defaults */ }
-const saveSettings = () => { try { localStorage.setItem('firebird-quake2:settings', JSON.stringify(settings)); } catch { /* ignore */ } };
-const DETAIL = { low: [160, 120], high: [320, 240], ultra: [640, 480] };   // the video modes the page offers
-const viewWidth = () => (DETAIL[settings.detail] ?? DETAIL.high)[0];
-const viewHeight = () => (DETAIL[settings.detail] ?? DETAIL.high)[1];
+// src/settings.js: the defaults, the video modes, and the round trip through localStorage, checked on the way in
+const storage = (() => { try { return window.localStorage; } catch { return null; } })();
+const settings = loadSettings(storage);
+const saveSettings = () => saveSettingsTo(settings, storage);
+const viewWidth = () => viewSize(settings)[0];
+const viewHeight = () => viewSize(settings)[1];
 const audio = new Q2Audio();
 audio.setVolume(settings.sfx / 100);
 audio.setMusicVolume(settings.music / 100);
@@ -131,8 +131,8 @@ const menu = new Menu({
   saveSlot: (i) => saveGame(SLOT_KEY(i)),
   get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : settings[k]),
   set: (k, v) => setSetting(k, v),
-  resetDefaults: () => { for (const [k, v] of Object.entries({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1 })) setSetting(k, v); },
-  resetVideo: () => { for (const [k, v] of Object.entries({ renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false })) setSetting(k, v); },
+  resetDefaults: () => { for (const [k, v] of Object.entries(OPTIONS_RESET)) setSetting(k, v); },
+  resetVideo: () => { for (const [k, v] of Object.entries(VIDEO_RESET)) setSetting(k, v); },
   console: () => openConsole(),
   quit: () => quitGame(),
   sound: (name) => audio.playLocal(name),
