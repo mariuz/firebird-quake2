@@ -1176,7 +1176,10 @@ CREATE OR ALTER PROCEDURE run_think (eid INTEGER, think VARCHAR(24))
 AS
 BEGIN
   IF (think IS NULL) THEN EXIT;
-  IF (think = 'door_go_down') THEN EXECUTE PROCEDURE door_go_down(eid);
+  -- the chain is walked in order: monster_think first, as it is most of the calls (4.6 of 6 a tic on demo1,
+  -- measured with a counter in each branch), and was last of 38
+  IF (think = 'monster_think') THEN EXECUTE PROCEDURE monster_think(eid);
+  ELSE IF (think = 'door_go_down') THEN EXECUTE PROCEDURE door_go_down(eid);
   ELSE IF (think = 'door_go_up') THEN EXECUTE PROCEDURE door_go_up(eid, player_ent());
   ELSE IF (think = 'door_hit_top') THEN EXECUTE PROCEDURE door_hit_top(eid);
   ELSE IF (think = 'door_hit_bottom') THEN EXECUTE PROCEDURE door_hit_bottom(eid);
@@ -1216,7 +1219,6 @@ BEGIN
   ELSE IF (think = 'dish_think') THEN EXECUTE PROCEDURE dish_think(eid);
   ELSE IF (think = 'remove') THEN DELETE FROM ents e WHERE e.id = :eid;
   ELSE IF (think = 'drop_touchable') THEN UPDATE ents e SET e.owner_id = NULL, e.think = NULL, e.nextthink = NULL WHERE e.id = :eid;   -- drop_make_touchable
-  ELSE IF (think = 'monster_think') THEN EXECUTE PROCEDURE monster_think(eid);
 END^
 
 -- SV_Physics for everything but the player and the pushers

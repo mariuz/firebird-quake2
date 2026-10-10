@@ -323,10 +323,14 @@ picker). Missing for the rest of the game:
   cannot be played again. A seeded generator in SQL (an LCG kept in `game`, the seed saved with the
   game and printed by the console) would make a replay of the inputs reproduce the run, and would let
   the tests assert exact outcomes where they now assert ranges.
-- **`run_think`**: a chain of 38 `IF (think = '…')` string comparisons, walked for every think of
-  every entity every tic. A think code (an integer column set with the name, `CASE` over it) or
-  `EXECUTE STATEMENT` are the two ways out; the chain's cost should be measured with
-  `call-counts.mjs` before either, as the tic's floor is the trace, not this.
+- **`run_think`**: measured, and the cheap fix taken. The chain of 38 `IF (think = '…')` string
+  comparisons is walked 6 times a tic on demo1 (a counter in each branch: 4.6 of them
+  `monster_think`, 1 `banner_think`, the rest timers and trains), and `monster_think` was the last
+  branch: about 170 failed comparisons a tic, 0.2 ms of a 5 ms idle tic. It is now the first
+  comparison. `ab-bench` against the old SQL: idle median 4.93 → 4.35 ms, walking 9.52 → 8.96,
+  the means within the noise (5.01 → 4.95, 10.45 → 10.34). A think code with a `CASE`, or
+  `EXECUTE STATEMENT`, would save what is left of the chain, which is now a few comparisons a
+  tic: not worth a schema column.
 - **Spawn-time thinks**: spawn functions schedule first thinks from the level's start (`nextthink =
   0.1`), as `init_map` runs at time 0, and `target_spawner` adds `now_()` for an entity spawned later.
   Scheduling every spawn relative to `now_()` would remove the special case and the trap for the next
