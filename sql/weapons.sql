@@ -744,6 +744,9 @@ BEGIN
   IF (ducked2 = 1) THEN maxspd = 100;
 
   -- PM_CheckJump
+  -- PMF_JUMP_HELD: a jump held in the air or in water keeps the flag as it is (it used to be left NULL,
+  -- which the column refused: a second tap on the touch screen's move half while still airborne crashed the tic)
+  jr2 = jr;
   IF (jump = 1) THEN
   BEGIN
     IF (wl >= 2) THEN

@@ -23,7 +23,8 @@ import { packSave, unpackSave, saveHeader } from './savestore.js';
 import { parseChangeMap } from './levels.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS } from './gamedata.js';
-import { readPad, padImpulse, padMenuKeys, firstPad, BUTTON, TURN, LOOK } from './gamepad.js';
+import { padMenuKeys, BUTTON } from './gamepad.js';
+import { Input, GAME_KEYS } from './input.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('screen');
@@ -66,17 +67,8 @@ function setStatus(msg, isError = false) {
 }
 
 // ── input ────────────────────────────────────────────────────────────────
-const keys = new Set();
-let mouseYaw = 0, mousePitch = 0;
-let fireClick = false;
-// the gamepad, read every frame: the buttons held at the last read (a press counts once) and the stick as a d-pad
-const padState = { held: new Set(), stick: { x: 0, y: 0 } };
-const pollPad = () => { const pad = readPad(firstPad(navigator.getGamepads?.()), padState.held); if (pad) padState.held = pad.held; return pad; };
-let impulse = 0;
-const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
-  'BracketLeft', 'BracketRight', 'Enter',
-  'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
-  'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
+// src/input.js holds the keys, the mouse, the touches and the pad between tics and reads them as the usercmd
+const input = new Input();
 let anyKey = null;      // a picture screen waiting for a key or a click
 let showHelp = false;   // the help computer (F1)
 let showInv = false;    // the inventory screen (TAB)
@@ -97,16 +89,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Tab') { e.preventDefault(); showInv = !showInv; showHelp = false; }         // inven
   if (e.code === 'Backquote') { e.preventDefault(); openConsole(); return; }
   if (GAME_KEYS.has(e.code)) e.preventDefault();
-  keys.add(e.code);
-  // default.cfg: 1-5 blaster to chaingun, 6 grenade launcher … 0 BFG10K, G "use grenades", / weapnext
-  // (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher)
-  if (e.code.startsWith('Digit')) impulse = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5, Digit6: 7, Digit7: 8, Digit8: 9, Digit9: 10, Digit0: 11 }[e.code];
-  if (e.code === 'KeyG') impulse = 6;
-  if (e.code === 'Slash') impulse = 12;
-  // the inventory (invuse, invnext, invprev) and default.cfg's item keys: q quad damage, i invulnerability,
-  // b rebreather, e environment suit (s, the silencer, and p, the power shield, are the page's back and pause)
-  const inv = { Enter: 13, BracketRight: 14, BracketLeft: 15, KeyQ: 16, KeyI: 17, KeyB: 19, KeyE: 20 }[e.code];
-  if (inv) impulse = inv;
+  input.key(e.code);   // the movement keys, and the weapon, inventory and item keys as impulses
   if (e.code === 'KeyP' || e.code === 'Pause') paused = !paused;
   if (e.code === 'F6') { e.preventDefault(); saveGame(); }
   if (e.code === 'F9') { e.preventDefault(); loadGame(); }
@@ -115,7 +98,7 @@ window.addEventListener('keydown', (e) => {
 // ── the menus (src/menu.js): up, the game is paused (M_PushMenu sets "paused" in single player) ──────
 let quietUnlock = false;   // the page let the pointer go itself: no menu for that
 function openMenu(push) {
-  keys.clear();
+  input.clear();
   push();
   if (menu.active && document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
 }
@@ -179,7 +162,7 @@ function quitGame() {
 const cmdline = $('cmdline');
 function openConsole() {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
-  keys.clear();
+  input.clear();
   cmdline.hidden = false;
   cmdline.value = '';
   histPos = history.length;
@@ -306,53 +289,11 @@ async function loadGame(key = SAVE_KEY) {
     running = true;
   } catch (err) { console.error(err); setStatus(`Load failed: ${err.message}`, true); }
 }
-window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', () => keys.clear());
+input.attach(canvas, window, { locked: () => document.pointerLockElement === canvas, settings: () => settings });
 canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } });
 canvas.addEventListener('click', () => {
   if (running && !menu.active && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});
 });
-canvas.addEventListener('mousedown', (e) => { if (document.pointerLockElement === canvas && e.button === 0) fireClick = true; });
-window.addEventListener('mouseup', () => { fireClick = false; });
-window.addEventListener('mousemove', (e) => {
-  if (document.pointerLockElement === canvas) {
-    mouseYaw -= e.movementX * 0.022 * settings.sensitivity;
-    mousePitch += e.movementY * 0.022 * settings.sensitivity * (settings.invertMouse ? -1 : 1);
-  }
-});
-window.addEventListener('wheel', () => { if (document.pointerLockElement === canvas) impulse = 12; });
-// touch: left half moves, right half looks, tap fires
-const touch = { move: null, look: null };
-canvas.addEventListener('touchstart', (e) => {
-  const r = canvas.getBoundingClientRect();
-  for (const t of e.changedTouches) {
-    const rec = { id: t.identifier, x: t.clientX, y: t.clientY, dx: 0, dy: 0, t: performance.now() };
-    if (t.clientX - r.left < r.width / 2) touch.move = rec; else touch.look = rec;
-  }
-  e.preventDefault();
-}, { passive: false });
-canvas.addEventListener('touchmove', (e) => {
-  for (const t of e.changedTouches) for (const k of ['move', 'look']) {
-    const rec = touch[k];
-    if (rec && rec.id === t.identifier) {
-      if (k === 'look') { mouseYaw -= (t.clientX - rec.x - rec.dx) * 0.4; mousePitch += (t.clientY - rec.y - rec.dy) * 0.4; }
-      rec.dx = t.clientX - rec.x; rec.dy = t.clientY - rec.y;
-    }
-  }
-  e.preventDefault();
-}, { passive: false });
-canvas.addEventListener('touchend', (e) => {
-  for (const t of e.changedTouches) for (const k of ['move', 'look']) {
-    const rec = touch[k];
-    if (rec && rec.id === t.identifier) {
-      if (k === 'look' && Math.abs(rec.dx) < 10 && Math.abs(rec.dy) < 10 && performance.now() - rec.t < 250) fireClick = 'tap';
-      if (k === 'move' && Math.abs(rec.dx) < 10 && Math.abs(rec.dy) < 10 && performance.now() - rec.t < 250) keys.add('TapJump');
-      touch[k] = null;
-    }
-  }
-  e.preventDefault();
-}, { passive: false });
-
 // on-screen buttons for touch screens (the halves of the view move and look): fire and jump while held, the next
 // weapon, the menu. Shown where the browser reports touch points or a coarse pointer.
 const touchBar = $('touch');
@@ -361,9 +302,9 @@ if (touchBar) {
   for (const b of touchBar.querySelectorAll('button')) {
     const act = b.dataset.act;
     const press = (on) => {
-      if (act === 'fire') { if (on) keys.add('TouchFire'); else keys.delete('TouchFire'); }
-      else if (act === 'jump') { if (on) keys.add('Space'); else keys.delete('Space'); }
-      else if (on && act === 'weapon') impulse = 12;
+      if (act === 'fire') input.hold('TouchFire', on);
+      else if (act === 'jump') input.hold('Space', on);
+      else if (on && act === 'weapon') input.impulse = 12;
       else if (on && act === 'menu') { if (anyKey) { const go = anyKey; anyKey = null; go(); } else if (menu.active) menu.key('Escape'); else if (running) escape(); }
     };
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); press(true); });
@@ -372,42 +313,11 @@ if (touchBar) {
   }
 }
 
+/** One tic's command from the input; the pad's Start is the page's Escape. */
 function readInput(tics) {
-  const k = (c) => keys.has(c);
-  const pad = pollPad();
-  if (pad) {
-    const pi = padImpulse(pad);
-    if (pi) impulse = pi;
-    if (pad.pressed.has(BUTTON.START)) { escape(); }
-  }
-  let fwd = (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0);
-  let side = (k('KeyD') || k('Period') ? 1 : 0) - (k('KeyA') || k('Comma') ? 1 : 0);
-  const turnKeys = (k('ArrowLeft') ? 1 : 0) - (k('ArrowRight') ? 1 : 0);
-  const lookKeys = (k('PageDown') ? 1 : 0) - (k('PageUp') ? 1 : 0);
-  const shift = k('ShiftLeft') || k('ShiftRight');
-  let run = settings.alwaysRun ? (shift ? 0 : 1) : (shift ? 1 : 0);    // cl_run: always run with shift to walk, or the other way
-  if (touch.move) {
-    fwd = Math.max(-1, Math.min(1, -touch.move.dy / 40));
-    side = Math.max(-1, Math.min(1, touch.move.dx / 40));
-  }
-  let padTurn = 0, padLook = 0;
-  if (pad && (pad.fwd || pad.side)) { fwd = pad.fwd; side = pad.side; run = settings.alwaysRun || pad.run ? 1 : 0; }
-  if (pad) {
-    // the right stick at the keyboard's turning speed at full throw, scaled by the mouse sensitivity (7 is 1×)
-    padTurn = pad.turn * TURN * tics * settings.sensitivity / 7;
-    padLook = pad.look * LOOK * tics * settings.sensitivity / 7 * (settings.invertMouse ? -1 : 1);
-  }
-  const yaw = turnKeys * 7 * tics + mouseYaw + padTurn;
-  const pitch = lookKeys * 5 * tics + mousePitch + padLook;
-  mouseYaw = 0; mousePitch = 0;
-  const fire = k('ControlLeft') || k('ControlRight') || k('KeyF') || k('TouchFire') || fireClick || pad?.fire ? 1 : 0;
-  if (fireClick === 'tap') fireClick = false;
-  // Quake's upmove: jump up, crouch (C) down, both nothing
-  const jump = (k('Space') || k('TapJump') || pad?.jump ? 1 : 0) - (k('KeyC') || pad?.crouch ? 1 : 0);
-  keys.delete('TapJump');
-  const imp = impulse;
-  impulse = 0;
-  return [tics, fwd, side, yaw, pitch, fire, jump, run, imp];
+  const cmd = input.read(tics, settings);
+  if (input.menuPressed) escape();
+  return cmd;
 }
 
 // ── maps ─────────────────────────────────────────────────────────────────
@@ -474,9 +384,9 @@ async function frame() {
   if (!running || paused || document.hidden || menu.active) {
     lastTic = performance.now();
     audio.silenceLoops();
-    const pad = pollPad();
+    const pad = input.pollPad();
     if (pad && pad.pressed.size && anyKey) { const go = anyKey; anyKey = null; go(); }
-    else if (pad && menu.active) { const mk = padMenuKeys(pad, padState.stick); padState.stick = mk.stick; for (const key of mk.keys) menu.key(key); }
+    else if (pad && menu.active) { const mk = padMenuKeys(pad, input.pad.stick); input.pad.stick = mk.stick; for (const key of mk.keys) menu.key(key); }
     else if (pad && paused && pad.pressed.has(BUTTON.START)) paused = false;
     if (menu.active && renderer && last && !document.hidden) { drawFrame(null, [], new Float32Array(64), last.TIME_); menu.draw(renderer, performance.now()); renderer.present(); }
     else if (paused && renderer && last) { drawFrame(null, [], new Float32Array(64), last.TIME_); hud.drawCenter(renderer, 'paused', 80); renderer.present(); }

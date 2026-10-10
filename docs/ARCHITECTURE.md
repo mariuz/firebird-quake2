@@ -362,8 +362,9 @@ Music was CD audio: `public/music/trackNN.ogg|mp3`, or a folder picked on the pa
 
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
-brightness, renderer mode, sound, music) persist in `localStorage`. Input: WASD/arrows, mouse look
-under pointer lock; on a touch screen the view's left half moves and its right half looks, a tap
+brightness, renderer mode, sound, music) persist in `localStorage`. Input (`src/input.js`, an `Input`
+the page attaches to the canvas and reads each tic as the usercmd, the page keeping the keys that
+are its own): WASD/arrows, mouse look under pointer lock; on a touch screen the view's left half moves and its right half looks, a tap
 fires, and on-screen buttons (shown where the browser reports touch points) fire and jump while
 held, change weapon and open the menu; a gamepad (`src/gamepad.js`, the Gamepad API's standard
 mapping, polled each frame) moves with the left stick, looks with the right at the keyboard's
@@ -425,7 +426,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `walkthrough-test.mjs` | every trigger the player can walk into on the three maps fires, and its movers move |
 | `entities-test.mjs` | the full game's entities the demo lacks, added to demo1's lump: secret doors, the earthquake, the elevator, the viper and its bomb, the ships, the string display and the clock, the decorations, a turret, target_spawner |
 | `save-test.mjs` | save, play on, load: every entity, mover and light style back as it was; the game keeps running with fresh ids |
-| `input-test.mjs` | a gamepad read as Quake's usercmd: dead zones, the run at the stick's edge, a button press counted once, the weapon impulses, the menu driven by d-pad, stick, A and B |
+| `input-test.mjs` | the page's input read as Quake's usercmd (`src/input.js`): keys, Shift and the Run setting, the impulses once per press, the mouse, drags and taps on the view's halves, the on-screen buttons; and the gamepad's reading (`src/gamepad.js`): dead zones, the run at the stick's edge, a press counted once, the weapon impulses, the menu driven by d-pad, stick, A and B |
 | `replay-test.mjs` | the same seed and the same 120 tics of input give the same game twice (every entity, the game row, the sounds), another seed another game, and a game loaded from a save goes on exactly as the saved one did |
 | `screenshot.mjs [map] [prefix] [--at=x,y,z,yaw] [--sql] [--compare]` | headless frames to PNG; `--compare` asserts both renderer modes paint identical pixels |
 | `browser-test.mjs [--coi]` | the page itself in a headless Chromium (Playwright), served without COOP/COEP as Pages serves it: the service worker isolates, the pak downloads, Firebird runs in its worker, frames come, keys move, `F6`/`F9` save and load, Escape pauses; no console errors, no 404 but the music and the favicon. CI runs it; `CHROME=` points it at a Chromium already installed |

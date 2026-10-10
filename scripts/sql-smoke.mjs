@@ -57,6 +57,13 @@ const moved = Math.hypot(s.PX - start.x, s.PY - start.y);
 assert(moved > 50, `player walked forward (${moved.toFixed(1)} units)`);
 assert(Math.abs(s.PZ - start.z) < 64, `player stayed on the floor (dz ${(s.PZ - start.z).toFixed(1)})`);
 
+// a jump held through the air (PMF_JUMP_HELD): the flag keeps, the tic runs; it used to write NULL to jump_released
+for (let i = 0; i < 8; i++) s = await tic([1, 0, 0, 0, 0, 0, 1, 1, 0]);
+const jr = (await db.query('SELECT jump_released j FROM player')).rows[0].J;
+assert(jr === 0, `jump held through the air: the flag stays down (${jr}) and the tics run`);
+for (let i = 0; i < 2; i++) s = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+assert((await db.query('SELECT jump_released j FROM player')).rows[0].J === 1, 'let go, it is released again');
+
 // the cluster ahead is marked in the frame's spare time (premark_ahead): a set kept for it, the view's own untouched
 {
   const before = (await db.query('SELECT vis_slot s, vis_cluster c FROM viewcfg')).rows[0];

@@ -124,7 +124,10 @@ them.
   `PM_CatagorizePosition` did. With that, two more came to light: on the ground the vertical speed is
   now zero as in pmove (a knockback's small downward push used to sink the box into the floor a few
   thousandths at a time until the player was stuck), and the standing-still shortcut writes the speed
-  friction has just taken away (the row kept 12 units a second forever). And a saved game now comes
+  friction has just taken away (the row kept 12 units a second forever). A jump held while airborne or
+  in water left `jump_released` unassigned (NULL to a NOT NULL column, the tic failing): pmove's
+  `PMF_JUMP_HELD` keeps the flag while the button is held, and so does `player_think` now; the smoke
+  test holds the jump through the air. And a saved game now comes
   back exactly: a double passed as a query parameter went to Firebird as text, whose conversion lost the
   last bit of one value in six, so `importSave` sent doubles as an integer and a power of two until
   firebird-wasm 0.4.0 bound numbers in binary.
@@ -363,9 +366,15 @@ picker). Missing for the rest of the game:
   A and B do what the keys do; a press counts once. `test:input` checks the reading in Node, and
   the browser test's touch phase taps the halves and every button on an emulated touch screen. The
   view at 160×120 is the detail setting for a phone.
-- **Code health**: `src/main.js` is 839 lines: the loop, input, settings, the menus' `host` object, the
-  console and the page's wiring in one file. The `host` object and the loop could stand apart from the
-  DOM, so the headless tests could drive the page's logic as `menu-test.mjs` drives the menus.
+- **Code health**: the input is out of `src/main.js`: `src/input.js` holds the keys, the mouse, the
+  touches and the pad between tics and reads them as the usercmd, attached to the canvas by the page,
+  which keeps only the keys that are its own (menus, console, F keys); `test:input` drives it headless
+  (keys, Shift and the Run setting, the impulses, the mouse at 0.022 degrees a count, drags and taps on
+  the view's halves, the on-screen buttons, the pad). That found a crash: a jump held while airborne
+  left `jump_released` NULL. `main.js` is 810 lines still: the loop, the settings, the menus' `host`
+  object, the console, the saves and the page's wiring. The `host` object and the loop could stand
+  apart from the DOM next, so the headless tests could drive the page's logic as `menu-test.mjs`
+  drives the menus.
 - **The cluster-change hitch**: smaller. Marking a new cluster went from ~43 to ~17 ms (the
   PVS's clusters looked up by index instead of every leaf's bit tested), and the last sixteen marked
   sets are kept, so walking back into one costs ~0.3 ms. A door opening or closing drops only the
