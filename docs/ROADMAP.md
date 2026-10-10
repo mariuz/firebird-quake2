@@ -331,10 +331,13 @@ picker). Missing for the rest of the game:
   the means within the noise (5.01 → 4.95, 10.45 → 10.34). A think code with a `CASE`, or
   `EXECUTE STATEMENT`, would save what is left of the chain, which is now a few comparisons a
   tic: not worth a schema column.
-- **Spawn-time thinks**: spawn functions schedule first thinks from the level's start (`nextthink =
-  0.1`), as `init_map` runs at time 0, and `target_spawner` adds `now_()` for an entity spawned later.
-  Scheduling every spawn relative to `now_()` would remove the special case and the trap for the next
-  spawner-like entity.
+- **Spawn-time thinks**: done. The spawn functions used to schedule first thinks from zero
+  (`nextthink = 0.1`), which `init_map` at time 0 made right, and `target_spawner` added `now_()`
+  to whatever it spawned, pushers included, whose thinks run on their own `ltime` from zero: a
+  spawned train would have waited the level's age. `spawn_map_ents` now reads the level clock once
+  and schedules the non-pusher thinks from it (the eleven of them: monsters, turret drivers, lasers,
+  timers, clocks, banners, decorations, gibs, `always_fire`, `crosslevel_think`, `elevator_init`);
+  the pushers keep `ltime`; the spawner shifts nothing.
 - **Phone and gamepad**: the page takes keys and the mouse only. Touch controls (a stick for moving, a
   drag for looking, buttons for fire and jump) and the Gamepad API would make the demo playable on a
   phone, where the WASM engine already runs; the view at 160×120 is the detail setting for it.

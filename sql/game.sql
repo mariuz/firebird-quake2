@@ -984,11 +984,11 @@ END^
 
 -- use_target_spawner: a fresh entity of its target's classname at its place and angle (ED_CallSpawn on a
 -- row added to the lump), anything in its box killed, off at its speed. The spawn functions schedule their
--- first thinks from the level's start, so the new entity's is moved to now.
+-- first thinks from the level clock (a pusher's from its own ltime, zero at spawn), so nothing is shifted.
 CREATE OR ALTER PROCEDURE target_spawner_use (eid INTEGER)
 AS
 DECLARE cls VARCHAR(40); DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
-DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE mid INTEGER; DECLARE skill SMALLINT; DECLARE n INTEGER; DECLARE t DOUBLE PRECISION;
+DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE mid INTEGER; DECLARE skill SMALLINT; DECLARE n INTEGER;
 BEGIN
   SELECT e.target, e.x, e.y, e.z, e.yaw, e.p1x, e.p1y, e.p1z FROM ents e WHERE e.id = :eid INTO cls, x, y, z, yaw, vx, vy, vz;
   IF (cls IS NULL OR cls = '') THEN EXIT;
@@ -999,8 +999,6 @@ BEGIN
   SELECT MAX(e.id) FROM ents e WHERE e.classname = :cls INTO n;
   IF (n IS NULL) THEN EXIT;
   EXECUTE PROCEDURE killbox(n);
-  t = now_();
-  UPDATE ents e SET e.nextthink = e.nextthink + :t WHERE e.id = :n AND e.nextthink IS NOT NULL;
   IF (vx <> 0 OR vy <> 0 OR vz <> 0) THEN UPDATE ents e SET e.vx = :vx, e.vy = :vy, e.vz = :vz WHERE e.id = :n;
 END^
 
@@ -2396,6 +2394,7 @@ END^
 -- ED_CallSpawn for that one row of map_ents (target_spawner)
 CREATE OR ALTER PROCEDURE spawn_map_ents (skill SMALLINT, spawnpoint VARCHAR(40), only_id INTEGER)
 AS
+DECLARE t0 DOUBLE PRECISION;   -- the level clock: zero at a level start, later for target_spawner
 DECLARE mid INTEGER; DECLARE cls VARCHAR(40); DECLARE tn VARCHAR(40); DECLARE tg VARCHAR(40); DECLARE kt VARCHAR(40); DECLARE mdl VARCHAR(64);
 DECLARE pt VARCHAR(40); DECLARE dt VARCHAR(40); DECLARE ct VARCHAR(40); DECLARE team VARCHAR(40);
 DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION; DECLARE ang DOUBLE PRECISION;
@@ -2413,6 +2412,7 @@ DECLARE skillbit INTEGER; DECLARE wmodel INTEGER; DECLARE startid INTEGER;
 DECLARE n1 VARCHAR(64); DECLARE n2 VARCHAR(64); DECLARE n3 VARCHAR(64);
 DECLARE minp DOUBLE PRECISION; DECLARE maxp DOUBLE PRECISION; DECLARE miny_ DOUBLE PRECISION; DECLARE maxy_ DOUBLE PRECISION;
 BEGIN
+  t0 = now_();
   skillbit = CASE skill WHEN 0 THEN 256 WHEN 1 THEN 512 ELSE 1024 END;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO wmodel;
   -- SelectSpawnPoint: the start named by the previous level's changelevel, else the one without a name
@@ -2603,7 +2603,7 @@ BEGIN
       UPDATE ents e SET e.solid = 0, e.movetype = 0, e.minx = -8, e.miny = -8, e.minz = -8, e.maxx = 8, e.maxy = 8, e.maxz = 8,
              e.dmg = IIF(COALESCE(:dmg, 0) = 0, 1000, :dmg) WHERE e.id = :eid;
     ELSE IF (cls = 'trigger_elevator') THEN
-      UPDATE ents e SET e.solid = 0, e.think = 'elevator_init', e.nextthink = 0.1e0 WHERE e.id = :eid;
+      UPDATE ents e SET e.solid = 0, e.think = 'elevator_init', e.nextthink = :t0 + 0.1e0 WHERE e.id = :eid;
     ELSE IF (cls = 'turret_breach') THEN
     BEGIN
       -- SP_turret_breach: the part that pitches and yaws, at `speed` degrees a second (50), hurting what blocks it
@@ -2631,7 +2631,7 @@ BEGIN
       UPDATE ents e SET e.mtype = 'infantry', e.skin = :mskin, e.health = 100, e.max_health = 100, e.gib_health = 0, e.mass = 200, e.viewheight = 24,
              e.solid = 3, e.takedamage = 2, e.movetype = 0, e.clipmask = 33685507, e.flags = 32 + 4096, e.aiflags = 4,
              e.minx = -16, e.miny = -16, e.minz = -24, e.maxx = 16, e.maxy = 16, e.maxz = 32, e.st = 'stand', e.anim = :stand, e.ideal_yaw = e.yaw,
-             e.think = 'turret_driver_link', e.nextthink = 0.1e0 WHERE e.id = :eid;
+             e.think = 'turret_driver_link', e.nextthink = :t0 + 0.1e0 WHERE e.id = :eid;
       UPDATE game g SET g.total_monsters = g.total_monsters + 1 WHERE g.id = 1;
       EXECUTE PROCEDURE link_ent(eid);
     END
@@ -2656,7 +2656,7 @@ BEGIN
       IF (tg IS NULL OR tg = '' OR (BIN_AND(sf, 2) <> 0 AND COALESCE(cnt, 0) = 0)) THEN BEGIN DELETE FROM ents e WHERE e.id = :eid; CONTINUE; END
       UPDATE ents e SET e.solid = 0, e.count_ = IIF(BIN_AND(:sf, 1) <> 0 AND COALESCE(:cnt, 0) = 0, 3600, COALESCE(:cnt, 0)) WHERE e.id = :eid;
       EXECUTE PROCEDURE clock_reset(eid);
-      IF (BIN_AND(sf, 4) = 0) THEN UPDATE ents e SET e.think = 'clock_think', e.nextthink = 1 WHERE e.id = :eid;
+      IF (BIN_AND(sf, 4) = 0) THEN UPDATE ents e SET e.think = 'clock_think', e.nextthink = :t0 + 1 WHERE e.id = :eid;
     END
     ELSE IF (cls IN ('misc_blackhole', 'misc_eastertank', 'misc_easterchick', 'misc_easterchick2')) THEN
     BEGIN
@@ -2670,7 +2670,7 @@ BEGIN
              e.maxx = IIF(:cls = 'misc_blackhole', 64, 32), e.maxy = IIF(:cls = 'misc_blackhole', 64, 32), e.maxz = IIF(:cls = 'misc_blackhole', 8, 32),
              e.dstx = CASE :cls WHEN 'misc_blackhole' THEN 0 WHEN 'misc_eastertank' THEN 254 WHEN 'misc_easterchick' THEN 208 ELSE 248 END,
              e.dsty = CASE :cls WHEN 'misc_blackhole' THEN 19 WHEN 'misc_eastertank' THEN 293 WHEN 'misc_easterchick' THEN 247 ELSE 287 END,
-             e.think = 'frame_cycle', e.nextthink = 0.2e0 WHERE e.id = :eid;
+             e.think = 'frame_cycle', e.nextthink = :t0 + 0.2e0 WHERE e.id = :eid;
       UPDATE ents e SET e.frame = e.dstx WHERE e.id = :eid;
       EXECUTE PROCEDURE link_ent(eid);
     END
@@ -2689,7 +2689,7 @@ BEGIN
     BEGIN
       IF (wt IS NULL OR wt = 0) THEN wt = 1;
       UPDATE ents e SET e.solid = 0, e.wait_ = :wt WHERE e.id = :eid;
-      IF (BIN_AND(sf, 1) <> 0) THEN UPDATE ents e SET e.think = 'timer_think', e.nextthink = 1 + RAND() * :wt WHERE e.id = :eid;   -- START_ON
+      IF (BIN_AND(sf, 1) <> 0) THEN UPDATE ents e SET e.think = 'timer_think', e.nextthink = :t0 + 1 + RAND() * :wt WHERE e.id = :eid;   -- START_ON
     END
     ELSE IF (cls = 'func_rotating') THEN
     BEGIN
@@ -2744,7 +2744,7 @@ BEGIN
     BEGIN
       UPDATE ents e SET e.solid = 0, e.model_id = NULL WHERE e.id = :eid;
       IF (cls = 'trigger_always') THEN
-        UPDATE ents e SET e.think = 'always_fire', e.nextthink = 0.2e0 + MAXVALUE(e.delay, 0), e.delay = 0 WHERE e.id = :eid;
+        UPDATE ents e SET e.think = 'always_fire', e.nextthink = :t0 + 0.2e0 + MAXVALUE(e.delay, 0), e.delay = 0 WHERE e.id = :eid;
     END
     ELSE IF (cls = 'target_changelevel') THEN
     BEGIN
@@ -2777,7 +2777,7 @@ BEGIN
       UPDATE ents e SET e.solid = 0, e.model_id = NULL WHERE e.id = :eid;
     ELSE IF (cls = 'target_crosslevel_target') THEN
       -- looks at the unit's flags once, after its delay (a second by default)
-      UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.think = 'crosslevel_think', e.nextthink = IIF(COALESCE(:dl, 0) = 0, 1, :dl) WHERE e.id = :eid;
+      UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.think = 'crosslevel_think', e.nextthink = :t0 + IIF(COALESCE(:dl, 0) = 0, 1, :dl) WHERE e.id = :eid;
     ELSE IF (cls IN ('target_explosion', 'target_splash', 'target_secret', 'target_goal', 'target_help', 'target_lightramp', 'target_temp_entity', 'target_blaster', 'target_spawner')) THEN
     BEGIN
       UPDATE ents e SET e.solid = 0, e.model_id = NULL WHERE e.id = :eid;
@@ -2790,7 +2790,7 @@ BEGIN
       -- a beam from its origin along its angles; sounds = 1 while on; dmg per touch
       EXECUTE PROCEDURE movedir(COALESCE(ang, 0)) RETURNING_VALUES dx, dy, dz;
       UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.p1x = :dx, e.p1y = :dy, e.p1z = :dz, e.sounds = IIF(BIN_AND(:sf, 1) <> 0, 1, 0),
-             e.dmg = IIF(COALESCE(:dmg, 0) = 0, 1, :dmg), e.think = 'laser_think', e.nextthink = 0.1e0 WHERE e.id = :eid;
+             e.dmg = IIF(COALESCE(:dmg, 0) = 0, 1, :dmg), e.think = 'laser_think', e.nextthink = :t0 + 0.1e0 WHERE e.id = :eid;
     END
     ELSE IF (cls IN ('misc_teleporter_dest', 'info_null', 'info_notnull')) THEN
     BEGIN
@@ -2828,7 +2828,7 @@ BEGIN
              e.movetype = IIF(BIN_AND(:mflags, 3) <> 0, 5, 4), e.clipmask = 33685507, e.flags = BIN_OR(32, :mflags), e.yaw_speed = :mys,
              e.minx = :a, e.miny = :b, e.minz = :c, e.maxx = :e2, e.maxy = :f2, e.maxz = :g2, e.viewheight = :g2 - 8,
              e.st = 'stand', e.anim = :stand, e.anim_frame = FLOOR(RAND() * 4), e.ideal_yaw = e.yaw,
-             e.think = 'monster_think', e.nextthink = 0.1e0 + RAND() * 0.5e0 WHERE e.id = :eid;
+             e.think = 'monster_think', e.nextthink = :t0 + 0.1e0 + RAND() * 0.5e0 WHERE e.id = :eid;
       UPDATE game g SET g.total_monsters = g.total_monsters + 1 WHERE g.id = 1;
       IF (BIN_AND(sf, 2) <> 0) THEN
         -- TRIGGER_SPAWN: nowhere until used
@@ -2859,7 +2859,7 @@ BEGIN
     BEGIN
       EXECUTE PROCEDURE set_model(eid, 'models/objects/banner/tris.md2');
       -- SP_misc_banner: a random frame to start, and misc_banner_think moves it on every 0.1 s
-      UPDATE ents e SET e.solid = 0, e.frame = FLOOR(RAND() * 16), e.think = 'banner_think', e.nextthink = 0.1 WHERE e.id = :eid;
+      UPDATE ents e SET e.solid = 0, e.frame = FLOOR(RAND() * 16), e.think = 'banner_think', e.nextthink = :t0 + 0.1 WHERE e.id = :eid;
       EXECUTE PROCEDURE link_ent(eid);
     END
     ELSE IF (cls = 'misc_satellite_dish') THEN
@@ -2871,7 +2871,7 @@ BEGIN
     ELSE IF (cls IN ('misc_gib_head', 'misc_gib_arm', 'misc_gib_leg')) THEN
     BEGIN
       EXECUTE PROCEDURE set_model(eid, CASE cls WHEN 'misc_gib_head' THEN 'models/objects/gibs/head/tris.md2' WHEN 'misc_gib_arm' THEN 'models/objects/gibs/arm/tris.md2' ELSE 'models/objects/gibs/leg/tris.md2' END);
-      UPDATE ents e SET e.solid = 0, e.movetype = 6, e.clipmask = 3, e.minx = -8, e.miny = -8, e.minz = -8, e.maxx = 8, e.maxy = 8, e.maxz = 8, e.avel_yaw = crand() * 200, e.effects = 2, e.think = 'remove', e.nextthink = 30 WHERE e.id = :eid;
+      UPDATE ents e SET e.solid = 0, e.movetype = 6, e.clipmask = 3, e.minx = -8, e.miny = -8, e.minz = -8, e.maxx = 8, e.maxy = 8, e.maxz = 8, e.avel_yaw = crand() * 200, e.effects = 2, e.think = 'remove', e.nextthink = :t0 + 30 WHERE e.id = :eid;
       EXECUTE PROCEDURE link_ent(eid);
     END
     ELSE IF (cls = 'misc_bigviper') THEN

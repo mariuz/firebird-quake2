@@ -129,8 +129,10 @@ short stories of what changed and what it measured; keep that.
   no model here until it shows up (`set_model` then); `alpha = 1` is translucent, not hidden.
 - `t_damage` ignores a non-monster, non-player at health 0 or less (it is dead already). Quake had no such
   test: something that takes damage at health 0 (`func_door_secret`) needs its class let through.
-- The spawn functions schedule first thinks from the level's start (`nextthink = 0.1`), as `init_map` runs at
-  time 0. Something spawned later through them (`target_spawner`) gets `now_()` added to its nextthink.
+- The spawn functions schedule first thinks from the level clock (`spawn_map_ents` reads `now_()` once into
+  `t0`; `init_map` runs at time 0, so a level start is unchanged), and a pusher's from its own `ltime`, which
+  starts at zero. Something spawned later through them (`target_spawner`) therefore needs no shifting; it used
+  to get `now_()` added to its nextthink, which was wrong for a spawned pusher.
 - A pusher's (movetype 7) thinks are scheduled on its own clock, `ltime`; everything else's on `now_()`.
   Entity pitch is Quake's: positive is downward (`angleMatrix`, `AngleVectors`).
 
