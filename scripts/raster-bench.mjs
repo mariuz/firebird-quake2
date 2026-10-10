@@ -27,7 +27,7 @@ const db = new FirebirdBrowser('memory://quake2', { transport: new DirectTranspo
 await createSchema(db, sql);
 const pak = new Pak(fs.readFileSync(process.env.PAK ?? path.join(root, 'public/pak/pak0.pak')).buffer);
 const res = await loadResources(db, pak, { width: W, height: H });
-const bsp = await loadMap(db, pak, res, mapName, { skill: 2 });
+const bsp = await loadMap(db, pak, res, mapName, { skill: 2, seed: 1 });
 const cm = loadColormap(pak);
 const renderer = new Renderer(stubCanvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
 renderer.setSize(W, H);

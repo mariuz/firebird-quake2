@@ -16,7 +16,7 @@ const db = new FirebirdBrowser('memory://quake2', { transport: new DirectTranspo
 await createSchema(db, sql);
 const pak = new Pak(fs.readFileSync(process.env.PAK ?? path.join(root, 'public/pak/pak0.pak')).buffer);
 const res = await loadResources(db, pak);
-await loadMap(db, pak, res, mapName, { skill: 2 });
+await loadMap(db, pak, res, mapName, { skill: 2, seed: 1 });   // seeded: a failing run replays
 
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failures++; };

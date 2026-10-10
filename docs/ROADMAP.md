@@ -335,8 +335,10 @@ picker). Missing for the rest of the game:
   goes on with the chances it would have had. `scripts/replay-test.mjs` plays 120 tics twice from one
   seed and compares every entity, the game row and the sounds (ids left out: the sequences run on
   across loads), then from another seed, then the second half again from a save. The cost is within
-  the noise (`ab-bench`: idle 4.19 → 4.26 ms, walking 10.00 → 10.05). Left: the tests still assert
-  ranges where they could now assert exact outcomes.
+  the noise (`ab-bench`: idle 4.19 → 4.26 ms, walking 10.00 → 10.05). Every test and bench script
+  seeds its first load with 1, so a failing run replays as it failed and an A/B plays the same game
+  in both trees. The range assertions stay ranges on purpose: an exact snapshot of a run would
+  churn with every behaviour change, and what a range states is the rule being tested.
 - **`run_think`**: measured, and the cheap fix taken. The chain of 38 `IF (think = '…')` string
   comparisons is walked 6 times a tic on demo1 (a counter in each branch: 4.6 of them
   `monster_think`, 1 `banner_think`, the rest timers and trains), and `monster_think` was the last

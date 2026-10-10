@@ -27,7 +27,7 @@ const db = new FirebirdBrowser('memory://s', { transport: new DirectTransport() 
 await createSchema(db, sql);
 const pak = new Pak(fs.readFileSync('public/pak/pak0.pak').buffer);
 const res = await loadResources(db, pak);
-await loadMap(db, pak, res, process.argv[2] ?? 'demo1', { skill: 2 });
+await loadMap(db, pak, res, process.argv[2] ?? 'demo1', { skill: 2, seed: 1 });
 const names = ['monster_think', 'find_target', 'visible', 'move_to_goal', 'move_step', 'fly_move', 'push_move', 'trace_move', 'trace_hull', 'trace_box', 'rhc', 'clip_leaf', 'model_point_leaf', 'point_contents', 'link_ent', 'test_position', 'check_water'];
 const read = async () => (await db.query(`SELECT ${names.map((n) => `COALESCE(CAST(RDB$GET_CONTEXT('USER_SESSION', '${n}') AS INTEGER), 0) AS "${n.toUpperCase()}"`).join(', ')} FROM rdb$database`)).rows[0];
 for (let i = 0; i < 20; i++) await db.query('SELECT * FROM q2_tic(1, 0, 0, 0, 0, 0, 0, 1, 0)');

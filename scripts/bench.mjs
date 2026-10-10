@@ -11,7 +11,7 @@ const db = new FirebirdBrowser('memory://quake2', { transport: new DirectTranspo
 await createSchema(db, sql);
 const pak = new Pak(fs.readFileSync(path.join(root, 'public/pak/pak0.pak')).buffer);
 const res = await loadResources(db, pak);
-await loadMap(db, pak, res, process.argv[2] ?? 'demo1', { skill: 2 });
+await loadMap(db, pak, res, process.argv[2] ?? 'demo1', { skill: 2, seed: 1 });
 const t = () => performance.now();
 async function time(label, q, n = 5) {
   const t0 = t();

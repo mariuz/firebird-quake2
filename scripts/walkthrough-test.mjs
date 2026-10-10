@@ -28,7 +28,7 @@ const tic = () => db.query('SELECT * FROM q2_tic(1, 0, 0, 0, 0, 0, 0, 1, 0)');
 
 for (const map of maps) {
   console.log(`── ${map}`);
-  await loadMap(db, pak, res, map, { skill: 2, newGame: true });
+  await loadMap(db, pak, res, map, { skill: 2, newGame: true, seed: 1 });
   const pe = (await q1('SELECT ent_id e FROM player')).E;
   // god, notarget, and no monsters: this is about the triggers
   await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16 + 64) WHERE id = ${pe}`);

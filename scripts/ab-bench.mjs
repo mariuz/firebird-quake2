@@ -21,7 +21,7 @@ async function open(dir, name) {
   const db = new FirebirdBrowser(`memory://${name}`, { transport: new DirectTransport() });
   await createSchema(db, sql);
   const res = await loadResources(db, pak);
-  await loadMap(db, pak, res, map, { skill: 2 });
+  await loadMap(db, pak, res, map, { skill: 2, seed: 1 });
   return db;
 }
 const A = await open(other, 'a'), B = await open(path.join(root, 'sql'), 'b');

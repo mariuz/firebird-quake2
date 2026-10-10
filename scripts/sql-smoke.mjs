@@ -32,7 +32,7 @@ const res = await loadResources(db, pak);
 console.log(`resources     ${(t() - t0).toFixed(0)} ms (${res.models.size} models)`);
 
 t0 = t();
-const bsp = await loadMap(db, pak, res, mapName, { skill: 2 });
+const bsp = await loadMap(db, pak, res, mapName, { skill: 2, seed: 1 });   // seeded: a failing run replays
 console.log(`map ${mapName}     ${(t() - t0).toFixed(0)} ms`);
 
 const counts = (await db.query(

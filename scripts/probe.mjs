@@ -17,7 +17,7 @@ await createSchema(db, sql);
 const pak = new Pak(fs.readFileSync(path.join(root, 'public/pak/pak0.pak')).buffer);
 const res = await loadResources(db, pak);
 const mapName = process.argv[2] ?? 'demo1';
-const bsp = await loadMap(db, pak, res, mapName, { skill: 2 });
+const bsp = await loadMap(db, pak, res, mapName, { skill: 2, seed: 1 });
 const q = async (s) => (await db.query(s)).rows;
 const start = bsp.entities.find((e) => e.classname === 'info_player_start');
 const [sx, sy, sz] = (process.argv[3] ?? start.origin.split(' ').join(',')).split(',').map(Number);
