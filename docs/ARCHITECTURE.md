@@ -381,7 +381,9 @@ headless.
 Saved games (`src/savegame.js`): `F6` reads the game tables (`game`, `player`, `ents`,
 `lightstyles`, `player_trail`) as rows, with the column names from the result's field list and the
 model ids' names, and the unit's other levels as they were left (`exportLevel`'s objects, `savedLevels`
-gets them back), and keeps them as JSON in `localStorage`; `F9` reloads the map, empties the four tables, inserts the
+gets them back), and keeps them in `localStorage` as `src/savestore.js` packs them: a header line
+(the map, the comment, the version) and the JSON gzipped and base64'd, a tenth of the JSON, so the
+fifteen slots fit the origin's quota (a plain JSON save from before still reads); `F9` reloads the map, empties the four tables, inserts the
 saved rows with model ids remapped by name, restarts `ent_seq` above the highest id and resets the
 frame's caches. The per-frame cache columns of `ents` are not saved. Each table's rows go in as one
 `execBatch`, and a `DOUBLE PRECISION` column gets the saved double bit for bit: since firebird-wasm

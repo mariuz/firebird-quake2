@@ -305,10 +305,12 @@ picker). Missing for the rest of the game:
   fails with error 260 until the index is back: the keys must return before `init_map`.) Left:
   load `face_verts` after the first frame is up (only the painter's surface builds read it), and
   put the `DELETE`s into the loading plaque's first tic.
-- **Saves and `localStorage`**: a save is JSON, uncompressed; a demo3 save carrying two levels left
-  is 495 KB (46 KB gzipped), and fifteen slots plus the autosave share an origin's ~5 MB. Compress
-  with `CompressionStream('gzip')` on the way in (and accept both forms on the way out), or move the
-  slots to IndexedDB, which has no such budget.
+- **Saves and `localStorage`**: done. A save was JSON, uncompressed: a demo3 save carrying two
+  levels left was 495 KB, and fifteen slots plus the autosave and the quick slot share an origin's
+  ~5 MB. `src/savestore.js` now stores a header line (the map, the comment, the version, which the
+  load menu reads without inflating anything) and the JSON gzipped through `CompressionStream` and
+  base64'd: a tenth of the size. A plain JSON save from before still loads. The save test packs and
+  unpacks a save byte for byte; the browser test saves and loads through the page.
 - **A browser test in CI**: done. `scripts/browser-test.mjs` (`npm run test:browser`) serves the
   build without COOP/COEP, as Pages does, and drives it in a headless Chromium through Playwright:
   the service worker isolates the page and reloads it once, the pak downloads, Firebird starts in

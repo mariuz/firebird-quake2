@@ -7,6 +7,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
 import { exportSave, importSave, exportLevel, importLevel, savedLevels } from '../src/savegame.js';
+import { packSave, unpackSave, saveHeader, MAGIC } from '../src/savestore.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mapName = process.argv[2] ?? 'demo1';
@@ -37,6 +38,16 @@ const save = await exportSave(db, mapName);
 const json = JSON.stringify(save);
 check(save.tables.ents.rows.length === before.N, `save holds every entity (${before.N} rows, ${(json.length / 1024).toFixed(0)} KB of JSON)`);
 check(!save.tables.ents.cols.includes('FACES_LST'), 'the frame caches are not in the save');
+
+// as localStorage keeps it: gzipped and base64'd behind a header line, and back
+save.comment = ' 9:05 10/ 8  Outer Base';
+const packed = await packSave(save);
+check(packed.startsWith(MAGIC + '\n') && packed.length < json.length / 4, `the stored form is a quarter of the JSON at most (${(packed.length / 1024).toFixed(0)} KB)`);
+const head = saveHeader(packed);
+check(head.map === mapName && head.comment === save.comment && head.version === save.version, 'the header line names the map, the comment and the version');
+check(JSON.stringify(await unpackSave(packed)) === JSON.stringify(save), 'unpacking gives the save back, byte for byte');
+check(JSON.stringify(await unpackSave(JSON.stringify(save))) === JSON.stringify(save) && saveHeader(JSON.stringify(save)).map === mapName, 'a plain JSON save from before still reads');
+delete save.comment;
 
 // play on, so the state drifts
 for (let i = 0; i < 25; i++) await tic(1, 1, 0);

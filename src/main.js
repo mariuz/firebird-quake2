@@ -19,6 +19,7 @@ import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
 import { Menu, saveComment } from './menu.js';
 import { exportSave, importSave, exportLevel, importLevel, savedLevels } from './savegame.js';
+import { packSave, unpackSave, saveHeader } from './savestore.js';
 import { parseChangeMap } from './levels.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS } from './gamedata.js';
@@ -134,7 +135,7 @@ const menu = new Menu({
   },
   slots: () => Array.from({ length: 15 }, (_, i) => {
     try {
-      const s = JSON.parse(localStorage.getItem(SLOT_KEY(i)) ?? 'null');
+      const s = saveHeader(localStorage.getItem(SLOT_KEY(i)));
       return s ? { valid: true, name: s.comment ?? s.map } : { valid: false };
     } catch { return { valid: false }; }
   }),
@@ -241,7 +242,7 @@ async function runCommand(line) {
   }
 }
 
-// ── saved games: the game tables and the unit's other levels as JSON in localStorage (F6 saves, F9 loads) ─────────
+// ── saved games: the game tables and the unit's other levels, gzipped JSON in localStorage (F6 saves, F9 loads) ─────
 const SAVE_KEY = 'firebird-quake2:save:quick';
 /** The save's comment: the level's name (the worldspawn message) after "ENTERING " or the time. */
 async function levelName() {
@@ -251,9 +252,9 @@ async function levelName() {
 async function writeSave(key, autosave) {
   const save = await exportSave(db, map.name, unitLevels);   // (with the unit's other levels, as left)
   save.comment = saveComment(await levelName(), autosave);
-  const json = JSON.stringify(save);
-  localStorage.setItem(key, json);
-  return json.length;
+  const text = await packSave(save);   // gzip + base64: a tenth of the JSON, and the slots fit the origin's quota
+  localStorage.setItem(key, text);
+  return text.length;
 }
 async function saveGame(key = SAVE_KEY) {
   if (!running || !map) return;
@@ -266,7 +267,7 @@ async function saveGame(key = SAVE_KEY) {
 }
 async function loadGame(key = SAVE_KEY) {
   let save;
-  try { save = JSON.parse(localStorage.getItem(key) ?? 'null'); } catch { save = null; }
+  try { save = await unpackSave(localStorage.getItem(key)); } catch { save = null; }
   if (!save) { setStatus('No saved game', true); setTimeout(() => setStatus(''), 2000); return; }
   if (!pak.has(`maps/${save.map}.bsp`)) { setStatus(`The saved game is on ${save.map}, which is not in this pak`, true); return; }
   running = false;
