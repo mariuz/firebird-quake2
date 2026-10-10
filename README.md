@@ -80,7 +80,8 @@ second lookup:
 
 Each table goes in as one `INSERT` run for every row by firebird-wasm's `execBatch`: one `IBatch`
 request to the engine for thousands of rows, the numbers bound in binary. The Outer Base (90 k rows)
-loads in about two and a half seconds. (It used to be generated `LOAD_<table>` procedures parsing 30 KB
+loads in about two and a half seconds in Node, and the page skips the 37 k face vertices that only
+its SQL-projecting renderer mode reads, loading them on demand: about two seconds. (It used to be generated `LOAD_<table>` procedures parsing 30 KB
 chunks of fixed-width rows in PSQL, which beat 0.4.0's batch, a statement execute per row, by 13 %;
 0.4.1's `IBatch` beats them by 15 %.)
 

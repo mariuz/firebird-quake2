@@ -60,7 +60,11 @@ NULL). Since firebird-wasm 0.4.1 a batch is one `IBatch` request to the engine f
 and since 0.4.0 a number crosses in binary where the column is a number, so the engine parses no
 text and the BSP's coordinates arrive exactly. A row of `face_verts` costs ~12 µs, mostly the
 insert into the primary key. The Outer Base loads in about two and a half seconds in Node,
-`init_map` included.
+`init_map` included. `face_verts` (37 k rows, a sixth of that) is read by `frame_faces` alone,
+the SQL-projecting renderer mode: `loadMap(…, { faceVerts: false })` leaves it out and keeps the
+rows in `res.world`, `ensureFaceVerts(db, res)` loads them later, and the page does exactly that
+unless that mode is on (2561 → 2167 ms median, alternating four loads each). The scripts load
+everything.
 
 How it got here: row-by-row `exec()` of 90 000 rows took minutes, and the WASM build bound every
 parameter as text, so each table had a generated `LOAD_<table>` procedure that parsed one 30 KB
@@ -79,7 +83,7 @@ faster, and the generated PSQL is gone.
 | `leaffaces`, `leafbrushes` | the index arrays | |
 | `brushes`, `brushsides` | BRUSHES, BRUSHSIDES + PLANES + TEXINFO flags | brush bounds are computed by the loader (union of the leaves that reference the brush, then tightened by its axial sides) |
 | `faces` | FACES + PLANES (flipped for `side`) + TEXINFO | the texture's `.wal` name, SURF_* flags, texel vectors, and a bounding sphere (`cx cy cz radius`) |
-| `face_verts` | EDGES and SURFEDGES resolved to an ordered vertex list | |
+| `face_verts` | EDGES and SURFEDGES resolved to an ordered vertex list | read only by `frame_faces`; the page loads it on demand |
 | `textures` | TEXINFO names | |
 | `models` | the world and its `*N` submodels, plus every MD2 and SP2 | `kind` B/M/S, bounds, `headnode`, `radius` |
 | `areas`, `areaportals` | AREAS, AREAPORTALS | the portals between areas; `portal_state` (open while a door holds it) and `area_flood` (which areas are connected, `FloodAreaConnections`) are derived at run time |

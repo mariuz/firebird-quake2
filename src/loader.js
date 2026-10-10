@@ -222,7 +222,7 @@ const ENT_NUM = ['angle', 'spawnflags', 'wait', 'delay', 'random', 'speed', 'acc
   'mass', 'volume', 'attenuation', 'distance', 'gravity', 'skyrotate', 'minpitch', 'maxpitch', 'minyaw', 'maxyaw'];
 
 /** SV_SpawnServer: replace the current map with `name` from the PAK. */
-export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null, seed = null } = {}) {
+export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null, seed = null, faceVerts = true } = {}) {
   const bsp = new Bsp(pak.buffer(`maps/${name}.bsp`), `maps/${name}.bsp`);
   await db.exec(`DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents; DELETE FROM map_ents; DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL;
     DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM leaffaces; DELETE FROM leafbrushes; DELETE FROM areas; DELETE FROM areaportals; DELETE FROM portal_state; DELETE FROM area_flood;
@@ -230,12 +230,14 @@ export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, s
   for (const [id, m] of [...res.models]) if (m.kind === 'B') res.models.delete(id);
   const geo = geometryRows(bsp, res);
   for (const [mid, info] of geo.modelInfo) res.models.set(mid, info);
-  res.world = { bsp, modelIds: geo.modelIds, faceBase: 0 };
+  // face_verts (37 k rows, a fifth of the load) is read only by frame_faces, the SQL-projecting renderer mode: the
+  // page loads it on demand (ensureFaceVerts) when that mode is on, the scripts always
+  res.world = { bsp, modelIds: geo.modelIds, faceBase: 0, faceVertsLoaded: faceVerts, faceVerts: faceVerts ? null : geo.faceVerts };
 
   await bulkLoad(db, 'models', geo.models);
   await bulkLoad(db, 'textures', geo.textures);
   await bulkLoad(db, 'faces', geo.faces);
-  await bulkLoad(db, 'face_verts', geo.faceVerts);
+  if (faceVerts) await bulkLoad(db, 'face_verts', geo.faceVerts);
   await bulkLoad(db, 'nodes', geo.nodes);
   await bulkLoad(db, 'leaves', geo.leaves);
   await bulkLoad(db, 'areas', geo.areas);
@@ -261,6 +263,16 @@ export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, s
   if (seed != null) await db.query("SELECT RDB$SET_CONTEXT('USER_SESSION', 'rng', ?) FROM rdb$database", [Math.floor(Number(seed)) >>> 0]);
   await db.exec(`EXECUTE PROCEDURE init_map('${name}', ${geo.modelIds[0]}, ${skill}, ${newGame ? 1 : 0}, ${spawnpoint ? "'" + String(spawnpoint).replace(/'/g, '') + "'" : 'NULL'})`);
   return bsp;
+}
+
+/** The face vertices of the loaded map, if loadMap was told to leave them out: frame_faces needs them. */
+export async function ensureFaceVerts(db, res) {
+  const w = res.world;
+  if (!w || w.faceVertsLoaded) return false;
+  await bulkLoad(db, 'face_verts', w.faceVerts);
+  w.faceVertsLoaded = true;
+  w.faceVerts = null;
+  return true;
 }
 
 export { ENT_NUM, SURF };

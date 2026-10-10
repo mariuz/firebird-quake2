@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
-import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
+import { createSchema, loadResources, loadMap, ensureFaceVerts, SQL_FILES } from '../src/loader.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pakPath = process.env.PAK ?? path.join(root, 'public/pak/pak0.pak');
@@ -804,6 +804,18 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   const dead = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
   assert(dead.HEALTH <= 0 && dead.DEAD === 1, 'kill kills, godmode or not');
   assert((await cmd('fly')).startsWith('unknown command'), 'an unknown command says so');
+}
+
+// the page's fast renderer never reads face_verts, so it loads the map without them and asks for them on demand
+{
+  await loadMap(db, pak, res, mapName, { skill: 2, faceVerts: false });
+  const n0 = (await db.query('SELECT COUNT(*) n FROM face_verts')).rows[0].N;
+  assert(n0 === 0 && res.world.faceVertsLoaded === false, 'a map loaded without face_verts has none in the database');
+  const t1 = t();
+  assert(await ensureFaceVerts(db, res), 'ensureFaceVerts loads them');
+  const n1 = (await db.query('SELECT COUNT(*) n FROM face_verts')).rows[0].N;
+  assert(n1 === counts.FV && res.world.faceVertsLoaded && !(await ensureFaceVerts(db, res)), `all ${n1} of them, once (${(t() - t1).toFixed(0)} ms)`);
+  assert((await db.query('SELECT COUNT(*) n FROM frame_faces')).rows[0].N > 0, 'and frame_faces, the SQL-projecting mode, has its vertices');
 }
 
 await db.close();

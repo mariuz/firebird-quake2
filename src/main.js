@@ -14,7 +14,7 @@ import weaponsSql from '../sql/weapons.sql';
 import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
-import { createSchema, loadResources, loadMap, setView } from './loader.js';
+import { createSchema, loadResources, loadMap, ensureFaceVerts, setView } from './loader.js';
 import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
 import { Menu, saveComment } from './menu.js';
@@ -419,7 +419,8 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   if (newGame) { helpSeen = 0; unitLevels.clear(); }
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
-  const bsp = await loadMap(db, pak, res, name, { skill: settings.skill, newGame, spawnpoint });
+  // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on
+  const bsp = await loadMap(db, pak, res, name, { skill: settings.skill, newGame, spawnpoint, faceVerts: settings.renderer === 'sql' });
   // a level of this unit left earlier comes back as it was left (SV_ReadLevelFile), the player at the spawn point
   if (!newGame && unitLevels.has(name)) await importLevel(db, unitLevels.get(name));
   map = { name, bsp };
@@ -507,6 +508,7 @@ async function frame() {
     // one round trip: every row is tagged with what it is (see FRAME_ALL in sql/render.sql)
     //   r = [kind, i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, d7, d8, s, lst]
     const wantSpeakers = ++frameNo % 10 === 0;
+    if (settings.renderer === 'sql' && res.world && !res.world.faceVertsLoaded) await ensureFaceVerts(db, res);
     const rows = (await db.query(`SELECT * FROM frame_all(${settings.renderer === 'sql' ? 1 : 0}, ${lastSoundId}, ${lastFxId}, ${wantSpeakers ? 1 : 0})`, [], arr)).rows;
     const faces = [], ents = [], sounds = [], fx = [], loops = [];
     const styleMap = styleBase.slice();

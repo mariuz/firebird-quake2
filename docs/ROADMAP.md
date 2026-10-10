@@ -303,9 +303,11 @@ picker). Missing for the rest of the game:
   (alternating with the plain load, four each) and rejected: 2384 ms against 2000, because the
   rows went in no faster without their keys and the eight index builds cost 290 ms; the per-row
   cost is the record itself, not the key. (A compiled procedure whose plan uses a dropped index
-  fails with error 260 until the index is back: the keys must return before `init_map`.) Left:
-  load `face_verts` after the first frame is up (only the painter's surface builds read it), and
-  put the `DELETE`s into the loading plaque's first tic.
+  fails with error 260 until the index is back: the keys must return before `init_map`.)
+  `face_verts` turned out to be read by nothing but `frame_faces`, the SQL-projecting renderer
+  mode, so the page now loads the map without it unless that mode is on and `ensureFaceVerts`
+  loads it on demand (the smoke test checks both): 2561 → 2167 ms median for demo1, alternating
+  four loads each. Left: the old map's `DELETE`s into the loading plaque's first tic.
 - **Saves and `localStorage`**: done. A save was JSON, uncompressed: a demo3 save carrying two
   levels left was 495 KB, and fifteen slots plus the autosave and the quick slot share an origin's
   ~5 MB. `src/savestore.js` now stores a header line (the map, the comment, the version, which the
@@ -368,9 +370,11 @@ picker). Missing for the rest of the game:
   a set for the first cluster that has none, in the slot used longest ago that is not the view's;
   sixteen sets are kept now instead of eight, as eight thrashed. On a 400-tic walk through the
   first rooms (18 clusters) the frames over 8 ms went from 19–22 to 9–10. What stays: corners where
-  two or three small clusters are crossed within a few tics (one mark a frame), the first frame's
-  mark, and the eye's own re-mark when a door in its group of areas moves, since what it sees
-  changes.
+  two or three small clusters are crossed within a few tics, the first frame's mark, and the eye's
+  own re-mark when a door in its group of areas moves, since what it sees changes. Letting the
+  page mark up to three clusters a frame was measured and brought nothing (8–11 hitches against
+  9–11, three more marks): the probes do not see round the corner, so more marks a frame mark the
+  wrong clusters sooner.
 - **The tic's floor**: a monster step is a three-call box trace plus a relink, about 0.7 ms;
   with many monsters in a big room the tic grows linearly. The engine's per-level cost of a tree
   descent (~16 µs) is the limit: a trace is 23 levels and 6.6 `rhc` calls on average, and the walk
