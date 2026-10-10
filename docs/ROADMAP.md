@@ -307,7 +307,11 @@ picker). Missing for the rest of the game:
   `face_verts` turned out to be read by nothing but `frame_faces`, the SQL-projecting renderer
   mode, so the page now loads the map without it unless that mode is on and `ensureFaceVerts`
   loads it on demand (the smoke test checks both): 2561 → 2167 ms median for demo1, alternating
-  four loads each. Left: the old map's `DELETE`s into the loading plaque's first tic.
+  four loads each, and a quiet run reloads in 1.5 s. That also settled the old map's `DELETE`s:
+  they were half a second when `face_verts`' 37 k rows had to go, and are 45 ms without them;
+  the loading plaque is up while `loadMap` runs, so there was nothing to move. What is left of
+  the load is the inserts into indexed tables (`faces` 280 ms, `leaves`, `brushsides`) and
+  `init_map`.
 - **Saves and `localStorage`**: done. A save was JSON, uncompressed: a demo3 save carrying two
   levels left was 495 KB, and fifteen slots plus the autosave and the quick slot share an origin's
   ~5 MB. `src/savestore.js` now stores a header line (the map, the comment, the version, which the
