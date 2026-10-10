@@ -539,6 +539,9 @@ async function frame() {
     drawFrame(faces, ents, styleMap, last.TIME_, tics * 0.05);
     perf.draw = performance.now() - t;
     updateStats();
+    // the frame's spare time marks the cluster the player is heading into (premark_ahead), so the
+    // crossing is a switch of slot and not a hitch; a call that finds nothing to do costs ~0.3 ms
+    if (perf.tic + perf.faces + perf.draw < 30) await db.query('SELECT marked FROM premark_ahead');
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message}`, true);

@@ -111,41 +111,16 @@ BEGIN
   RETURN 0;
 END^
 
--- mark_faces: R_MarkLeaves, once per view cluster: every face of every leaf
--- in the PVS goes into VIS_FACES, in the slot it returns. The last 8 clusters'
--- sets are kept, each with the areas its flood joined; a new map or a load
--- (VIEWCFG.VIS_CLUSTER reset) drops them all, a portal opening or closing only
--- those whose area's connections changed (flood_areas).
-CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER, vleaf INTEGER)
-RETURNS (slot SMALLINT)
+-- build_vis_set: the marking itself, into a slot: every face of every leaf whose cluster is in the PVS, in an
+-- area the eye's area reaches through open portals, with the cluster's box culling what no eye in it can face.
+-- mark_faces does it for the view; premark_ahead for a cluster the player is heading into.
+CREATE OR ALTER PROCEDURE build_vis_set (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER, varea INTEGER, slot SMALLINT, used INTEGER)
 AS
-DECLARE cur INTEGER; DECLARE world INTEGER; DECLARE curarea INTEGER; DECLARE varea INTEGER; DECLARE eflood INTEGER;
+DECLARE world INTEGER; DECLARE eflood INTEGER;
 DECLARE bminx DOUBLE PRECISION; DECLARE bminy DOUBLE PRECISION; DECLARE bminz DOUBLE PRECISION;
 DECLARE bmaxx DOUBLE PRECISION; DECLARE bmaxy DOUBLE PRECISION; DECLARE bmaxz DOUBLE PRECISION;
-DECLARE i INTEGER; DECLARE len INTEGER; DECLARE d INTEGER; DECLARE k INTEGER; DECLARE c INTEGER; DECLARE used INTEGER; DECLARE sig VARCHAR(1000);
+DECLARE i INTEGER; DECLARE len INTEGER; DECLARE d INTEGER; DECLARE k INTEGER; DECLARE c INTEGER; DECLARE sig VARCHAR(1000);
 BEGIN
-  SELECT l.area FROM leaves l WHERE l.id = :vleaf INTO varea;
-  SELECT c.vis_cluster, c.vis_area, c.vis_slot FROM viewcfg c WHERE c.id = 1 INTO cur, curarea, slot;
-  IF (cur IS NOT DISTINCT FROM vcluster AND curarea IS NOT DISTINCT FROM varea AND slot IS NOT NULL) THEN EXIT;
-  IF (cur IS NULL) THEN DELETE FROM vis_sets;
-  SELECT COALESCE(MAX(s.used), 0) + 1 FROM vis_sets s INTO used;
-  -- a set kept from before: switch to it
-  slot = NULL;
-  SELECT s.slot FROM vis_sets s WHERE s.cluster = :vcluster AND s.area IS NOT DISTINCT FROM :varea INTO slot;
-  IF (slot IS NOT NULL) THEN
-  BEGIN
-    UPDATE vis_sets s SET s.used = :used WHERE s.slot = :slot;
-    UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.vis_area = :varea, c.vis_slot = :slot, c.world_lst = NULL WHERE c.id = 1;
-    EXIT;
-  END
-  -- else a free slot, or the one used longest ago
-  k = 0;
-  WHILE (k < 8 AND slot IS NULL) DO
-  BEGIN
-    IF (NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.slot = :k)) THEN slot = k;
-    k = k + 1;
-  END
-  IF (slot IS NULL) THEN SELECT FIRST 1 s.slot FROM vis_sets s ORDER BY s.used INTO slot;
   DELETE FROM vis_sets s WHERE s.slot = :slot;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
   -- the areas the eye's area is connected to through open portals (CM_WriteAreaBits)
@@ -196,6 +171,103 @@ BEGIN
      AND IIF(f.nx > 0, f.nx * :bmaxx, f.nx * :bminx) + IIF(f.ny > 0, f.ny * :bmaxy, f.ny * :bminy) + IIF(f.nz > 0, f.nz * :bmaxz, f.nz * :bminz) - f.dist > 0;
   SELECT LIST(x.area, ',') FROM (SELECT f.area FROM area_flood f WHERE f.flood = :eflood ORDER BY f.area) x INTO sig;
   INSERT INTO vis_sets (slot, cluster, area, used, areas) VALUES (:slot, :vcluster, :varea, :used, :sig);
+END^
+
+-- premark_ahead: the cluster the player is heading into, marked before the eye gets there, so the
+-- crossing is a switch of slot and not a 17 ms hitch. Four points are probed: half a second and a
+-- second along the velocity, and 128 and 256 units along the view (where the player looks is where
+-- the player goes next, a corner or a door away); the first whose cluster and area have no kept
+-- set gets one, in a free slot or the one used longest ago that is not the view's. Called by the
+-- page in the spare time of a frame; returns the cluster it marked, or NULL when there was nothing
+-- to do.
+CREATE OR ALTER PROCEDURE premark_ahead
+RETURNS (marked INTEGER)
+AS
+DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
+DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE vh DOUBLE PRECISION;
+DECLARE n INTEGER; DECLARE t DOUBLE PRECISION; DECLARE leaf INTEGER; DECLARE cl INTEGER; DECLARE ar INTEGER; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII;
+DECLARE cur SMALLINT; DECLARE slot SMALLINT; DECLARE k INTEGER; DECLARE used INTEGER;
+DECLARE yaw DOUBLE PRECISION; DECLARE fx DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
+BEGIN
+  marked = NULL;
+  -- selectable (SUSPEND at the end), so the one-row answer comes back through SELECT; the early ways out LEAVE this loop
+  WHILE (1 = 1) DO
+  BEGIN
+  SELECT p.ent_id FROM player p WHERE p.id = 1 INTO pe;
+  SELECT e.x, e.y, e.z, e.vx, e.vy, e.vz, e.viewheight, e.yaw FROM ents e WHERE e.id = :pe INTO x, y, z, vx, vy, vz, vh, yaw;
+  IF (x IS NULL) THEN LEAVE;
+  SELECT c.vis_slot FROM viewcfg c WHERE c.id = 1 INTO cur;
+  fx = COS(COALESCE(yaw, 0) * PI() / 180); fy = SIN(COALESCE(yaw, 0) * PI() / 180);
+  n = 0;
+  WHILE (n < 4) DO
+  BEGIN
+    IF (n < 2) THEN
+    BEGIN
+      t = IIF(n = 0, 0.5e0, 1e0);
+      px = x + COALESCE(vx, 0) * t; py = y + COALESCE(vy, 0) * t; pz = z + COALESCE(vz, 0) * t;
+    END
+    ELSE
+    BEGIN
+      t = IIF(n = 2, 128, 256);
+      px = x + fx * t; py = y + fy * t; pz = z;
+    END
+    leaf = point_leaf(px, py, pz + COALESCE(vh, 22));
+    SELECT l.cluster, l.area, l.pvs FROM leaves l WHERE l.id = :leaf INTO cl, ar, pvs;
+    IF (cl >= 0 AND NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.cluster = :cl AND s.area IS NOT DISTINCT FROM :ar)) THEN
+    BEGIN
+      slot = NULL; k = 0;
+      WHILE (k < 16 AND slot IS NULL) DO
+      BEGIN
+        IF (k IS DISTINCT FROM cur AND NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.slot = :k)) THEN slot = k;
+        k = k + 1;
+      END
+      IF (slot IS NULL) THEN SELECT FIRST 1 s.slot FROM vis_sets s WHERE s.slot IS DISTINCT FROM :cur ORDER BY s.used INTO slot;
+      IF (slot IS NULL) THEN LEAVE;
+      SELECT COALESCE(MAX(s.used), 0) + 1 FROM vis_sets s INTO used;
+      EXECUTE PROCEDURE build_vis_set(COALESCE(pvs, ''), cl, ar, slot, used);
+      marked = cl;
+      LEAVE;
+    END
+    n = n + 1;
+  END
+  LEAVE;
+  END
+  SUSPEND;
+END^
+
+-- mark_faces: R_MarkLeaves, once per view cluster: every face of every leaf
+-- in the PVS goes into VIS_FACES, in the slot it returns. The last 8 clusters'
+-- sets are kept, each with the areas its flood joined; a new map or a load
+-- (VIEWCFG.VIS_CLUSTER reset) drops them all, a portal opening or closing only
+-- those whose area's connections changed (flood_areas).
+CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER, vleaf INTEGER)
+RETURNS (slot SMALLINT)
+AS
+DECLARE cur INTEGER; DECLARE curarea INTEGER; DECLARE varea INTEGER; DECLARE k INTEGER; DECLARE used INTEGER;
+BEGIN
+  SELECT l.area FROM leaves l WHERE l.id = :vleaf INTO varea;
+  SELECT c.vis_cluster, c.vis_area, c.vis_slot FROM viewcfg c WHERE c.id = 1 INTO cur, curarea, slot;
+  IF (cur IS NOT DISTINCT FROM vcluster AND curarea IS NOT DISTINCT FROM varea AND slot IS NOT NULL) THEN EXIT;
+  IF (cur IS NULL) THEN DELETE FROM vis_sets;
+  SELECT COALESCE(MAX(s.used), 0) + 1 FROM vis_sets s INTO used;
+  -- a set kept from before: switch to it
+  slot = NULL;
+  SELECT s.slot FROM vis_sets s WHERE s.cluster = :vcluster AND s.area IS NOT DISTINCT FROM :varea INTO slot;
+  IF (slot IS NOT NULL) THEN
+  BEGIN
+    UPDATE vis_sets s SET s.used = :used WHERE s.slot = :slot;
+    UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.vis_area = :varea, c.vis_slot = :slot, c.world_lst = NULL WHERE c.id = 1;
+    EXIT;
+  END
+  -- else a free slot, or the one used longest ago
+  k = 0;
+  WHILE (k < 16 AND slot IS NULL) DO
+  BEGIN
+    IF (NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.slot = :k)) THEN slot = k;
+    k = k + 1;
+  END
+  IF (slot IS NULL) THEN SELECT FIRST 1 s.slot FROM vis_sets s ORDER BY s.used INTO slot;
+  EXECUTE PROCEDURE build_vis_set(pvs, vcluster, varea, slot, used);
   UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.vis_area = :varea, c.vis_slot = :slot, c.world_lst = NULL WHERE c.id = 1;
 END^
 

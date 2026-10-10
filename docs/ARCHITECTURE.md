@@ -224,13 +224,23 @@ can ever face it. The PVS's leaves are found by decoding its set bits and lookin
 cluster up through `leaves_cluster` into a temporary `vis_leaves`; a scan of every leaf testing its
 bit in the hex string cost three times as much (~5 µs a leaf). Their faces come in by primary key
 from a `DISTINCT` over `leaffaces`, which beat scanning every face with an `IN`. A new cluster
-costs ~17 ms (it was ~43). The last eight marked sets are kept, each in its own slot of
-`vis_faces` (primary key `slot, face`; `vis_sets` says which cluster and area a slot holds and
-when it was last used), so walking back into a recent cluster is a switch of
+costs ~17 ms (it was ~43). The marking itself is `build_vis_set(pvs, cluster, area, slot, used)`;
+`mark_faces` runs it for the view and switches to the slot. The last sixteen marked sets are kept,
+each in its own slot of `vis_faces` (primary key `slot, face`; `vis_sets` says which cluster and
+area a slot holds and when it was last used), so walking back into a recent cluster is a switch of
 `viewcfg.vis_slot` (~0.3 ms); the frame reads `WHERE v.slot = :vslot`, which costs nothing
 measurable. A new map or a load (`viewcfg.vis_cluster` reset) drops all the sets; a portal opening
 or closing (`flood_areas`) only those whose area's connections changed, each set keeping the areas
 its flood joined when it was marked, and the eye's set going means marking afresh.
+
+`premark_ahead()` marks before the eye arrives: the page calls it after each frame whose tic, query
+and raster left spare time, and it probes four points (half a second and a second along the
+player's velocity, 128 and 256 units along the view) and builds a set for the first whose cluster
+and area have none, in a free slot or the one used longest ago that is not the view's (~0.3 ms
+when there is nothing to do, a mark's cost when there is). On a 400-tic walk through demo1's first
+rooms, 18 clusters crossed, frames over 8 ms went from 19–22 to 9–10 with sixteen slots (with
+eight they thrashed: 29 marks for 18 crossings, 15 hitches left). What stays are the corners where
+two or three small clusters are crossed within a few tics, and the first frame's mark.
 
 `frame_all(mode, last_sound, last_fx, want_speakers)` returns the frame as kind-tagged rows
 (`kind`, `i1..i5`, `d1..d8`, `s`, `lst`):

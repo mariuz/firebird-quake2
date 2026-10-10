@@ -57,6 +57,20 @@ const moved = Math.hypot(s.PX - start.x, s.PY - start.y);
 assert(moved > 50, `player walked forward (${moved.toFixed(1)} units)`);
 assert(Math.abs(s.PZ - start.z) < 64, `player stayed on the floor (dz ${(s.PZ - start.z).toFixed(1)})`);
 
+// the cluster ahead is marked in the frame's spare time (premark_ahead): a set kept for it, the view's own untouched
+{
+  const before = (await db.query('SELECT vis_slot s, vis_cluster c FROM viewcfg')).rows[0];
+  const m = (await db.query('SELECT marked FROM premark_ahead')).rows[0].MARKED;
+  const after = (await db.query('SELECT vis_slot s, vis_cluster c FROM viewcfg')).rows[0];
+  const sets = (await db.query('SELECT COUNT(*) n FROM vis_sets')).rows[0].N;
+  assert(after.S === before.S && after.C === before.C && sets <= 8, `premark_ahead leaves the view's set alone (marked ${m ?? 'nothing'}, ${sets} set(s) kept)`);
+  if (m != null) assert((await db.query('SELECT COUNT(*) n FROM vis_sets WHERE cluster = ?', [m])).rows[0].N === 1, 'and what it marked is kept');
+  // it probes four points, so a few more calls mark what is left and then there is nothing to do
+  let calls = 0;
+  while (calls < 6 && (await db.query('SELECT marked FROM premark_ahead')).rows[0].MARKED != null) calls++;
+  assert(calls < 6, `asked again, it marks what the probes still find (${calls} more) and then has nothing to do`);
+}
+
 // turn around and walk into the wall behind: we must stop, not pass through
 await tic([1, 0, 0, 180, 0, 0, 0, 1, 0]);
 let last = s;

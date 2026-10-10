@@ -359,12 +359,18 @@ picker). Missing for the rest of the game:
   console and the page's wiring in one file. The `host` object and the loop could stand apart from the
   DOM, so the headless tests could drive the page's logic as `menu-test.mjs` drives the menus.
 - **The cluster-change hitch**: smaller. Marking a new cluster went from ~43 to ~17 ms (the
-  PVS's clusters looked up by index instead of every leaf's bit tested), and the last eight marked
+  PVS's clusters looked up by index instead of every leaf's bit tested), and the last sixteen marked
   sets are kept, so walking back into one costs ~0.3 ms. A door opening or closing drops only the
   sets whose area's connections changed (each set keeps the areas its flood joined), so the others
-  outlive it. Left: marking the next cluster ahead of time (the page would need an idle moment in
-  the worker to spend on it); the eye's own re-mark when a door in its group of areas moves is
-  the one hitch that stays, since what it sees changes.
+  outlive it. Marking the next cluster ahead of time is done: `premark_ahead()` runs in the frame's
+  spare time (the page calls it when the tic, the query and the raster took under 30 ms), probes
+  half a second and a second along the velocity and 128 and 256 units along the view, and builds
+  a set for the first cluster that has none, in the slot used longest ago that is not the view's;
+  sixteen sets are kept now instead of eight, as eight thrashed. On a 400-tic walk through the
+  first rooms (18 clusters) the frames over 8 ms went from 19–22 to 9–10. What stays: corners where
+  two or three small clusters are crossed within a few tics (one mark a frame), the first frame's
+  mark, and the eye's own re-mark when a door in its group of areas moves, since what it sees
+  changes.
 - **The tic's floor**: a monster step is a three-call box trace plus a relink, about 0.7 ms;
   with many monsters in a big room the tic grows linearly. The engine's per-level cost of a tree
   descent (~16 µs) is the limit: a trace is 23 levels and 6.6 `rhc` calls on average, and the walk
