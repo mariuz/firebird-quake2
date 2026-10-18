@@ -1,12 +1,12 @@
-// browser-test.mjs – the page itself, in a real (headless) Chromium: the worker, the
-// cross-origin isolation, the pak download, the game loop, the keys, a quick save and load.
+// browser-test.mjs – the page itself, in a real (headless) Chromium: the worker, the engine
+// build it picks, the pak download, the game loop, the keys, a quick save and load.
 //
 //   node scripts/browser-test.mjs [--coi] [--keep]
 //
 // Builds and serves dist/ like scripts/build.mjs --serve. Without --coi the server sends no
-// COOP/COEP headers, exactly like GitHub Pages, so the service worker has to supply the
-// isolation and reload the page once: that is the deployed path, and the one tested by default.
-// With --coi the headers come from the server and the service worker is bypassed.
+// COOP/COEP headers, exactly like GitHub Pages: the page is not cross-origin isolated and runs
+// firebird-wasm's build without threads. That is the deployed path, and the one tested by
+// default. With --coi the headers come from the server and the page runs the threaded build.
 //
 // Needs the `playwright` dev dependency and a Chromium: `npx playwright install chromium`, or
 // CHROME=/path/to/chrome to use one already there. The every-Node test scripts run the SQL
@@ -40,7 +40,7 @@ for (let i = 0; i < 180 && !up; i++) {
   try { up = (await fetch(base)).ok; } catch { await sleep(1000); }
 }
 if (!up) { console.error('the dev server did not come up:\n' + serverLog); server.kill(); process.exit(1); }
-console.log(`serving on ${base} (${coi ? 'COOP/COEP from the server' : 'no headers, like Pages: the service worker isolates'})`);
+console.log(`serving on ${base} (${coi ? 'COOP/COEP from the server: the threaded build' : 'no headers, like Pages: the build without threads'})`);
 
 // ── the browser ───────────────────────────────────────────────────────────────────────────
 const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
@@ -50,6 +50,9 @@ const missing = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 page.on('response', (r) => { if (r.status() === 404) missing.push(new URL(r.url()).pathname); });
+// The engine binary each page asked for: the build it runs.
+const engines = new Set();
+page.on('request', (r) => { const m = /(firebird-embedded(-st)?\.wasm)/.exec(r.url()); if (m) engines.add(m[1]); });
 
 const status = () => page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
 const stats = () => page.evaluate(() => document.getElementById('stats')?.textContent ?? '').catch(() => '');
@@ -58,10 +61,10 @@ const isolated = () => page.evaluate(() => window.crossOriginIsolated).catch(() 
 try {
   await page.goto(base, { waitUntil: 'load' });
 
-  // isolation: with no headers the service worker installs and reloads the page once
-  let iso = false;
-  for (let i = 0; i < 30 && !iso; i++) { iso = await isolated(); if (!iso) await sleep(500); }
-  assert(iso, `the page is cross-origin isolated${coi ? '' : ' through the service worker'}`);
+  // isolation comes from the server's headers or not at all: no service worker supplies it
+  assert((await isolated()) === coi, coi ? 'the page is cross-origin isolated (the server\'s headers)' : 'the page is not cross-origin isolated, as on Pages');
+  const workers = await page.evaluate(() => navigator.serviceWorker?.getRegistrations().then((r) => r.length) ?? 0);
+  assert(workers === 0, `no service worker is registered (${workers})`);
 
   // the pak downloads, Firebird starts in its worker, the map loads and the loop runs
   let ready = false;
@@ -72,6 +75,10 @@ try {
     await sleep(1000);
   }
   assert(ready, `the game is running (${((Date.now() - t0) / 1000).toFixed(0)} s to the first frames): ${await stats()}`);
+  const want = coi ? 'firebird-embedded.wasm' : 'firebird-embedded-st.wasm';
+  assert(engines.size === 1 && engines.has(want), `it runs ${coi ? 'the threaded build' : 'the build without threads'} (${[...engines].join(', ') || 'none'})`);
+  assert((await page.evaluate(() => document.getElementById('engine')?.textContent ?? '')).includes(coi ? ', threads' : 'Firebird'),
+    'the page says which build it runs');
   assert((await status()) === '', 'no status message is left showing');
 
   if (ready) {
@@ -136,6 +143,26 @@ try {
       assert(m3 !== m4, 'and again closes it');
     }
     await touchCtx.close();
+  }
+
+  // a browser that still has the old service worker (it isolated the page before firebird-wasm
+  // 0.8.0): the script at its URL now removes itself, and reloads the page once without it
+  {
+    const ctx = await browser.newContext();
+    const sp = await ctx.newPage();
+    sp.on('pageerror', (e) => errors.push(`retire pageerror: ${e.message}`));
+    await sp.goto(base, { waitUntil: 'domcontentloaded' });
+    let loads = 0;
+    sp.on('load', () => { loads++; });
+    await sp.evaluate(() => navigator.serviceWorker.register('./coi-serviceworker.js'));
+    let left = 1;
+    for (let i = 0; i < 40 && (left > 0 || loads === 0); i++) {
+      await sleep(250);
+      left = await sp.evaluate(() => navigator.serviceWorker.getRegistrations().then((r) => r.length)).catch(() => 1);
+    }
+    assert(left === 0, 'the retired service worker unregisters itself');
+    assert(loads >= 1, `and reloads the page it held (${loads} reload(s))`);
+    await ctx.close();
   }
 
   // nothing optional is loud: only the music tracks and the favicon may be missing

@@ -93,13 +93,17 @@ jobs:
         run: npm run test:settings
 
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
-      # service worker isolates, the pak downloads, Firebird runs in its worker, keys, a quick save
-      # and load, the menu, no console errors
+      # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
+      # quick save and load, the menu, the retired service worker removing itself, no console
+      # errors. Then the same with the headers, on the threaded build.
       - name: Install Chromium for the browser test
         run: npx playwright install --with-deps chromium
 
       - name: The page in a browser
         run: npm run test:browser
+
+      - name: The page in a browser, cross-origin isolated (the threaded build)
+        run: npm run test:browser -- --coi
 
       - name: Headless screenshots
         run: npm run screenshots

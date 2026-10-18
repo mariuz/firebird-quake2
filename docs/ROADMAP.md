@@ -323,7 +323,7 @@ picker). Missing for the rest of the game:
   unpacks a save byte for byte; the browser test saves and loads through the page.
 - **A browser test in CI**: done. `scripts/browser-test.mjs` (`npm run test:browser`) serves the
   build without COOP/COEP, as Pages does, and drives it in a headless Chromium through Playwright:
-  the service worker isolates the page and reloads it once, the pak downloads, Firebird starts in
+  the page runs the engine's build without threads (with `--coi`, the threaded one), the pak downloads, Firebird starts in
   its worker and the first frames come (7 s here), the stats line keeps changing, `W` walks, `F6`
   saves and `F9` loads, Escape pauses the loop and again resumes it, and nothing is logged as an
   error or missing but the music tracks and the favicon. The Pages workflow runs it after the Node
@@ -414,6 +414,8 @@ picker). Missing for the rest of the game:
 - **`firebird-wasm`**: 0.4.0 binds a number in binary where the column is a number (a double
   arrives exactly: the save's mantissa-and-exponent trick is gone) and has `execBatch` (one statement,
   many rows, one call); 0.4.1 runs the batch as one `IBatch` request, and the map load uses it (see
-  *Load time*). Still to come there: a `SharedArrayBuffer`-free build, which would remove the
-  COOP/COEP requirement and the service worker that exists only to supply it (planned in
-  firebird-wasm's `docs/plans/sab-free-build.md`: the engine starts threads, so it is not a flag).
+  *Load time*). 0.8.0 ships a build without threads, which needs no `SharedArrayBuffer`: the page
+  runs it wherever it is not cross-origin isolated, so on Pages, and the service worker that only
+  supplied COOP/COEP is retired (what is at its URL now unregisters itself). Measured in a headless
+  Chromium on demo1, idle: a 5 ms tic and 3 ms of frame queries on both builds, the first frames in
+  5.6 s without threads against 6.5 s with them.

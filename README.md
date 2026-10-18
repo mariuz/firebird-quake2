@@ -34,7 +34,7 @@ npm run test:base3     # and on demo3
 npm run test:monsters  # every monster of the demo: spawned, it sees the player, attacks, and dies
 npm run test:save      # save, play on, load: the game comes back exactly and keeps running
 # in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, save, load); F1 the help computer
-npm run serve          # http://localhost:8080/ — add -- --coi if your browser blocks service workers
+npm run serve          # http://localhost:8080/ (as Pages serves it); add -- --coi for the threaded engine
 npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs demo1 --at=x,y,z,yaw)
 npm run bench          # where a tic and a frame spend their time
 npm run bench:tic      # the cost of a tic over 200 tics of play (median, p90); add --walk for a moving player
@@ -48,9 +48,12 @@ npm run inspect        # what is in the pak (maps, models and their frame runs, 
 the page at your own `pak0.pak` with the file picker, or copy it with `PAK=/path/to/pak0.pak npm run fetch-pak`:
 the base unit's maps and monsters work the same way.
 
-Firebird WASM uses pthreads, so the page must be cross-origin isolated. The dev server sends the
-COOP/COEP headers with `--coi`; a static host like GitHub Pages cannot, so `coi-serviceworker.js`
-re-issues responses with the headers after a one-time reload.
+The page needs no special headers. Served as GitHub Pages serves it, without COOP/COEP, it runs
+`firebird-wasm`'s build without threads (since 0.8.0), which needs no `SharedArrayBuffer`; served
+with the headers (`npm run serve -- --coi`) it runs the threaded build. Both play the same: on
+demo1 a tic takes 5 ms either way, and the build without threads starts sooner (the first
+frames in 5.6 s against 6.5 s here). The service worker that used to supply the headers is
+retired: what is left at its URL removes itself from the browsers that still have it.
 
 ## How it works
 
