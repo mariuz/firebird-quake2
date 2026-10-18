@@ -3,8 +3,10 @@
 //   node scripts/build.mjs            build
 //   node scripts/build.mjs --serve    build, then serve dist/ on :8080 WITHOUT
 //                                     COOP/COEP headers – exactly like GitHub
-//                                     Pages – so the service worker is tested.
-//   node scripts/build.mjs --serve --coi    serve with the headers instead
+//                                     Pages – so the build without threads runs.
+//   node scripts/build.mjs --serve --coi    serve with the headers instead: the
+//                                     page is cross-origin isolated and runs
+//                                     the threaded build
 //
 // Everything is referenced relatively: a project site lives under /<repo>/.
 
@@ -19,11 +21,18 @@ const OUT = path.join(root, 'dist');
 const PKG = path.join(root, 'node_modules/firebird-wasm/dist');
 
 // wasm-loader.js has a Node-only require() of the Emscripten glue; browsers
-// take the globalThis path, so keep the glue out of the bundle.
-const EXTERNAL = ['*firebird-embedded.js'];
+// take the globalThis path, so keep the glue (both builds') out of the bundle.
+const EXTERNAL = ['*firebird-embedded.js', '*firebird-embedded-st.js'];
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
+
+// Every reference carries this build's id (?v=…): the page, its script and
+// stylesheet, the Worker, the engine's glue and .wasm. GitHub Pages lets a
+// browser keep a file for 10 minutes, so after a deploy a fresh page could
+// meet an old script; asked for by a new URL, every file of the new build is
+// fetched new. (The retired service worker used to revalidate them instead.)
+const BUILD = Date.now().toString(36);
 
 await build({
   entryPoints: [path.join(root, 'src/main.js')],
@@ -35,12 +44,17 @@ await build({
   sourcemap: true,
   minify: true,
   loader: { '.sql': 'text' },
+  define: { __BUILD__: JSON.stringify(BUILD) },
   external: EXTERNAL,
   logLevel: 'warning',
 });
 
 // The engine Worker: a classic script that loads the Emscripten glue first and
 // finds the .wasm next to itself, whatever path prefix the site is served from.
+// Which glue: the threaded build needs SharedArrayBuffer, which only a
+// cross-origin isolated page has; everywhere else (GitHub Pages, which sends
+// no COOP/COEP) the build without threads, which needs neither (as
+// firebird-wasm's wasmGlueFile() picks).
 const worker = await build({
   entryPoints: [path.join(PKG, 'browser/worker-entry.js')],
   bundle: true,
@@ -54,18 +68,24 @@ const worker = await build({
 });
 fs.writeFileSync(
   path.join(OUT, 'firebird-engine-worker.js'),
-  "importScripts(new URL('./firebird-embedded.js', self.location.href).href);\n" +
-    'self.FIREBIRD_WORKER_OPTIONS = { locateFile: (f) => new URL(f, self.location.href).href };\n' +
+  // The Worker's own ?v= goes on to the files it loads.
+  'const v = self.location.search;\n' +
+    "importScripts(new URL((self.crossOriginIsolated ? './firebird-embedded.js' : './firebird-embedded-st.js') + v, self.location.href).href);\n" +
+    'self.FIREBIRD_WORKER_OPTIONS = { locateFile: (f) => new URL(f + v, self.location.href).href };\n' +
     worker.outputFiles[0].text,
 );
 
-for (const f of ['firebird-embedded.js', 'firebird-embedded.wasm']) {
+for (const f of ['firebird-embedded.js', 'firebird-embedded.wasm', 'firebird-embedded-st.js', 'firebird-embedded-st.wasm']) {
   fs.copyFileSync(path.join(PKG, 'wasm', f), path.join(OUT, f));
 }
 
 // public/ verbatim (index.html, css, service worker, pak/ if present)
 fs.cpSync(path.join(root, 'public'), OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
+const page = path.join(OUT, 'index.html');
+fs.writeFileSync(page, fs.readFileSync(page, 'utf8')
+  .split('src="./main.js"').join(`src="./main.js?v=${BUILD}"`)
+  .split('href="./style.css"').join(`href="./style.css?v=${BUILD}"`));
 
 const size = (dir) => fs.readdirSync(dir, { withFileTypes: true })
   .reduce((s, e) => s + (e.isDirectory() ? size(path.join(dir, e.name)) : fs.statSync(path.join(dir, e.name)).size), 0);

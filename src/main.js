@@ -673,22 +673,19 @@ for (const b of document.querySelectorAll('[data-sql]')) b.addEventListener('cli
 
 // ── boot ────────────────────────────────────────────────────────────────
 async function openDatabase() {
-  if (!window.crossOriginIsolated && window.isSecureContext && 'serviceWorker' in navigator &&
-      Number(sessionStorage.getItem('firebird-quake2:coi-reloads') || '0') < 2) {
-    setStatus('Enabling cross-origin isolation for Firebird WASM (one-time reload)…');
-    return new Promise(() => {});
-  }
-  if (!window.crossOriginIsolated) {
-    throw new Error('This page is not cross-origin isolated, so Firebird WASM cannot start. Reload once (the service worker enables it), and use HTTPS or localhost.');
-  }
+  // No cross-origin isolation needed: without it (GitHub Pages sends no
+  // COOP/COEP) the Worker loads firebird-wasm's build without threads; a page
+  // served with the headers gets the threaded build. See scripts/build.mjs.
   setStatus('Starting Firebird 6 (WebAssembly)…');
   const instance = new FirebirdBrowser('memory://quake2', {
-    worker: new Worker(new URL('./firebird-engine-worker.js', import.meta.url)),
+    // ?v= the build's id (scripts/build.mjs): a new deploy's Worker, never a cached one.
+    // eslint-disable-next-line no-undef
+    worker: new Worker(new URL(`./firebird-engine-worker.js?v=${typeof __BUILD__ === 'string' ? __BUILD__ : ''}`, import.meta.url)),
     multiTab: 'allow-unsafe',
     autoPersist: false,
   });
   const v = await instance.query("SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') AS v FROM rdb$database");
-  $('engine').textContent = `Firebird ${v.rows[0].V}`;
+  $('engine').textContent = `Firebird ${v.rows[0].V}${window.crossOriginIsolated ? ', threads' : ''}`;
   setStatus('Creating the Quake 2 schema (PSQL)…');
   await createSchema(instance, { schema: schemaSql, physics: physicsSql, game: gameSql, weapons: weaponsSql, monsters: monstersSql, render: renderSql });
   return instance;

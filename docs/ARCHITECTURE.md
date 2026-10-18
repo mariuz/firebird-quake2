@@ -34,9 +34,14 @@ The engine runs in a Worker through `firebird-wasm`; the page talks to it with
 `db.query(sql, params, { rowMode: 'array' })`. Each query is a round trip to the worker (about a
 millisecond in a browser), which is why the frame is one query and not six.
 
-Firebird needs threads, so the page must be cross-origin isolated: the dev server sends the
-COOP/COEP headers (`--coi`), GitHub Pages cannot, so `public/coi-serviceworker.js` re-issues
-responses with the headers after a one-time reload.
+Which engine: the Worker (`firebird-engine-worker.js`, written by `scripts/build.mjs`) loads
+`firebird-wasm`'s threaded build where the page is cross-origin isolated and its build without
+threads everywhere else, which needs no `SharedArrayBuffer` and so no COOP/COEP: GitHub Pages
+runs that one. The engine line of the page says which (", threads" for the threaded one). A tic
+costs the same on both (5 ms idle on demo1, in a headless Chromium). `public/coi-serviceworker.js`
+once supplied the headers on Pages; it is now a script that unregisters itself, for the browsers
+that registered it. Every reference carries the build's id (`?v=`), so a fresh deploy never meets
+a script cached from the last one.
 
 ## 2. Loading: the pak becomes tables (`src/loader.js`)
 
@@ -431,7 +436,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `settings-test.mjs` | the page's settings (`src/settings.js`): the defaults, the round trip through storage, and each stored value checked against what it can be (a bad one back to its default, a full storage harmless) |
 | `replay-test.mjs` | the same seed and the same 120 tics of input give the same game twice (every entity, the game row, the sounds), another seed another game, and a game loaded from a save goes on exactly as the saved one did |
 | `screenshot.mjs [map] [prefix] [--at=x,y,z,yaw] [--sql] [--compare]` | headless frames to PNG; `--compare` asserts both renderer modes paint identical pixels |
-| `browser-test.mjs [--coi]` | the page itself in a headless Chromium (Playwright), served without COOP/COEP as Pages serves it: the service worker isolates, the pak downloads, Firebird runs in its worker, frames come, keys move, `F6`/`F9` save and load, Escape pauses; no console errors, no 404 but the music and the favicon. CI runs it; `CHROME=` points it at a Chromium already installed |
+| `browser-test.mjs [--coi]` | the page itself in a headless Chromium (Playwright), served without COOP/COEP as Pages serves it: not isolated, no service worker, the build without threads (with `--coi`: isolated, the threaded build); the pak downloads, Firebird runs in its worker, frames come, keys move, `F6`/`F9` save and load, Escape pauses; the retired service worker removes itself; no console errors, no 404 but the music and the favicon. CI runs it; `CHROME=` points it at a Chromium already installed |
 | `bench.mjs`, `tic-bench.mjs`, `raster-bench.mjs`, `call-counts.mjs`, `ab-bench.mjs` | where the time goes (section 10) |
 | `probe.mjs`, `inspect.mjs` | traces around a point; what is in the pak |
 | `fetch-pak.mjs`, `build.mjs` | the demo download; the esbuild bundle and dev server |

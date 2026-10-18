@@ -14,7 +14,7 @@ https://mariuz.github.io/firebird-quake2/ by the Pages workflow on every push to
 
 Layout: `sql/` (schema, physics, game, weapons, monsters, render — loaded in that order),
 `src/` (pak/bsp/md2 parsers, loader, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
-tools), `public/` (page, service worker, the pak goes in `public/pak/`), `docs/`.
+tools), `public/` (page, the retired service worker, the pak goes in `public/pak/`), `docs/`.
 
 ## Commands
 
@@ -34,7 +34,8 @@ npm run test:console                  # the console line headless: the page's co
 npm run test:settings                 # the settings: defaults, storage round trip, bad stored values back to defaults
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
-npm run serve -- --coi                # dev server with cross-origin isolation (PORT=8081 to pick a port)
+npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
+npm run serve -- --coi                # with COOP/COEP: cross-origin isolated, the threaded build
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
 ```
 
@@ -149,13 +150,14 @@ short stories of what changed and what it measured; keep that.
 ## Browser testing
 
 - The desktop app's built-in browser pane cannot start the Firebird worker; use Claude in Chrome
-  (the user's Chrome) or a real browser. The dev server: `PORT=8081 node scripts/build.mjs --serve --coi`.
+  (the user's Chrome) or a real browser. The dev server: `PORT=8081 node scripts/build.mjs --serve`
+  (as Pages: the engine's build without threads), `--coi` added for the threaded build.
 - A background tab is throttled and `document.hidden` pauses the loop; the stats line's fps is
   meaningless there. Read the tic / frame query / raster costs instead, or bring the tab to the
   front.
 - Nothing in the page needs sign-in or personal data; the only inputs are the pak and music files.
-- The dev server's bundle can be served from the browser's HTTP cache after a rebuild; reload with the
-  cache bypassed (or clear it) before believing a test of new page code. A hidden tab
+- Each build stamps its files with a new `?v=` id, so a reload after a rebuild fetches the new bundle;
+  a page left open from before still runs the old one until it is reloaded. A hidden tab
   (`document.visibilityState`) is throttled so hard that a load takes tens of seconds and screenshots
   time out: judge timings in Node, check the page's state with JS.
 
