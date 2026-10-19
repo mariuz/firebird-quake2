@@ -715,8 +715,8 @@ BEGIN
     -- out of it, nothing is seen either way, so think at 3 Hz)
     pe = player_ent();
     vis = 0;
-    SELECT IIF(l.pvs = '' OR (:cl >= 0 AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(:cl, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(:cl, 3))) <> 0), 1, 0)
-      FROM leaves l JOIN ents p ON p.id = :pe WHERE l.id = p.leaf INTO vis;
+    SELECT IIF(COALESCE(c.pvs, '') = '' OR (:cl >= 0 AND BIN_AND(POSITION(SUBSTRING(c.pvs FROM BIN_SHR(:cl, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(:cl, 3))) <> 0), 1, 0)
+      FROM ents p JOIN leaves l ON l.id = p.leaf LEFT JOIN clusters c ON c.id = l.cluster WHERE p.id = :pe INTO vis;
     IF (vis = 0) THEN nt = t + IIF(st = 'walk', 0.4e0, 0.3e0);   -- a patrol out of sight strides four times as far at 2.5 Hz
     ELSE IF (MOD(af, 2) = 0 AND find_target(eid) = 1) THEN
     BEGIN
@@ -853,7 +853,7 @@ BEGIN
     END
     -- far from the player and out of its sight: think less often, stride further
     SELECT vlen(a.x - b.x, a.y - b.y, a.z - b.z) FROM ents a CROSS JOIN ents b WHERE a.id = :eid AND b.id = :enemy INTO d;
-    IF (d > 1200 AND pvs_visible((SELECT l.pvs FROM leaves l WHERE l.id = (SELECT e.leaf FROM ents e WHERE e.id = :enemy)), cl) = 0) THEN
+    IF (d > 1200 AND pvs_visible((SELECT c.pvs FROM ents e JOIN leaves l ON l.id = e.leaf JOIN clusters c ON c.id = l.cluster WHERE e.id = :enemy), cl) = 0) THEN
     BEGIN
       nt = t + 0.3e0;
       IF (run_spd > 0) THEN

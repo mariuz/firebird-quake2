@@ -315,6 +315,15 @@ picker). Missing for the rest of the game:
   the loading plaque is up while `loadMap` runs, so there was nothing to move. What is left of
   the load is the inserts into indexed tables (`faces` 280 ms, `leaves`, `brushsides`) and
   `init_map`.
+  The PVS moved off the leaves: each leaf carried its cluster's decompressed PVS in a `VARCHAR(2048)`, and
+  Firebird builds a record at its declared width, so the column made every leaf's write about three times as
+  dear whatever it held (demo1's 5241 leaves, best of four in one run: 269 ms with it, 269 with it NULL, 86
+  without the column). The
+  strings are now a `clusters` table, one row per cluster (1448 on demo1); leaves and clusters together
+  measured 302 and 337 ms before and 239 and 208 after, alternating trees, and the walking tic's median
+  7.41–7.51 ms against 7.61–8.62 (no slower). The entity test in `frame_all` reads the eye's PVS from
+  `view_setup` instead of joining `leaves` for it. `ab-bench` cannot compare across this change (a tree
+  from before it has no `clusters` table for the loader to fill).
 - **Saves and `localStorage`**: done. A save was JSON, uncompressed: a demo3 save carrying two
   levels left was 495 KB, and fifteen slots plus the autosave and the quick slot share an origin's
   ~5 MB. `src/savestore.js` now stores a header line (the map, the comment, the version, which the

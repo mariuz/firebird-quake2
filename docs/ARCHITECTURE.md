@@ -86,7 +86,8 @@ faster, and the generated PSQL is gone.
 | table | from the BSP | notes |
 |---|---|---|
 | `nodes` | NODES + PLANES | the plane copied in; `c0`/`c1` children (negative = leaf), `cc0`/`cc1` the child leaves' contents, so a trace can skip an empty leaf without visiting it |
-| `leaves` | LEAVES | cluster, area, bounds, `first_lf`/`num_lf`, `first_lb`/`num_lb`, and the cluster's PVS decompressed to a hex string (`pvs`) |
+| `leaves` | LEAVES | cluster, area, bounds, `first_lf`/`num_lf`, `first_lb`/`num_lb` |
+| `clusters` | VISIBILITY | each cluster's PVS decompressed to a hex string (`pvs`); a leaf with no cluster has no row, which reads as everything visible. Once per cluster, not on each leaf: the column's 2048-character width tripled the cost of writing a leaf |
 | `leaffaces`, `leafbrushes` | the index arrays | |
 | `brushes`, `brushsides` | BRUSHES, BRUSHSIDES + PLANES + TEXINFO flags | brush bounds are computed by the loader (union of the leaves that reference the brush, then tightened by its axial sides) |
 | `faces` | FACES + PLANES (flipped for `side`) + TEXINFO | the texture's `.wal` name, SURF_* flags, texel vectors, and a bounding sphere (`cx cy cz radius`) |

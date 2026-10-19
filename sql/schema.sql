@@ -123,12 +123,19 @@ CREATE TABLE leaves (
   first_lf INTEGER NOT NULL,            -- leaffaces
   num_lf   INTEGER NOT NULL,
   first_lb INTEGER NOT NULL,            -- leafbrushes
-  num_lb   INTEGER NOT NULL,
-  -- the decompressed PVS of the leaf's cluster as hex: cluster j visible ⇔ bit j
-  -- (the character at index j >> 2, low nibble first). '' means everything.
-  pvs      VARCHAR(2048) CHARACTER SET ASCII
+  num_lb   INTEGER NOT NULL
 );
 CREATE INDEX leaves_cluster ON leaves (cluster);
+
+-- The decompressed PVS of each cluster as hex: cluster j visible ⇔ bit j (the character at index
+-- j >> 2, low nibble first); '' means everything. A leaf with no cluster (-1, outside the world) has
+-- no row here, which reads as everything too. It used to be a column of every leaf, where its
+-- 2048-character width made each leaf's record three times as costly to write: 269 → 86 ms for
+-- demo1's 5241 leaves, for 1448 clusters' worth of strings.
+CREATE TABLE clusters (
+  id  INTEGER NOT NULL PRIMARY KEY,
+  pvs VARCHAR(2048) CHARACTER SET ASCII
+);
 
 -- the map's areas and the portals between them (AREAS and AREAPORTALS lumps). A portal is open while a
 -- door holds it open (portal_state); areas reachable from one another through open portals share a
