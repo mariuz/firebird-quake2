@@ -377,10 +377,16 @@ picker). Missing for the rest of the game:
   the input element. The settings went next: `src/settings.js` has the defaults, the video modes, the
   menus' resets and the storage round trip, and checks what storage hands back (a hand-edited
   `fov: 500` or `detail: 'bogus'` used to reach the game as it was); `test:settings` covers it.
-  `main.js` is 760 lines, from 899: the loop, the menus' `host` object, the saves and the page's
-  wiring. The `host` object and the loop could stand apart from
-  the DOM next, so the headless tests could drive the page's logic as `menu-test.mjs` drives the
-  menus.
+  Then the game itself: `src/session.js` is what the server did in single player, with no DOM: a map
+  started or a level of the unit come back to as it was left, a tic, the frame read and decoded
+  (`decodeFrame`), a level left (a unit's end forgetting the unit), the slots written, listed and loaded
+  against a storage object. `main.js` keeps the canvas, the sound, the status line, the keys and the
+  menus' host, and is 695 lines. `test:session` drives a `Session` headless through the page's own calls.
+  Writing it showed one thing the pixel comparison cannot: from demo1's start the SQL-projecting renderer
+  mode lists the fan's 24 faces where the fast mode leaves the fan out, both modes drawing the same world
+  faces; the fan is out of sight there, so no pixel differs. What is left of `main.js` that is not the
+  DOM is the frame's effects (`handleFx`, `frameDlights`, the explosions), which belong beside the
+  renderer.
 - **The cluster-change hitch**: smaller. Marking a new cluster went from ~43 to ~17 ms (the
   PVS's clusters looked up by index instead of every leaf's bit tested), and the last sixteen marked
   sets are kept, so walking back into one costs ~0.3 ms. A door opening or closing drops only the
