@@ -14,13 +14,11 @@ import weaponsSql from '../sql/weapons.sql';
 import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
-import { createSchema, loadResources, loadMap, ensureFaceVerts, setView } from './loader.js';
+import { createSchema, loadResources, setView } from './loader.js';
 import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
 import { Hud, viewFrame } from './hud.js';
 import { Menu, saveComment } from './menu.js';
-import { exportSave, importSave, exportLevel, importLevel, savedLevels } from './savegame.js';
-import { packSave, unpackSave, saveHeader } from './savestore.js';
-import { parseChangeMap } from './levels.js';
+import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS } from './gamedata.js';
 import { padMenuKeys, BUTTON } from './gamepad.js';
@@ -35,14 +33,14 @@ const statsEl = $('stats');
 const TIC_MS = 50;
 
 let db, pak, res, renderer, hud;
+// src/session.js: the game without the page (maps, tics, the frame, the unit's levels, the slots);
+// `map` and `last` are its map and its last Q2_TIC row, kept here for the drawing
+let session = null;
 let map = null;          // { name, bsp }
 let last = null;         // last Q2_TIC row
 let running = false;
 let paused = false;
 let lastTic = 0;
-let lastSoundId = 0;
-let lastFxId = 0;
-let frameNo = 0;
 let beams = [];          // [{ a, b, color, until }]
 const tongues = new Map(); // TE_PARASITE_ATTACK by parasite: { a, b, until } (CL_ParseBeam: one per entity, 0.2 s)
 let explosions = [];     // CL_AddExplosions' list: [{ x, y, z, t0, type, mdl | spr, base, frames, light, c, pitch, yaw }]
@@ -113,20 +111,14 @@ document.addEventListener('pointerlockchange', () => {
   if (quietUnlock) { quietUnlock = false; return; }
   if (running && !menu.active && !anyKey && cmdline.hidden) escape();
 });
-const SLOT_KEY = (i) => `firebird-quake2:save:save${i}`;
 const menu = new Menu({
   get hud() { return hud; },
   playing: () => running && !!map,
   newGame: (skill) => {
     settings.skill = skill; $('skill').value = String(skill); saveSettings();
-    startMap(pak.has('maps/demo1.bsp') ? 'demo1' : 'base1', true).catch((err) => setStatus(err.message, true));
+    startMap(session.firstMap(), true).catch((err) => setStatus(err.message, true));
   },
-  slots: () => Array.from({ length: 15 }, (_, i) => {
-    try {
-      const s = saveHeader(localStorage.getItem(SLOT_KEY(i)));
-      return s ? { valid: true, name: s.comment ?? s.map } : { valid: false };
-    } catch { return { valid: false }; }
-  }),
+  slots: () => session?.slots() ?? [],
   loadSlot: (i) => loadGame(SLOT_KEY(i)),
   saveSlot: (i) => saveGame(SLOT_KEY(i)),
   get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : settings[k]),
@@ -194,20 +186,9 @@ cmdline.addEventListener('keydown', async (e) => {
 });
 
 // ── saved games: the game tables and the unit's other levels, gzipped JSON in localStorage (F6 saves, F9 loads) ─────
-const SAVE_KEY = 'firebird-quake2:save:quick';
-/** The save's comment: the level's name (the worldspawn message) after "ENTERING " or the time. */
-async function levelName() {
-  const g = (await db.query('SELECT level_msg FROM game')).rows[0];
-  return (g?.LEVEL_MSG ?? '').trim() || map.name;
-}
-async function writeSave(key, autosave) {
-  const save = await exportSave(db, map.name, unitLevels);   // (with the unit's other levels, as left)
-  save.comment = saveComment(await levelName(), autosave);
-  const text = await packSave(save);   // gzip + base64: a tenth of the JSON, and the slots fit the origin's quota
-  localStorage.setItem(key, text);
-  return text.length;
-}
-async function saveGame(key = SAVE_KEY) {
+/** Save with the comment the slot shows: the level's name after "ENTERING " (the autosave) or the time. */
+const writeSave = async (key, autosave) => session.writeSave(key, saveComment(await session.levelName(), autosave));
+async function saveGame(key = QUICK_KEY) {
   if (!running || !map) return;
   if (last?.DEAD) { setStatus("Can't savegame while dead!", true); setTimeout(() => setStatus(''), 2000); return; }
   try {
@@ -216,23 +197,16 @@ async function saveGame(key = SAVE_KEY) {
     setTimeout(() => { if (statusEl.textContent.startsWith('Game saved')) setStatus(''); }, 2000);
   } catch (err) { console.error(err); setStatus(`Save failed: ${err.message}`, true); }
 }
-async function loadGame(key = SAVE_KEY) {
-  let save;
-  try { save = await unpackSave(localStorage.getItem(key)); } catch { save = null; }
+async function loadGame(key = QUICK_KEY) {
+  const save = await session.readSave(key);
   if (!save) { setStatus('No saved game', true); setTimeout(() => setStatus(''), 2000); return; }
   if (!pak.has(`maps/${save.map}.bsp`)) { setStatus(`The saved game is on ${save.map}, which is not in this pak`, true); return; }
   running = false;
   try {
-    unitLevels.clear();
-    await startMap(save.map, false, null, false);   // the map's geometry and models afresh, then the saved rows
-    running = false;
+    beginMap();
     setStatus('Loading the saved game…');
-    await importSave(db, save);
-    for (const [name, lv] of savedLevels(save)) unitLevels.set(name, lv);   // the unit's other levels, as the save left them
-    await loadStyleBase();
-    brushFrames.clear(); brushAngles.clear();
-    const { rows } = await db.query('SELECT MAX(id) m FROM sound_events');
-    lastSoundId = rows[0].M ?? 0; lastFxId = 0;
+    // the map's geometry and models afresh, then the saved rows, then the unit's other levels as the save left them
+    mapLoaded(await session.loadSave(save, { skill: settings.skill, faceVerts: settings.renderer === 'sql' }));
     setStatus('Game loaded');
     setTimeout(() => { if (statusEl.textContent === 'Game loaded') setStatus(''); }, 2000);
     lastTic = performance.now();
@@ -271,40 +245,37 @@ function readInput(tics) {
 }
 
 // ── maps ─────────────────────────────────────────────────────────────────
-async function startMap(name, newGame, spawnpoint = null, autosave = true) {
+/** Before a map loads: the menus, the help and inventory screens away. */
+function beginMap() {
   running = false;
   menu.off();
   showHelp = false;
   showInv = false;
-  if (newGame) { helpSeen = 0; unitLevels.clear(); }
-  setStatus(`Loading ${name} into Firebird…`);
-  const t0 = performance.now();
-  // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on
-  const bsp = await loadMap(db, pak, res, name, { skill: settings.skill, newGame, spawnpoint, faceVerts: settings.renderer === 'sql' });
-  // a level of this unit left earlier comes back as it was left (SV_ReadLevelFile), the player at the spawn point
-  if (!newGame && unitLevels.has(name)) await importLevel(db, unitLevels.get(name));
-  map = { name, bsp };
+}
+/** A map is in (session.startMap's setup): the renderer and the sound set up from it. */
+function mapLoaded(setup) {
+  map = session.map;
   renderer.setResources(res);
   renderer.particles = [];
   beams = []; explosions = []; flashes = []; tongues.clear();
-  const g = (await db.query('SELECT sky, cd_track FROM game')).rows[0];
-  renderer.setSky(g.SKY);
-  // CL_SetSky: worldspawn's skyrotate and skyaxis (CS_SKYROTATE, CS_SKYAXIS)
-  const ws = bsp.entities.find((e) => e.classname === 'worldspawn') ?? {};
-  renderer.skyRotate = Number(ws.skyrotate) || 0;
-  renderer.skyAxis = ws.skyaxis ? ws.skyaxis.trim().split(/\s+/).map(Number).map((v) => (Number.isFinite(v) ? v : 0)) : [0, 0, 0];
-  await loadStyleBase();
-  const speakers = (await db.query("SELECT id, x, y, z, noise1, sounds FROM ents WHERE classname = 'target_speaker' AND BIN_AND(spawnflags, 3) <> 0 AND noise1 IS NOT NULL", [], arr)).rows;
-  audio.setSpeakers(speakers);
+  renderer.setSky(setup.sky);
+  renderer.skyRotate = setup.skyRotate;
+  renderer.skyAxis = setup.skyAxis;
+  audio.setSpeakers(setup.speakers);
   audio.stopLoops();
-  audio.playMusic(Number(g.CD_TRACK ?? 0));
-  const { rows } = await db.query('SELECT MAX(id) m FROM sound_events');
-  lastSoundId = rows[0].M ?? 0;
-  lastFxId = 0;
+  audio.playMusic(setup.cdTrack);
+  $('mapname').textContent = map.name;
+  $('map').value = map.name;
+}
+async function startMap(name, newGame, spawnpoint = null, autosave = true) {
+  beginMap();
+  if (newGame) helpSeen = 0;
+  setStatus(`Loading ${name} into Firebird…`);
+  const t0 = performance.now();
+  // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on
+  mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql' }));
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);
   setStatus('');
-  $('mapname').textContent = name;
-  $('map').value = name;
   if (autosave) {
     try { await writeSave(SLOT_KEY(0), true); } catch (err) { console.warn('autosave:', err.message); }
   }
@@ -320,15 +291,9 @@ function nextFrame() {
   setTimeout(go, 60);
 }
 
-const arr = { rowMode: 'array' };
-const brushFrames = new Map();
-const styleBase = new Float32Array(64);
-/** The light styles' resting values: the frame lists only the ones that animate or that the map has switched. */
-async function loadStyleBase() {
-  styleBase.fill(0);
-  for (const [s, p] of (await db.query('SELECT style, pattern FROM lightstyles', [], arr)).rows) if (s < 64 && p) styleBase[s] = (p.charCodeAt(0) - 97) / 12.5;
-}
-const brushAngles = new Map();
+// the brush models' frames and angles in the frame being drawn (FRAME_ALL's kind 6)
+let brushFrames = new Map();
+let brushAngles = new Map();
 
 async function frame() {
   if (!running || paused || document.hidden || menu.active) {
@@ -350,8 +315,8 @@ async function frame() {
     if (now - lastTic > 200) lastTic = now;
 
     let t = performance.now();
-    last = (await db.query('SELECT * FROM q2_tic(?, ?, ?, ?, ?, ?, ?, ?, ?)', readInput(tics), { rowMode: 'object' })).rows[0];
-    if (showInv) invItems = (await db.query('SELECT idx, cnt FROM inventory_list', [], { rowMode: 'array' })).rows;
+    last = await session.tic(readInput(tics));
+    if (showInv) invItems = await session.inventory();
     perf.tic = performance.now() - t;
 
     if (last.EXIT_KIND === 1 && last.NEXT_MAP) {
@@ -359,51 +324,29 @@ async function frame() {
       nextFrame();
       return;
     }
-    if (last.EXIT_KIND === 3) {
-      await db.exec('UPDATE game SET exit_kind = 0 WHERE id = 1');
-      openMenu(() => menu.loadMenu());
-    }
+    if (await session.takeLoadRequest()) openMenu(() => menu.loadMenu());
 
     t = performance.now();
-    // one round trip: every row is tagged with what it is (see FRAME_ALL in sql/render.sql)
-    //   r = [kind, i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, d7, d8, s, lst]
-    const wantSpeakers = ++frameNo % 10 === 0;
-    if (settings.renderer === 'sql' && res.world && !res.world.faceVertsLoaded) await ensureFaceVerts(db, res);
-    const rows = (await db.query(`SELECT * FROM frame_all(${settings.renderer === 'sql' ? 1 : 0}, ${lastSoundId}, ${lastFxId}, ${wantSpeakers ? 1 : 0})`, [], arr)).rows;
-    const faces = [], ents = [], sounds = [], fx = [], loops = [];
-    const styleMap = styleBase.slice();
-    let speakers = null;
-    brushFrames.clear(); brushAngles.clear();
-    for (const r of rows) {
-      switch (r[0]) {
-        case 1: { const ent = r[2], ox = r[6], oy = r[7], oz = r[8]; for (const id of r[15].split(',')) faces.push([+id, ent, ox, oy, oz]); break; }
-        case 8: faces.push([r[1], r[2], r[6], r[7], r[8], r[9], r[10], r[11], r[12], r[3]]); break;
-        case 2: ents.push([r[1], r[2], r[3], r[4], r[6], r[7], r[8], r[9], r[10], r[11], r[5], r[12], r[14], r[13]]); break;
-        case 3: if (r[15]) for (const kv of r[15].split(',')) { const i = kv.indexOf(':'); const st = +kv.slice(0, i); if (st < 64) styleMap[st] = (kv.charCodeAt(i + 1) - 97) / 12.5; } break;
-        case 4: sounds.push([r[1], 0, r[2], r[3], r[14], r[6], r[7], r[8], r[9], r[10]]); break;
-        case 5: fx.push([r[1], r[2], r[6], r[7], r[8], r[9], r[10], r[11], r[3]]); break;
-        case 6: brushFrames.set(r[1], [r[2], r[3] ?? 0]); if (r[6] || r[7] || r[8]) brushAngles.set(r[1], [r[6], r[7], r[8]]); break;
-        case 7: speakers = r[15] ? r[15].split(',').map(Number) : []; break;
-        case 9: loops.push([r[14], r[8], r[9], r[10]]); break;
-        default: break;
-      }
-    }
-    if (speakers) audio.setSpeakersOn(speakers);
+    // one round trip, decoded (FRAME_ALL in sql/render.sql, decodeFrame in src/session.js)
+    const f = await session.frame({ sqlRenderer: settings.renderer === 'sql' });
+    const { faces, ents, sounds, fx, loops } = f;
+    brushFrames = f.brushFrames; brushAngles = f.brushAngles;
+    if (f.speakers) audio.setSpeakersOn(f.speakers);
     perf.faces = performance.now() - t;
     perf.rows = faces.length;
     const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
-    if (sounds.length) { lastSoundId = sounds[sounds.length - 1][0]; audio.playEvents(sounds, listener); }
+    if (sounds.length) audio.playEvents(sounds, listener);
     audio.setLoops(loops);
     audio.update(listener);
-    if (fx.length) { lastFxId = fx[fx.length - 1][0]; handleFx(fx, last.TIME_); }
+    if (fx.length) handleFx(fx, last.TIME_);
 
     t = performance.now();
-    drawFrame(faces, ents, styleMap, last.TIME_, tics * 0.05);
+    drawFrame(faces, ents, f.styles, last.TIME_, tics * 0.05);
     perf.draw = performance.now() - t;
     updateStats();
     // the frame's spare time marks the cluster the player is heading into (premark_ahead), so the
     // crossing is a switch of slot and not a hitch; a call that finds nothing to do costs ~0.3 ms
-    if (perf.tic + perf.faces + perf.draw < 30) await db.query('SELECT marked FROM premark_ahead');
+    if (perf.tic + perf.faces + perf.draw < 30) await session.premark();
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message}`, true);
@@ -418,15 +361,9 @@ const model = (name) => res.models.get(res.byName.get(name))?.mdl;
 
 // ── leaving a level: what the server did with the map string (SV_Map; src/levels.js) ─────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// the unit's levels left by an ordinary exit, by map name (SV_WriteLevelFile), to come back to as they were left
-const unitLevels = new Map();
 async function changeLevel(target) {
-  const c = parseChangeMap(target);
-  // a unit's end forgets the unit's levels; any other exit keeps the one being left
-  if (c.unitEnd) unitLevels.clear();
-  else if (map) unitLevels.set(map.name, await exportLevel(db));
-  // the unit's cross-level flags last the unit ("within the same unit", g_target.c)
-  if (c.unitEnd) await db.exec('UPDATE game SET serverflags = 0 WHERE id = 1');
+  // the unit's levels and its cross-level flags (session.leave); then a picture, the next map, or the end
+  const c = await session.leave(target);
   if (c.kind === 'pic' && pak.has(`pics/${c.map}`)) {
     await showPicture(`pics/${c.map}`);
     return c.then ? changeLevel(c.then) : endGame();
@@ -455,7 +392,7 @@ async function showPicture(file) {
 
 /** The game is over (the demo's last exit): a new game from the first map. */
 async function endGame() {
-  await startMap(pak.has('maps/demo1.bsp') ? 'demo1' : 'base1', true);
+  await startMap(session.firstMap(), true);
 }
 
 function handleFx(rows, time) {
@@ -698,6 +635,7 @@ async function usePak(buffer, label) {
   if (!maps.length) throw new Error(`${label} has no maps`);
   setStatus(`Copying ${label} models into Firebird…`);
   res = await loadResources(db, pak, { width: viewWidth(), height: viewHeight(), fov: settings.fov });
+  session.use(pak, res);
   const cm = loadColormap(pak);
   renderer = new Renderer(canvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
   renderer.setSize(viewWidth(), viewHeight());
@@ -713,7 +651,8 @@ async function usePak(buffer, label) {
 async function boot() {
   try {
     db = await openDatabase();
-    window.quake2 = { db, audio, menu, get renderer() { return renderer; }, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
+    session = new Session(db, storage);
+    window.quake2 = { db, session, audio, menu, get renderer() { return renderer; }, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));
     if (!resp.ok) throw new Error(`could not fetch pak0.pak (${resp.status}); pick a PAK file instead`);

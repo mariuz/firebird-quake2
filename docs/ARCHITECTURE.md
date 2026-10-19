@@ -21,7 +21,8 @@ src/bsp.js    BSP v38 parser             sql/schema.sql    the tables and indexe
 src/md2.js    MD2, SP2                   sql/physics.sql   traces, movement, linking
 src/loader.js bulk loads it all  ─────►  sql/game.sql      entities, triggers, items, damage
                                          sql/weapons.sql   the player and the ten weapons
-src/main.js   input, loop, console       sql/monsters.sql  AI, pushers, the tic, map init
+src/main.js   the page: loop, drawing    sql/monsters.sql  AI, pushers, the tic, map init
+src/session.js maps, tics, the frame, saves (no DOM)
    each frame:                           sql/render.sql    visibility and the frame
    SELECT * FROM q2_tic(...)      ─────► 20 Hz game logic, returns the player's view of itself
    SELECT * FROM frame_all(...)   ─────► everything to draw, hear and animate this frame
@@ -363,7 +364,17 @@ The loops fall silent while the game is paused or in a menu.
 Music was CD audio: `public/music/trackNN.ogg|mp3`, or a folder picked on the page, plays each map's
 `worldspawn` track; without them a synthesised drone fills in.
 
-## 8. The page (`src/main.js`, `public/`)
+## 8. The page (`src/main.js`, `src/session.js`, `public/`)
+
+What the server did in single player is `src/session.js`, a `Session` with no DOM: a map started
+(`startMap`, which returns the sky, the CD track and the looped speakers for the page to set up) or a
+level of the unit come back to as it was left, a tic run (`tic`, the usercmd in), the frame read in one
+round trip and decoded (`frame`, `decodeFrame`: the faces, the entities, the light styles, the sounds and
+effects not yet played, the brush models' frames and angles, the looped speakers every tenth frame), a
+level left (`leave`, which keeps it or, at a unit's end, forgets the unit), and the slots written, read,
+listed and loaded against a storage object. `src/main.js` holds one and does what only a page can: the
+canvas, the sound, the status line, the keys and the menus' host. `scripts/session-test.mjs` drives a
+`Session` headless through the same calls.
 
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
@@ -433,6 +444,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `save-test.mjs` | save, play on, load: every entity, mover and light style back as it was; the game keeps running with fresh ids |
 | `input-test.mjs` | the page's input read as Quake's usercmd (`src/input.js`): keys, Shift and the Run setting, the impulses once per press, the mouse, drags and taps on the view's halves, the on-screen buttons; and the gamepad's reading (`src/gamepad.js`): dead zones, the run at the stick's edge, a press counted once, the weapon impulses, the menu driven by d-pad, stick, A and B |
 | `console-test.mjs` | the console line headless (`src/console.js`): `map`, `fov`, `seed`, `save`, `load`, `inven` reach the page's host, the rest reach `player_command`, the history steps and forgets as `Key_Console`'s did, Tab completes |
+| `session-test.mjs` | the game as the page plays it, without the page (`src/session.js`): a map started, tics, the frame decoded (the sounds each once, the speakers every tenth frame, both renderer modes the same world faces), a slot saved, listed and loaded back exactly, levels left and come back to as left, a save carrying them, a unit's end and a new game forgetting them, the death screen's load request taken once, no storage no saves |
 | `settings-test.mjs` | the page's settings (`src/settings.js`): the defaults, the round trip through storage, and each stored value checked against what it can be (a bad one back to its default, a full storage harmless) |
 | `replay-test.mjs` | the same seed and the same 120 tics of input give the same game twice (every entity, the game row, the sounds), another seed another game, and a game loaded from a save goes on exactly as the saved one did |
 | `screenshot.mjs [map] [prefix] [--at=x,y,z,yaw] [--sql] [--compare]` | headless frames to PNG; `--compare` asserts both renderer modes paint identical pixels |

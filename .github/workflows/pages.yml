@@ -92,6 +92,11 @@ jobs:
       - name: The settings
         run: npm run test:settings
 
+      # The game as the page plays it, without the page (src/session.js): tics, the frame decoded in
+      # both renderer modes, slots saved and loaded, levels left and come back to, a unit's end
+      - name: The session
+        run: npm run test:session
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
       # quick save and load, the menu, the retired service worker removing itself, no console

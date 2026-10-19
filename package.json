@@ -29,7 +29,8 @@
     "test:replay": "node scripts/replay-test.mjs",
     "test:input": "node scripts/input-test.mjs",
     "test:console": "node scripts/console-test.mjs",
-    "test:settings": "node scripts/settings-test.mjs"
+    "test:settings": "node scripts/settings-test.mjs",
+    "test:session": "node scripts/session-test.mjs"
   },
   "license": "MIT",
   "dependencies": {
