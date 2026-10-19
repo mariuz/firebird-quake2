@@ -97,6 +97,10 @@ jobs:
       - name: The session
         run: npm run test:session
 
+      # The temporary entities headless: explosions, beams, the tongue, flashes, their lights and drawing
+      - name: The effects
+        run: npm run test:effects
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
       # quick save and load, the menu, the retired service worker removing itself, no console

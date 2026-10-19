@@ -30,7 +30,8 @@
     "test:input": "node scripts/input-test.mjs",
     "test:console": "node scripts/console-test.mjs",
     "test:settings": "node scripts/settings-test.mjs",
-    "test:session": "node scripts/session-test.mjs"
+    "test:session": "node scripts/session-test.mjs",
+    "test:effects": "node scripts/effects-test.mjs"
   },
   "license": "MIT",
   "dependencies": {
