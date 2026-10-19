@@ -289,10 +289,22 @@ DECLARE c2 INTEGER; DECLARE c3 INTEGER; DECLARE cl INTEGER; DECLARE ep DOUBLE PR
 DECLARE m00 DOUBLE PRECISION; DECLARE m01 DOUBLE PRECISION; DECLARE m02 DOUBLE PRECISION;
 DECLARE m10 DOUBLE PRECISION; DECLARE m11 DOUBLE PRECISION; DECLARE m12 DOUBLE PRECISION;
 DECLARE m20 DOUBLE PRECISION; DECLARE m21 DOUBLE PRECISION; DECLARE m22 DOUBLE PRECISION; DECLARE vslot SMALLINT;
+DECLARE ef DOUBLE PRECISION; DECLARE rot SMALLINT;
+DECLARE nrx DOUBLE PRECISION; DECLARE nry DOUBLE PRECISION; DECLARE nrz DOUBLE PRECISION; DECLARE enr DOUBLE PRECISION;
+DECLARE nlx DOUBLE PRECISION; DECLARE nly DOUBLE PRECISION; DECLARE nlz DOUBLE PRECISION; DECLARE enl DOUBLE PRECISION;
+DECLARE ntx DOUBLE PRECISION; DECLARE nty DOUBLE PRECISION; DECLARE ntz DOUBLE PRECISION; DECLARE ent DOUBLE PRECISION;
+DECLARE nbx DOUBLE PRECISION; DECLARE nby DOUBLE PRECISION; DECLARE nbz DOUBLE PRECISION; DECLARE enb DOUBLE PRECISION;
+DECLARE bcx DOUBLE PRECISION; DECLARE bcy DOUBLE PRECISION; DECLARE bcz DOUBLE PRECISION; DECLARE brad DOUBLE PRECISION;
 BEGIN
   EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
   hw = w / 2e0; hh = h / 2e0;
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
+  -- FRAME_ALL's frustum planes, for its whole-model test below
+  ef = ex * fx + ey * fy + ez * fz;
+  nrx = kx * fx - rx; nry = kx * fy - ry; nrz = kx * fz - rz; enr = ex * nrx + ey * nry + ez * nrz;
+  nlx = kx * fx + rx; nly = kx * fy + ry; nlz = kx * fz + rz; enl = ex * nlx + ey * nly + ez * nlz;
+  ntx = ky * fx - ux; nty = ky * fy - uy; ntz = ky * fz - uz; ent = ex * ntx + ey * nty + ez * ntz;
+  nbx = ky * fx + ux; nby = ky * fy + uy; nbz = ky * fz + uz; enb = ex * nbx + ey * nby + ez * nbz;
   EXECUTE PROCEDURE mark_faces(pvs, vcl, vleaf) RETURNING_VALUES vslot;
 
   -- the faces that face the eye and whose sphere is in the frustum
@@ -307,14 +319,21 @@ BEGIN
      AND ABS((v.cx - :ex) * :ux + (v.cy - :ey) * :uy + (v.cz - :ez) * :uz)
          <= ((v.cx - :ex) * :fx + (v.cy - :ey) * :fy + (v.cz - :ez) * :fz) * :ky + v.radius * :qy;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
-  FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.cluster, e.cl2, e.cl3, e.pitch, e.yaw, e.roll
+  FOR SELECT e.id, e.model_id, e.x, e.y, e.z, e.cluster, e.cl2, e.cl3, e.pitch, e.yaw, e.roll, IIF(e.pitch <> 0 OR e.yaw <> 0 OR e.roll <> 0, 1, 0),
+             e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2, (e.maxx - e.minx + e.maxy - e.miny + e.maxz - e.minz) / 2
         FROM ents e
        WHERE e.mkind = 'B' AND e.model_id <> :world AND e.solid <> 1
-        INTO eid, emid, ox, oy, oz, cl, c2, c3, ep, eyaw, er
+        INTO eid, emid, ox, oy, oz, cl, c2, c3, ep, eyaw, er, rot, bcx, bcy, bcz, brad
   DO
   BEGIN
     IF (clusters_visible(pvs, cl, c2, c3) = 0) THEN CONTINUE;
-    IF (ep = 0 AND eyaw = 0 AND er = 0) THEN
+    -- the whole model against the frustum first, as FRAME_ALL does (R_DrawBrushModel's R_CullBox; a rotated
+    -- one: a sphere about its origin wide enough for any angle). Without it a rotated model out of view
+    -- sent all its faces, which the fast mode never listed.
+    IF (rot = 1) THEN BEGIN brad = brad + ABS(bcx - ox) + ABS(bcy - oy) + ABS(bcz - oz); bcx = ox; bcy = oy; bcz = oz; END
+    IF (bcx * fx + bcy * fy + bcz * fz - ef + brad < nearz OR bcx * nrx + bcy * nry + bcz * nrz - enr + brad * qx < 0 OR bcx * nlx + bcy * nly + bcz * nlz - enl + brad * qx < 0
+        OR bcx * ntx + bcy * nty + bcz * ntz - ent + brad * qy < 0 OR bcx * nbx + bcy * nby + bcz * nbz - enb + brad * qy < 0) THEN CONTINUE;
+    IF (rot = 0) THEN
       INSERT INTO sel_faces (face, ent_id, ox, oy, oz)
       SELECT f.id, :eid, :ox, :oy, :oz FROM faces f
        WHERE f.model_id = :emid AND BIN_AND(f.flags, 128) = 0

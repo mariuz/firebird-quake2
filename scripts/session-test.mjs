@@ -67,7 +67,20 @@ const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 const worldFast = facesOf(fast.faces, 1, 0), worldSql = facesOf(viaSql.faces, 9, 0);
 check(worldFast.size > 20 && sameSet(worldFast, worldSql), `both renderer modes give the same world faces (${worldFast.size})`);
 const brushFast = facesOf(fast.faces, 1, 1), brushSql = facesOf(viaSql.faces, 9, 1);
-check([...brushFast].every((x) => brushSql.has(x)), `every brush model face the fast mode draws, the SQL mode draws (${brushFast.size} of ${brushSql.size})`);
+check(sameSet(brushFast, brushSql), `both renderer modes give the same brush model faces (${brushFast.size})`);
+// ... and by the fan (a rotating brush model) and the doors, where brush models are in view; the player put
+// back afterwards, as the rest of the test plays on from where it was
+const pq = 'SELECT e.x, e.y, e.z, e.yaw, e.vx, e.vy, e.vz FROM ents e WHERE e.id = (SELECT ent_id FROM player)';
+const was = (await db.query(pq, [], { rowMode: 'array' })).rows[0];
+const place = async ([x, y, z, yaw, vx = 0, vy = 0, vz = 0]) => {
+  await db.exec(`UPDATE ents SET x = ${x}, y = ${y}, z = ${z}, yaw = ${yaw}, vx = ${vx}, vy = ${vy}, vz = ${vz} WHERE id = (SELECT ent_id FROM player)`);
+  await db.exec('EXECUTE PROCEDURE link_ent((SELECT ent_id FROM player))');
+};
+await place([300, 500, -40, 90]);
+const fanFast = facesOf((await session.frame()).faces, 1, 1), fanSql = facesOf((await session.frame({ sqlRenderer: true })).faces, 9, 1);
+check(fanFast.size > 0 && sameSet(fanFast, fanSql), `by the fan, both renderer modes give the same brush model faces (${fanFast.size})`);
+await place(was);
+check(JSON.stringify((await db.query(pq, [], { rowMode: 'array' })).rows[0]) === JSON.stringify(was), 'the player is put back where it was');
 
 // decodeFrame alone: a style row, a sound row, a brush model's frame and angles
 const base = new Float32Array(64); base[3] = 0.5;

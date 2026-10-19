@@ -287,6 +287,11 @@ console. `frame_faces` is the other renderer mode, selectable on the page: it pr
 in SQL (one cursor over the selected faces' vertices with the rotation, the view transform and the
 projection in the select list) and the painter only scan-converts; both modes paint identical
 pixels (`node scripts/screenshot.mjs demo1 --compare`), which is the renderer's regression test.
+Both select the same faces with the same tests, a brush model's whole-model sphere included
+(`R_DrawBrushModel`'s `R_CullBox`; for a rotated one, a sphere about its origin wide enough for any
+angle, and no per-face test after it): `frame_faces` once lacked that test and sent all 24 of the fan's
+faces from anywhere in its PVS, which no pixel showed. `test:session` compares the two selections,
+the world's and the brush models', at the start and by the fan.
 
 ## 6. The painter (`src/renderer.js`)
 
