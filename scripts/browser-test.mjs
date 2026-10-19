@@ -56,6 +56,9 @@ page.on('request', (r) => { const m = /(firebird-embedded(-st)?\.wasm)/.exec(r.u
 
 const status = () => page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
 const stats = () => page.evaluate(() => document.getElementById('stats')?.textContent ?? '').catch(() => '');
+// The frames the game has played (src/session.js counts them): the stats line is rounded, and two reads of it
+// can match while frames come, so whether the game runs or stands is read from this count.
+const frames = (p) => p.evaluate(() => window.quake2?.session?.frameNo ?? -1).catch(() => -1);
 const isolated = () => page.evaluate(() => window.crossOriginIsolated).catch(() => false);
 
 try {
@@ -83,8 +86,8 @@ try {
 
   if (ready) {
     // the loop advances: the frame counter in the stats line changes between reads
-    const a = await stats(); await sleep(700); const b = await stats();
-    assert(a !== b, 'frames keep coming');
+    const a = await frames(page); await sleep(700); const b = await frames(page);
+    assert(b > a, `frames keep coming (${b - a} in 0.7 s)`);
 
     // keys reach the game: walk forward, then the quick save and quick load
     await page.mouse.click(480, 360);
@@ -102,13 +105,13 @@ try {
     const slot = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('firebird-quake2:save:')).length);
     assert(slot >= 1, `a save is in localStorage (${slot} slot(s))`);
 
-    // the menu opens over the game (the loop pauses: the stats line stands still) and closes again
+    // the menu opens over the game (the loop pauses: no frame is played) and closes again
     await page.keyboard.press('Escape'); await sleep(500);
-    const m1 = await stats(); await sleep(700); const m2 = await stats();
+    const m1 = await frames(page); await sleep(700); const m2 = await frames(page);
     assert(m1 === m2, 'Escape opens the menu and the game pauses');
     await page.keyboard.press('Escape'); await sleep(500);
-    const m3 = await stats(); await sleep(700); const m4 = await stats();
-    assert(m3 !== m4, 'Escape again closes it and the game goes on');
+    const m3 = await frames(page); await sleep(700); const m4 = await frames(page);
+    assert(m4 > m3, `Escape again closes it and the game goes on (${m4 - m3} frames in 0.7 s)`);
   }
 
   // a touch screen: the on-screen buttons show, and taps on them and on the view's halves reach the game
@@ -135,12 +138,12 @@ try {
       assert(/q2_tic \d+ ms/.test(await tstats()), 'the game runs on after the taps');
       await tp.locator('#touch button[data-act="menu"]').tap();
       await sleep(600);
-      const m1 = await tstats(); await sleep(700); const m2 = await tstats();
+      const m1 = await frames(tp); await sleep(700); const m2 = await frames(tp);
       assert(m1 === m2, 'the menu button opens the menu and the game pauses');
       await tp.locator('#touch button[data-act="menu"]').tap();
       await sleep(600);
-      const m3 = await tstats(); await sleep(700); const m4 = await tstats();
-      assert(m3 !== m4, 'and again closes it');
+      const m3 = await frames(tp); await sleep(700); const m4 = await frames(tp);
+      assert(m4 > m3, `and again closes it (${m4 - m3} frames in 0.7 s)`);
     }
     await touchCtx.close();
   }

@@ -384,9 +384,12 @@ picker). Missing for the rest of the game:
   menus' host, and is 695 lines. `test:session` drives a `Session` headless through the page's own calls.
   Writing it showed one thing the pixel comparison cannot: from demo1's start the SQL-projecting renderer
   mode lists the fan's 24 faces where the fast mode leaves the fan out, both modes drawing the same world
-  faces; the fan is out of sight there, so no pixel differs. What is left of `main.js` that is not the
-  DOM is the frame's effects (`handleFx`, `frameDlights`, the explosions), which belong beside the
-  renderer.
+  faces; the fan is out of sight there, so no pixel differs. The frame's effects followed:
+  `src/effects.js` keeps cl_tent.c's temporary entities (the explosions, the beams, the parasite's tongue,
+  the muzzle flashes), gives the frame's dynamic lights and draws them; its chances come from a `random` a
+  test can give, and `test:effects` checks each effect's life, light and drawing with a renderer that
+  records, then paints one. `main.js` is 606 lines: the canvas, the sound, the status line, the keys, the
+  menus' host, the loop and the drawing order, which is what a page is.
 - **The cluster-change hitch**: smaller. Marking a new cluster went from ~43 to ~17 ms (the
   PVS's clusters looked up by index instead of every leaf's bit tested), and the last sixteen marked
   sets are kept, so walking back into one costs ~0.3 ms. A door opening or closing drops only the

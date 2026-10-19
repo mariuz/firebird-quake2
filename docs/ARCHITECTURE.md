@@ -23,6 +23,7 @@ src/loader.js bulk loads it all  ─────►  sql/game.sql      entities,
                                          sql/weapons.sql   the player and the ten weapons
 src/main.js   the page: loop, drawing    sql/monsters.sql  AI, pushers, the tic, map init
 src/session.js maps, tics, the frame, saves (no DOM)
+src/effects.js  explosions, beams, flashes, lights (no DOM)
    each frame:                           sql/render.sql    visibility and the frame
    SELECT * FROM q2_tic(...)      ─────► 20 Hz game logic, returns the player's view of itself
    SELECT * FROM frame_all(...)   ─────► everything to draw, hear and animate this frame
@@ -315,7 +316,7 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
 - **Model lighting.** `drawAlias(…, light, { dlight, minlight, glow })` is `R_AliasSetupLighting`: the
   lightmap light (scaled by the brightness) plus the dynamic part, `RF_MINLIGHT` and `RF_GLOW` applied,
   ambient and shade clamped as ref_soft clamped them, the shade by the normal's x.
-- **Dynamic lights.** `renderer.dlights` is the frame's lights (`frameDlights` in `src/main.js`: muzzle
+- **Dynamic lights.** `renderer.dlights` is the frame's lights (`Effects.lights` in `src/effects.js`: muzzle
   flashes from fx 15, projectiles by their effects bits, explosions fading; the frame sends a projectile
   in the PVS whether it is in the frustum or not, so one flying past lights what is in view). `faceDlights` is
   `R_MarkLights` face by face (the plane distance, the reach across the face); a face it returns lights
@@ -336,10 +337,13 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   by sprites too. The view weapon is drawn after clearing the z-buffer, with a closer near plane.
 - **Particles and beams** are cl_fx.c's: explosions, blood, blaster sparks, the rail spiral,
   teleport fog, laser beams as particle lines.
-- **Explosions** are `CL_AddExplosions`' list in `src/main.js` (`explosions`): the `r_explode` and `explode`
-  models and the `s_bfg2` sprite, stepped at 10 frames a second, skins and translucency by frame and alpha,
-  drawn fullbright (`drawAlias`'s `fullbright`, `alpha` 1 for 33% and 2 for 66%); their lights come from the
-  same list in `frameDlights`.
+- **Explosions** are `CL_AddExplosions`' list in `src/effects.js` (an `Effects`, cl_tent.c's temporary
+  entities, which also keeps the beams, the parasite's tongue and the muzzle flashes): the `r_explode` and
+  `explode` models and the `s_bfg2` sprite, stepped at 10 frames a second, skins and translucency by frame and
+  alpha, drawn fullbright (`drawAlias`'s `fullbright`, `alpha` 1 for 33% and 2 for 66%); their lights come from
+  the same list in `Effects.lights`. `add` takes the frame's effect rows, `lights` gives the frame's dynamic
+  lights and drops what has played out, `draw` paints after the entities; the chances come from a `random`
+  a test can give.
 - **2D** (`src/hud.js`): `single_statusbar` from `pics/` (health, ammo, armour flashing with power
   armour, the selected item; the pickup's icon and name, the powerup timer, the help icon), the
   crosshair, centre prints, the help computer and the inventory screen (`CL_DrawInventory`), with
@@ -445,6 +449,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `input-test.mjs` | the page's input read as Quake's usercmd (`src/input.js`): keys, Shift and the Run setting, the impulses once per press, the mouse, drags and taps on the view's halves, the on-screen buttons; and the gamepad's reading (`src/gamepad.js`): dead zones, the run at the stick's edge, a press counted once, the weapon impulses, the menu driven by d-pad, stick, A and B |
 | `console-test.mjs` | the console line headless (`src/console.js`): `map`, `fov`, `seed`, `save`, `load`, `inven` reach the page's host, the rest reach `player_command`, the history steps and forgets as `Key_Console`'s did, Tab completes |
 | `session-test.mjs` | the game as the page plays it, without the page (`src/session.js`): a map started, tics, the frame decoded (the sounds each once, the speakers every tenth frame, both renderer modes the same world faces), a slot saved, listed and loaded back exactly, levels left and come back to as left, a save carrying them, a unit's end and a new game forgetting them, the death screen's load request taken once, no storage no saves |
+| `effects-test.mjs` | the temporary entities (`src/effects.js`): each effect row's particles and what it keeps, the explosions' frames, skins, translucency and fading light, the blaster hit turned to its direction, the BFG's sprite, a muzzle flash lighting its frame only, the `EF_` lights, beams lasting 0.1 and 0.12 s, a parasite's tongue (one per parasite, a segment every 30 units, 0.2 s), and an explosion painting a real frame |
 | `settings-test.mjs` | the page's settings (`src/settings.js`): the defaults, the round trip through storage, and each stored value checked against what it can be (a bad one back to its default, a full storage harmless) |
 | `replay-test.mjs` | the same seed and the same 120 tics of input give the same game twice (every entity, the game row, the sounds), another seed another game, and a game loaded from a save goes on exactly as the saved one did |
 | `screenshot.mjs [map] [prefix] [--at=x,y,z,yaw] [--sql] [--compare]` | headless frames to PNG; `--compare` asserts both renderer modes paint identical pixels |

@@ -13,7 +13,7 @@ by the same author (mariuz), which live next to this repository under `C:\fbq\`.
 https://mariuz.github.io/firebird-quake2/ by the Pages workflow on every push to `main`.
 
 Layout: `sql/` (schema, physics, game, weapons, monsters, render — loaded in that order),
-`src/` (pak/bsp/md2 parsers, loader, session, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
+`src/` (pak/bsp/md2 parsers, loader, session, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
 tools), `public/` (page, the retired service worker, the pak goes in `public/pak/`), `docs/`.
 
 ## Commands
@@ -33,6 +33,7 @@ npm run test:input                    # the page's input as the usercmd: keys, m
 npm run test:console                  # the console line headless: the page's commands, player_command, history, Tab
 npm run test:settings                 # the settings: defaults, storage round trip, bad stored values back to defaults
 npm run test:session                  # the game without the page: maps, tics, the frame, slots, levels left and come back to
+npm run test:effects                  # the temporary entities: explosions, beams, the tongue, flashes, their lights and how they draw
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
