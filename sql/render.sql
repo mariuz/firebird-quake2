@@ -57,7 +57,8 @@ BEGIN
   -- the eye's leaf: the one found for this position last frame, else a walk of the tree
   SELECT c.lv_leaf FROM viewcfg c WHERE c.id = 1 AND c.lv_ex = :ex AND c.lv_ey = :ey AND c.lv_ez = :ez INTO leaf;
   IF (leaf IS NULL) THEN leaf = point_leaf(ex, ey, ez);
-  SELECT l.pvs, l.cluster FROM leaves l WHERE l.id = :leaf INTO pvs, cluster;
+  SELECT l.cluster FROM leaves l WHERE l.id = :leaf INTO cluster;
+  SELECT c.pvs FROM clusters c WHERE c.id = :cluster INTO pvs;
   IF (pvs IS NULL) THEN pvs = '';
   IF (cluster IS NULL) THEN cluster = -1;
   SUSPEND;
@@ -212,7 +213,9 @@ BEGIN
       px = x + fx * t; py = y + fy * t; pz = z;
     END
     leaf = point_leaf(px, py, pz + COALESCE(vh, 22));
-    SELECT l.cluster, l.area, l.pvs FROM leaves l WHERE l.id = :leaf INTO cl, ar, pvs;
+    SELECT l.cluster, l.area FROM leaves l WHERE l.id = :leaf INTO cl, ar;
+    pvs = NULL;
+    SELECT c.pvs FROM clusters c WHERE c.id = :cl INTO pvs;
     IF (cl >= 0 AND NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.cluster = :cl AND s.area IS NOT DISTINCT FROM :ar)) THEN
     BEGIN
       slot = NULL; k = 0;
@@ -523,19 +526,19 @@ BEGIN
   -- (CL_AddPacketEntities, V_AddLight): a rocket flying past the view lights the wall in front.
   kind = 2;
   FOR SELECT e.id, e.model_id, e.frame, e.skin, e.effects, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.alpha, e.renderfx, e.mkind
-        FROM ents e CROSS JOIN leaves l
-       WHERE l.id = :vleaf AND e.mkind IN ('M', 'S') AND e.id <> :pe
+        FROM ents e
+       WHERE e.mkind IN ('M', 'S') AND e.id <> :pe
          AND (BIN_AND(e.effects, 216) <> 0
               OR (e.x * :fx + e.y * :fy + e.z * :fz - :ef + e.mradius + 64 >= :nearz
                   AND e.x * :nrx + e.y * :nry + e.z * :nrz - :enr + (e.mradius + 64) * :qx >= 0
                   AND e.x * :nlx + e.y * :nly + e.z * :nlz - :enl + (e.mradius + 64) * :qx >= 0
                   AND e.x * :ntx + e.y * :nty + e.z * :ntz - :ent + (e.mradius + 64) * :qy >= 0
                   AND e.x * :nbx + e.y * :nby + e.z * :nbz - :enb + (e.mradius + 64) * :qy >= 0))
-         AND (l.pvs = ''
+         AND (:pvs = ''
               OR ((e.cluster IS NULL OR e.cluster < 0) AND e.cl2 IS NULL AND e.cl3 IS NULL)
-              OR (e.cluster >= 0 AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cluster, 3))) <> 0)
-              OR (e.cl2 IS NOT NULL AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cl2, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cl2, 3))) <> 0)
-              OR (e.cl3 IS NOT NULL AND BIN_AND(POSITION(SUBSTRING(l.pvs FROM BIN_SHR(e.cl3, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cl3, 3))) <> 0))
+              OR (e.cluster >= 0 AND BIN_AND(POSITION(SUBSTRING(:pvs FROM BIN_SHR(e.cluster, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cluster, 3))) <> 0)
+              OR (e.cl2 IS NOT NULL AND BIN_AND(POSITION(SUBSTRING(:pvs FROM BIN_SHR(e.cl2, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cl2, 3))) <> 0)
+              OR (e.cl3 IS NOT NULL AND BIN_AND(POSITION(SUBSTRING(:pvs FROM BIN_SHR(e.cl3, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(e.cl3, 3))) <> 0))
          AND (:eflood IS NULL OR e.area IS NULL OR (SELECT f.flood FROM area_flood f WHERE f.area = e.area) = :eflood)
         INTO i1, i2, i3, i4, i5, d1, d2, d3, d4, d5, d6, alpha, rfx, k
   DO
