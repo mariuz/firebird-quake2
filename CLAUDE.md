@@ -35,6 +35,7 @@ npm run test:settings                 # the settings: defaults, storage round tr
 npm run test:session                  # the game without the page: maps, tics, the frame, slots, levels left and come back to
 npm run test:effects                  # the temporary entities: explosions, beams, the tongue, flashes, their lights and how they draw
 npm run test:audio                    # the sound mix headless: spatialisation, channels, the loops summed per sound, speakers, music
+npm run test:golden                   # the docs screenshots rendered again and compared pixel for pixel (a painter change: regenerate them)
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
@@ -44,8 +45,9 @@ npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring
 
 A change is done when: `sql-check` passes, the three smoke tests, the monsters, walkthrough, entities, save, menu and painter tests say `all good`,
 `screenshot.mjs --compare` reports `differ in 0 of 76800 pixels` on demo1 and demo2 (and the
-viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), `test:browser`
-says `all good` (the page in a real Chromium, served as Pages serves it), and CI is green. Commit messages here are written as
+viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), `test:golden` says
+`all good` (the docs screenshots, pixel for pixel; a painter change on purpose regenerates them in the same
+commit), `test:browser` says `all good` (the page in a real Chromium, served as Pages serves it), and CI is green. Commit messages here are written as
 short stories of what changed and what it measured; keep that.
 
 ## How to measure (do this before optimising anything)
@@ -176,6 +178,8 @@ short stories of what changed and what it measured; keep that.
   A per-frame cache column goes into `SKIP` in `src/savegame.js`; any other new column changes the
   save format (bump `SAVE_VERSION` if old saves must not load).
 - README and docs are updated in the same commit as the change they describe; the docs
-  screenshots are regenerated with `npm run screenshots` when the painter changes visibly.
+  screenshots are regenerated (`node scripts/screenshot.mjs demo1`, `demo2`, `demo3`) when the painter
+  changes, visibly or not: `test:golden` compares them pixel for pixel, so a painter change that leaves
+  them as they were fails CI until they are.
 - Attribution: when an agent wrote a commit, end its message with a `Co-Authored-By:` line naming
   the model that wrote it (the session tells the agent which).

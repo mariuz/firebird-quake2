@@ -118,8 +118,9 @@ jobs:
       - name: The page in a browser, cross-origin isolated (the threaded build)
         run: npm run test:browser -- --coi
 
-      - name: Headless screenshots
-        run: npm run screenshots
+      # The painter's look: the twelve docs screenshots rendered again and compared pixel for pixel
+      - name: The docs screenshots, pixel for pixel
+        run: npm run test:golden
 
       - name: Build site
         run: npm run build
