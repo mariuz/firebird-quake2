@@ -324,6 +324,15 @@ picker). Missing for the rest of the game:
   7.41–7.51 ms against 7.61–8.62 (no slower). The entity test in `frame_all` reads the eye's PVS from
   `view_setup` instead of joining `leaves` for it. `ab-bench` cannot compare across this change (a tree
   from before it has no `clusters` table for the loader to fill).
+  Measured next and rejected: the two low-selectivity indexes, `faces_model` (7393 of demo1's 7905 faces
+  are the world model's) and `leaves_cluster` (2632 leaves share one cluster), made unique by adding the
+  primary key to each. An isolated insert into a fresh table looked twice as fast with `(model_id, id)`,
+  but a map load is a `DELETE` and a reinsert of the same ids, and against that index each reload got
+  slower (302, 398, 576, 997 ms over four loads, twice over; the plain index held at 306–410): a key that
+  meets its own dead entry costs more than a duplicate appended to a chain. Two databases loading
+  alternately in one process, one schema each, six loads: median 1896 ms with the composite indexes
+  against 1830 without. The isolated measurements on this machine also moved by 2× between runs of the
+  same thing; only the two-database A/B is worth believing for a change this size.
 - **Saves and `localStorage`**: done. A save was JSON, uncompressed: a demo3 save carrying two
   levels left was 495 KB, and fifteen slots plus the autosave and the quick slot share an origin's
   ~5 MB. `src/savestore.js` now stores a header line (the map, the comment, the version, which the
