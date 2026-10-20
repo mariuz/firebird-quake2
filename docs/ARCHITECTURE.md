@@ -279,6 +279,8 @@ Brush models (doors, plats, the fan) are the second pass: for each one in the PV
 per view cluster and kept on the row), the model is tested against the frustum as a whole, then
 its faces at its origin (rotated models skip the per-face tests: the painter clips them), as one
 list per model; a model's list is kept on its row with the view stamp and pose it was made for.
+Brush models take no area test: a door straddles two areas and was sent to a client in either
+(`SV_LinkEdict`'s `areanum2`), and the demo maps' one portal each has its door in it.
 
 Alias models and sprites are one cursor whose `WHERE` holds the frustum tests, the PVS test
 (an expression on the eye's leaf row, joined in, over the entity's three cluster columns) and the

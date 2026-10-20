@@ -29,8 +29,11 @@ them.
   `area_flood` (`FloodAreaConnections`) which areas are connected, recomputed when a door opens or
   closes (`door_use_areaportals`) or a `func_areaportal` is used. Marking keeps only the leaves of the
   eye's connected areas, and the entity pass only the entities in them; a change forgets the marked
-  view. Left: a door's own faces are still listed from either side (brush models skip the area test,
-  which keeps a door visible from both areas), and the re-mark a door causes is the usual hitch.
+  view. Brush models skip the area test, so a door is listed from either side: that is Quake 2's
+  own rule by another route (`SV_LinkEdict` gave a door straddling two areas an `areanum2`, and
+  `SV_BuildClientFrame` sent it to a client in either), and each demo map has one portal, its
+  door in it. What the skip costs is a brush model inside the PVS but behind a closed door, listed
+  and then hidden by the door; no pixel. Left: the re-mark a door causes is the usual hitch.
 - **Intermission and the unit's end**: done, as single-player Quake 2 has them. A plain exit is taken
   at once behind the loading plaque; a unit's end (`*` in the map) parks the player at an
   `info_player_intermission`, the world frozen, until fire or jump after five seconds; a `.pcx` exit
