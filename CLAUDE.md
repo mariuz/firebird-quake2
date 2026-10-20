@@ -34,6 +34,7 @@ npm run test:console                  # the console line headless: the page's co
 npm run test:settings                 # the settings: defaults, storage round trip, bad stored values back to defaults
 npm run test:session                  # the game without the page: maps, tics, the frame, slots, levels left and come back to
 npm run test:effects                  # the temporary entities: explosions, beams, the tongue, flashes, their lights and how they draw
+npm run test:audio                    # the sound mix headless: spatialisation, channels, the loops summed per sound, speakers, music
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)

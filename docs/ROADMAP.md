@@ -436,8 +436,10 @@ picker). Missing for the rest of the game:
   player can walk into on the three maps (it fires, the movers it targets move), with the smoke test
   closing a door on a monster and on a barrel as `door_blocked` had it; `test:save` saves, levels left
   and come back to; `test:menu` the menus; `test:painter` the painter's dynamic lights and mip levels.
-  What has no test but the docs screenshots viewed by eye: the painter's look beyond those, and the
-  sound mix.
+  `test:audio` holds the sound mix (`src/audio.js`) to snd_dma.c against a Web Audio that records what it is
+  asked to build: `S_Spatialize`'s fall-off and pan, a one-shot cut by the next on its channel, the loops
+  summed per sound with each side clamped, the speakers, the page hidden, the music's three modes. What has
+  no test but the docs screenshots viewed by eye: the painter's look beyond those.
 - **`firebird-wasm`**: 0.4.0 binds a number in binary where the column is a number (a double
   arrives exactly: the save's mantissa-and-exponent trick is gone) and has `execBatch` (one statement,
   many rows, one call); 0.4.1 runs the batch as one `IBatch` request, and the map load uses it (see
