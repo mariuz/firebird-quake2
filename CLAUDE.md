@@ -53,7 +53,8 @@ short stories of what changed and what it measured; keep that.
   with a counter in every hot routine and prints calls per tic: that is what found a 17 ms-per-tic
   bug that no profile showed.
 - This machine's timings vary by ±50 % between runs. Compare two SQL trees with
-  `node scripts/ab-bench.mjs /tmp/oldsql demo1 [--walk] [--frame [--turn]]`, which loads both into
+  `node scripts/ab-bench.mjs /tmp/oldsql demo1 [--walk] [--frame [--turn] [--sql]] [--at=x,y,z,yaw]` (`--sql`: the
+  SQL-projecting mode's frame), which loads both into
   two in-memory databases and alternates tics, so load noise hits both alike. Make the baseline
   with `for f in schema physics game weapons monsters render; do git show HEAD:sql/$f.sql > /tmp/oldsql/$f.sql; done`
   (the old SQL must still load with the current `src/loader.js`: keep schema-dependent resets in SQL, not in the loader).

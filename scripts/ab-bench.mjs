@@ -1,6 +1,6 @@
 // ab-bench.mjs – A/B two SQL trees on the same machine at the same time: tics alternate between
 // two databases, one loaded from each, so load noise hits both alike.
-//   node scripts/ab-bench.mjs <other-sql-dir> [map] [--tics=N] [--walk] [--frame [--turn]]
+//   node scripts/ab-bench.mjs <other-sql-dir> [map] [--tics=N] [--walk] [--frame [--turn] [--sql]] [--at=x,y,z,yaw]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,8 @@ const N = Number(process.argv.find((a) => a.startsWith('--tics='))?.slice(7) ?? 
 const walk = process.argv.includes('--walk') ? 1 : 0;
 const frame = process.argv.includes('--frame');   // time frame_all instead of the tic
 const turn = process.argv.includes('--turn');     // ... with the view turning a little each frame
+const sqlMode = process.argv.includes('--sql');   // ... in the SQL-projecting renderer mode (frame_faces)
+const at = process.argv.find((a) => a.startsWith('--at='))?.slice(5).split(',').map(Number);   // the player put here first
 const pak = new Pak(fs.readFileSync(path.join(root, 'public/pak/pak0.pak')).buffer);
 async function open(dir, name) {
   const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(dir, `${n}.sql`), 'utf8')]));
@@ -22,10 +24,12 @@ async function open(dir, name) {
   await createSchema(db, sql);
   const res = await loadResources(db, pak);
   await loadMap(db, pak, res, map, { skill: 2, seed: 1 });
+  if (at) await db.exec(`UPDATE ents SET x = ${at[0]}, y = ${at[1]}, z = ${at[2]}, yaw = ${at[3] ?? 0}, vx = 0, vy = 0, vz = 0 WHERE id = (SELECT ent_id FROM player)`);
+  if (at) await db.exec('EXECUTE PROCEDURE link_ent((SELECT ent_id FROM player))');
   return db;
 }
 const A = await open(other, 'a'), B = await open(path.join(root, 'sql'), 'b');
-const q = frame ? 'SELECT * FROM frame_all(0, 0, 0, 0)' : `SELECT * FROM q2_tic(1, ${walk}, 0, ${walk ? 3 : 0}, 0, 0, 0, 1, 0)`;
+const q = frame ? `SELECT * FROM frame_all(${sqlMode ? 1 : 0}, 0, 0, 0)` : `SELECT * FROM q2_tic(1, ${walk}, 0, ${walk ? 3 : 0}, 0, 0, 0, 1, 0)`;
 const pre = turn ? 'UPDATE ents SET yaw = yaw + 0.7 WHERE id = (SELECT ent_id FROM player)' : null;
 for (let i = 0; i < 20; i++) { await A.query(q); await B.query(q); }
 const ta = [], tb = [];
