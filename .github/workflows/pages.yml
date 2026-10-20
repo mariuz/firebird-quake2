@@ -101,6 +101,10 @@ jobs:
       - name: The effects
         run: npm run test:effects
 
+      # The sound mix headless: spatialisation, one-shots cut per channel, loops summed per sound, speakers, music
+      - name: The sound mix
+        run: npm run test:audio
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
       # quick save and load, the menu, the retired service worker removing itself, no console

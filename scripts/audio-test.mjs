@@ -1,0 +1,178 @@
+// audio-test.mjs – the sound mix headless (src/audio.js, snd_dma.c): spatialisation as S_Spatialize had it, a
+// one-shot per event cut by the next on its channel, the looped sounds summed per name as S_AddLoopSounds did,
+// the looped speakers on and off, the page hidden and back, and the music: a track file, the drone, off.
+//   node scripts/audio-test.mjs
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Pak } from '../src/pak.js';
+import { Q2Audio } from '../src/audio.js';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const pak = new Pak(fs.readFileSync(process.env.PAK ?? path.join(root, 'public/pak/pak0.pak')).buffer);
+let failed = 0;
+const check = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if (!ok) failed++; };
+const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+// ── a Web Audio that records: every node made, started and stopped, and what it is connected to ──
+const made = [];
+class Param { constructor(v) { this.value = v; this.ramps = []; } linearRampToValueAtTime(v, t) { this.ramps.push(['lin', v, t]); } exponentialRampToValueAtTime(v, t) { this.ramps.push(['exp', v, t]); } setValueAtTime(v, t) { this.ramps.push(['set', v, t]); } cancelScheduledValues() {} }
+class Node { constructor(kind) { this.kind = kind; this.to = null; this.started = false; this.stopped = false; made.push(this); } connect(n) { this.to = n; return n; } disconnect() { this.to = null; } start(when, offset) { this.started = true; this.offset = offset; } stop() { if (this.stopped) throw new Error('stopped twice'); this.stopped = true; } }
+class FakeContext {
+  constructor() { this.state = 'running'; this.currentTime = 10; this.sampleRate = 22050; this.destination = new Node('destination'); this.decoded = 0; this.resumed = 0; this.suspended = 0; }
+  createGain() { const n = new Node('gain'); n.gain = new Param(1); return n; }
+  createBufferSource() { const n = new Node('source'); n.buffer = null; n.loop = false; return n; }
+  createStereoPanner() { const n = new Node('panner'); n.pan = new Param(0); return n; }
+  createOscillator() { const n = new Node('osc'); n.type = 'sine'; n.frequency = new Param(440); n.detune = new Param(0); return n; }
+  createBiquadFilter() { const n = new Node('filter'); n.type = 'lowpass'; n.frequency = new Param(350); n.Q = new Param(1); return n; }
+  createBuffer(channels, length, rate) { return { duration: length / rate, getChannelData: () => new Float32Array(length) }; }
+  async decodeAudioData(bytes) { this.decoded++; return { duration: 1.5, bytes: bytes.byteLength }; }
+  async resume() { this.resumed++; this.state = 'running'; }
+  async suspend() { this.suspended++; this.state = 'suspended'; }
+}
+globalThis.window = { AudioContext: FakeContext };
+globalThis.location = { href: 'http://localhost/' };
+globalThis.fetch = async () => ({ ok: false });   // no music/trackNN files are served
+
+/** Walk a source's chain: [gain, panner|null, destination node]. */
+const chain = (src) => { const g = src.to, p = g?.to?.kind === 'panner' ? g.to : null, out = (p ?? g)?.to; return { g, p, out }; };
+const sources = () => made.filter((n) => n.kind === 'source');
+const started = () => sources().filter((n) => n.started && !n.stopped);
+
+const audio = new Q2Audio();
+audio.setPak(pak);
+const L = { x: 0, y: 0, z: 0, yaw: 0 };   // the listener: at the origin, facing +x (right is -y, as Quake's AngleVectors has it)
+
+// ── spatialisation (S_Spatialize) ──
+audio.listener = L;
+check(audio.spatialize(50, 0, 0, 1).gain === 1 && audio.spatialize(79, 0, 0, 1).gain === 1, 'full volume within 80 units');
+check(near(audio.spatialize(580, 0, 0, 1).gain, 0.5), 'ATTN_NORM: half way to silence 500 units past that (dist_mult 0.001)');
+check(audio.spatialize(1080, 0, 0, 1).gain === 0 && audio.spatialize(5000, 0, 0, 1).gain === 0, 'and silent from 1080 units');
+check(near(audio.spatialize(580, 0, 0, 2).gain, 0) && near(audio.spatialize(330, 0, 0, 2).gain, 0.5), 'ATTN_IDLE (2) falls off twice as fast');
+check(audio.spatialize(5000, 0, 0, 0).gain === 1 && audio.spatialize(5000, 0, 0, 0).pan === 0, 'ATTN_NONE is heard everywhere, in the middle');
+check(audio.spatialize(null, null, null, 1).gain === 1, 'a sound from nowhere (a local sound) is full and centred');
+check(near(audio.spatialize(0, -100, 0, 1).pan, 0.8) && near(audio.spatialize(0, 100, 0, 1).pan, -0.8), 'to the right pans right (0.8), to the left left');
+check(near(audio.spatialize(100, 0, 0, 1).pan, 0) && near(audio.spatialize(-100, 0, 0, 1).pan, 0), 'ahead and behind are centred');
+audio.listener = { x: 0, y: 0, z: 0, yaw: 90 };
+check(near(audio.spatialize(100, 0, 0, 1).pan, 0.8), 'turned to +y, a sound at +x is on the right');
+check(near(audio.spatialize(0, 0, 100, 1).pan, 0) && near(audio.spatialize(0, 0, 200, 1).gain, 1 - 120 * 0.001), 'straight up is centred and attenuated by its height');
+audio.listener = L;
+
+// ── one-shots (S_StartSound): nothing before the context exists, then a source per event ──
+const BLAST = 'weapons/blastf1a.wav', MENU = 'misc/menu1.wav', FLY = 'weapons/rockfly.wav', HUM = 'weapons/rg_hum.wav';
+check([BLAST, MENU, FLY, HUM].every((n) => pak.has('sound/' + n)), 'the sounds the test uses are in the pak');
+const ev = (id, ent, chan, name, vol, attn, x, y, z) => [id, 0, ent, chan, name, vol, attn, x, y, z];
+await audio.playEvents([ev(1, 5, 1, BLAST, 1, 1, 10, 0, 0)], L);
+check(audio.ctx === null && made.length === 0, 'before a gesture unlocks the context, nothing plays and nothing is made');
+audio.unlock();
+check(audio.ctx instanceof FakeContext && audio.master.gain.value === 0.7 && audio.master.to === audio.ctx.destination, 'unlock makes the context, the master gain at the volume, into the destination');
+audio.setVolume(0.4);
+check(audio.master.gain.value === 0.4, 'the volume setting moves the master gain');
+made.length = 0;
+await audio.playEvents([ev(1, 5, 1, BLAST, 1, 1, 0, -200, 0)], L);
+let s = started();
+let c = chain(s[0]);
+check(s.length === 1 && s[0].buffer === await audio.buffer(BLAST) && near(c.g.gain.value, 1 - 120 * 0.001) && near(c.p.pan.value, 0.8) && c.out === audio.master,
+  `a blaster shot 200 to the right: one source, gain ${c.g.gain.value.toFixed(3)}, pan 0.8, through the master`);
+await audio.playEvents([ev(2, 5, 1, BLAST, 0.5, 1, 0, 0, 0)], L);
+check(s[0].stopped && started().length === 1 && near(chain(started()[0]).g.gain.value, 0.5), 'the next sound on the same entity and channel cuts it; the volume scales the gain');
+const before = started().length;
+await audio.playEvents([ev(3, 5, 0, MENU, 1, 0, null, null, null), ev(4, 5, 0, MENU, 1, 0, null, null, null)], L);
+check(started().length === before + 2, 'channel 0 (CHAN_AUTO) never cuts: two more play beside each other');
+await audio.playEvents([ev(5, 7, 1, BLAST, 1, 1, 3000, 0, 0)], L);
+check(started().length === before + 2, 'a sound out of range makes no source');
+await audio.playEvents([ev(6, 7, 1, 'nope/missing.wav', 1, 1, 0, 0, 0)], L);
+check(started().length === before + 2 && (await audio.buffer('nope/missing.wav')) === null, 'a sound not in the pak is skipped');
+const decoded = audio.ctx.decoded;
+await audio.playEvents([ev(7, 8, 2, BLAST, 1, 1, 0, 0, 0), ev(8, 9, 2, BLAST, 1, 1, 0, 0, 0)], L);
+check(audio.ctx.decoded === decoded, 'a sound is decoded once and the buffer kept');
+made.length = 0;
+audio.playLocal(MENU);
+await tick(); await tick();
+c = chain(started()[0]);
+check(started().length === 1 && c.g.gain.value === 1 && c.p.pan.value === 0, 'a local sound (the menus) is full and centred');
+
+// ── looped sounds (S_AddLoopSounds): one channel per name, the entities summed ──
+made.length = 0;
+audio.setLoops([[FLY, 50, 0, 0]]);
+audio.update(L);
+await tick(); await tick();
+let loop = audio.loops.get(FLY);
+check(audio.loops.size === 1 && loop.src?.loop === true && loop.src.started && loop.src.offset >= 0 && loop.src.offset < 1.5, 'a rocket in flight: one looped source, started somewhere in the sound');
+audio.update(L);
+check(near(loop.gain.gain.value, 1) && near(loop.pan.pan.value, 0), 'within 80 units it is full and centred');
+audio.setLoops([[FLY, 0, -200, 0]]);
+audio.update(L);
+const g1 = loop.gain.gain.value;
+check(near(g1, 1 - 120 * 0.003) && near(loop.pan.pan.value, 0.8), `200 units to the right: ATTN_STATIC's fall-off (${g1.toFixed(3)}), panned right`);
+audio.setLoops([[FLY, 0, -200, 0], [FLY, 0, 200, 0]]);
+audio.update(L);
+check(audio.loops.size === 1 && near(loop.gain.gain.value, 2 * g1) && near(loop.pan.pan.value, 0), 'two rockets with the same sound share the channel: their gains add, their pans cancel');
+audio.setLoops(Array.from({ length: 6 }, () => [FLY, 10, 0, 0]));
+audio.update(L);
+check(near(loop.gain.gain.value, 2), 'six on top of the listener: each side clamped at full scale (gain 2, left plus right)');
+audio.setLoops([[FLY, 50, 0, 0], [HUM, 50, 0, 0]]);
+audio.update(L);
+await tick(); await tick();
+check(audio.loops.size === 2 && audio.loops.get(HUM).src?.loop, 'a second sound gets a channel of its own');
+audio.setLoops([[HUM, 50, 0, 0]]);
+audio.update(L);
+check(loop.gain.gain.value === 0 && audio.loops.get(HUM).gain.gain.value > 0 && !loop.src.stopped, 'a loop no frame lists goes silent, its channel kept for the next time');
+audio.setLoops([[FLY, 2000, 0, 0]]);
+audio.update(L);
+check(loop.gain.gain.value === 0, 'out of range, silent');
+
+// ── looped speakers: mixed with the loops at ATTN_STATIC, on and off with the frame ──
+audio.setLoops([]);
+audio.setSpeakers([[41, 30, 0, 0, FLY, 1], [42, 0, 0, 0, HUM, 0]]);
+audio.update(L);
+check(near(loop.gain.gain.value, 1) && audio.loops.get(HUM).gain.gain.value === 0, 'a speaker that is on plays its loop; one that is off does not');
+audio.setSpeakersOn([42]);
+audio.update(L);
+check(loop.gain.gain.value === 0 && near(audio.loops.get(HUM).gain.gain.value, 1), 'the frame turns speakers on and off');
+audio.setSpeakers([]);
+
+// ── the page hidden and back ──
+audio.setLoops([[FLY, 10, 0, 0]]);
+audio.update(L);
+audio.suspend(true);
+check(audio.ctx.suspended === 1 && audio.loopRows.length === 0 && loop.gain.gain.value === 0, 'hidden: the context suspends and the loops fall silent');
+audio.suspend(false);
+check(audio.ctx.resumed >= 1, 'shown again: the context resumes');
+audio.stopLoops();
+check(loop.src.stopped && audio.loops.size === 0, 'stopLoops ends every looped source');
+
+// ── music ──
+made.length = 0;
+audio.setMusicMode('off');
+await audio.playMusic(9);
+check(audio.music === null && made.length === 0, 'music off: nothing');
+audio.setMusicMode('synth');
+await audio.playMusic(9);
+let oscs = made.filter((n) => n.kind === 'osc');
+check(audio.music?.kind === 'synth' && oscs.length >= 5 && oscs.every((o) => o.started), `the drone: ${oscs.length} oscillators playing`);
+const token = audio.music;
+await audio.playMusic(9);
+check(audio.music === token, 'the same track again does not restart');
+await audio.playMusic(10);
+check(audio.music !== token && audio.music?.kind === 'synth', 'another track replaces it');
+audio.stopMusic();
+check(audio.music === null, 'stopMusic ends it');
+audio.setMusicMode('tracks');
+made.length = 0;
+await audio.playMusic(9);
+check(audio.music?.kind === 'synth', 'in tracks mode with no track file to be had, the drone stands in');
+const wav = new File([new Uint8Array(64)], 'Track09.mp3');
+audio.setMusicFiles([wav, new File([new Uint8Array(8)], 'readme.txt')]);
+await tick(); await tick(); await tick();
+check(audio.musicFiles.size === 1 && audio.musicFiles.has('track09'), 'a picked folder: trackNN files by number, case aside, the rest ignored');
+const track = sources().find((n) => n.loop && n.to === audio.musicGain && n.started && !n.stopped);
+check(audio.music?.kind === 'track' && !!track, 'the track file plays looped into the music gain');
+audio.setMusicVolume(0.25);
+check(audio.musicGain.gain.value === 0.25, 'the music volume moves the music gain');
+audio.setMusicMode('off');
+check(track.stopped && audio.music === null, 'music off stops the track');
+
+console.log(failed ? `${failed} failure(s)` : 'all good');
+process.exit(failed ? 1 : 0);
