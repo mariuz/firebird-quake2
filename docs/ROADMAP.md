@@ -24,7 +24,10 @@ them.
   when the unit returns to it (`importLevel`, `SV_ReadLevelFile`), the player put in afresh at the spawn point
   it came in by; a unit's end, a new game or a loaded game forgets them. The levels live in the page's memory,
   not in the saved game. Powerups running when a level is left stop there, as `PutClientInServer` cleared them
-  (they used to run on for as long as the old level's clock had left them).
+  (they used to run on for as long as the old level's clock had left them). The health comes along: Quake 2's
+  `SaveClientData` kept each client's health, max health and god or notarget flags in its pers at a level's
+  exit and `PutClientInServer` gave them back at the next (`save_client_data`, run by the session's `leave`;
+  the port used to start every level at a hundred). A new game's are fresh.
 - **Area portals**: done. The BSP's areas and portals are tables; `portal_state` says which are open,
   `area_flood` (`FloodAreaConnections`) which areas are connected, recomputed when a door opens or
   closes (`door_use_areaportals`) or a `func_areaportal` is used. Marking keeps only the leaves of the

@@ -191,11 +191,14 @@ check(session.coop && ps.length === 2 && ps[1].X === before[1].X && ps[1].Y === 
   'a loaded save brings both clients back where they were, with what they had');
 check((await q('SELECT id FROM coop_respawn')).length === 2 && (await one('SELECT coop FROM game')).COOP === 1, 'and the respawn copies and the coop flag');
 
-// ── a level change carries both ──
+// ── a level change carries both, each with the health it left with ──
+await db.exec(`UPDATE ents SET health = 55 WHERE id = ${p2.ENT_ID}`);
+const h1 = (await players())[0].HEALTH;
 const to = await session.leave('demo2$base1');
 await session.startMap('demo2', { skill: 2, spawnpoint: to.spawn });
 ps = await players();
 check(ps.length === 2 && ps.every((p) => p.CLASSNAME === 'player'), 'the next level has both clients');
+check(ps[1].HEALTH === 55 && ps[0].HEALTH === h1 && h1 < 100, `each with the health it left with (${ps[0].HEALTH}, ${ps[1].HEALTH})`);
 check(Math.abs(ps[1].Y - 2232) < 1 && [828, 876].some((x) => Math.abs(ps[1].X - x) < 1), `the second at the coop spot named by the exit (base1: ${ps[1].X.toFixed(0)},${ps[1].Y.toFixed(0)})`);
 check(ps[1].KEYS === 0 && ps[1].WEAPONS === 3, 'its pers come along (the shotgun; keys do not carry over)');
 await session.tic(idle, idle);

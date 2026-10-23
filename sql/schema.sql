@@ -473,6 +473,9 @@ CREATE TABLE player (
   bob_z           DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- the view's bob this tic: height, pitch and roll
   bob_pitch       DOUBLE PRECISION DEFAULT 0 NOT NULL,
   bob_roll        DOUBLE PRECISION DEFAULT 0 NOT NULL,
+  pers_health     INTEGER DEFAULT 100 NOT NULL,          -- pers.health, max_health and savedFlags (god, notarget): what SaveClientData kept at a
+  pers_max_health INTEGER DEFAULT 100 NOT NULL,          --   level's exit for PutClientInServer to give back at the next level
+  pers_flags      INTEGER DEFAULT 0 NOT NULL,
   anim_priority   SMALLINT DEFAULT 0 NOT NULL,           -- G_SetClientFrame: 0 basic 1 wave 2 jump 3 pain 4 attack 5 death (what the other player sees)
   anim_end        INTEGER DEFAULT 0 NOT NULL,            -- the frame the run started ends at
   anim_duck       SMALLINT DEFAULT 0 NOT NULL,

@@ -1398,7 +1398,7 @@ BEGIN
            p.max_bullets = 200, p.max_shells = 100, p.max_rockets = 50, p.max_grenades = 50, p.max_cells = 200, p.max_slugs = 50,
            p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
            p.silencer_shots = 0, p.kills = 0, p.inv_quad = 0, p.inv_invuln = 0, p.inv_silencer = 0, p.inv_breather = 0, p.inv_enviro = 0,
-           p.inv_screen = 0, p.inv_shield = 0, p.inv_sel = 7;
+           p.inv_screen = 0, p.inv_shield = 0, p.inv_sel = 7, p.pers_health = 100, p.pers_max_health = 100, p.pers_flags = 0;
   END
   UPDATE player p SET p.weaponframe = 0, p.attack_finished = 0, p.attack_start = 0, p.pain_finished = 0, p.punchangle = 0, p.view_ofs = 22, p.dmg_take = 0, p.dmg_save = 0,
          p.dmg_time = -10, p.bonus_time = -10, p.pickup_item = 0, p.pickup_time = 0, p.msg = NULL, p.msg_time = 0, p.cprint = NULL, p.cprint_time = 0, p.dead_time = 0, p.pitch = 0, p.stepz = 0,

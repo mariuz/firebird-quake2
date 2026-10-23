@@ -2590,13 +2590,15 @@ END^
 -- PutClientInServer: the client's entity afresh at a spawn point: the box, the model, the health it brings
 -- (pers.health), alive, whatever stood there telefragged (KillBox); the client row's per-level fields cleared
 -- (the pers stay: a level change or a coop respawn settles those before calling)
-CREATE OR ALTER PROCEDURE put_client_in_server (pe INTEGER, x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION, hp INTEGER, mhp INTEGER)
+CREATE OR ALTER PROCEDURE put_client_in_server (pe INTEGER, x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION, hp INTEGER, mhp INTEGER, pflags INTEGER = 0)
 AS
 DECLARE v INTEGER;
 BEGIN
+  -- (pers.health <= 0 would be a client that died on the way: InitClientPersistant's fresh hundred)
+  IF (hp IS NULL OR hp <= 0) THEN BEGIN hp = 100; mhp = 100; END
   UPDATE ents e SET e.classname = 'player', e.x = :x, e.y = :y, e.z = :z + 1, e.yaw = :yaw, e.pitch = 0, e.roll = 0, e.vx = 0, e.vy = 0, e.vz = 0,
          e.minx = -16, e.miny = -16, e.minz = -24, e.maxx = 16, e.maxy = 16, e.maxz = 32, e.viewheight = 22,
-         e.solid = 3, e.movetype = 3, e.clipmask = 33619971, e.health = :hp, e.max_health = :mhp, e.takedamage = 2, e.mass = 200, e.flags = 0, e.anim = 'stand',
+         e.solid = 3, e.movetype = 3, e.clipmask = 33619971, e.health = :hp, e.max_health = :mhp, e.takedamage = 2, e.mass = 200, e.flags = BIN_AND(:pflags, 16 + 64), e.anim = 'stand',
          e.deadflag = 0, e.effects = 0, e.renderfx = 0, e.frame = 0, e.skin = 0, e.waterlevel = 0, e.watertype = 0, e.alpha = 0, e.teleport_time = now_() + 0.7e0
    WHERE e.id = :pe;
   EXECUTE PROCEDURE set_model(pe, 'players/male/tris.md2');
@@ -2643,13 +2645,26 @@ END^
 CREATE OR ALTER PROCEDURE client_begin (pid SMALLINT, spawnpoint VARCHAR(40))
 AS
 DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+DECLARE php INTEGER; DECLARE pmh INTEGER; DECLARE pfl INTEGER;
 BEGIN
   IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = :pid)) THEN INSERT INTO player (id) VALUES (:pid);
   EXECUTE PROCEDURE coop_spawn_point(pid, spawnpoint) RETURNING_VALUES x, y, z, yaw;
   IF (x IS NULL) THEN EXIT;
   EXECUTE PROCEDURE spawn_ent('player', x, y, z) RETURNING_VALUES pe;
   UPDATE player p SET p.ent_id = :pe WHERE p.id = :pid;
-  EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, 100, 100);
+  SELECT p.pers_health, p.pers_max_health, p.pers_flags FROM player p WHERE p.id = :pid INTO php, pmh, pfl;
+  EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, php, pmh, pfl);
+END^
+
+-- SaveClientData: at a level's exit, each client's health, max health and god or notarget flags go to its
+-- pers, which PutClientInServer gives back at the next level (the inventory already lives on the row)
+CREATE OR ALTER PROCEDURE save_client_data
+AS
+BEGIN
+  UPDATE player p SET p.pers_health = (SELECT e.health FROM ents e WHERE e.id = p.ent_id),
+         p.pers_max_health = (SELECT e.max_health FROM ents e WHERE e.id = p.ent_id),
+         p.pers_flags = (SELECT BIN_AND(e.flags, 16 + 64) FROM ents e WHERE e.id = p.ent_id)
+   WHERE p.ent_id IS NOT NULL AND EXISTS (SELECT 1 FROM ents e WHERE e.id = p.ent_id);
 END^
 
 -- InitClientResp: the respawn copy of every client's pers as the level begins (coop_respawn = pers)
@@ -2720,6 +2735,7 @@ DECLARE a DOUBLE PRECISION; DECLARE b DOUBLE PRECISION; DECLARE c DOUBLE PRECISI
 DECLARE skillbit INTEGER; DECLARE wmodel INTEGER; DECLARE startid INTEGER;
 DECLARE n1 VARCHAR(64); DECLARE n2 VARCHAR(64); DECLARE n3 VARCHAR(64);
 DECLARE minp DOUBLE PRECISION; DECLARE maxp DOUBLE PRECISION; DECLARE miny_ DOUBLE PRECISION; DECLARE maxy_ DOUBLE PRECISION;
+DECLARE php INTEGER; DECLARE pmh INTEGER; DECLARE pfl INTEGER;
 BEGIN
   t0 = now_();
   skillbit = CASE skill WHEN 0 THEN 256 WHEN 1 THEN 512 ELSE 1024 END;
@@ -2773,9 +2789,11 @@ BEGIN
     IF (cls = 'info_player_start') THEN
     BEGIN
       IF (mid <> startid) THEN BEGIN DELETE FROM ents e WHERE e.id = :eid; CONTINUE; END
-      -- the first client's entity is the start itself (ClientBegin's PutClientInServer, here with the map)
+      -- the first client's entity is the start itself (ClientBegin's PutClientInServer, here with the map), with
+      -- the health and the flags its pers kept from the level before (SaveClientData; a new game's are fresh)
       UPDATE player p SET p.ent_id = :eid WHERE p.id = 1;
-      EXECUTE PROCEDURE put_client_in_server(eid, ox, oy, oz, COALESCE(ang, 0), 100, 100);
+      SELECT p.pers_health, p.pers_max_health, p.pers_flags FROM player p WHERE p.id = 1 INTO php, pmh, pfl;
+      EXECUTE PROCEDURE put_client_in_server(eid, ox, oy, oz, COALESCE(ang, 0), php, pmh, pfl);
     END
     -- ── doors ──
     ELSE IF (cls IN ('func_door', 'func_water')) THEN
