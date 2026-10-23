@@ -121,6 +121,19 @@ check(readPad(null) === null, 'no pad reads as null');
   check(c[1] === 1 && c[3] === -7 && c[7] === 1 && c[8] === 12 && inp.menuPressed, 'the pad moves, turns at the keyboard\'s speed, runs at the stick\'s edge, changes weapon, and Start asks for the menu');
   c = cmd();
   check(c[8] === 0 && !inp.menuPressed, 'held on, the bumper and Start count no more');
+  // coop: the pad is the second player's command, read apart; the keys stay the first's
+  inp.clear(); inp.key('KeyW');
+  pads = [pad([0, 0, 0, 1], [BUTTON.A, BUTTON.LB])];
+  c = inp.read(1, settings, { pad: false });
+  const c2 = inp.readPad(1, settings);
+  check(c[1] === 1 && c[3] === 0 && c[6] === 0 && c[8] === 0, `read without the pad is the keys alone: [${c.join(', ')}]`);
+  check(c2[1] === 0 && c2[4] === 5 && c2[6] === 1 && c2[7] === 0 && c2[8] === 13, `readPad is the pad alone: looks down, jumps, the previous weapon [${c2.join(', ')}]`);
+  pads = [pad([0, 0, 0, 0], [BUTTON.START])];
+  inp.read(1, settings, { pad: false });
+  check(inp.menuPressed, 'the pad\'s Start still asks for the menu');
+  pads = [];
+  inp.read(1, settings, { pad: false });
+  check(inp.readPad(1, settings).join(',') === '1,0,0,0,0,0,0,0,0', 'without a pad the second player\'s command does nothing');
 }
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }

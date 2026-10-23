@@ -113,11 +113,16 @@ export class Input {
     canvas.addEventListener('touchend', (e) => { for (const t of e.changedTouches) this.touchEnd(t.identifier); e.preventDefault(); }, { passive: false });
   }
 
-  /** One tic's command. `tics` is how many the frame owes; the turning keys and sticks scale with it. */
-  read(tics, settings) {
+  /**
+   * One tic's command. `tics` is how many the frame owes; the turning keys and sticks scale with it. The
+   * pad is read here (once a frame) and merged in, unless `pad` is false: then it is the second player's,
+   * read by readPad after this.
+   */
+  read(tics, settings, { pad: usePad = true } = {}) {
     const k = (c) => this.keys.has(c);
-    const pad = this.pollPad();
-    this.menuPressed = !!pad && pad.pressed.has(BUTTON.START);
+    const polled = this.pollPad();
+    this.menuPressed = !!polled && polled.pressed.has(BUTTON.START);
+    const pad = usePad ? polled : null;
     if (pad) { const pi = padImpulse(pad); if (pi) this.impulse = pi; }
     let fwd = (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0);
     let side = (k('KeyD') || k('Period') ? 1 : 0) - (k('KeyA') || k('Comma') ? 1 : 0);
@@ -147,5 +152,17 @@ export class Input {
     const imp = this.impulse;
     this.impulse = 0;
     return [tics, fwd, side, yaw, pitch, fire, jump, run, imp];
+  }
+
+  /**
+   * The pad alone as a tic's command, for a coop game's second player: the pad read by this frame's read()
+   * (call after it). Without a pad, a command that does nothing.
+   */
+  readPad(tics, settings) {
+    const pad = this.pad.last;
+    if (!pad) return [tics, 0, 0, 0, 0, 0, 0, settings.alwaysRun ? 1 : 0, 0];
+    const yaw = pad.turn * TURN * tics * settings.sensitivity / 7;
+    const pitch = pad.look * LOOK * tics * settings.sensitivity / 7 * (settings.invertMouse ? -1 : 1);
+    return [tics, pad.fwd, pad.side, yaw, pitch, pad.fire ? 1 : 0, (pad.jump ? 1 : 0) - (pad.crouch ? 1 : 0), settings.alwaysRun || pad.run ? 1 : 0, padImpulse(pad)];
   }
 }

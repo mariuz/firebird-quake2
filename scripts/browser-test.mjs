@@ -112,6 +112,26 @@ try {
     await page.keyboard.press('Escape'); await sleep(500);
     const m3 = await frames(page); await sleep(700); const m4 = await frames(page);
     assert(m4 > m3, `Escape again closes it and the game goes on (${m4 - m3} frames in 0.7 s)`);
+
+    // two players: the players select starts a new coop game; both clients come with every tic, the screen is
+    // split in two views half as high, the game runs on; then one player again, the whole screen
+    const state = () => page.evaluate(() => ({ coop: window.quake2?.session?.coop, clients: window.quake2?.session?.clients?.length,
+      views: window.quake2?.renderer?.views, h: window.quake2?.renderer?.h, screenH: window.quake2?.renderer?.screenH, canvasH: document.getElementById('screen').height })).catch(() => ({}));
+    await page.selectOption('#players', '2');
+    let two = {};
+    for (let i = 0; i < 240 && !(two.coop === true && two.clients === 2 && two.views === 2); i++) { await sleep(250); two = await state(); }
+    assert(two.coop === true && two.clients === 2 && two.views === 2, `two players: a new coop game with both clients and a split view (${JSON.stringify(two)})`);
+    assert(two.h * 2 === two.screenH && two.screenH === two.canvasH, `each view is half the screen (${two.h} of ${two.screenH})`);
+    const c1 = await frames(page); await sleep(700); const c2 = await frames(page);
+    assert(c2 > c1, `the coop game runs on (${c2 - c1} frames in 0.7 s)`);
+    await page.keyboard.press('Escape'); await sleep(500);
+    assert((await state()).views === 1, 'the menu over a coop game takes the whole screen');
+    await page.keyboard.press('Escape'); await sleep(700);
+    assert((await state()).views === 2, 'and the split view comes back with the game');
+    await page.selectOption('#players', '1');
+    let one = {};
+    for (let i = 0; i < 240 && !(one.coop === false && one.clients === 1 && one.views === 1); i++) { await sleep(250); one = await state(); }
+    assert(one.coop === false && one.clients === 1 && one.views === 1 && one.h === one.screenH, `one player again: a new single-player game on the whole screen (${JSON.stringify(one)})`);
   }
 
   // a touch screen: the on-screen buttons show, and taps on them and on the view's halves reach the game

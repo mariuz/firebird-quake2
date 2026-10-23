@@ -398,6 +398,15 @@ listed and loaded against a storage object. `src/main.js` holds one and does wha
 canvas, the sound, the status line, the keys and the menus' host. `scripts/session-test.mjs` drives a
 `Session` headless through the same calls.
 
+A coop game (the Players select, or the game menu's players spin, for the next new game; a save remembers)
+is two clients on one page: the keys, the mouse and the touches are the first player's command, the gamepad
+alone the second's (`Input.read(…, { pad: false })` and `Input.readPad`), both sent with the tic; the frame
+is asked for twice (`frame({ client })`), the sounds and effects with the first (the first player is the
+listener), and the painter draws each view half as high into a screen split along the middle
+(`Renderer.setSize(w, h, 2)`, `present(…, view)`; the SQL's `viewcfg` is the half-height view, the fov being
+horizontal). The menus and the pause take the whole screen again. The help computer and the inventory are
+the page's keys', so the first player's; the particles are run once a frame and drawn in both views.
+
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
 brightness, renderer mode, sound, music) persist in `localStorage`. Input (`src/input.js`, an `Input`

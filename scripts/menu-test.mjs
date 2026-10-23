@@ -50,12 +50,20 @@ draw();
 const easy = drawn.find(([k, s]) => k === 'str' && s === 'easy');
 assert(easy && easy[2] === 160 - 16 && !easy[4], `its items are left-justified at the centre less 16, in the plain font (easy at ${easy?.[2]})`);
 keys('ArrowDown', 'ArrowDown', 'ArrowDown');
-assert(menu.current.cursor === 4, `the cursor steps over the blank line to load game (${menu.current.cursor})`);
-keys('ArrowUp', 'ArrowUp', 'Enter');
+assert(menu.current.cursor === 4, `the cursor steps over the blank line to the players spin (${menu.current.cursor})`);
+draw();
+assert(drawn.some(([k, s]) => k === 'str' && s === 'one'), 'the players spin shows one player');
+keys('ArrowRight');
+assert(settings.coop === true, 'turned, it asks the host for a coop game');
+keys('ArrowLeft');
+assert(settings.coop === false, 'and back for one player');
+keys('ArrowDown');
+assert(menu.current.cursor === 6, `the cursor steps over the next blank line to load game (${menu.current.cursor})`);
+keys('ArrowUp', 'ArrowUp', 'ArrowUp', 'Enter');
 assert(calls.includes('new 1') && !menu.active, 'medium starts a new game at skill 1 and puts the menu away');
 
 // load and save
-menu.mainCursor = 0; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
+menu.mainCursor = 0; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
 assert(menu.current.id === 'load', 'load game opens the fifteen slots');
 draw();
 const lines = drawn.filter(([k]) => k === 'str').map(([, s, , y]) => [s, y]);
@@ -63,7 +71,7 @@ assert(lines.length === 15 && lines[0][0] === 'ENTERING Outer Base' && lines[1][
   'the autosave first, ten units further apart than the rest, the empty slots <EMPTY>');
 keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
 assert(calls.includes('load 3') && !menu.active, 'a slot with a game loads it');
-menu.mainCursor = 0; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
+menu.mainCursor = 0; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
 assert(menu.current.id === 'save' && menu.current.items.length === 14 && menu.current.cursor === 2, `save game lists slots 1-14, its cursor following the load menu's (${menu.current.cursor})`);
 keys('Enter');
 assert(calls.includes('save 3'), 'and saves into the slot chosen');

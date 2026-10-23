@@ -292,8 +292,11 @@ picker). Missing for the rest of the game:
   g_func.c now; the ships are unseen until their trigger uses them.
 - **Cutscenes**: the intro and the unit transitions are cinematics (`.cin`); a level exit naming one
   skips it and goes on to the map after its `+` (`src/levels.js`).
-- **Coop**: the game side is done, as p_client.c and g_items.c had it, for two local clients (there is no
-  networking; the page's part, a second view and the gamepad as the second player's controls, is next). A
+- **Coop**: done for two local clients (there is no networking), as p_client.c and g_items.c had it. The page's
+  part: the Players select or the game menu's players spin starts a coop game, the screen split in two views
+  (each half as high, the SQL's view with it), the keyboard, mouse and touches the first player's command and
+  the gamepad alone the second's, the frame asked for per view, the sounds with the first (the listener), the
+  menus over the whole screen; a save brings its players back. The game side: a
   `player` row per client, found by its entity (`p.ent_id = :pe`: every routine that reads or writes the
   client does so for the edict it has in hand, as `ent->client` did); `init_map(…, coop)` puts the second
   client in at its `info_player_coop` (`SelectCoopSpawnPoint`: the ones named by the exit's spawnpoint, in
@@ -309,9 +312,10 @@ picker). Missing for the rest of the game:
   the level with (`coop_respawn`, taken by `InitClientResp` at each level start; the keys found since kept)
   and a teleport's effect. Messages go to the client they are for (`cprint(pe, …)`), the kill count to the
   killer's row, a level change and a save carry both clients. `test:coop` checks all of it, and that single
-  player is as it was: one row, the same tic. Left for the page: a split view, the second player's HUD and
-  input, the menus (a "coop" new game), the obituaries Quake printed in coop. Not done: the power cube's
-  per-client count (the full game's), the trail (`p_trail.c` is single player's: it follows the first client).
+  player is as it was: one row, the same tic; the browser test starts a coop game on the page and sees the
+  split view. Left: the obituaries Quake printed in coop, the power cube's per-client count (the full
+  game's), the trail (`p_trail.c` is single player's: it follows the first client), and the second player's
+  help computer and inventory screen (the page's keys are the first's).
 
 ## Engineering
 

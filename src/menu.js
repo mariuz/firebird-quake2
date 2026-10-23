@@ -178,17 +178,24 @@ export class Menu {
     this.push({ id: 'main', draw, key });
   }
 
-  /** M_Menu_Game_f: easy, medium, hard; load game, save game (the credits are left out) */
+  /**
+   * M_Menu_Game_f: easy, medium, hard; load game, save game (the credits are left out). The players spin
+   * is this port's: a new game at a skill is for one player, or two in coop (the view split, the gamepad
+   * the second's), which Quake 2 reached through its network menu.
+   */
   game() {
-    const start = (skill) => () => { this.off(); this.host.newGame(skill); };
+    const h = this.host;
+    const start = (skill) => () => { this.off(); h.newGame(skill); };
     const m = this.framework({
       id: 'game', banner: 'm_banner_game', items: [
         action('easy', 0, start(0), { left: true }),
         action('medium', 10, start(1), { left: true }),
         action('hard', 20, start(2), { left: true }),
         separator(),
-        action('load game', 40, () => this.loadMenu(), { left: true }),
-        action('save game', 50, () => this.saveMenu(), { left: true }),
+        spin('players', 40, ['one', 'two (coop)'], () => (h.get('coop') ? 1 : 0), (v) => h.set('coop', !!v)),
+        separator(),
+        action('load game', 60, () => this.loadMenu(), { left: true }),
+        action('save game', 70, () => this.saveMenu(), { left: true }),
       ],
     });
     m.layout = (r) => { m.x = r.w >> 1; m.y = (r.h - (m.items[m.items.length - 1].y + 10)) >> 1; };
