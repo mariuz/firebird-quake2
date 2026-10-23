@@ -6,7 +6,7 @@
 export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
-  renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, crosshair: 1 });
+  renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, crosshair: 1, coop: false });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1 });
@@ -33,6 +33,7 @@ const CHECK = {
   alwaysRun: bool, invertMouse: bool,
   sensitivity: num(1, 20),
   crosshair: int(0, 3),
+  coop: bool,            // a new game with two players: the view split, the gamepad the second's
 };
 
 /** The settings as stored, each checked; anything missing, unknown or out of its range is its default. */

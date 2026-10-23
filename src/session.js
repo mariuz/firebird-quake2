@@ -215,6 +215,7 @@ export class Session {
     this.unitLevels.clear();
     const setup = await this.startMap(save.map, { skill, faceVerts });
     await importSave(this.db, save);
+    this.coop = (await this.db.query('SELECT coop FROM game')).rows[0]?.COOP === 1;   // the save's game, one player's or two
     for (const [name, lv] of savedLevels(save)) this.unitLevels.set(name, lv);
     await this.loadStyleBase();
     await this.resetEvents();

@@ -44,6 +44,10 @@ npm run bench:raster   # where the painter spends its time (add --cold to rebuil
 npm run inspect        # what is in the pak (maps, models and their frame runs, sounds)
 ```
 
+Two can play: the Players select (or the game menu's players spin) starts a coop game, the screen split in
+two views, the keyboard and mouse the first player's and a gamepad the second's, as `p_client.c` had coop
+(the demo pak has no player model, so the other player is unseen until a registered pak supplies it).
+
 `fetch-pak` needs 7-Zip or `unzip` to open the demo's self-extracting archive. If you own Quake 2, point
 the page at your own `pak0.pak` with the file picker, or copy it with `PAK=/path/to/pak0.pak npm run fetch-pak`:
 the base unit's maps and monsters work the same way.

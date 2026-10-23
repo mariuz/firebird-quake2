@@ -131,10 +131,10 @@ const menu = new Menu({
 /** A setting changed from a menu: through the page's own control where there is one, so both agree. */
 function setSetting(k, v) {
   const control = { sfx: ['sfxvol', 'input'], musicMode: ['music', 'change'], alwaysRun: ['run', 'change'], renderer: ['renderer', 'change'],
-    detail: ['detail', 'change'], brightness: ['brightness', 'change'] }[k];
+    detail: ['detail', 'change'], brightness: ['brightness', 'change'], coop: ['players', 'change'] }[k];
   if (control) {
     const el = $(control[0]);
-    el.value = k === 'alwaysRun' ? (v ? '1' : '0') : String(v);
+    el.value = k === 'alwaysRun' ? (v ? '1' : '0') : k === 'coop' ? (v ? '2' : '1') : String(v);
     el.dispatchEvent(new Event(control[1]));
   } else if (k === 'fullscreen') {
     if (v && !document.fullscreenElement) canvas.requestFullscreen?.().catch(() => {});
@@ -156,7 +156,7 @@ const cmdline = $('cmdline');
 const con = new Console({
   get db() { return db; }, get pak() { return pak; }, settings, saveSettings, setStatus,
   startMap: (name) => startMap(name, true),
-  setView: (fov) => setView(db, viewWidth(), viewHeight(), fov),
+  setView: (fov) => applyView(fov),
   saveGame: () => saveGame(), loadGame: () => loadGame(),
   toggleInventory: () => { showInv = !showInv; showHelp = false; },
   isRunning: () => running,
@@ -205,7 +205,7 @@ async function loadGame(key = QUICK_KEY) {
     beginMap();
     setStatus('Loading the saved game…');
     // the map's geometry and models afresh, then the saved rows, then the unit's other levels as the save left them
-    mapLoaded(await session.loadSave(save, { skill: settings.skill, faceVerts: settings.renderer === 'sql' }));
+    await mapLoaded(await session.loadSave(save, { skill: settings.skill, faceVerts: settings.renderer === 'sql' }));
     setStatus('Game loaded');
     setTimeout(() => { if (statusEl.textContent === 'Game loaded') setStatus(''); }, 2000);
     lastTic = performance.now();
@@ -236,11 +236,24 @@ if (touchBar) {
   }
 }
 
-/** One tic's command from the input; the pad's Start is the page's Escape. */
+/**
+ * One tic's commands from the input: the first player's (the keys, the mouse, the touches, and the pad in
+ * single player) and, in coop, the second's (the pad alone); the pad's Start is the page's Escape either way.
+ */
 function readInput(tics) {
-  const cmd = input.read(tics, settings);
+  const cmd = input.read(tics, settings, { pad: !session.coop });
   if (input.menuPressed) escape();
-  return cmd;
+  return [cmd, session.coop ? input.readPad(tics, settings) : null];
+}
+
+/**
+ * The view's size for the SQL's frustum (viewcfg) and the painter: the whole screen for one player, the
+ * screen split along the middle for two (each view half as high; Quake's fov is horizontal, so the same fov).
+ */
+async function applyView(fov = settings.fov) {
+  const views = session?.coop ? 2 : 1;
+  await setView(db, viewWidth(), Math.floor(viewHeight() / views), fov);
+  if (renderer) renderer.setSize(viewWidth(), viewHeight(), views);
 }
 
 // ── maps ─────────────────────────────────────────────────────────────────
@@ -252,8 +265,9 @@ function beginMap() {
   showInv = false;
 }
 /** A map is in (session.startMap's setup): the renderer and the sound set up from it. */
-function mapLoaded(setup) {
+async function mapLoaded(setup) {
   map = session.map;
+  await applyView();          // one view or two, as the game (a new one, or a save) has players
   renderer.setResources(res);
   renderer.particles = [];
   tempEnts.clear();
@@ -271,8 +285,9 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   if (newGame) helpSeen = 0;
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
-  // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on
-  mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql' }));
+  // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on; a new
+  // game has the players the setting says (one, or two in coop), a level change keeps the game's
+  await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...(newGame ? { coop: settings.coop } : {}) }));
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);
   setStatus('');
   if (autosave) {
@@ -302,8 +317,10 @@ async function frame() {
     if (pad && pad.pressed.size && anyKey) { const go = anyKey; anyKey = null; go(); }
     else if (pad && menu.active) { const mk = padMenuKeys(pad, input.pad.stick); input.pad.stick = mk.stick; for (const key of mk.keys) menu.key(key); }
     else if (pad && paused && pad.pressed.has(BUTTON.START)) paused = false;
-    if (menu.active && renderer && last && !document.hidden) { drawFrame(null, [], new Float32Array(64), last.TIME_); menu.draw(renderer, performance.now()); renderer.present(); }
-    else if (paused && renderer && last) { drawFrame(null, [], new Float32Array(64), last.TIME_); hud.drawCenter(renderer, 'paused', 80); renderer.present(); }
+    // (the menus and the pause take the whole screen, a split one too: one view, drawn again full size)
+    if (renderer && renderer.views !== 1) renderer.setSize(viewWidth(), viewHeight(), 1);
+    if (menu.active && renderer && last && !document.hidden) { drawFrame(0, last, null, [], new Float32Array(64), last.TIME_); menu.draw(renderer, performance.now()); renderer.present(); }
+    else if (paused && renderer && last) { drawFrame(0, last, null, [], new Float32Array(64), last.TIME_); hud.drawCenter(renderer, 'paused', 80); renderer.present(); }
     nextFrame();
     return;
   }
@@ -314,7 +331,10 @@ async function frame() {
     if (now - lastTic > 200) lastTic = now;
 
     let t = performance.now();
-    last = await session.tic(readInput(tics));
+    const [cmd, cmd2] = readInput(tics);
+    last = await session.tic(cmd, cmd2);
+    // (a new map began loading while the tic ran: this frame is the old map's, and its tables are going)
+    if (!running) { nextFrame(); return; }
     if (showInv) invItems = await session.inventory();
     perf.tic = performance.now() - t;
 
@@ -326,13 +346,18 @@ async function frame() {
     if (await session.takeLoadRequest()) openMenu(() => menu.loadMenu());
 
     t = performance.now();
-    // one round trip, decoded (FRAME_ALL in sql/render.sql, decodeFrame in src/session.js)
-    const f = await session.frame({ sqlRenderer: settings.renderer === 'sql' });
+    // one round trip, decoded (FRAME_ALL in sql/render.sql, decodeFrame in src/session.js); in coop a second
+    // for the second player's view (the sounds and effects came with the first: the first player is the
+    // listener). The tic's rows say how many clients the game has: a view each.
+    const views = session.clients.length >= 2 ? 2 : 1;
+    if (renderer.views !== views) renderer.setSize(viewWidth(), viewHeight(), views);
+    const f = await session.frame({ sqlRenderer: settings.renderer === 'sql', client: 1 });
+    const f2 = views === 2 ? await session.frame({ sqlRenderer: settings.renderer === 'sql', client: 2 }) : null;
+    if (!running) { nextFrame(); return; }
     const { faces, ents, sounds, fx, loops } = f;
-    brushFrames = f.brushFrames; brushAngles = f.brushAngles;
     if (f.speakers) audio.setSpeakersOn(f.speakers);
     perf.faces = performance.now() - t;
-    perf.rows = faces.length;
+    perf.rows = faces.length + (f2?.faces.length ?? 0);
     const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
     if (sounds.length) audio.playEvents(sounds, listener);
     audio.setLoops(loops);
@@ -340,7 +365,13 @@ async function frame() {
     if (fx.length) tempEnts.add(fx, last.TIME_, renderer);
 
     t = performance.now();
-    drawFrame(faces, ents, f.styles, last.TIME_, tics * 0.05);
+    renderer.runParticles(tics * 0.05, last.TIME_);   // once a frame, whatever the views
+    brushFrames = f.brushFrames; brushAngles = f.brushAngles;
+    drawFrame(0, last, faces, ents, f.styles, last.TIME_, tics * 0.05);
+    if (f2) {
+      brushFrames = f2.brushFrames; brushAngles = f2.brushAngles;
+      drawFrame(1, session.clients[1] ?? last, f2.faces, f2.ents, f2.styles, last.TIME_, tics * 0.05);
+    }
     perf.draw = performance.now() - t;
     updateStats();
     // the frame's spare time marks the cluster the player is heading into (premark_ahead), so the
@@ -394,7 +425,11 @@ async function endGame() {
   await startMap(session.firstMap(), true);
 }
 
-function drawFrame(faces, ents, styles, time, dt = 0.05) {
+/**
+ * One view painted: `which` is 0 for the top (or whole) screen, 1 for a split screen's bottom; `last` the
+ * client's Q2_TIC row the view belongs to (the page's `last` for the first player).
+ */
+function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   const r = renderer;
   r.dlights = tempEnts.lights(ents, time);
   const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? (last.DEAD ? 40 : 0), fov: settings.fov };
@@ -426,9 +461,9 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
       r.drawSprite(m.spr, Math.floor(time * 10) % Math.max(1, m.spr.frames.length), [x, y, z], 255, effects & 128 ? true : false);
     }
   }
-  // the temporary entities: beams, the parasite's tongue, the explosions (src/effects.js)
+  // the temporary entities: beams, the parasite's tongue, the explosions (src/effects.js); the particles were
+  // run once for the frame
   tempEnts.draw(r, bsp, time);
-  r.runParticles(dt, time);
   r.drawParticles();
   // the weapon in hand (depth hack: drawn over everything near); none at the intermission
   const wp = WEAPONS[last.WEAPON];
@@ -441,12 +476,12 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
       let gr = xys * bfs * 0.005, gy = xys * bfs * 0.01;
       if (Math.floor(bt) & 1) { gr = -gr; gy = -gy; }
       let gp = xys * bfs * 0.005;
-      if (gunPrev) {
+      if (gunPrev[which]) {
         const lag = (a, b) => { let d = a - b; if (d > 180) d -= 360; if (d < -180) d += 360; d *= 0.1 / Math.max(dt, 0.05); return Math.max(-45, Math.min(45, d)); };
-        const dy = lag(gunPrev.yaw, last.YAW);
-        gr += 0.1 * dy; gy += 0.2 * dy; gp += 0.2 * lag(gunPrev.pitch, last.PITCH);
+        const dy = lag(gunPrev[which].yaw, last.YAW);
+        gr += 0.1 * dy; gy += 0.2 * dy; gp += 0.2 * lag(gunPrev[which].pitch, last.PITCH);
       }
-      gunPrev = { yaw: last.YAW, pitch: last.PITCH };
+      gunPrev[which] = { yaw: last.YAW, pitch: last.PITCH };
       // the gun: RF_MINLIGHT, lit from the eye (CL_AddViewWeapon)
       const light = lightPoint(bsp, last.PX, last.PY, last.VIEW_Z);
       r.zb.fill(0, 0, r.w * r.h);
@@ -454,23 +489,21 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
         { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z) });
     }
   }
-  prevPos = { x: last.PX, y: last.PY };
-
   // ... warped (D_WarpScreen) onto the screen; the status bar is drawn over that
   if (underwater) r.warpScreen(time);
 
   // 2D: the status bar (with the help icon blinking while there is news on the help computer; at the
   // intermission too, as SCR_DrawStats drew it over the frozen view with no layout in single player), and the
-  // help computer itself on F1
+  // help computer and the inventory, which are the page's keys', on the first player's view
   last.HELP_ICON = (last.HELP_CHANGED ?? 0) > helpSeen && Math.floor(time * 10) & 8;
   last.FOV = settings.fov;
   last.CROSSHAIR = settings.crosshair;
   hud.draw(r, last, time);
-  if (showHelp) hud.drawHelp(r, last);
-  else if (showInv && !last.DEAD) hud.drawInventory(r, invItems, last.INV_SEL, performance.now() / 1000);
+  if (which === 0 && showHelp) hud.drawHelp(r, last);
+  else if (which === 0 && showInv && !last.DEAD) hud.drawInventory(r, invItems, last.INV_SEL, performance.now() / 1000);
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
   if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
-  if (last.DEAD) hud.drawCenter(r, 'You died\n\npress fire', 60);
+  if (last.DEAD) hud.drawCenter(r, session.coop ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
   // the palette blend: damage, bonus, powerups, water
   let tint = null;
   const since = time - last.DMG_TIME;
@@ -482,10 +515,9 @@ function drawFrame(faces, ents, styles, time, dt = 0.05) {
   else if (last.INVINCIBLE) tint = [255, 255, 0, 0.3];
   else if (last.ENVIRO) tint = [0, 255, 0, 0.2];
   else if (last.WATERLEVEL >= 3) tint = last.WATERTYPE & 8 ? [255, 80, 0, 0.6] : last.WATERTYPE & 16 ? [0, 25, 5, 0.6] : [0, 40, 100, 0.4];
-  r.present(tint);
+  r.present(tint, null, which);
 }
-let prevPos = null;
-let gunPrev = null;     // the view angles of the last frame (the gun's lag)
+const gunPrev = [null, null];     // each view's angles of the last frame (the gun's lag)
 
 let fpsT = performance.now(), fpsN = 0, fps = 0;
 function updateStats() {
@@ -584,8 +616,15 @@ $('map').addEventListener('change', (e) => { settings.map = e.target.value; save
 $('detail').value = settings.detail;
 $('detail').addEventListener('change', async (e) => {
   settings.detail = e.target.value; saveSettings();
-  await setView(db, viewWidth(), viewHeight(), settings.fov);
-  renderer.setSize(viewWidth(), viewHeight());
+  await applyView();
+});
+// the players: one, or two in coop; a change starts a new game with that many (the game cannot gain one midway)
+$('players').value = settings.coop ? '2' : '1';
+$('players').addEventListener('change', (e) => {
+  const coop = e.target.value === '2';
+  if (coop === settings.coop) return;
+  settings.coop = coop; saveSettings();
+  if (map) startMap(map.name, true).catch((err) => setStatus(err.message, true));
 });
 $('renderer').value = settings.renderer;
 $('renderer').addEventListener('change', (e) => { settings.renderer = e.target.value; saveSettings(); });

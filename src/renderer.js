@@ -40,17 +40,25 @@ export class Renderer {
     this.setSize(320, 240);
   }
 
-  setSize(w, h) {
+  /**
+   * The screen is w × h; with `views` 2 it is split in two along the middle and the painter draws one view
+   * at a time into a frame w × h/2 high, which present(…, view) puts on the screen's top or bottom half
+   * (a coop game: each client's view).
+   */
+  setSize(w, h, views = 1) {
+    this.views = views;
+    this.screenH = h;
     this.w = w;
-    this.h = h;
+    this.h = Math.floor(h / views);
     this.canvas.width = w;
     this.canvas.height = h;
-    this.fb = new Uint8Array(w * h);
-    this.zb = new Float32Array(w * h);
-    this.image = this.ctx.createImageData(w, h);
+    this.fb = new Uint8Array(w * this.h);
+    this.zb = new Float32Array(w * this.h);
+    this.image = this.ctx.createImageData(w, this.h);
     this.pixels = new Uint32Array(this.image.data.buffer);
-    this.edgeL = new Float32Array(h * 5);   // x, iz, sz, tz, light per scanline
-    this.edgeR = new Float32Array(h * 5);
+    this.edgeL = new Float32Array(this.h * 5);   // x, iz, sz, tz, light per scanline
+    this.edgeR = new Float32Array(this.h * 5);
+    this.warpTab = null;
   }
 
   /** The model registry (loader.js's res.models) and the world's faces. */
@@ -925,8 +933,11 @@ export class Renderer {
     }
   }
 
-  /** Convert palette indices to pixels, with a colour blend; `palette24` (768 bytes) overrides the game's palette. */
-  present(tint = null, palette24 = null) {
+  /**
+   * Convert palette indices to pixels, with a colour blend; `palette24` (768 bytes) overrides the game's palette.
+   * `view` is which part of a split screen this frame is (0 the top).
+   */
+  present(tint = null, palette24 = null, view = 0) {
     let pal = this.palette;
     if (palette24) {
       pal = this.picPal ?? (this.picPal = new Uint32Array(256));
@@ -944,7 +955,7 @@ export class Renderer {
     }
     const { fb, pixels } = this;
     for (let i = 0; i < fb.length; i++) pixels[i] = p[fb[i]];
-    this.ctx.putImageData(this.image, 0, 0);
+    this.ctx.putImageData(this.image, 0, view * this.h);
   }
 }
 
