@@ -2,10 +2,11 @@
 //
 // Left stick moves (forward and strafe, a run past 0.9 of its throw), right stick looks (at the
 // keyboard's turning speed at full throw, scaled by the mouse sensitivity), RT fires, A jumps, B
-// crouches, LB and RB step through the weapons, Start opens the menu. In a menu the d-pad and the
-// left stick move the cursor, A chooses, B goes back. Pure: it takes a Gamepad object (or anything
-// with `axes` and `buttons`) and the previous read, and returns the command and the buttons that
-// went down since, so the page's tests can drive it with plain objects.
+// crouches, LB and RB step through the weapons, the d-pad steps through the inventory (left and
+// right) and uses the selected item (up), Y shows the inventory, Back the help computer, Start opens
+// the menu. In a menu the d-pad and the left stick move the cursor, A chooses, B goes back. Pure: it
+// takes a Gamepad object (or anything with `axes` and `buttons`) and the previous read, and returns
+// the command and the buttons that went down since, so the page's tests can drive it with plain objects.
 
 export const DEAD = 0.2;               // a stick's dead zone, of its throw
 export const RUN_AT = 0.9;             // a stick this far out runs
@@ -55,12 +56,23 @@ export function readPad(pad, prev = new Set()) {
   };
 }
 
-/** The impulses a read asks for: RB the next weapon (12), LB the previous (13); 0 for none. */
+/**
+ * The impulses a read asks for: RB the next weapon (12), LB the previous (13); the d-pad's right and left the
+ * inventory's next and previous (14, 15) and up invuse (13: uses the selected item); 0 for none.
+ */
 export function padImpulse(read) {
   if (!read) return 0;
   if (read.pressed.has(BUTTON.RB)) return 12;
   if (read.pressed.has(BUTTON.LB)) return 13;
+  if (read.pressed.has(BUTTON.RIGHT)) return 14;
+  if (read.pressed.has(BUTTON.LEFT)) return 15;
+  if (read.pressed.has(BUTTON.UP)) return 13;
   return 0;
+}
+
+/** The screens a read toggles: Y the inventory (inven), Back the help computer (F1); each once per press. */
+export function padScreens(read) {
+  return { inventory: !!read && read.pressed.has(BUTTON.Y), help: !!read && read.pressed.has(BUTTON.BACK) };
 }
 
 /** The menu keys a read presses, as key codes the menu takes: d-pad and left stick move, A chooses, B backs out. */

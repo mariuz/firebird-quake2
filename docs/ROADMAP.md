@@ -319,9 +319,10 @@ picker). Missing for the rest of the game:
   tripped on his own grenade.", "player 2 does a back flip into the lava.", "player 1 died." for a monster's
   kill), on every client's message line as `gi.bprintf` put them; Quake carried a means of death through
   `T_Damage`, and here it is read off the kill from the inflictor, the damage flags and the attacker's weapon
-  (see *Damage effects*). Left: the power cube's per-client count (the full game's), the trail (`p_trail.c`
-  is single player's: it follows the first client), and the second player's help computer and inventory
-  screen (the page's keys are the first's).
+  (see *Damage effects*). The gamepad has the inventory and the help computer for the player it drives
+  (the d-pad selects and uses, Y and Back show the screens), so the second player has them too. Left: the
+  power cube's per-client count (the full game's) and the trail (`p_trail.c` is single player's: it
+  follows the first client).
 
 ## Engineering
 

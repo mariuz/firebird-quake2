@@ -8,7 +8,7 @@
 // (menus, the console, the F keys) and hands the rest to key(). Nothing here touches the page's
 // state, so a test can drive it with plain calls.
 
-import { readPad, padImpulse, firstPad, BUTTON, TURN, LOOK } from './gamepad.js';
+import { readPad, padImpulse, padScreens, firstPad, BUTTON, TURN, LOOK } from './gamepad.js';
 
 // default.cfg's keys the browser must not act on itself (scrolling, the menu bar, tabbing away)
 export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
@@ -38,6 +38,7 @@ export class Input {
     this.touch = { move: null, look: null };
     this.pad = { held: new Set(), stick: { x: 0, y: 0 }, last: null };
     this.menuPressed = false;    // the pad's Start went down at the last read
+    this.padScreens = { inventory: false, help: false };   // ... and its Y or Back
     this.getPads = getPads;
     this.now = now;
   }
@@ -122,6 +123,7 @@ export class Input {
     const k = (c) => this.keys.has(c);
     const polled = this.pollPad();
     this.menuPressed = !!polled && polled.pressed.has(BUTTON.START);
+    this.padScreens = padScreens(polled);   // the inventory and help screens the pad's player asked for
     const pad = usePad ? polled : null;
     if (pad) { const pi = padImpulse(pad); if (pi) this.impulse = pi; }
     let fwd = (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0);

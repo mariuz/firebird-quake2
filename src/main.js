@@ -68,10 +68,17 @@ function setStatus(msg, isError = false) {
 // src/input.js holds the keys, the mouse, the touches and the pad between tics and reads them as the usercmd
 const input = new Input();
 let anyKey = null;      // a picture screen waiting for a key or a click
-let showHelp = false;   // the help computer (F1)
-let showInv = false;    // the inventory screen (TAB)
-let invItems = [];      // its rows: [itemlist index, count]
-let helpSeen = 0;       // the help_changed count the player has looked at
+// the help computer (F1, or the pad's Back) and the inventory screen (TAB, or the pad's Y), per view: the
+// keys are the first player's, the pad is its player's (the second in coop)
+let showHelp = [false, false];
+let showInv = [false, false];
+let invItems = [[], []];     // the inventory's rows: [itemlist index, count]
+let helpSeen = [0, 0];       // the help_changed count each player has looked at
+/** The help computer or the inventory toggled for player `p` (0 or 1), the other screen put away. */
+function toggleScreen(p, which) {
+  if (which === 'help') { showHelp[p] = !showHelp[p]; showInv[p] = false; const row = session?.clients[p] ?? last; if (row) helpSeen[p] = row.HELP_CHANGED ?? 0; }
+  else { showInv[p] = !showInv[p]; showHelp[p] = false; }
+}
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (anyKey && !e.repeat) { e.preventDefault(); const go = anyKey; anyKey = null; go(); return; }
@@ -83,8 +90,8 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'F2') { e.preventDefault(); openMenu(() => menu.saveMenu()); return; }
   if (e.code === 'F10') { e.preventDefault(); openMenu(() => menu.quitMenu()); return; }
   if (e.code === 'Escape') { e.preventDefault(); escape(); return; }
-  if (e.code === 'F1') { e.preventDefault(); showHelp = !showHelp; showInv = false; if (last) helpSeen = last.HELP_CHANGED ?? 0; }
-  if (e.code === 'Tab') { e.preventDefault(); showInv = !showInv; showHelp = false; }         // inven
+  if (e.code === 'F1') { e.preventDefault(); toggleScreen(0, 'help'); }
+  if (e.code === 'Tab') { e.preventDefault(); toggleScreen(0, 'inventory'); }         // inven
   if (e.code === 'Backquote') { e.preventDefault(); openConsole(); return; }
   if (GAME_KEYS.has(e.code)) e.preventDefault();
   input.key(e.code);   // the movement keys, and the weapon, inventory and item keys as impulses
@@ -101,7 +108,7 @@ function openMenu(push) {
   if (menu.active && document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
 }
 function escape() {
-  if (showHelp || showInv) { showHelp = false; showInv = false; return; }
+  if (showHelp[0] || showInv[0]) { showHelp[0] = false; showInv[0] = false; return; }
   openMenu(() => menu.main());
 }
 // the browser takes Escape to free the mouse, so the page sees the pointer go instead
@@ -158,7 +165,7 @@ const con = new Console({
   startMap: (name) => startMap(name, true),
   setView: (fov) => applyView(fov),
   saveGame: () => saveGame(), loadGame: () => loadGame(),
-  toggleInventory: () => { showInv = !showInv; showHelp = false; },
+  toggleInventory: () => toggleScreen(0, 'inventory'),
   isRunning: () => running,
 });
 function openConsole() {
@@ -243,6 +250,10 @@ if (touchBar) {
 function readInput(tics) {
   const cmd = input.read(tics, settings, { pad: !session.coop });
   if (input.menuPressed) escape();
+  // the pad's Y and Back: the inventory and the help computer of the player the pad drives
+  const padPlayer = session.coop ? 1 : 0;
+  if (input.padScreens.inventory) toggleScreen(padPlayer, 'inventory');
+  if (input.padScreens.help) toggleScreen(padPlayer, 'help');
   return [cmd, session.coop ? input.readPad(tics, settings) : null];
 }
 
@@ -261,8 +272,8 @@ async function applyView(fov = settings.fov) {
 function beginMap() {
   running = false;
   menu.off();
-  showHelp = false;
-  showInv = false;
+  showHelp = [false, false];
+  showInv = [false, false];
 }
 /** A map is in (session.startMap's setup): the renderer and the sound set up from it. */
 async function mapLoaded(setup) {
@@ -282,7 +293,7 @@ async function mapLoaded(setup) {
 }
 async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   beginMap();
-  if (newGame) helpSeen = 0;
+  if (newGame) helpSeen = [0, 0];
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
   // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on; a new
@@ -335,7 +346,7 @@ async function frame() {
     last = await session.tic(cmd, cmd2);
     // (a new map began loading while the tic ran: this frame is the old map's, and its tables are going)
     if (!running) { nextFrame(); return; }
-    if (showInv) invItems = await session.inventory();
+    for (let p = 0; p < session.clients.length; p++) if (showInv[p]) invItems[p] = await session.inventory(p + 1);
     perf.tic = performance.now() - t;
 
     if (last.EXIT_KIND === 1 && last.NEXT_MAP) {
@@ -493,14 +504,14 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   if (underwater) r.warpScreen(time);
 
   // 2D: the status bar (with the help icon blinking while there is news on the help computer; at the
-  // intermission too, as SCR_DrawStats drew it over the frozen view with no layout in single player), and the
-  // help computer and the inventory, which are the page's keys', on the first player's view
-  last.HELP_ICON = (last.HELP_CHANGED ?? 0) > helpSeen && Math.floor(time * 10) & 8;
+  // intermission too, as SCR_DrawStats drew it over the frozen view with no layout in single player), and this
+  // player's help computer or inventory when it is up
+  last.HELP_ICON = (last.HELP_CHANGED ?? 0) > helpSeen[which] && Math.floor(time * 10) & 8;
   last.FOV = settings.fov;
   last.CROSSHAIR = settings.crosshair;
   hud.draw(r, last, time);
-  if (which === 0 && showHelp) hud.drawHelp(r, last);
-  else if (which === 0 && showInv && !last.DEAD) hud.drawInventory(r, invItems, last.INV_SEL, performance.now() / 1000);
+  if (showHelp[which]) hud.drawHelp(r, last);
+  else if (showInv[which] && !last.DEAD) hud.drawInventory(r, invItems[which], last.INV_SEL, performance.now() / 1000);
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
   if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
   if (last.DEAD) hud.drawCenter(r, session.coop ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
