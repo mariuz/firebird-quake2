@@ -3,7 +3,7 @@
 // run, the buttons once per press, the weapons' impulses, and the menu driven by the d-pad, the stick and A/B.
 //   node scripts/input-test.mjs
 
-import { readPad, padImpulse, padMenuKeys, firstPad, axis, DEAD, BUTTON } from '../src/gamepad.js';
+import { readPad, padImpulse, padScreens, padMenuKeys, firstPad, axis, DEAD, BUTTON } from '../src/gamepad.js';
 import { Input, GAME_KEYS } from '../src/input.js';
 
 let failures = 0;
@@ -43,6 +43,10 @@ check(padImpulse(r) === 0, 'held on, it asks nothing more');
 prev = r.held;
 r = readPad(pad([0, 0, 0, 0], [BUTTON.LB]), prev);
 check(padImpulse(r) === 13, 'LB asks for the previous (13)');
+check(padImpulse(readPad(pad([0, 0, 0, 0], [BUTTON.RIGHT]))) === 14 && padImpulse(readPad(pad([0, 0, 0, 0], [BUTTON.LEFT]))) === 15 && padImpulse(readPad(pad([0, 0, 0, 0], [BUTTON.UP]))) === 13,
+  'the d-pad steps through the inventory (right 14, left 15) and uses the selected item (up, invuse 13)');
+const sc = padScreens(readPad(pad([0, 0, 0, 0], [BUTTON.Y])));
+check(sc.inventory && !sc.help && padScreens(readPad(pad([0, 0, 0, 0], [BUTTON.BACK]))).help && !padScreens(null).inventory, 'Y asks for the inventory screen, Back for the help computer, once per press');
 
 // the menu: d-pad keys once per press, the stick once per crossing, A chooses, B backs out
 let stick = { x: 0, y: 0 };
@@ -128,9 +132,9 @@ check(readPad(null) === null, 'no pad reads as null');
   const c2 = inp.readPad(1, settings);
   check(c[1] === 1 && c[3] === 0 && c[6] === 0 && c[8] === 0, `read without the pad is the keys alone: [${c.join(', ')}]`);
   check(c2[1] === 0 && c2[4] === 5 && c2[6] === 1 && c2[7] === 0 && c2[8] === 13, `readPad is the pad alone: looks down, jumps, the previous weapon [${c2.join(', ')}]`);
-  pads = [pad([0, 0, 0, 0], [BUTTON.START])];
+  pads = [pad([0, 0, 0, 0], [BUTTON.START, BUTTON.Y])];
   inp.read(1, settings, { pad: false });
-  check(inp.menuPressed, 'the pad\'s Start still asks for the menu');
+  check(inp.menuPressed && inp.padScreens.inventory && !inp.padScreens.help, 'the pad\'s Start still asks for the menu, and its Y for the inventory screen, whoever it drives');
   pads = [];
   inp.read(1, settings, { pad: false });
   check(inp.readPad(1, settings).join(',') === '1,0,0,0,0,0,0,0,0', 'without a pad the second player\'s command does nothing');

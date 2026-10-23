@@ -404,8 +404,10 @@ alone the second's (`Input.read(…, { pad: false })` and `Input.readPad`), both
 is asked for twice (`frame({ client })`), the sounds and effects with the first (the first player is the
 listener), and the painter draws each view half as high into a screen split along the middle
 (`Renderer.setSize(w, h, 2)`, `present(…, view)`; the SQL's `viewcfg` is the half-height view, the fov being
-horizontal). The menus and the pause take the whole screen again. The help computer and the inventory are
-the page's keys', so the first player's; the particles are run once a frame and drawn in both views.
+horizontal). The menus and the pause take the whole screen again. The help computer and the inventory
+screen are per view: F1 and Tab are the first player's, the pad's Back and Y its player's (the second in
+coop; `Input.padScreens`), its d-pad the inventory's keys (`padImpulse`: invnext, invprev, invuse); the
+particles are run once a frame and drawn in both views.
 
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
