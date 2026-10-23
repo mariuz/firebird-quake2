@@ -103,9 +103,11 @@ them.
   strikes, up to 500 × (1 − √(d/1000)) to everything both the ball and the shooter can see), its
   impact splash over 100 units rather than the blast's 1000, a core hit that is not energy damage,
   and lasers of 10 that carry on through monsters to the wall and reach barrels too. The railgun is
-  no longer marked as energy damage, so armour protects fully against it. The per-cause death
-  messages and the means-of-death bookkeeping are left out on purpose: Quake 2 prints them only in
-  deathmatch and coop, and in single player says "died." and nothing else.
+  no longer marked as energy damage, so armour protects fully against it. The means-of-death bookkeeping
+  (`meansOfDeath`, set by every attack and read at the kill) is left out: Quake 2 printed the per-cause
+  messages only in deathmatch and coop, and in single player said "died." and nothing else. Coop's
+  obituaries (`client_obituary`, since the port has coop) tell the cause from what the kill has in hand
+  instead: the inflictor's class and effect, the damage flags, the attacker's weapon.
 - **Water**: done as far as Quake 2 had it. Bullets that reach water splash at the surface in its
   colour (`TE_SPLASH`), go on under it with twice the spread and leave a bubble trail
   (`TE_BUBBLETRAIL`), as `fire_lead` did; the splash colours are `cl_tent.c`'s (`target_splash`'s
@@ -313,9 +315,13 @@ picker). Missing for the rest of the game:
   and a teleport's effect. Messages go to the client they are for (`cprint(pe, …)`), the kill count to the
   killer's row, a level change and a save carry both clients. `test:coop` checks all of it, and that single
   player is as it was: one row, the same tic; the browser test starts a coop game on the page and sees the
-  split view. Left: the obituaries Quake printed in coop, the power cube's per-client count (the full
-  game's), the trail (`p_trail.c` is single player's: it follows the first client), and the second player's
-  help computer and inventory screen (the page's keys are the first's).
+  split view. The obituaries are `ClientObituary`'s, in coop ("player 2 was blasted by player 1.", "player 1
+  tripped on his own grenade.", "player 2 does a back flip into the lava.", "player 1 died." for a monster's
+  kill), on every client's message line as `gi.bprintf` put them; Quake carried a means of death through
+  `T_Damage`, and here it is read off the kill from the inflictor, the damage flags and the attacker's weapon
+  (see *Damage effects*). Left: the power cube's per-client count (the full game's), the trail (`p_trail.c`
+  is single player's: it follows the first client), and the second player's help computer and inventory
+  screen (the page's keys are the first's).
 
 ## Engineering
 

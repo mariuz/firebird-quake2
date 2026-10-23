@@ -124,6 +124,38 @@ check(session.clients[1].DEAD === 0 && session.clients[1].HEALTH === 100, 'its r
 await db.exec(`EXECUTE PROCEDURE t_damage(${body.ID}, ${p1.ENT_ID}, ${p1.ENT_ID}, 200, 0, 0)`);
 check(!(await one(`SELECT id FROM ents WHERE id = ${body.ID}`)), 'the body gibs when hurt enough (body_die)');
 
+// ── the obituaries (ClientObituary, coop only): every client's message line says who died of what ──
+const msgs = async () => (await q('SELECT msg FROM player ORDER BY id')).map((r) => r.MSG);
+const respawn = async () => { for (let i = 0; i < 22; i++) await session.tic(idle, idle); await session.tic(idle, cmd({ jump: 1 })); };
+const dieOf = async (sql, want) => {
+  await db.exec(sql);
+  const m = await msgs();
+  check(m[0] === want && m[1] === want, `${JSON.stringify(m[0])}`);
+  await respawn();
+};
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${p2.ENT_ID}, ${p2.ENT_ID}, 100000, 0, 34)`, 'player 2 suicides.');
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, 0, 0, 1000, 0, 8)`, 'player 2 cratered.');
+await db.exec(`UPDATE ents SET watertype = 8, waterlevel = 1 WHERE id = ${p2.ENT_ID}`);
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, 0, 0, 1000, 0, 34)`, 'player 2 does a back flip into the lava.');
+await db.exec(`UPDATE ents SET watertype = 32, waterlevel = 3 WHERE id = ${p2.ENT_ID}`);
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, 0, 0, 1000, 0, 34)`, 'player 2 sank like a rock.');
+const mon2 = (await one("SELECT * FROM spawn_monster('soldier', 200)")).ID;
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${mon2}, ${mon2}, 1000, 0, 0)`, 'player 2 died.');
+await db.exec(`DELETE FROM ents WHERE id = ${mon2}`);
+const bolt = (await one(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('bolt', 0, 0, 0) RETURNING_VALUES id; UPDATE ents e SET e.owner_id = ${p1.ENT_ID}, e.effects = 8 WHERE e.id = :id; SUSPEND; END`)).ID;
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${bolt}, ${p1.ENT_ID}, 1000, 0, 4)`, 'player 2 was blasted by player 1.');
+await db.exec(`UPDATE ents SET effects = 64 WHERE id = ${bolt}`);
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${bolt}, ${p1.ENT_ID}, 1000, 0, 4)`, "player 2 was melted by player 1's hyperblaster.");
+await db.exec(`DELETE FROM ents WHERE id = ${bolt}; UPDATE player SET weapon = 4 WHERE id = 1`);
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${p1.ENT_ID}, ${p1.ENT_ID}, 1000, 0, 16)`, "player 2 was blown away by player 1's super shotgun.");
+await db.exec('UPDATE player SET weapon = 512 WHERE id = 1');
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${p1.ENT_ID}, ${p1.ENT_ID}, 1000, 0, 0)`, 'player 2 was railed by player 1.');
+const rk = (await one(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('rocket', 0, 0, 0) RETURNING_VALUES id; UPDATE ents e SET e.owner_id = ${p1.ENT_ID} WHERE e.id = :id; SUSPEND; END`)).ID;
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p1.ENT_ID}, 1000, 0, 1)`, "player 2 almost dodged player 1's rocket.");
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p2.ENT_ID}, 1000, 0, 1)`, 'player 2 blew himself up.');
+await db.exec(`DELETE FROM ents WHERE id = ${rk}; UPDATE player SET weapon = 1 WHERE id = 1`);
+check((await players())[1].DEADFLAG === 0, 'and the client is back in the game after each');
+
 // ── a weapon or a key one client takes stays for the other ──
 ps = await players();
 const sg = await spawnItem('weapon_shotgun', ps[0].X, ps[0].Y, ps[0].Z);
