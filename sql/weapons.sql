@@ -666,7 +666,7 @@ BEGIN
       ELSE UPDATE game g SET g.exit_kind = 3 WHERE g.id = 1;
     END
     UPDATE player p SET p.bobtime = 0, p.bob_z = 0, p.bob_pitch = 0, p.bob_roll = 0, p.ducked = 0 WHERE p.ent_id = :pe AND (p.bob_z <> 0 OR p.bob_pitch <> 0 OR p.bob_roll <> 0 OR p.ducked <> 0);
-    EXECUTE PROCEDURE set_client_frame(pe, 0, 1, 0);        -- the death animation plays out
+    IF (coop = 1) THEN EXECUTE PROCEDURE set_client_frame(pe, 0, 1, 0);        -- the death animation plays out
     EXIT;
   END
 
@@ -1002,8 +1002,8 @@ BEGIN
 
   -- weapon
   EXECUTE PROCEDURE player_fire(pe, fire);
-  -- what the other player sees of this one
-  EXECUTE PROCEDURE set_client_frame(pe, IIF(xys > 0, 1, 0), IIF(BIN_AND(flags, 512) <> 0, 1, 0), ducked2);
+  -- what the other player sees of this one (nobody, in single player: the own model is never drawn)
+  IF (coop = 1) THEN EXECUTE PROCEDURE set_client_frame(pe, IIF(xys > 0, 1, 0), IIF(BIN_AND(flags, 512) <> 0, 1, 0), ducked2);
 END^
 
 SET TERM ; ^

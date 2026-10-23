@@ -130,9 +130,9 @@ DECLARE cur SMALLINT; DECLARE n INTEGER;
 BEGIN
   SELECT p.id FROM game g JOIN player p ON p.ent_id = g.sight_client WHERE g.id = 1 INTO cur;
   cur = COALESCE(cur, 0);
-  SELECT FIRST 1 p.ent_id FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id > :cur AND e.health > 0 AND BIN_AND(e.flags, 64) = 0 ORDER BY p.id INTO n;
-  IF (n IS NULL) THEN
-    SELECT FIRST 1 p.ent_id FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id <= :cur AND e.health > 0 AND BIN_AND(e.flags, 64) = 0 ORDER BY p.id INTO n;
+  -- (the ones after the current first, then round to the start: one cursor, a tic's worth of rows)
+  SELECT FIRST 1 p.ent_id FROM player p JOIN ents e ON e.id = p.ent_id WHERE e.health > 0 AND BIN_AND(e.flags, 64) = 0
+   ORDER BY IIF(p.id > :cur, 0, 1), p.id INTO n;
   UPDATE game g SET g.sight_client = :n WHERE g.id = 1 AND g.sight_client IS DISTINCT FROM :n;
 END^
 
