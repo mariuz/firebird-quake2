@@ -1922,8 +1922,83 @@ BEGIN
   DELETE FROM ents e WHERE e.id = :eid;
 END^
 
--- Killed(): the target's health fell to zero
-CREATE OR ALTER PROCEDURE killed (targ INTEGER, attacker INTEGER)
+-- ClientObituary, in coop (single player prints nothing: the page says "You died"). Quake carried a means of
+-- death through T_Damage; here it is read off the kill: what the inflictor is (a bolt and its effect, a grenade
+-- or a hand grenade, a rocket, the BFG's ball, a barrel, a mover, a trigger), the damage flags (radius, bullet,
+-- energy, no-protection, falling) and the attacker's weapon in hand (the bullets and the rail leave no
+-- projectile). A client is "player 1" or "player 2"; the model is the male's, so "his". The line goes to every
+-- client's message line, as gi.bprintf did.
+CREATE OR ALTER PROCEDURE client_obituary (targ INTEGER, inflictor INTEGER, attacker INTEGER, dflags INTEGER, damage INTEGER)
+AS
+DECLARE me VARCHAR(16); DECLARE who VARCHAR(16); DECLARE icls VARCHAR(40); DECLARE ieff INTEGER; DECLARE wt INTEGER; DECLARE w INTEGER;
+DECLARE msg VARCHAR(80); DECLARE msg2 VARCHAR(40); DECLARE radius SMALLINT;
+BEGIN
+  SELECT 'player ' || p.id FROM player p WHERE p.ent_id = :targ INTO me;
+  IF (me IS NULL) THEN EXIT;
+  SELECT 'player ' || p.id FROM player p WHERE p.ent_id = :attacker INTO who;
+  IF (inflictor > 0) THEN SELECT e.classname, e.effects FROM ents e WHERE e.id = :inflictor INTO icls, ieff;
+  radius = IIF(BIN_AND(dflags, 1) <> 0, 1, 0);
+  msg = NULL; msg2 = '';
+  -- what the world did (no attacker)
+  IF (COALESCE(attacker, 0) = 0 AND COALESCE(inflictor, 0) = 0) THEN
+  BEGIN
+    SELECT e.watertype FROM ents e WHERE e.id = :targ INTO wt;
+    IF (BIN_AND(dflags, 8) <> 0) THEN msg = 'cratered';                                         -- MOD_FALLING
+    ELSE IF (BIN_AND(dflags, 2) <> 0 AND BIN_AND(wt, 8) <> 0) THEN msg = 'does a back flip into the lava';   -- MOD_LAVA
+    ELSE IF (BIN_AND(dflags, 2) <> 0 AND BIN_AND(wt, 16) <> 0) THEN msg = 'melted';           -- MOD_SLIME
+    ELSE IF (BIN_AND(dflags, 2) <> 0) THEN msg = 'sank like a rock';                           -- MOD_WATER
+  END
+  ELSE IF (icls IN ('misc_explobox', 'func_explosive')) THEN msg = 'blew up';                  -- MOD_BARREL, MOD_EXPLOSIVE
+  ELSE IF (icls = 'target_laser') THEN msg = 'saw the light';                                  -- MOD_TARGET_LASER
+  ELSE IF (icls IN ('trigger_hurt', 'misc_viper_bomb', 'target_explosion', 'target_splash')) THEN msg = 'was in the wrong place';   -- MOD_TRIGGER_HURT, MOD_BOMB, MOD_SPLASH
+  ELSE IF (icls IN ('func_door', 'func_door_rotating', 'func_plat', 'func_train', 'func_rotating', 'func_object', 'func_water', 'func_door_secret')) THEN msg = 'was squished';   -- MOD_CRUSH
+  -- what the client did to himself
+  ELSE IF (attacker = targ) THEN
+  BEGIN
+    IF (BIN_AND(dflags, 34) = 34 AND damage >= 100000) THEN msg = 'suicides';                   -- MOD_SUICIDE (the kill command)
+    ELSE IF (icls = 'hgrenade') THEN msg = 'tripped on his own grenade';                        -- MOD_HG_SPLASH
+    ELSE IF (icls = 'grenade') THEN msg = 'tripped on his own grenade';                         -- MOD_G_SPLASH
+    ELSE IF (icls = 'rocket') THEN msg = 'blew himself up';                                     -- MOD_R_SPLASH
+    ELSE IF (icls = 'bfg_ball') THEN msg = 'should have used a smaller gun';                    -- MOD_BFG_BLAST
+    ELSE msg = 'killed himself';
+  END
+  IF (msg IS NOT NULL) THEN
+  BEGIN
+    EXECUTE PROCEDURE sprint(NULL, me || ' ' || msg || '.');
+    EXIT;
+  END
+  -- what the other client did (a weapon's message, with his name)
+  IF (who IS NOT NULL) THEN
+  BEGIN
+    SELECT p.weapon FROM player p WHERE p.ent_id = :attacker INTO w;
+    IF (icls = 'bolt' AND BIN_AND(ieff, 64) <> 0) THEN BEGIN msg = 'was melted by'; msg2 = '''s hyperblaster'; END   -- MOD_HYPERBLASTER
+    ELSE IF (icls = 'bolt') THEN msg = 'was blasted by';                                                               -- MOD_BLASTER
+    ELSE IF (BIN_AND(dflags, 16) <> 0 AND w = 4) THEN BEGIN msg = 'was blown away by'; msg2 = '''s super shotgun'; END   -- MOD_SSHOTGUN
+    ELSE IF (BIN_AND(dflags, 16) <> 0 AND w = 16) THEN BEGIN msg = 'was cut in half by'; msg2 = '''s chaingun'; END   -- MOD_CHAINGUN
+    ELSE IF (BIN_AND(dflags, 16) <> 0 AND w = 8) THEN msg = 'was machinegunned by';                                    -- MOD_MACHINEGUN
+    ELSE IF (BIN_AND(dflags, 16) <> 0) THEN msg = 'was gunned down by';                                                -- MOD_SHOTGUN
+    ELSE IF (icls = 'grenade' AND radius = 1) THEN BEGIN msg = 'was shredded by'; msg2 = '''s shrapnel'; END            -- MOD_G_SPLASH
+    ELSE IF (icls = 'grenade') THEN BEGIN msg = 'was popped by'; msg2 = '''s grenade'; END                              -- MOD_GRENADE
+    ELSE IF (icls = 'hgrenade' AND radius = 1) THEN BEGIN msg = 'didn''t see'; msg2 = '''s handgrenade'; END           -- MOD_HG_SPLASH
+    ELSE IF (icls = 'hgrenade') THEN BEGIN msg = 'caught'; msg2 = '''s handgrenade'; END                               -- MOD_HANDGRENADE
+    ELSE IF (icls = 'rocket' AND radius = 1) THEN BEGIN msg = 'almost dodged'; msg2 = '''s rocket'; END                 -- MOD_R_SPLASH
+    ELSE IF (icls = 'rocket') THEN BEGIN msg = 'ate'; msg2 = '''s rocket'; END                                          -- MOD_ROCKET
+    ELSE IF (icls = 'bfg_ball' AND radius = 1) THEN BEGIN msg = 'was disintegrated by'; msg2 = '''s BFG blast'; END     -- MOD_BFG_BLAST
+    ELSE IF (icls = 'bfg_ball' AND damage <= 10) THEN BEGIN msg = 'saw the pretty lights from'; msg2 = '''s BFG'; END   -- MOD_BFG_LASER
+    ELSE IF (icls = 'bfg_ball') THEN BEGIN msg = 'couldn''t hide from'; msg2 = '''s BFG'; END                          -- MOD_BFG_EFFECT
+    ELSE IF (BIN_AND(dflags, 32) <> 0 AND damage >= 100000) THEN BEGIN msg = 'tried to invade'; msg2 = '''s personal space'; END   -- MOD_TELEFRAG
+    ELSE IF (w = 512 AND inflictor = attacker) THEN msg = 'was railed by';                                             -- MOD_RAILGUN
+    IF (msg IS NOT NULL) THEN
+    BEGIN
+      EXECUTE PROCEDURE sprint(NULL, me || ' ' || msg || ' ' || who || msg2 || '.');
+      EXIT;
+    END
+  END
+  EXECUTE PROCEDURE sprint(NULL, me || ' died.');
+END^
+
+-- Killed(): the target's health fell to zero (the inflictor, the damage and its flags for the obituary)
+CREATE OR ALTER PROCEDURE killed (targ INTEGER, attacker INTEGER, inflictor INTEGER = NULL, dflags INTEGER = 0, damage INTEGER = 0)
 AS
 DECLARE cls VARCHAR(40); DECLARE flags INTEGER; DECLARE hp INTEGER; DECLARE gh INTEGER; DECLARE k INTEGER;
 BEGIN
@@ -1943,6 +2018,7 @@ BEGIN
     k = CAST(FLOOR(rnd() * 3) AS INTEGER);
     UPDATE player p SET p.anim_priority = 5, p.anim_end = IIF(p.ducked = 1, 177, CASE :k WHEN 0 THEN 183 WHEN 1 THEN 189 ELSE 197 END) WHERE p.ent_id = :targ;
     UPDATE ents e SET e.frame = IIF((SELECT p.ducked FROM player p WHERE p.ent_id = :targ) = 1, 172, CASE :k WHEN 0 THEN 177 WHEN 1 THEN 183 ELSE 189 END) WHERE e.id = :targ;
+    IF ((SELECT g.coop FROM game g WHERE g.id = 1) = 1) THEN EXECUTE PROCEDURE client_obituary(targ, inflictor, attacker, dflags, damage);
     IF (hp < -40) THEN
     BEGIN
       EXECUTE PROCEDURE snd(targ, 2, 'misc/udeath.wav', 1, 1);
@@ -2109,7 +2185,7 @@ BEGIN
       IF (hp < -40) THEN BEGIN EXECUTE PROCEDURE gib_ent(targ, take); UPDATE ents e SET e.model_id = NULL WHERE e.id = :targ; END
       EXIT;
     END
-    EXECUTE PROCEDURE killed(targ, attacker);
+    EXECUTE PROCEDURE killed(targ, attacker, inflictor, dflags, damage);
     EXIT;
   END
   IF (cls = 'player') THEN
