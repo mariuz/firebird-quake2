@@ -156,7 +156,8 @@ them.
   `inven`. The status bar is `single_statusbar`: the selected item bottom right, the item just picked up
   (icon and name, three seconds) in place of a message, one powerup timer with its seconds, the help icon
   (or the weapon's when the fov hides the gun), the power armour flashing with the armour; keys show in the
-  inventory, as in Quake 2. Pickups as single player had them: a new weapon (or the first grenades) is
+  inventory, as in Quake 2, the power cube with its count (each cube taken is one, each door wanting one
+  spends one; see *Coop* for the bits that tell them apart). Pickups as single player had them: a new weapon (or the first grenades) is
   raised at once, a weapon already held is taken for its ammo, a picked-up usable item becomes the
   selection, and an item's targets fire the first time it is touched even when it stays. Left: the
   silencer and the power shield have no key of their own here (`s` and `p` are the page's back and
@@ -323,9 +324,14 @@ picker). Missing for the rest of the game:
   kill), on every client's message line as `gi.bprintf` put them; Quake carried a means of death through
   `T_Damage`, and here it is read off the kill from the inflictor, the damage flags and the attacker's weapon
   (see *Damage effects*). The gamepad has the inventory and the help computer for the player it drives
-  (the d-pad selects and uses, Y and Back show the screens), so the second player has them too. Left: the
-  power cube's per-client count (the full game's) and the trail (`p_trail.c` is single player's: it
-  follows the first client).
+  (the d-pad selects and uses, Y and Back show the screens), so the second player has them too. The full
+  game's power cubes are per client as g_items.c had them: `SpawnItem` gives each cube a spawnflag bit of
+  its own (256 on, up to eight a level), `Pickup_Key` counts a client's cubes (`player.power_cubes`, the
+  inventory's count) and marks which (`cube_mask`, pers.power_cubes), so in coop a client takes each cube
+  once and the cube stays for the other; a `trigger_key` wanting one spends the activator's first cube
+  (`trigger_key_touch`), in coop the same cube from every client that has it, and the key bit goes with
+  the last cube; another key in coop is taken from every client. Left: the trail (`p_trail.c` is single
+  player's: it follows the first client).
 
 ## Engineering
 

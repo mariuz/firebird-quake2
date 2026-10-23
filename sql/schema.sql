@@ -411,7 +411,8 @@ CREATE TABLE player (
   max_slugs       INTEGER DEFAULT 50 NOT NULL,
   weapons         INTEGER DEFAULT 1 NOT NULL,             -- WP_ bits: 1 blaster 2 shotgun 4 sshotgun 8 machinegun 16 chaingun 32 grenades 64 gl 128 rl 256 hyperblaster 512 railgun 1024 bfg
   keys            INTEGER DEFAULT 0 NOT NULL,             -- KEY_ bits: 1 blue 2 red 4 data cd 8 power cube 16 pyramid 32 data spinner 64 pass 128 commander's head 256 airstrike
-  power_cubes     INTEGER DEFAULT 0 NOT NULL,
+  power_cubes     INTEGER DEFAULT 0 NOT NULL,             -- pers.inventory[key_power_cube]: how many cubes are held (keys' bit 8 says any)
+  cube_mask       INTEGER DEFAULT 0 NOT NULL,             -- pers.power_cubes: which ones, by the bit SpawnItem gave each cube (spawnflags 256 …)
   weapon          INTEGER DEFAULT 1 NOT NULL,             -- the WP_ bit of the current weapon
   weaponframe     INTEGER DEFAULT 0 NOT NULL,
   weaponstate     SMALLINT DEFAULT 0 NOT NULL,            -- 0 ready 1 firing 2 changing

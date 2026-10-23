@@ -1396,7 +1396,7 @@ BEGIN
     -- InitClientPersistant, every client
     UPDATE player p SET p.armor = 0, p.armor_type = 0, p.power_armor = 0, p.bullets = 0, p.shells = 0, p.rockets = 0, p.grenades = 0, p.cells = 0, p.slugs = 0,
            p.max_bullets = 200, p.max_shells = 100, p.max_rockets = 50, p.max_grenades = 50, p.max_cells = 200, p.max_slugs = 50,
-           p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
+           p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.cube_mask = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
            p.silencer_shots = 0, p.kills = 0, p.inv_quad = 0, p.inv_invuln = 0, p.inv_silencer = 0, p.inv_breather = 0, p.inv_enviro = 0,
            p.inv_screen = 0, p.inv_shield = 0, p.inv_sel = 7, p.pers_health = 100, p.pers_max_health = 100, p.pers_flags = 0;
   END

@@ -65,6 +65,10 @@ await add('info_notnull', 92, -320, 48, { targetname: 'muz' });
 await add('turret_driver', 60, -280, 40, { target: 'tb' });
 await add('target_spawner', 160, -220, 40, { targetname: 'spw', target: 'misc_explobox' });
 await add('target_spawner', 160, -220, 60, { targetname: 'spw2', target: 'misc_gib_arm', angle: 90, speed: 100 });
+// two power cubes by the start and three doors that each want one (the full game's power cube hunt)
+await add('key_power_cube', 200, -300, 24);
+await add('key_power_cube', 230, -300, 24);
+for (const tn of ['tk1', 'tk2', 'tk3']) await add('trigger_key', 0, 0, 0, { targetname: tn, item: 'key_power_cube' });
 const world = (await q1('SELECT world_model w FROM game')).W;
 await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents');
 await db.exec(`EXECUTE PROCEDURE init_map('demo1', ${world}, 2, 1, NULL)`);
@@ -259,6 +263,24 @@ const near = (a, b) => Math.abs(a - b) < 0.5;
   assert((await q1(`SELECT nextthink nt, enemy_id a FROM ents WHERE id = ${clk.ID}`)).NT === null, 'a timer without MULTI_USE runs once');
   const tod = await q1("SELECT message FROM ents WHERE classname = 'target_string' AND targetname = 'tod'");
   assert(/^[ 0-9][0-9]:[0-9]{2}:[0-9]{2}$/.test(tod.MESSAGE ?? ''), `a clock with no timer flag shows the time of day (${JSON.stringify(tod.MESSAGE)})`);
+}
+
+// ── key_power_cube: a bit of its own per cube (SpawnItem), counted when taken (Pickup_Key), spent one at a time (trigger_key_touch)
+{
+  const cubes = await qa("SELECT id, spawnflags FROM ents WHERE classname = 'key_power_cube' ORDER BY id");
+  assert(cubes.length === 2 && cubes[0].SPAWNFLAGS === 256 && cubes[1].SPAWNFLAGS === 512, `two cubes spawn, each with a bit of its own (${cubes.map((c) => c.SPAWNFLAGS).join(', ')})`);
+  const pl = () => q1(`SELECT keys, power_cubes, cube_mask, inv_count(${pe}, 33) n FROM player WHERE ent_id = ${pe}`);
+  for (const c of cubes) await db.exec(`EXECUTE PROCEDURE item_touch(${c.ID}, ${pe})`);
+  let p = await pl();
+  assert((p.KEYS & 8) === 8 && p.POWER_CUBES === 2 && p.CUBE_MASK === 768 && p.N === 2, `both taken: the key, two cubes counted, both bits held (mask ${p.CUBE_MASK}, inventory ${p.N})`);
+  assert((await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'key_power_cube'")).N === 0, 'in single player a taken cube goes');
+  await use('tk1'); p = await pl();
+  assert((p.KEYS & 8) === 8 && p.POWER_CUBES === 1 && p.CUBE_MASK === 512 && p.N === 1, `a door spends one cube, the first taken; the key stays while one is left (mask ${p.CUBE_MASK})`);
+  await use('tk2'); p = await pl();
+  assert((p.KEYS & 8) === 0 && p.POWER_CUBES === 0 && p.CUBE_MASK === 0 && p.N === 0, 'the second door spends the last: the key is gone');
+  await use('tk3');
+  const m = (await q1(`SELECT cprint FROM player WHERE ent_id = ${pe}`)).CPRINT;
+  assert(m === 'You need the power cube' && (await q1("SELECT COUNT(*) n FROM ents WHERE targetname = 'tk3'")).N === 1, `a third door is not opened without one (${JSON.stringify(m)})`);
 }
 
 console.log(failed ? `${failed} FAILED` : 'all good');
