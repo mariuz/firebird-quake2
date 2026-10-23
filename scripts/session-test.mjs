@@ -111,16 +111,21 @@ check((await playerPos()).TIC === saved.TIC + 1, 'and the loaded game runs on');
 // levels left and come back to: demo1 marked, left for demo2, then demo2 left back for demo1
 const marked = (await db.query('SELECT MIN(id) id FROM ents WHERE mtype IS NOT NULL')).rows[0].ID;
 await db.exec(`UPDATE ents SET health = 1234 WHERE id = ${marked}`);
+// ... the player leaving at 37 health, 101 max (an adrenaline) and in god mode: SaveClientData keeps them for the next level
+await db.exec("UPDATE ents SET health = 37, max_health = 101, flags = BIN_OR(flags, 16) WHERE id = (SELECT ent_id FROM player WHERE id = 1)");
 const toDemo2 = await session.leave('demo2');
 check(toDemo2.kind === 'map' && toDemo2.map === 'demo2' && session.unitLevels.has('demo1'), 'an ordinary exit keeps the level being left');
 await session.startMap('demo2', { skill: 2, spawnpoint: toDemo2.spawn });
 check(session.map.name === 'demo2', 'the next level loads');
+const arrived = (await db.query('SELECT e.health, e.max_health, e.flags FROM ents e WHERE e.id = (SELECT ent_id FROM player WHERE id = 1)')).rows[0];
+check(arrived.HEALTH === 37 && arrived.MAX_HEALTH === 101 && (arrived.FLAGS & 16) !== 0, `the player arrives with the health, max health and god mode it left with (${arrived.HEALTH}/${arrived.MAX_HEALTH}, flags ${arrived.FLAGS})`);
 await session.tic(cmd());
 const back = await session.leave('demo1');
 await session.startMap('demo1', { skill: 2, spawnpoint: back.spawn });
 const health = (await db.query(`SELECT health FROM ents WHERE id = ${marked}`)).rows[0]?.HEALTH;
 check(health === 1234, 'a level of the unit comes back as it was left');
 check(session.unitLevels.has('demo2'), 'and the one just left is kept in its turn');
+check((await db.query('SELECT e.health FROM ents e WHERE e.id = (SELECT ent_id FROM player WHERE id = 1)')).rows[0].HEALTH === 37, 'the player comes back to it with its health too');
 
 // a save carries the unit's other levels
 await session.writeSave(SLOT_KEY(5), 'with levels');
@@ -134,10 +139,12 @@ const end = await session.leave('*demo1');
 const flags = (await db.query('SELECT serverflags FROM game WHERE id = 1')).rows[0].SERVERFLAGS;
 check(end.unitEnd && session.unitLevels.size === 0 && flags === 0, 'a unit\'s end forgets its levels and its flags');
 
-// a new game forgets the unit too
+// a new game forgets the unit too, and starts the player afresh
 session.unitLevels.set('demo2', {});
 await session.startMap('demo1', { newGame: true, skill: 2 });
 check(session.unitLevels.size === 0, 'a new game forgets the unit\'s levels');
+const fresh = (await db.query('SELECT e.health, e.max_health, e.flags FROM ents e WHERE e.id = (SELECT ent_id FROM player WHERE id = 1)')).rows[0];
+check(fresh.HEALTH === 100 && fresh.MAX_HEALTH === 100 && (fresh.FLAGS & 16) === 0, 'and the player has InitClientPersistant\'s hundred, no god mode');
 
 // the death screen's fire asks for the load menu once
 await db.exec('UPDATE game SET exit_kind = 3 WHERE id = 1');

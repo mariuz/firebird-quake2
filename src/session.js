@@ -167,6 +167,8 @@ export class Session {
    */
   async leave(target) {
     const c = parseChangeMap(target);
+    // SaveClientData: the clients' health, max health and god or notarget flags come along to the next level
+    await this.db.exec('EXECUTE PROCEDURE save_client_data');
     if (c.unitEnd) this.unitLevels.clear();
     else if (this.map) this.unitLevels.set(this.map.name, await exportLevel(this.db));
     if (c.unitEnd) await this.db.exec('UPDATE game SET serverflags = 0 WHERE id = 1');

@@ -393,7 +393,8 @@ client's), the frame read in one
 round trip and decoded (`frame`, `decodeFrame`: the faces, the entities, the light styles, the sounds and
 effects not yet played, the brush models' frames and angles, the looped speakers every tenth frame; `client`
 picks whose view), a
-level left (`leave`, which keeps it or, at a unit's end, forgets the unit), and the slots written, read,
+level left (`leave`, which keeps the clients' health and flags for the next level as `SaveClientData` did, then
+keeps the level or, at a unit's end, forgets the unit), and the slots written, read,
 listed and loaded against a storage object. `src/main.js` holds one and does what only a page can: the
 canvas, the sound, the status line, the keys and the menus' host. `scripts/session-test.mjs` drives a
 `Session` headless through the same calls.
