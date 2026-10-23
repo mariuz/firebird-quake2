@@ -292,9 +292,26 @@ picker). Missing for the rest of the game:
   g_func.c now; the ships are unseen until their trigger uses them.
 - **Cutscenes**: the intro and the unit transitions are cinematics (`.cin`); a level exit naming one
   skips it and goes on to the map after its `+` (`src/levels.js`).
-- **Coop and deathmatch**: `info_player_coop` / `info_player_deathmatch` are recognised and the
-  spawnflag filters are applied, but there is one player row and no networking; a second local
-  player would mean a second `player` row and a second view, which the SQL could carry.
+- **Coop**: the game side is done, as p_client.c and g_items.c had it, for two local clients (there is no
+  networking; the page's part, a second view and the gamepad as the second player's controls, is next). A
+  `player` row per client, found by its entity (`p.ent_id = :pe`: every routine that reads or writes the
+  client does so for the edict it has in hand, as `ent->client` did); `init_map(…, coop)` puts the second
+  client in at its `info_player_coop` (`SelectCoopSpawnPoint`: the ones named by the exit's spawnpoint, in
+  order; the start when a map has none, telefragging as `KillBox` did); each client's usercmd (`usercmd`, the
+  first's from `q2_tic`'s parameters) runs its own `player_think`, and the tic returns a row per client;
+  `view_setup(client)` and `frame_all(…, client)` give each its view, with the other's model in it
+  (`G_SetClientFrame` animates it: stand, run, crouch, jump, attack, pain and death frames; the demo pak has no
+  `players/male/tris.md2`, so here the other player is unseen until a registered pak supplies it). The
+  monsters look for `game.sight_client`, which `AI_SetSightClient` rotates through the living, targetable
+  clients each tic, and drop a dead enemy for the other. A weapon or a key one client takes stays for the
+  other (`IT_STAY_COOP`; one already held is left). A dead client's button a second later is `respawn`: the
+  body stays behind (`CopyToBodyQue`, gibbable), the client goes back in at its spot with the pers it entered
+  the level with (`coop_respawn`, taken by `InitClientResp` at each level start; the keys found since kept)
+  and a teleport's effect. Messages go to the client they are for (`cprint(pe, …)`), the kill count to the
+  killer's row, a level change and a save carry both clients. `test:coop` checks all of it, and that single
+  player is as it was: one row, the same tic. Left for the page: a split view, the second player's HUD and
+  input, the menus (a "coop" new game), the obituaries Quake printed in coop. Not done: the power cube's
+  per-client count (the full game's), the trail (`p_trail.c` is single player's: it follows the first client).
 
 ## Engineering
 

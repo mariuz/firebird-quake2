@@ -105,6 +105,11 @@ jobs:
       - name: The sound mix
         run: npm run test:audio
 
+      # A coop game headless: two clients, their usercmds, rows and views, the monsters' sight client, respawns,
+      # the weapons and keys that stay, a level change and a save with both; single player untouched
+      - name: Coop
+        run: npm run test:coop
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
       # quick save and load, the menu, the retired service worker removing itself, no console

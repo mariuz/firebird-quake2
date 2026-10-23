@@ -35,7 +35,10 @@ CREATE TABLE game (
   cd_track       INTEGER DEFAULT 0 NOT NULL,
   intermission_time DOUBLE PRECISION,                   -- set at a unit's end: the player watches from an info_player_intermission
   help_msg2      VARCHAR(400),                          -- target_help without spawnflags 1: the second message
-  help_changed   INTEGER DEFAULT 0 NOT NULL             -- counts target_help uses (the page blinks the help icon until F1)
+  help_changed   INTEGER DEFAULT 0 NOT NULL,            -- counts target_help uses (the page blinks the help icon until F1)
+  coop           SMALLINT DEFAULT 0 NOT NULL,           -- the coop cvar: a second client shares the game (one row more in PLAYER)
+  spawnpoint     VARCHAR(40),                           -- game.spawnpoint: the start the level was entered by, where a coop respawn goes
+  sight_client   INTEGER                                -- level.sight_client: the client the monsters look for this tic (AI_SetSightClient), NULL when none is alive
 );
 
 -- which cluster and area each kept slot of VIS_FACES (render.sql) holds, when it was last used, and the
@@ -386,7 +389,8 @@ CREATE INDEX ents_movetype ON ents (movetype);
 CREATE INDEX ents_mkind ON ents (mkind);
 CREATE INDEX ents_team ON ents (team);
 
--- The one client.
+-- The clients (gclient_t): one row each, 1 the first player, 2 a coop game's second. Its entity is ENT_ID, and
+-- the game's routines find the row by that entity (p.ent_id = :pe), since what they have in hand is the edict.
 CREATE TABLE player (
   id              SMALLINT NOT NULL PRIMARY KEY,
   ent_id          INTEGER,
@@ -468,7 +472,58 @@ CREATE TABLE player (
   bobtime         DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- the walk cycle (p_view.c's bobtime)
   bob_z           DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- the view's bob this tic: height, pitch and roll
   bob_pitch       DOUBLE PRECISION DEFAULT 0 NOT NULL,
-  bob_roll        DOUBLE PRECISION DEFAULT 0 NOT NULL
+  bob_roll        DOUBLE PRECISION DEFAULT 0 NOT NULL,
+  anim_priority   SMALLINT DEFAULT 0 NOT NULL,           -- G_SetClientFrame: 0 basic 1 wave 2 jump 3 pain 4 attack 5 death (what the other player sees)
+  anim_end        INTEGER DEFAULT 0 NOT NULL,            -- the frame the run started ends at
+  anim_duck       SMALLINT DEFAULT 0 NOT NULL,
+  anim_run        SMALLINT DEFAULT 0 NOT NULL
+);
+
+-- client_respawn_t's coop_respawn: each client's persistent data as it was when the level began
+-- (InitClientResp copied pers there), which a coop respawn puts back (PutClientInServer)
+CREATE TABLE coop_respawn (
+  id              SMALLINT NOT NULL PRIMARY KEY,         -- the player's id
+  health          INTEGER DEFAULT 100 NOT NULL,
+  max_health      INTEGER DEFAULT 100 NOT NULL,
+  armor           INTEGER DEFAULT 0 NOT NULL,
+  armor_type      SMALLINT DEFAULT 0 NOT NULL,
+  bullets         INTEGER DEFAULT 0 NOT NULL,
+  shells          INTEGER DEFAULT 0 NOT NULL,
+  rockets         INTEGER DEFAULT 0 NOT NULL,
+  grenades        INTEGER DEFAULT 0 NOT NULL,
+  cells           INTEGER DEFAULT 0 NOT NULL,
+  slugs           INTEGER DEFAULT 0 NOT NULL,
+  max_bullets     INTEGER DEFAULT 200 NOT NULL,
+  max_shells      INTEGER DEFAULT 100 NOT NULL,
+  max_rockets     INTEGER DEFAULT 50 NOT NULL,
+  max_grenades    INTEGER DEFAULT 50 NOT NULL,
+  max_cells       INTEGER DEFAULT 200 NOT NULL,
+  max_slugs       INTEGER DEFAULT 50 NOT NULL,
+  weapons         INTEGER DEFAULT 1 NOT NULL,
+  weapon          INTEGER DEFAULT 1 NOT NULL,
+  power_cubes     INTEGER DEFAULT 0 NOT NULL,
+  inv_quad        SMALLINT DEFAULT 0 NOT NULL,
+  inv_invuln      SMALLINT DEFAULT 0 NOT NULL,
+  inv_silencer    SMALLINT DEFAULT 0 NOT NULL,
+  inv_breather    SMALLINT DEFAULT 0 NOT NULL,
+  inv_enviro      SMALLINT DEFAULT 0 NOT NULL,
+  inv_screen      SMALLINT DEFAULT 0 NOT NULL,
+  inv_shield      SMALLINT DEFAULT 0 NOT NULL,
+  inv_sel         SMALLINT DEFAULT 7 NOT NULL
+);
+
+-- usercmd_t: what each client asks of the tic (ClientThink's cmd). Q2_TIC's own parameters are the first
+-- client's; a coop game's page writes the second's row before the tic. The impulse is spent by the tic.
+CREATE TABLE usercmd (
+  client  SMALLINT NOT NULL PRIMARY KEY,
+  fwd     DOUBLE PRECISION DEFAULT 0 NOT NULL,
+  side    DOUBLE PRECISION DEFAULT 0 NOT NULL,
+  yaw_d   DOUBLE PRECISION DEFAULT 0 NOT NULL,
+  pitch_d DOUBLE PRECISION DEFAULT 0 NOT NULL,
+  fire    SMALLINT DEFAULT 0 NOT NULL,
+  jump    SMALLINT DEFAULT 0 NOT NULL,
+  run     SMALLINT DEFAULT 0 NOT NULL,
+  imp     SMALLINT DEFAULT 0 NOT NULL
 );
 
 -- S_StartSound: every sound the simulation makes, for the browser to play.

@@ -508,7 +508,7 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
 {
   const one = async (q) => (await db.query(q)).rows[0];
   const keep = await one('SELECT weapons, weapon, shells, bullets, cells FROM player WHERE id = 1');
-  const use = async (imp) => { await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_impulse(${imp}); END`); return one('SELECT weapon, msg FROM player WHERE id = 1'); };
+  const use = async (imp) => { await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_impulse(player_ent(), ${imp}); END`); return one('SELECT weapon, msg FROM player WHERE id = 1'); };
   await db.exec('UPDATE player SET weapons = 2047, weapon = 1, shells = 10, bullets = 50, cells = 100, grenades = 5, rockets = 5, slugs = 5, msg = NULL WHERE id = 1');
   let u = await use(7);
   assert(u.WEAPON === 64, 'impulse 7 (the page\'s 6) raises the grenade launcher');
@@ -635,7 +635,7 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   const p = await one('SELECT e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = (SELECT ent_id FROM player)');
   let id0 = await top();
   await db.exec('UPDATE player SET weapon = 8, weapons = BIN_OR(weapons, 8), bullets = 50, attack_finished = 0, silencer_shots = 0, grenade_time = 0 WHERE id = 1');
-  await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_fire(1); END');
+  await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_fire(player_ent(), 1); END');
   let fl = await flashes(id0);
   const a = p.YAW * Math.PI / 180;
   const ex = p.X + Math.cos(a) * 18 + Math.sin(a) * 16, ey = p.Y + Math.sin(a) * 18 - Math.cos(a) * 16;
@@ -643,7 +643,7 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
     `a shot flashes a light of 200-231 (${fl[0]?.N}) 18 ahead of the player and 16 to the right`);
   id0 = await top();
   await db.exec('UPDATE player SET attack_finished = 0, silencer_shots = 5 WHERE id = 1');
-  await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_fire(1); END');
+  await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_fire(player_ent(), 1); END');
   fl = await flashes(id0);
   assert(fl.length === 1 && fl[0].N >= 100 && fl[0].N < 132, `... a silenced one 100-131 (${fl[0]?.N})`);
   const mon = await one("SELECT FIRST 1 e.id FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE t.missile_kind IS NOT NULL AND e.health > 0 ORDER BY e.id");

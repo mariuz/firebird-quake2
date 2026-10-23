@@ -33,7 +33,8 @@
     "test:session": "node scripts/session-test.mjs",
     "test:effects": "node scripts/effects-test.mjs",
     "test:audio": "node scripts/audio-test.mjs",
-    "test:golden": "node scripts/golden-test.mjs"
+    "test:golden": "node scripts/golden-test.mjs",
+    "test:coop": "node scripts/coop-test.mjs"
   },
   "license": "MIT",
   "dependencies": {

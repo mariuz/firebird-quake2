@@ -1,0 +1,186 @@
+// coop-test.mjs – a coop game headless: two clients in the SQL, as p_client.c had them. The second starts at its
+// info_player_coop, each sends its own usercmd and gets its own row from the tic and its own view; the monsters
+// look for the clients in turn (AI_SetSightClient) and drop a dead one; a weapon or a key one client takes stays
+// for the other (IT_STAY_COOP); a dead client comes back at its spot with what it entered the level with, its
+// body left behind (respawn, PutClientInServer); a level change and a save carry both clients; and single player
+// is as it was: one row.
+//   node scripts/coop-test.mjs
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
+import { Pak } from '../src/pak.js';
+import { createSchema, loadResources, SQL_FILES } from '../src/loader.js';
+import { Session, SLOT_KEY } from '../src/session.js';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));
+const db = new FirebirdBrowser('memory://quake2', { transport: new DirectTransport() });
+await createSchema(db, sql);
+const pak = new Pak(fs.readFileSync(process.env.PAK ?? path.join(root, 'public/pak/pak0.pak')).buffer);
+const res = await loadResources(db, pak);
+
+let failures = 0;
+const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failures++; };
+const q = async (s, args = []) => (await db.query(s, args)).rows;
+const one = async (s, args = []) => (await q(s, args))[0];
+const store = new Map();
+const session = new Session(db, { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) });
+session.use(pak, res);
+
+// the usercmd as Input.read gives it: tics, forward, side, yaw, pitch, fire, jump, run, impulse
+const cmd = ({ fwd = 0, fire = 0, jump = 0, imp = 0 } = {}) => [1, fwd, 0, 0, 0, fire, jump, 1, imp];
+const idle = cmd();
+const players = () => q('SELECT p.id, p.ent_id, e.x, e.y, e.z, e.yaw, e.health, e.deadflag, e.classname, p.weapons, p.keys FROM player p LEFT JOIN ents e ON e.id = p.ent_id ORDER BY p.id');
+const place = async (pe, x, y, z, yaw = 0) => {
+  await db.exec(`UPDATE ents SET x = ${x}, y = ${y}, z = ${z}, yaw = ${yaw}, vx = 0, vy = 0, vz = 0 WHERE id = ${pe}; EXECUTE PROCEDURE link_ent(${pe})`);
+};
+const spawnItem = async (cls, x, y, z) => (await one(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN
+  EXECUTE PROCEDURE spawn_ent('${cls}', ${x}, ${y}, ${z}) RETURNING_VALUES id;
+  EXECUTE PROCEDURE set_model(id, item_model('${cls}'));
+  UPDATE ents e SET e.solid = 1, e.movetype = 6, e.minx = -15, e.miny = -15, e.minz = -15, e.maxx = 15, e.maxy = 15, e.maxz = 15 WHERE e.id = :id;
+  EXECUTE PROCEDURE link_ent(id); SUSPEND; END`)).ID;
+
+// ── the game starts with two clients ──
+await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true });
+let ps = await players();
+check(ps.length === 2 && ps.every((p) => p.CLASSNAME === 'player' && p.HEALTH === 100), `a coop game has two clients, both players (${ps.map((p) => p.ENT_ID).join(', ')})`);
+const [p1, p2] = ps;
+check(Math.abs(p1.X - 128) < 1 && Math.abs(p1.Y + 320) < 1, `the first at the map's start (${p1.X.toFixed(0)},${p1.Y.toFixed(0)})`);
+check([32, 96, 168].some((x) => Math.abs(p2.X - x) < 1) && Math.abs(p2.Y + 224) < 1 && Math.abs(p2.YAW - 90) < 1,
+  `the second at an info_player_coop without a name, facing its angle (${p2.X.toFixed(0)},${p2.Y.toFixed(0)} yaw ${p2.YAW})`);
+check((await one('SELECT coop, spawnpoint FROM game')).COOP === 1, 'game.coop is set');
+check((await q('SELECT id FROM coop_respawn')).length === 2, 'both clients have their respawn copy of the pers');
+
+// ── each client's usercmd, each client's row ──
+let rows = await session.tic(idle, cmd({ fwd: 1 }));
+check(session.clients.length === 2 && session.clients[0].CLIENT === 1 && session.clients[1].CLIENT === 2 && rows === session.clients[0],
+  'the tic returns a row per client, the first first, and `last` is the first\'s');
+for (let i = 0; i < 10; i++) await session.tic(idle, cmd({ fwd: 1 }));
+ps = await players();
+check(Math.abs(ps[0].X - p1.X) < 0.01 && Math.abs(ps[0].Y - p1.Y) < 0.01, 'the first client, idle, stays put');
+check(Math.hypot(ps[1].X - p2.X, ps[1].Y - p2.Y) > 50, `the second walks on its usercmd (${Math.hypot(ps[1].X - p2.X, ps[1].Y - p2.Y).toFixed(0)} units in 11 tics)`);
+check(session.clients[1].PX === ps[1].X && session.clients[1].PY === ps[1].Y, 'its row carries its own position');
+await session.tic(idle, cmd({ imp: 2 }));
+check((await one('SELECT imp FROM usercmd WHERE client = 2')).IMP === 0, 'an impulse is spent by the tic it came in');
+await session.tic(idle);
+check(session.clients.length === 2, 'a tic without the second usercmd still runs both (the last command holds)');
+
+// ── each client's view ──
+const v1 = await one('SELECT * FROM view_setup(1)'), v2 = await one('SELECT * FROM view_setup(2)');
+check(Math.abs(v1.EX - ps[0].X) < 0.01 && Math.abs(v2.EX - ps[1].X) < 0.01 && v1.LEAF !== v2.LEAF, `view_setup(client) is each client's eye (leaves ${v1.LEAF}, ${v2.LEAF})`);
+const f1 = await session.frame({ client: 1 }), f2 = await session.frame({ client: 2 });
+check(f1.faces.length > 50 && f2.faces.length > 50 && f1.faces.length !== f2.faces.length, `each client's frame is its own (${f1.faces.length} and ${f2.faces.length} faces)`);
+check(!f1.ents.some((e) => e[0] === p1.ENT_ID) && !f2.ents.some((e) => e[0] === p2.ENT_ID), 'a client\'s own model is not in its frame');
+const sqlF = await session.frame({ client: 2, sqlRenderer: true });
+check(sqlF.faces.length > 0, 'the SQL-projecting mode takes the client too');
+check((await q('SELECT idx FROM inventory_list(2)')).some((r) => r.IDX === 7), 'inventory_list(client) is the client\'s (the blaster)');
+
+// ── the monsters look for the clients in turn, and for whoever is left ──
+const sight = async () => (await one('SELECT sight_client FROM game')).SIGHT_CLIENT;
+await session.tic(idle);
+const s1 = await sight();
+await session.tic(idle);
+const s2 = await sight();
+check(s1 !== s2 && [s1, s2].includes(p1.ENT_ID) && [s1, s2].includes(p2.ENT_ID), `the sight client alternates between the two (${s1}, ${s2})`);
+await q("SELECT msg FROM player_command('notarget', '', 1)");
+await session.tic(idle); await session.tic(idle);
+check((await sight()) === p2.ENT_ID && (await sight()) === p2.ENT_ID, 'a notarget client is passed over');
+// the second client where the first stands, a soldier in front of them: it hunts the second
+await place(p2.ENT_ID, p1.X + 24, p1.Y, p1.Z, p1.YAW);
+const mon = (await one("SELECT * FROM spawn_monster('soldier', 200)")).ID;
+let enemy = null;
+for (let i = 0; i < 40 && enemy !== p2.ENT_ID; i++) { await session.tic(idle, idle); enemy = (await one(`SELECT enemy_id FROM ents WHERE id = ${mon}`)).ENEMY_ID; }
+check(enemy === p2.ENT_ID, `a monster that sees the clients goes for the sight client (soldier ${mon} → ${enemy})`);
+await q("SELECT msg FROM player_command('god', '', 1)");
+await q("SELECT msg FROM player_command('give', 'shotgun', 2)");
+check((await players())[1].WEAPONS === 3 && (await players())[0].WEAPONS === 1, 'the console\'s commands take a client: give shotgun to the second');
+await q("SELECT msg FROM player_command('kill', '', 2)");
+ps = await players();
+check(ps[1].DEADFLAG === 1 && ps[1].HEALTH <= 0 && ps[0].DEADFLAG === 0, 'the second client dies; the first lives on');
+check(session.last.EXIT_KIND === 0, 'nobody\'s death ends the game (no load menu)');
+await q("SELECT msg FROM player_command('notarget', '', 1)");   // off again
+for (let i = 0; i < 6; i++) await session.tic(idle, idle);
+enemy = (await one(`SELECT enemy_id FROM ents WHERE id = ${mon}`)).ENEMY_ID;
+check(enemy !== p2.ENT_ID, `with its enemy dead the monster drops it (enemy ${enemy ?? 'none'})`);
+for (let i = 0; i < 40 && enemy !== p1.ENT_ID; i++) { await session.tic(idle, idle); enemy = (await one(`SELECT enemy_id FROM ents WHERE id = ${mon}`)).ENEMY_ID; }
+check(enemy === p1.ENT_ID, 'and finds the other client');
+await db.exec(`DELETE FROM ents WHERE id = ${mon}`);
+
+// ── a dead client comes back: any button a second after dying, at its spot, as it entered the level ──
+for (let i = 0; i < 5; i++) await session.tic(idle, cmd({ fire: 1 }));
+check((await players())[1].DEADFLAG === 1, 'fire within the first second after dying does nothing');
+for (let i = 0; i < 20; i++) await session.tic(idle, idle);
+await session.tic(idle, cmd({ jump: 1 }));
+ps = await players();
+check(ps[1].DEADFLAG === 0 && ps[1].HEALTH === 100 && ps[1].ENT_ID === p2.ENT_ID, 'a button a second later respawns it: alive, full health, the same entity');
+check([32, 96, 168].some((x) => Math.abs(ps[1].X - x) < 1) && Math.abs(ps[1].Y + 224) < 1, `back at its coop spot (${ps[1].X.toFixed(0)},${ps[1].Y.toFixed(0)})`);
+check(ps[1].WEAPONS === 1, 'with the pers it entered the level with (the shotgun given since is gone)');
+const body = await one(`SELECT id, classname, deadflag, solid, takedamage, x, y FROM ents WHERE classname = 'bodyque'`);
+check(body && body.DEADFLAG === 1 && body.SOLID === 2 && body.TAKEDAMAGE === 2 && Math.abs(body.X - (p1.X + 24)) < 40, `the body stays where it fell (${body?.X?.toFixed(0)},${body?.Y?.toFixed(0)})`);
+const tele = (await session.frame({ client: 1 })).fx;
+check(tele.some((e) => e[1] === 5), 'a teleport effect marks the respawn (EV_PLAYER_TELEPORT)');
+check(session.clients[1].DEAD === 0 && session.clients[1].HEALTH === 100, 'its row says so');
+await db.exec(`EXECUTE PROCEDURE t_damage(${body.ID}, ${p1.ENT_ID}, ${p1.ENT_ID}, 200, 0, 0)`);
+check(!(await one(`SELECT id FROM ents WHERE id = ${body.ID}`)), 'the body gibs when hurt enough (body_die)');
+
+// ── a weapon or a key one client takes stays for the other ──
+ps = await players();
+const sg = await spawnItem('weapon_shotgun', ps[0].X, ps[0].Y, ps[0].Z);
+await session.tic(idle, idle);
+check((await players())[0].WEAPONS === 3 && (await one(`SELECT id FROM ents WHERE id = ${sg}`)), 'the first client takes a shotgun, and the shotgun stays (IT_STAY_COOP)');
+await session.tic(idle, idle);
+check((await one(`SELECT id FROM ents WHERE id = ${sg}`)), 'a client that has it leaves it');
+await place(p2.ENT_ID, ps[0].X, ps[0].Y, ps[0].Z);
+await session.tic(idle, idle);
+check((await players())[1].WEAPONS === 3, 'the second client takes it too');
+await place(p2.ENT_ID, p2.X, p2.Y, p2.Z, 90);
+const key = await spawnItem('key_blue_key', ps[0].X, ps[0].Y, ps[0].Z);
+await session.tic(idle, idle);
+check((await players())[0].KEYS === 1 && (await one(`SELECT id FROM ents WHERE id = ${key}`)), 'the first client takes a key, and the key stays');
+await place(p2.ENT_ID, ps[0].X, ps[0].Y, ps[0].Z);
+await session.tic(idle, idle);
+check((await players())[1].KEYS === 1, 'the second takes it too');
+await place(p2.ENT_ID, p2.X, p2.Y, p2.Z, 90);
+const hp = await spawnItem('item_health', ps[0].X, ps[0].Y, ps[0].Z);
+await db.exec(`UPDATE ents SET health = 50 WHERE id = ${p1.ENT_ID}`);
+await session.tic(idle, idle);
+check(!(await one(`SELECT id FROM ents WHERE id = ${hp}`)), 'anything else goes when taken, as in single player');
+await db.exec("EXECUTE PROCEDURE cprint((SELECT ent_id FROM player WHERE id = 2), 'for two')");
+check((await one('SELECT cprint FROM player WHERE id = 2')).CPRINT === 'for two' && (await one('SELECT cprint FROM player WHERE id = 1')).CPRINT !== 'for two', 'a centerprint reaches one client');
+
+// ── a save carries both clients ──
+await session.writeSave(SLOT_KEY(1), 'coop');
+const before = await players();
+for (let i = 0; i < 10; i++) await session.tic(idle, cmd({ fwd: 1 }));
+await session.loadSave(await session.readSave(SLOT_KEY(1)), { skill: 2 });
+ps = await players();
+check(session.coop && ps.length === 2 && ps[1].X === before[1].X && ps[1].Y === before[1].Y && ps[1].KEYS === 1,
+  'a loaded save brings both clients back where they were, with what they had');
+check((await q('SELECT id FROM coop_respawn')).length === 2 && (await one('SELECT coop FROM game')).COOP === 1, 'and the respawn copies and the coop flag');
+
+// ── a level change carries both ──
+const to = await session.leave('demo2$base1');
+await session.startMap('demo2', { skill: 2, spawnpoint: to.spawn });
+ps = await players();
+check(ps.length === 2 && ps.every((p) => p.CLASSNAME === 'player'), 'the next level has both clients');
+check(Math.abs(ps[1].Y - 2232) < 1 && [828, 876].some((x) => Math.abs(ps[1].X - x) < 1), `the second at the coop spot named by the exit (base1: ${ps[1].X.toFixed(0)},${ps[1].Y.toFixed(0)})`);
+check(ps[1].KEYS === 0 && ps[1].WEAPONS === 3, 'its pers come along (the shotgun; keys do not carry over)');
+await session.tic(idle, idle);
+const back = await session.leave('demo1');
+await session.startMap('demo1', { skill: 2, spawnpoint: back.spawn });
+ps = await players();
+check(ps.length === 2 && ps[0].ENT_ID !== ps[1].ENT_ID && (await q("SELECT id FROM ents WHERE classname = 'player'")).length === 2, 'a level come back to puts both clients in afresh');
+await session.tic(idle, idle);
+check(session.clients.length === 2, 'and the game runs on with two');
+
+// ── single player is as it was ──
+await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: false });
+ps = await players();
+check(ps.length === 1 && (await q("SELECT id FROM ents WHERE classname = 'player'")).length === 1, 'a single-player game has one client');
+await session.tic(idle);
+check(session.clients.length === 1 && session.last.CLIENT === 1, 'and the tic returns one row');
+check((await one('SELECT coop FROM game')).COOP === 0 && !session.coop, 'coop is off');
+
+console.log(failures ? `${failures} failure(s)` : 'all good');
+process.exit(failures ? 1 : 0);

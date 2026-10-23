@@ -36,6 +36,7 @@ npm run test:session                  # the game without the page: maps, tics, t
 npm run test:effects                  # the temporary entities: explosions, beams, the tongue, flashes, their lights and how they draw
 npm run test:audio                    # the sound mix headless: spatialisation, channels, the loops summed per sound, speakers, music
 npm run test:golden                   # the docs screenshots rendered again and compared pixel for pixel (a painter change: regenerate them)
+npm run test:coop                     # a coop game headless: two clients, their rows and views, the sight client, respawns, items that stay
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
@@ -43,7 +44,7 @@ npm run serve -- --coi                # with COOP/COEP: cross-origin isolated, t
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
 ```
 
-A change is done when: `sql-check` passes, the three smoke tests, the monsters, walkthrough, entities, save, menu and painter tests say `all good`,
+A change is done when: `sql-check` passes, the three smoke tests, the monsters, walkthrough, entities, save, menu, painter and coop tests say `all good`,
 `screenshot.mjs --compare` reports `differ in 0 of 76800 pixels` on demo1 and demo2 (and the
 viewpoint `--at=300,500,-40,90` by the fan and doors when touching brush models), `test:golden` says
 `all good` (the docs screenshots, pixel for pixel; a painter change on purpose regenerates them in the same
@@ -112,6 +113,12 @@ short stories of what changed and what it measured; keep that.
   probes all land in solid (the fan's hub) has no cluster and must be drawn anyway.
 - Firebird evaluates `AND` left to right and short-circuits: put the cheap, selective test first.
 - The player's `pitch` lives on `player`, the yaw on `ents`; `view_setup` reads both.
+- There is a `player` row per client (two in coop), found by its entity: a routine that has the player's edict
+  in hand (`pe`, `other`, `targ`, `attacker`) reads and writes `player p WHERE p.ent_id = :pe`, never `p.id = 1`;
+  `client_of(eid)` says whether an entity is a client at all. `player_ent()` is the first client's entity, for
+  what is the page's own (the console, `premark_ahead`, the trail) or a default activator. Messages take the
+  client they are for (`cprint(pe, msg)`, NULL for all). The monsters look for `game.sight_client`, which
+  `ai_set_sight_client` rotates through the living clients each tic (`AI_SetSightClient`).
 - "Not moved since the last link" (`lx = x`) is true right after every move, because the move relinks:
   it cannot stand for "not moved since the last check". The player's water check was skipped that way
   and swimming silently died; remember the position of the check itself (`player.water_x/y/z`).

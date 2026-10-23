@@ -52,7 +52,7 @@ await db.query(`SELECT move_step(${w.ID}, 3, 0, 0) FROM rdb$database`);
 d = await read();
 console.log('one move_step:', diff(c, d));
 const pe = (await db.query('SELECT ent_id e FROM player')).rows[0].E;
-await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_think(0.05, 1, 0, 0, 0, 0, 0, 1, 0); END');
+await db.query('EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_think(player_ent(), 0.05, 1, 0, 0, 0, 0, 0, 1, 0); END');
 c = await read();
 console.log('one player_think (walking):', diff(d, c));
 c = await read();

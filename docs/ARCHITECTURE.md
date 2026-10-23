@@ -107,9 +107,12 @@ from RGB to the brightest channel the way `Mod_LoadLighting` did for ref_soft.
 nextthink, targets, pusher state…) plus port-specific ones: `leaf`, `cluster`, `cl2`, `cl3` (the
 leaf and the clusters the box touches), `lx ly lz` (where it was last linked), `mkind`/`mradius`
 (the model's kind and radius, copied in by `set_model`), `vis_cl`/`vis` and `fl_*`/`faces_lst`
-(brush-model visibility caches, section 6). `player` holds the client: ammo, armour, weapons,
-keys, timers, pitch, punch, step smoothing. `game` is the level: time, tic, skill, counts, the
-next map, `has_water`. `sound_events` and `fx_events` are the outgoing queues (section 7).
+(brush-model visibility caches, section 6). `player` holds the clients, a row each (one in single
+player, two in coop; `ent_id` is the client's edict, and the game's routines find the row by it): ammo,
+armour, weapons, keys, timers, pitch, punch, step smoothing, the player model's animation; `coop_respawn`
+is each client's pers as the level began, which a coop respawn puts back; `usercmd` is each client's
+command for the tic. `game` is the level: time, tic, skill, counts, the next map, `has_water`, `coop`,
+`sight_client` (the client the monsters look for this tic). `sound_events` and `fx_events` are the outgoing queues (section 7).
 `clip_planes` and `pushed` are global temporary tables standing in for the C arrays of
 `SV_FlyMove` and `SV_Push`.
 
@@ -153,9 +156,12 @@ MASK_SHOT 100663299, MASK_OPAQUE 25, MASK_WATER 56, MASK_SOLID 3.
 ## 4. The game (`sql/game.sql`, `sql/weapons.sql`, `sql/monsters.sql`)
 
 `q2_tic(tics, fwd, side, yaw_d, pitch_d, fire, jump, run, imp)` runs one or two 20 Hz tics
-(the page catches up by at most two per frame) and returns the player's view of itself: health,
+(the page catches up by at most two per frame) and returns a row per client, the first first (its
+`client` column says which): each player's view of itself: health,
 ammo, weapons, position and angles, view height and punch, messages, damage flash values,
-level counts, water, powerups, the eye's leaf and cluster. Each tic:
+level counts, water, powerups, the eye's leaf and cluster. The parameters are the first client's usercmd;
+a coop game's second client has its row in `usercmd`, written before the tic. Each tic
+(`G_RunFrame`: `ai_set_sight_client` first, then `player_think` for each client in turn):
 
 1. `player_think` – pmove.c: ducking (`PM_CheckDuck`: a box 4 high, the eye at -2, 100 units per
    second; standing up only where the full box fits), friction, acceleration (300/200 units per second,
@@ -254,7 +260,8 @@ rooms, 18 clusters crossed, frames over 8 ms went from 19–22 to 9–10 with si
 eight they thrashed: 29 marks for 18 crossings, 15 hitches left). What stays are the corners where
 two or three small clusters are crossed within a few tics, and the first frame's mark.
 
-`frame_all(mode, last_sound, last_fx, want_speakers)` returns the frame as kind-tagged rows
+`frame_all(mode, last_sound, last_fx, want_speakers, client = 1)` returns the frame of the client's view
+(`view_setup(client)`: its eye; its own model left out, the other client's in) as kind-tagged rows
 (`kind`, `i1..i5`, `d1..d8`, `s`, `lst`):
 
 | kind | rows | contents |
@@ -380,9 +387,12 @@ Music was CD audio: `public/music/trackNN.ogg|mp3`, or a folder picked on the pa
 
 What the server did in single player is `src/session.js`, a `Session` with no DOM: a map started
 (`startMap`, which returns the sky, the CD track and the looped speakers for the page to set up) or a
-level of the unit come back to as it was left, a tic run (`tic`, the usercmd in), the frame read in one
+level of the unit come back to as it was left (`coop: true` puts a second client in), a tic run (`tic`, the
+usercmd in, a coop game's second as a second argument; `last` is the first client's row, `clients` every
+client's), the frame read in one
 round trip and decoded (`frame`, `decodeFrame`: the faces, the entities, the light styles, the sounds and
-effects not yet played, the brush models' frames and angles, the looped speakers every tenth frame), a
+effects not yet played, the brush models' frames and angles, the looped speakers every tenth frame; `client`
+picks whose view), a
 level left (`leave`, which keeps it or, at a unit's end, forgets the unit), and the slots written, read,
 listed and loaded against a storage object. `src/main.js` holds one and does what only a page can: the
 canvas, the sound, the status line, the keys and the menus' host. `scripts/session-test.mjs` drives a
@@ -458,6 +468,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `console-test.mjs` | the console line headless (`src/console.js`): `map`, `fov`, `seed`, `save`, `load`, `inven` reach the page's host, the rest reach `player_command`, the history steps and forgets as `Key_Console`'s did, Tab completes |
 | `session-test.mjs` | the game as the page plays it, without the page (`src/session.js`): a map started, tics, the frame decoded (the sounds each once, the speakers every tenth frame, both renderer modes the same world faces), a slot saved, listed and loaded back exactly, levels left and come back to as left, a save carrying them, a unit's end and a new game forgetting them, the death screen's load request taken once, no storage no saves |
 | `golden-test.mjs` | the painter's look: the twelve docs screenshots (three maps, four shots each) rendered again by `screenshot.mjs` and compared to `docs/` pixel for pixel, with the count and the box of what differs; the painter is deterministic, so a difference is a change, regenerated with the shots when it is meant |
+| `coop-test.mjs` | a coop game headless, through a `Session`: two clients, the second at its `info_player_coop`; each one's usercmd, row from the tic, view and inventory; the sight client alternating and passing over notarget; a monster hunting the sight client and, that one dead, the other; a death that ends nothing, the respawn a second later at the spot with the level-start pers and the body left (and gibbed); a weapon and a key that stay for the other client; a centerprint to one client; a save and a level change (there and back) with both; single player with one row |
 | `audio-test.mjs` | the sound mix (`src/audio.js`) against a Web Audio that records: `S_Spatialize`'s fall-off (full within 80 units, ATTN_NORM silent from 1080, ATTN_IDLE twice as fast, ATTN_NONE everywhere) and pan (0.8 to the side, the listener's yaw), a one-shot per event cut by the next on its entity's channel but not on CHAN_AUTO, out of range or missing from the pak skipped, each sound decoded once, the loops summed per name at ATTN_STATIC with each side clamped, silent when unlisted and the channel kept, the speakers on and off with the frame, the page hidden and back, and the music: off, the drone, a track file from a picked folder, the volume |
 | `effects-test.mjs` | the temporary entities (`src/effects.js`): each effect row's particles and what it keeps, the explosions' frames, skins, translucency and fading light, the blaster hit turned to its direction, the BFG's sprite, a muzzle flash lighting its frame only, the `EF_` lights, beams lasting 0.1 and 0.12 s, a parasite's tongue (one per parasite, a segment every 30 units, 0.2 s), and an explosion painting a real frame |
 | `settings-test.mjs` | the page's settings (`src/settings.js`): the defaults, the round trip through storage, and each stored value checked against what it can be (a bad one back to its default, a full storage harmless) |

@@ -25,7 +25,7 @@ const pe = (await q1('SELECT ent_id e FROM player')).E;
 const p = await q1(`SELECT x, y, z FROM ents WHERE id = ${pe}`);
 await time('tic (1 tic, idle)', 'SELECT * FROM q2_tic(1, 0, 0, 0, 0, 0, 0, 1, 0)');
 await time('tic (1 tic, walking)', 'SELECT * FROM q2_tic(1, 1, 0, 0, 0, 0, 0, 1, 0)');
-await time('player_think only', 'EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_think(0.05, 1, 0, 0, 0, 0, 0, 1, 0); END');
+await time('player_think only', 'EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE player_think(player_ent(), 0.05, 1, 0, 0, 0, 0, 0, 1, 0); END');
 await time('run_pushers', 'EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE run_pushers(0.05); END');
 await time('run_physics', 'EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE run_physics(0.05); END');
 await time('trace_move (player box, 100 units fwd)', `SELECT * FROM trace_move(${pe}, -16, -16, -24, 16, 16, 32, ${p.X}, ${p.Y}, ${p.Z}, ${p.X + 100}, ${p.Y}, ${p.Z}, 33619971)`);

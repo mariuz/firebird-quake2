@@ -63,16 +63,77 @@ BEGIN
   INSERT INTO fx_events (id, tic, kind, x, y, z, x2, y2, z2, n) VALUES (NEXT VALUE FOR fx_seq, :tic, :kind, :x, :y, :z, :x2, :y2, :z2, :n);
 END^
 
-CREATE OR ALTER PROCEDURE cprint (msg VARCHAR(400))
+-- gi.centerprintf to the client whose entity is `pe` (NULL: gi.bprintf, every client)
+CREATE OR ALTER PROCEDURE cprint (pe INTEGER, msg VARCHAR(400))
 AS
 BEGIN
-  UPDATE player p SET p.cprint = :msg, p.cprint_time = (SELECT g.time_ FROM game g WHERE g.id = 1) + 3 WHERE p.id = 1;
+  UPDATE player p SET p.cprint = :msg, p.cprint_time = (SELECT g.time_ FROM game g WHERE g.id = 1) + 3 WHERE :pe IS NULL OR p.ent_id = :pe;
 END^
 
-CREATE OR ALTER PROCEDURE sprint (msg VARCHAR(200))
+-- gi.cprintf: the message line of the client whose entity is `pe` (NULL: every client)
+CREATE OR ALTER PROCEDURE sprint (pe INTEGER, msg VARCHAR(200))
 AS
 BEGIN
-  UPDATE player p SET p.msg = :msg, p.msg_time = (SELECT g.time_ FROM game g WHERE g.id = 1) + 3 WHERE p.id = 1;
+  UPDATE player p SET p.msg = :msg, p.msg_time = (SELECT g.time_ FROM game g WHERE g.id = 1) + 3 WHERE :pe IS NULL OR p.ent_id = :pe;
+END^
+
+-- ent->client: the player row of an entity, NULL for anything that is not a client
+CREATE OR ALTER FUNCTION client_of (eid INTEGER) RETURNS SMALLINT
+AS
+DECLARE c SMALLINT;
+BEGIN
+  IF (eid IS NULL) THEN RETURN NULL;
+  SELECT p.id FROM player p WHERE p.ent_id = :eid INTO c;
+  RETURN c;
+END^
+
+-- G_SetClientFrame: the player model's frame for what the client is doing, for the other player to see
+-- (m_player.h: stand01 0-39, run1 40-45, attack1 46-53, pain101 54-65 in threes, jump1 66-71, crstnd01 135-153,
+-- crwalk1 154-159, crattak1 160-168, crpain1 169-172, crdeath1 173-177, death101 178-197 in sixes and eights).
+-- The priorities: 0 basic, 1 wave, 2 jump, 3 pain, 4 attack, 5 death. Run every tic at the end of player_think.
+CREATE OR ALTER PROCEDURE set_client_frame (pe INTEGER, moving SMALLINT, onground SMALLINT, ducked SMALLINT)
+AS
+DECLARE pri SMALLINT; DECLARE fin INTEGER; DECLARE aduck SMALLINT; DECLARE arun SMALLINT; DECLARE fr INTEGER; DECLARE newanim SMALLINT = 0;
+BEGIN
+  SELECT p.anim_priority, p.anim_end, p.anim_duck, p.anim_run, e.frame FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.ent_id = :pe INTO pri, fin, aduck, arun, fr;
+  IF (pri IS NULL) THEN EXIT;
+  -- check for stand/duck and stop/go transitions
+  IF (ducked <> aduck AND pri < 5) THEN newanim = 1;
+  ELSE IF (moving <> arun AND pri = 0) THEN newanim = 1;
+  ELSE IF (onground = 0 AND pri <= 1) THEN newanim = 1;
+  IF (newanim = 0) THEN
+  BEGIN
+    IF (fr < fin) THEN BEGIN UPDATE ents e SET e.frame = e.frame + 1 WHERE e.id = :pe; EXIT; END   -- continue an animation
+    IF (pri = 5) THEN EXIT;                                                                           -- stay there
+    IF (pri = 2) THEN
+    BEGIN
+      IF (onground = 0) THEN EXIT;                                                                    -- stay there
+      UPDATE player p SET p.anim_priority = 1, p.anim_end = 71 WHERE p.ent_id = :pe;                  -- jump3 … jump6: the landing
+      UPDATE ents e SET e.frame = 68 WHERE e.id = :pe;
+      EXIT;
+    END
+  END
+  -- return to either a running or standing frame
+  pri = 0;
+  IF (onground = 0) THEN BEGIN pri = 2; fin = 67; IF (fr <> 67) THEN fr = 66; END
+  ELSE IF (moving = 1) THEN BEGIN fr = IIF(ducked = 1, 154, 40); fin = IIF(ducked = 1, 159, 45); END
+  ELSE BEGIN fr = IIF(ducked = 1, 135, 0); fin = IIF(ducked = 1, 153, 39); END
+  UPDATE player p SET p.anim_priority = :pri, p.anim_end = :fin, p.anim_duck = :ducked, p.anim_run = :moving WHERE p.ent_id = :pe;
+  UPDATE ents e SET e.frame = :fr WHERE e.id = :pe;
+END^
+
+-- AI_SetSightClient: the client the monsters look for this tic, the next one after the last that is in the
+-- game, alive and not notarget; none when every client is dead (then FindTarget finds nothing)
+CREATE OR ALTER PROCEDURE ai_set_sight_client
+AS
+DECLARE cur SMALLINT; DECLARE n INTEGER;
+BEGIN
+  SELECT p.id FROM game g JOIN player p ON p.ent_id = g.sight_client WHERE g.id = 1 INTO cur;
+  cur = COALESCE(cur, 0);
+  -- (the ones after the current first, then round to the start: one cursor, a tic's worth of rows)
+  SELECT FIRST 1 p.ent_id FROM player p JOIN ents e ON e.id = p.ent_id WHERE e.health > 0 AND BIN_AND(e.flags, 64) = 0
+   ORDER BY IIF(p.id > :cur, 0, 1), p.id INTO n;
+  UPDATE game g SET g.sight_client = :n WHERE g.id = 1 AND g.sight_client IS DISTINCT FROM :n;
 END^
 
 CREATE OR ALTER FUNCTION now_ () RETURNS DOUBLE PRECISION
@@ -473,12 +534,12 @@ CREATE OR ALTER PROCEDURE door_touch (eid INTEGER, other INTEGER)
 AS
 DECLARE msg VARCHAR(400); DECLARE af DOUBLE PRECISION; DECLARE master INTEGER;
 BEGIN
-  IF (other <> player_ent()) THEN EXIT;
+  IF (client_of(other) IS NULL) THEN EXIT;
   SELECT COALESCE(e.linked_id, e.id) FROM ents e WHERE e.id = :eid INTO master;
   SELECT e.message, e.attack_finished FROM ents e WHERE e.id = :master INTO msg, af;
   IF (af > now_() OR msg IS NULL OR msg = '') THEN EXIT;
   UPDATE ents e SET e.attack_finished = now_() + 5 WHERE e.id = :master;
-  EXECUTE PROCEDURE cprint(msg);
+  EXECUTE PROCEDURE cprint(other, msg);
   EXECUTE PROCEDURE snd(other, 2, 'misc/talk1.wav', 1, 1);
 END^
 
@@ -744,9 +805,9 @@ BEGIN
     EXECUTE PROCEDURE snd_at(x, y, z, 'world/quake.wav', 1, 0);
     UPDATE ents e SET e.pausetime = :t + 0.5e0 WHERE e.id = :eid;
   END
-  pe = player_ent();
+  -- (every client on the ground: target_earthquake_think walks the clients)
   UPDATE ents e SET e.flags = BIN_AND(e.flags, BIN_NOT(512)), e.vx = e.vx + crand() * 150, e.vy = e.vy + crand() * 150,
-         e.vz = :spd * (100e0 / e.mass) WHERE e.id = :pe AND BIN_AND(e.flags, 512) <> 0 AND e.deadflag = 0;
+         e.vz = :spd * (100e0 / e.mass) WHERE e.id IN (SELECT p.ent_id FROM player p) AND BIN_AND(e.flags, 512) <> 0 AND e.deadflag = 0;
   IF (t < until_) THEN UPDATE ents e SET e.think = 'earthquake_think', e.nextthink = :t + 0.1e0 WHERE e.id = :eid;
 END^
 
@@ -975,7 +1036,8 @@ BEGIN
   IF (en IS NULL) THEN
   BEGIN
     IF (find_target(eid) = 0) THEN BEGIN UPDATE ents d SET d.enemy_id = NULL WHERE d.id = :eid; EXIT; END
-    en = player_ent(); tt = t; aif = BIN_AND(aif, BIN_NOT(16));
+    SELECT g.sight_client FROM game g WHERE g.id = 1 INTO en;
+    tt = t; aif = BIN_AND(aif, BIN_NOT(16));
     UPDATE ents d SET d.enemy_id = :en, d.trail_time = :tt, d.aiflags = :aif WHERE d.id = :eid;
   END
   ELSE IF (visible(eid, en) = 1) THEN
@@ -1091,9 +1153,9 @@ BEGIN
            e.enemy_id = :activator WHERE e.id = :tid;
     EXIT;
   END
-  IF (msg IS NOT NULL AND msg <> '' AND activator = player_ent() AND cls NOT IN ('func_door', 'func_door_rotating', 'target_secret', 'target_goal', 'target_help')) THEN
+  IF (msg IS NOT NULL AND msg <> '' AND client_of(activator) IS NOT NULL AND cls NOT IN ('func_door', 'func_door_rotating', 'target_secret', 'target_goal', 'target_help')) THEN
   BEGIN
-    EXECUTE PROCEDURE cprint(msg);
+    EXECUTE PROCEDURE cprint(activator, msg);
     EXECUTE PROCEDURE snd(activator, 2, 'misc/talk1.wav', 1, 1);
   END
   IF (kt IS NOT NULL AND kt <> '') THEN
@@ -1180,7 +1242,7 @@ BEGIN
     ELSE IF (tcls = 'target_secret') THEN
     BEGIN
       UPDATE game g SET g.found_secrets = g.found_secrets + 1 WHERE g.id = 1;
-      EXECUTE PROCEDURE cprint(COALESCE((SELECT e.message FROM ents e WHERE e.id = :t), 'You have found a secret.'));
+      EXECUTE PROCEDURE cprint(activator, COALESCE((SELECT e.message FROM ents e WHERE e.id = :t), 'You have found a secret.'));
       EXECUTE PROCEDURE snd(player_ent(), 2, 'misc/secret.wav', 1, 1);
       UPDATE ents e SET e.message = NULL WHERE e.id = :t;
       EXECUTE PROCEDURE use_targets(t, activator);
@@ -1189,7 +1251,7 @@ BEGIN
     ELSE IF (tcls = 'target_goal') THEN
     BEGIN
       UPDATE game g SET g.found_goals = g.found_goals + 1 WHERE g.id = 1;
-      EXECUTE PROCEDURE cprint(COALESCE((SELECT e.message FROM ents e WHERE e.id = :t), 'Objective completed.'));
+      EXECUTE PROCEDURE cprint(activator, COALESCE((SELECT e.message FROM ents e WHERE e.id = :t), 'Objective completed.'));
       EXECUTE PROCEDURE snd(player_ent(), 2, 'misc/secret.wav', 1, 1);
       UPDATE ents e SET e.message = NULL WHERE e.id = :t;
       EXECUTE PROCEDURE use_targets(t, activator);
@@ -1201,7 +1263,7 @@ BEGIN
       UPDATE game g SET g.help_msg = IIF(BIN_AND((SELECT e.spawnflags FROM ents e WHERE e.id = :t), 1) <> 0, (SELECT e.message FROM ents e WHERE e.id = :t), g.help_msg),
              g.help_msg2 = IIF(BIN_AND((SELECT e.spawnflags FROM ents e WHERE e.id = :t), 1) = 0, (SELECT e.message FROM ents e WHERE e.id = :t), g.help_msg2),
              g.help_changed = g.help_changed + 1 WHERE g.id = 1;
-      EXECUTE PROCEDURE cprint((SELECT e.message FROM ents e WHERE e.id = :t));
+      EXECUTE PROCEDURE cprint(activator, (SELECT e.message FROM ents e WHERE e.id = :t));
       EXECUTE PROCEDURE snd(player_ent(), 2, 'misc/pc_up.wav', 1, 0);
     END
     ELSE IF (tcls = 'target_changelevel') THEN EXECUTE PROCEDURE changelevel(t);
@@ -1283,18 +1345,20 @@ BEGIN
   BEGIN
     kbit = CASE item WHEN 'key_blue_key' THEN 1 WHEN 'key_red_key' THEN 2 WHEN 'key_data_cd' THEN 4 WHEN 'key_power_cube' THEN 8 WHEN 'key_pyramid' THEN 16
                      WHEN 'key_data_spinner' THEN 32 WHEN 'key_pass' THEN 64 WHEN 'key_commander_head' THEN 128 WHEN 'key_airstrike_target' THEN 256 ELSE 0 END;
-    IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = 1 AND BIN_AND(p.keys, :kbit) <> 0)) THEN
+    -- (trigger_key_touch: the activator must be a client with the key)
+    IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.ent_id = :activator AND BIN_AND(p.keys, :kbit) <> 0)) THEN
     BEGIN
       IF (nt IS NULL OR nt < now_()) THEN
       BEGIN
-        EXECUTE PROCEDURE cprint('You need the ' || REPLACE(SUBSTRING(item FROM 5), '_', ' '));
+        EXECUTE PROCEDURE cprint(activator, 'You need the ' || REPLACE(SUBSTRING(item FROM 5), '_', ' '));
         EXECUTE PROCEDURE snd(activator, 2, 'misc/keytry.wav', 1, 1);
         UPDATE ents e SET e.nextthink = now_() + 5 WHERE e.id = :eid;
       END
       EXIT;
     END
     EXECUTE PROCEDURE snd(activator, 2, 'misc/keyuse.wav', 1, 1);
-    UPDATE player p SET p.keys = BIN_AND(p.keys, BIN_NOT(:kbit)) WHERE p.id = 1;     -- the key is used up
+    -- the key is used up (in coop, Quake 2 took one from every client; 3.14 took the activator's)
+    UPDATE player p SET p.keys = BIN_AND(p.keys, BIN_NOT(:kbit)) WHERE p.ent_id = :activator;
     EXECUTE PROCEDURE use_targets(eid, activator);
     DELETE FROM ents e WHERE e.id = :eid;
     EXIT;
@@ -1325,14 +1389,14 @@ BEGIN
   BEGIN
     IF (BIN_AND(sf, 1) = 0) THEN
     BEGIN
-      EXECUTE PROCEDURE cprint(c || ' more to go...');
+      EXECUTE PROCEDURE cprint(activator, c || ' more to go...');
       EXECUTE PROCEDURE snd(activator, 2, 'misc/talk1.wav', 1, 1);
     END
     EXIT;
   END
   IF (BIN_AND(sf, 1) = 0) THEN
   BEGIN
-    EXECUTE PROCEDURE cprint('Sequence completed!');
+    EXECUTE PROCEDURE cprint(activator, 'Sequence completed!');
     EXECUTE PROCEDURE snd(activator, 2, 'misc/talk1.wav', 1, 1);
   END
   UPDATE ents e SET e.enemy_id = :activator WHERE e.id = :eid;
@@ -1349,7 +1413,6 @@ DECLARE pe INTEGER; DECLARE n INTEGER; DECLARE k INTEGER;
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
 DECLARE pitch DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
 BEGIN
-  pe = player_ent();
   SELECT COUNT(*) FROM map_ents m WHERE m.classname = 'info_player_intermission' INTO n;
   IF (n > 0) THEN
   BEGIN
@@ -1361,12 +1424,16 @@ BEGIN
     SELECT FIRST 1 m.ox, m.oy, m.oz, 0, COALESCE(m.ayaw, m.angle, 0)
       FROM map_ents m WHERE m.classname = 'info_player_start' ORDER BY m.id INTO x, y, z, pitch, yaw;
   UPDATE game g SET g.intermission_time = g.time_ WHERE g.id = 1;
-  IF (x IS NOT NULL) THEN
-    UPDATE ents e SET e.x = :x, e.y = :y, e.z = :z, e.yaw = :yaw, e.vx = 0, e.vy = 0, e.vz = 0, e.solid = 0, e.effects = 0 WHERE e.id = :pe;
-  UPDATE player p SET p.pitch = COALESCE(:pitch, p.pitch), p.view_ofs = 0, p.stepz = 0, p.punchangle = 0, p.grenade_time = 0,
-         p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
-         p.dmg_take = 0, p.dmg_save = 0, p.cprint = NULL, p.msg = NULL WHERE p.id = 1;
-  EXECUTE PROCEDURE link_ent(pe);
+  -- every client (BeginIntermission moves them all)
+  FOR SELECT p.ent_id FROM player p WHERE p.ent_id IS NOT NULL INTO pe DO
+  BEGIN
+    IF (x IS NOT NULL) THEN
+      UPDATE ents e SET e.x = :x, e.y = :y, e.z = :z, e.yaw = :yaw, e.vx = 0, e.vy = 0, e.vz = 0, e.solid = 0, e.effects = 0 WHERE e.id = :pe;
+    UPDATE player p SET p.pitch = COALESCE(:pitch, p.pitch), p.view_ofs = 0, p.stepz = 0, p.punchangle = 0, p.grenade_time = 0,
+           p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
+           p.dmg_take = 0, p.dmg_save = 0, p.cprint = NULL, p.msg = NULL WHERE p.ent_id = :pe;
+    EXECUTE PROCEDURE link_ent(pe);
+  END
 END^
 
 -- target_changelevel_use: the level's exit. In single player only the end of a unit ("*" in the map)
@@ -1379,8 +1446,9 @@ BEGIN
   SELECT e.map FROM ents e WHERE e.id = :eid INTO m;
   SELECT g.exit_kind, g.intermission_time FROM game g WHERE g.id = 1 INTO ek, it;
   IF (ek <> 0 OR it IS NOT NULL OR m IS NULL OR m = '') THEN EXIT;      -- already leaving
+  -- the dead don't leave (use_target_changelevel: in single player only; a coop level is left by whoever lives)
   SELECT e.health FROM ents e WHERE e.id = player_ent() INTO hp;
-  IF (hp <= 0) THEN EXIT;                                               -- the dead don't leave
+  IF (hp <= 0 AND (SELECT g.coop FROM game g WHERE g.id = 1) = 0) THEN EXIT;
   UPDATE game g SET g.next_map = :m WHERE g.id = 1;
   IF (POSITION('*', m) > 0) THEN EXECUTE PROCEDURE begin_intermission;
   ELSE UPDATE game g SET g.exit_kind = 1 WHERE g.id = 1;
@@ -1410,7 +1478,7 @@ BEGIN
     EXECUTE PROCEDURE t_damage(v, other, other, 100000, 0, 32);
   UPDATE ents e SET e.x = :dx, e.y = :dy, e.z = :dz + 10, e.yaw = :dyaw, e.pitch = 0, e.vx = 0, e.vy = 0, e.vz = 0,
          e.flags = BIN_AND(e.flags, BIN_NOT(512)), e.teleport_time = now_() + 0.7e0 WHERE e.id = :other;
-  UPDATE player p SET p.pitch = 0 WHERE p.id = 1;
+  UPDATE player p SET p.pitch = 0 WHERE p.ent_id = :other;
   EXECUTE PROCEDURE link_ent(other);
   EXECUTE PROCEDURE snd_at(dx, dy, dz, 'misc/tele1.wav', 1, 1);
   EXECUTE PROCEDURE fx(5, dx, dy, dz + 10, 0, 0, 0, 0);
@@ -1424,42 +1492,43 @@ BEGIN
   RETURN CASE w WHEN 2 THEN 1 WHEN 4 THEN 1 WHEN 8 THEN 2 WHEN 16 THEN 2 WHEN 32 THEN 3 WHEN 64 THEN 3 WHEN 128 THEN 4 WHEN 256 THEN 5 WHEN 512 THEN 6 WHEN 1024 THEN 5 ELSE 0 END;
 END^
 
-CREATE OR ALTER FUNCTION ammo_count (kind SMALLINT) RETURNS INTEGER
+-- (the client's, by its entity: pers.inventory[ammo])
+CREATE OR ALTER FUNCTION ammo_count (pe INTEGER, kind SMALLINT) RETURNS INTEGER
 AS
 DECLARE n INTEGER;
 BEGIN
   SELECT CASE :kind WHEN 1 THEN p.shells WHEN 2 THEN p.bullets WHEN 3 THEN p.grenades WHEN 4 THEN p.rockets WHEN 5 THEN p.cells WHEN 6 THEN p.slugs ELSE 0 END
-    FROM player p WHERE p.id = 1 INTO n;
+    FROM player p WHERE p.ent_id = :pe INTO n;
   RETURN COALESCE(n, 0);
 END^
 
 -- Add_Ammo: returns 1 if any was taken
-CREATE OR ALTER FUNCTION add_ammo (kind SMALLINT, n INTEGER) RETURNS SMALLINT
+CREATE OR ALTER FUNCTION add_ammo (pe INTEGER, kind SMALLINT, n INTEGER) RETURNS SMALLINT
 AS
 DECLARE cur INTEGER; DECLARE mx INTEGER;
 BEGIN
   SELECT CASE :kind WHEN 1 THEN p.shells WHEN 2 THEN p.bullets WHEN 3 THEN p.grenades WHEN 4 THEN p.rockets WHEN 5 THEN p.cells WHEN 6 THEN p.slugs END,
          CASE :kind WHEN 1 THEN p.max_shells WHEN 2 THEN p.max_bullets WHEN 3 THEN p.max_grenades WHEN 4 THEN p.max_rockets WHEN 5 THEN p.max_cells WHEN 6 THEN p.max_slugs END
-    FROM player p WHERE p.id = 1 INTO cur, mx;
+    FROM player p WHERE p.ent_id = :pe INTO cur, mx;
   IF (cur IS NULL OR cur >= mx) THEN RETURN 0;
   cur = MINVALUE(mx, cur + n);
   UPDATE player p SET p.shells = IIF(:kind = 1, :cur, p.shells), p.bullets = IIF(:kind = 2, :cur, p.bullets), p.grenades = IIF(:kind = 3, :cur, p.grenades),
-         p.rockets = IIF(:kind = 4, :cur, p.rockets), p.cells = IIF(:kind = 5, :cur, p.cells), p.slugs = IIF(:kind = 6, :cur, p.slugs) WHERE p.id = 1;
+         p.rockets = IIF(:kind = 4, :cur, p.rockets), p.cells = IIF(:kind = 5, :cur, p.cells), p.slugs = IIF(:kind = 6, :cur, p.slugs) WHERE p.ent_id = :pe;
   RETURN 1;
 END^
 
--- the best weapon the player holds with ammo (NoAmmoWeaponChange's order)
-CREATE OR ALTER FUNCTION best_weapon () RETURNS INTEGER
+-- the best weapon the client holds with ammo (NoAmmoWeaponChange's order)
+CREATE OR ALTER FUNCTION best_weapon (pe INTEGER) RETURNS INTEGER
 AS
 DECLARE w INTEGER;
 BEGIN
-  SELECT p.weapons FROM player p WHERE p.id = 1 INTO w;
-  IF (BIN_AND(w, 512) <> 0 AND ammo_count(6) > 0) THEN RETURN 512;
-  IF (BIN_AND(w, 256) <> 0 AND ammo_count(5) > 0) THEN RETURN 256;
-  IF (BIN_AND(w, 16) <> 0 AND ammo_count(2) > 0) THEN RETURN 16;
-  IF (BIN_AND(w, 8) <> 0 AND ammo_count(2) > 0) THEN RETURN 8;
-  IF (BIN_AND(w, 4) <> 0 AND ammo_count(1) > 1) THEN RETURN 4;
-  IF (BIN_AND(w, 2) <> 0 AND ammo_count(1) > 0) THEN RETURN 2;
+  SELECT p.weapons FROM player p WHERE p.ent_id = :pe INTO w;
+  IF (BIN_AND(w, 512) <> 0 AND ammo_count(pe, 6) > 0) THEN RETURN 512;
+  IF (BIN_AND(w, 256) <> 0 AND ammo_count(pe, 5) > 0) THEN RETURN 256;
+  IF (BIN_AND(w, 16) <> 0 AND ammo_count(pe, 2) > 0) THEN RETURN 16;
+  IF (BIN_AND(w, 8) <> 0 AND ammo_count(pe, 2) > 0) THEN RETURN 8;
+  IF (BIN_AND(w, 4) <> 0 AND ammo_count(pe, 1) > 1) THEN RETURN 4;
+  IF (BIN_AND(w, 2) <> 0 AND ammo_count(pe, 1) > 0) THEN RETURN 2;
   RETURN 1;
 END^
 
@@ -1469,7 +1538,7 @@ END^
 -- 21 rockets, 22 slugs, 23 quad damage, 24 invulnerability, 25 silencer, 26 rebreather, 27 environment suit,
 -- 28-31 the instant ones (ancient head, adrenaline, bandolier, ammo pack), 32-40 the keys, 41 health.
 -- The counts live where the game keeps them (the weapon bits, the ammo, the armour, the key bits) and in inv_*.
-CREATE OR ALTER FUNCTION inv_count (idx SMALLINT) RETURNS INTEGER
+CREATE OR ALTER FUNCTION inv_count (pe INTEGER, idx SMALLINT) RETURNS INTEGER
 AS
 DECLARE n INTEGER;
 BEGIN
@@ -1485,7 +1554,7 @@ BEGIN
     WHEN :idx BETWEEN 32 AND 40 THEN IIF(BIN_AND(p.keys, CASE :idx WHEN 32 THEN 4 WHEN 34 THEN 16 WHEN 35 THEN 32 WHEN 36 THEN 64
                                                          WHEN 37 THEN 1 WHEN 38 THEN 2 WHEN 39 THEN 128 ELSE 256 END) <> 0, 1, 0)
     ELSE 0 END
-    FROM player p WHERE p.id = 1 INTO n;
+    FROM player p WHERE p.ent_id = :pe INTO n;
   RETURN COALESCE(n, 0);
 END^
 
@@ -1557,66 +1626,69 @@ BEGIN
 END^
 
 -- SelectNextItem / SelectPrevItem (dir 1 / -1): the next usable item held, round the itemlist; -1 when none
-CREATE OR ALTER PROCEDURE inv_select (dir SMALLINT)
+CREATE OR ALTER PROCEDURE inv_select (pe INTEGER, dir SMALLINT)
 AS
 DECLARE cur SMALLINT; DECLARE i SMALLINT = 1; DECLARE idx SMALLINT; DECLARE u SMALLINT; DECLARE n INTEGER;
 BEGIN
-  SELECT p.inv_sel FROM player p WHERE p.id = 1 INTO cur;
+  SELECT p.inv_sel FROM player p WHERE p.ent_id = :pe INTO cur;
   WHILE (i <= 41) DO
   BEGIN
     idx = MOD(cur + dir * i + 82, 41);
     u = item_usable(idx);
     IF (u = 1) THEN
     BEGIN
-      n = inv_count(idx);
+      n = inv_count(pe, idx);
       IF (n > 0) THEN
       BEGIN
-        UPDATE player p SET p.inv_sel = :idx WHERE p.id = 1;
+        UPDATE player p SET p.inv_sel = :idx WHERE p.ent_id = :pe;
         EXIT;
       END
     END
     i = i + 1;
   END
-  UPDATE player p SET p.inv_sel = -1 WHERE p.id = 1;
+  UPDATE player p SET p.inv_sel = -1 WHERE p.ent_id = :pe;
 END^
 
--- the inventory screen's rows (svc_inventory): every item held, with its count, in itemlist order
-CREATE OR ALTER PROCEDURE inventory_list
+-- the inventory screen's rows (svc_inventory): every item the client holds, with its count, in itemlist order
+CREATE OR ALTER PROCEDURE inventory_list (client SMALLINT = 1)
 RETURNS (idx SMALLINT, cnt INTEGER)
 AS
+DECLARE pe INTEGER;
 BEGIN
+  SELECT p.ent_id FROM player p WHERE p.id = :client INTO pe;
   idx = 1;
   WHILE (idx <= 40) DO
   BEGIN
-    cnt = inv_count(idx);
+    cnt = inv_count(pe, idx);
     IF (cnt > 0) THEN SUSPEND;
     idx = idx + 1;
   END
 END^
 
 -- ValidateSelectedItem: an item used up moves the selection on
-CREATE OR ALTER PROCEDURE inv_validate
+CREATE OR ALTER PROCEDURE inv_validate (pe INTEGER)
 AS
 DECLARE cur SMALLINT; DECLARE n INTEGER;
 BEGIN
-  SELECT p.inv_sel FROM player p WHERE p.id = 1 INTO cur;
-  n = IIF(cur > 0, inv_count(cur), 0);
-  IF (n <= 0) THEN EXECUTE PROCEDURE inv_select(1);
+  SELECT p.inv_sel FROM player p WHERE p.ent_id = :pe INTO cur;
+  n = IIF(cur > 0, inv_count(pe, cur), 0);
+  IF (n <= 0) THEN EXECUTE PROCEDURE inv_select(pe, 1);
 END^
 
 -- the pickup functions of g_items.c: taken says whether the item was taken, idx is its itemlist index
 CREATE OR ALTER PROCEDURE item_pickup (item INTEGER, other INTEGER)
-RETURNS (taken SMALLINT, snd_ VARCHAR(64), idx SMALLINT)
+RETURNS (taken SMALLINT, snd_ VARCHAR(64), idx SMALLINT, stays SMALLINT)
 AS
 DECLARE cls VARCHAR(40); DECLARE hp INTEGER; DECLARE mhp INTEGER;
 DECLARE t DOUBLE PRECISION; DECLARE w INTEGER; DECLARE have INTEGER; DECLARE n INTEGER; DECLARE sk SMALLINT;
 DECLARE av INTEGER; DECLARE atype SMALLINT; DECLARE newtype SMALLINT; DECLARE base INTEGER; DECLARE mx INTEGER; DECLARE kbit INTEGER;
-DECLARE cnt INTEGER; DECLARE ak SMALLINT; DECLARE oldcount INTEGER; DECLARE isf INTEGER;
+DECLARE cnt INTEGER; DECLARE ak SMALLINT; DECLARE oldcount INTEGER; DECLARE isf INTEGER; DECLARE coop SMALLINT;
 BEGIN
-  taken = 0;
+  taken = 0; stays = 0;
+  SELECT g.coop FROM game g WHERE g.id = 1 INTO coop;
   SELECT e.classname, e.count_, e.spawnflags FROM ents e WHERE e.id = :item INTO cls, cnt, isf;
   SELECT e.health, e.max_health FROM ents e WHERE e.id = :other INTO hp, mhp;
-  SELECT p.weapons, p.armor, p.armor_type FROM player p WHERE p.id = 1 INTO have, av, atype;
+  SELECT p.weapons, p.armor, p.armor_type FROM player p WHERE p.ent_id = :other INTO have, av, atype;
   idx = item_class_index(cls);
   t = now_();
   snd_ = 'items/pkup.wav';
@@ -1636,13 +1708,13 @@ BEGIN
   ELSE IF (cls = 'item_health_mega') THEN
   BEGIN
     UPDATE ents e SET e.health = e.health + 100 WHERE e.id = :other;
-    UPDATE player p SET p.mega_time = :t + 5 WHERE p.id = 1;
+    UPDATE player p SET p.mega_time = :t + 5 WHERE p.ent_id = :other;
     snd_ = 'items/m_health.wav';
   END
   -- armour (Pickup_Armor)
   ELSE IF (cls = 'item_armor_shard') THEN
   BEGIN
-    UPDATE player p SET p.armor = p.armor + 2, p.armor_type = IIF(p.armor_type = 0, 1, p.armor_type) WHERE p.id = 1;
+    UPDATE player p SET p.armor = p.armor + 2, p.armor_type = IIF(p.armor_type = 0, 1, p.armor_type) WHERE p.ent_id = :other;
     snd_ = 'misc/ar2_pkup.wav';
   END
   ELSE IF (cls IN ('item_armor_jacket', 'item_armor_combat', 'item_armor_body')) THEN
@@ -1651,12 +1723,12 @@ BEGIN
     base = CASE newtype WHEN 1 THEN 25 WHEN 2 THEN 50 ELSE 100 END;
     mx = CASE newtype WHEN 1 THEN 50 WHEN 2 THEN 100 ELSE 200 END;
     IF (atype = 0 OR av = 0) THEN
-      UPDATE player p SET p.armor = :base, p.armor_type = :newtype WHERE p.id = 1;
+      UPDATE player p SET p.armor = :base, p.armor_type = :newtype WHERE p.ent_id = :other;
     ELSE IF (newtype > atype) THEN
     BEGIN
       -- the better armour: keep part of the old count, converted
       n = CAST(av * (CASE atype WHEN 1 THEN 0.3e0 WHEN 2 THEN 0.6e0 ELSE 0.8e0 END) / (CASE newtype WHEN 1 THEN 0.3e0 WHEN 2 THEN 0.6e0 ELSE 0.8e0 END) AS INTEGER);
-      UPDATE player p SET p.armor = MINVALUE(:mx, :base + :n), p.armor_type = :newtype WHERE p.id = 1;
+      UPDATE player p SET p.armor = MINVALUE(:mx, :base + :n), p.armor_type = :newtype WHERE p.ent_id = :other;
     END
     ELSE
     BEGIN
@@ -1664,14 +1736,14 @@ BEGIN
       n = CAST(base * (CASE newtype WHEN 1 THEN 0.3e0 WHEN 2 THEN 0.6e0 ELSE 0.8e0 END) / (CASE atype WHEN 1 THEN 0.3e0 WHEN 2 THEN 0.6e0 ELSE 0.8e0 END) AS INTEGER);
       mx = CASE atype WHEN 1 THEN 50 WHEN 2 THEN 100 ELSE 200 END;
       IF (av >= mx) THEN EXIT;
-      UPDATE player p SET p.armor = MINVALUE(:mx, p.armor + :n) WHERE p.id = 1;
+      UPDATE player p SET p.armor = MINVALUE(:mx, p.armor + :n) WHERE p.ent_id = :other;
     END
     snd_ = 'misc/ar1_pkup.wav';
   END
   ELSE IF (cls IN ('item_power_shield', 'item_power_screen')) THEN
   BEGIN
     -- Pickup_PowerArmor: into the inventory; single player switches it on only when it is used
-    UPDATE player p SET p.inv_shield = p.inv_shield + IIF(:idx = 6, 1, 0), p.inv_screen = p.inv_screen + IIF(:idx = 5, 1, 0) WHERE p.id = 1;
+    UPDATE player p SET p.inv_shield = p.inv_shield + IIF(:idx = 6, 1, 0), p.inv_screen = p.inv_screen + IIF(:idx = 5, 1, 0) WHERE p.ent_id = :other;
     snd_ = 'misc/ar3_pkup.wav';
   END
   -- ammo (Pickup_Ammo)
@@ -1679,13 +1751,13 @@ BEGIN
   BEGIN
     ak = CASE cls WHEN 'ammo_shells' THEN 1 WHEN 'ammo_bullets' THEN 2 WHEN 'ammo_grenades' THEN 3 WHEN 'ammo_rockets' THEN 4 WHEN 'ammo_cells' THEN 5 WHEN 'ammo_slugs' THEN 6 ELSE 0 END;
     n = IIF(cnt > 0, cnt, CASE ak WHEN 1 THEN 10 WHEN 2 THEN 50 WHEN 3 THEN 5 WHEN 4 THEN 5 WHEN 5 THEN 50 WHEN 6 THEN 10 ELSE 0 END);
-    oldcount = ammo_count(ak);
-    IF (add_ammo(ak, n) = 0) THEN EXIT;
+    oldcount = ammo_count(other, ak);
+    IF (add_ammo(other, ak, n) = 0) THEN EXIT;
     -- a box of grenades is the hand grenade weapon too; the first one raises it (Pickup_Ammo, single player)
-    IF (ak = 3 AND BIN_AND(have, 32) = 0) THEN UPDATE player p SET p.weapons = BIN_OR(p.weapons, 32) WHERE p.id = 1;
+    IF (ak = 3 AND BIN_AND(have, 32) = 0) THEN UPDATE player p SET p.weapons = BIN_OR(p.weapons, 32) WHERE p.ent_id = :other;
     IF (ak = 3 AND oldcount = 0) THEN
       UPDATE player p SET p.weapon = 32, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
-             p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.id = 1 AND p.weapon <> 32;
+             p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.ent_id = :other AND p.weapon <> 32;
     snd_ = 'misc/am_pkup.wav';
   END
   -- weapons (Pickup_Weapon)
@@ -1696,13 +1768,19 @@ BEGIN
                  WHEN 'weapon_bfg' THEN 1024 ELSE 0 END;
     IF (w = 0) THEN EXIT;
     -- Pickup_Weapon in single player: always taken, with its ammo (as much as fits) unless it was dropped
-    -- (DROPPED_ITEM); the first one of its kind is raised at once, whatever is in hand
+    -- (DROPPED_ITEM); the first one of its kind is raised at once, whatever is in hand. In coop a weapon
+    -- already held is left for the others, and one taken stays for them (IT_STAY_COOP), unless it was dropped
+    IF (coop = 1 AND BIN_AND(COALESCE(isf, 0), 65536) = 0) THEN
+    BEGIN
+      IF (BIN_AND(have, w) <> 0) THEN EXIT;
+      stays = 1;
+    END
     ak = weapon_ammo(w);
     n = CASE ak WHEN 1 THEN 10 WHEN 2 THEN 50 WHEN 3 THEN 5 WHEN 4 THEN 5 WHEN 5 THEN 50 WHEN 6 THEN 10 ELSE 0 END;
-    IF (BIN_AND(COALESCE(isf, 0), 65536) = 0) THEN n = add_ammo(ak, n);
+    IF (BIN_AND(COALESCE(isf, 0), 65536) = 0) THEN n = add_ammo(other, ak, n);
     IF (BIN_AND(have, w) = 0) THEN
       UPDATE player p SET p.weapons = BIN_OR(p.weapons, :w), p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
-             p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.id = 1;
+             p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.ent_id = :other;
     snd_ = 'misc/w_pkup.wav';
   END
   -- keys
@@ -1710,7 +1788,13 @@ BEGIN
   BEGIN
     kbit = CASE cls WHEN 'key_blue_key' THEN 1 WHEN 'key_red_key' THEN 2 WHEN 'key_data_cd' THEN 4 WHEN 'key_power_cube' THEN 8 WHEN 'key_pyramid' THEN 16
                     WHEN 'key_data_spinner' THEN 32 WHEN 'key_pass' THEN 64 WHEN 'key_commander_head' THEN 128 WHEN 'key_airstrike_target' THEN 256 ELSE 0 END;
-    UPDATE player p SET p.keys = BIN_OR(p.keys, :kbit), p.power_cubes = p.power_cubes + IIF(:kbit = 8, 1, 0) WHERE p.id = 1;
+    -- Pickup_Key in coop: one each, and the key stays for the others (IT_STAY_COOP)
+    IF (coop = 1) THEN
+    BEGIN
+      IF (EXISTS (SELECT 1 FROM player p WHERE p.ent_id = :other AND BIN_AND(p.keys, :kbit) <> 0)) THEN EXIT;
+      stays = 1;
+    END
+    UPDATE player p SET p.keys = BIN_OR(p.keys, :kbit), p.power_cubes = p.power_cubes + IIF(:kbit = 8, 1, 0) WHERE p.ent_id = :other;
     snd_ = 'items/pkup.wav';
   END
   -- powerups (Pickup_Powerup): into the inventory, to be used with their key or invuse; hard holds one of each,
@@ -1718,11 +1802,11 @@ BEGIN
   ELSE IF (idx BETWEEN 23 AND 27) THEN
   BEGIN
     SELECT g.skill FROM game g WHERE g.id = 1 INTO sk;
-    n = inv_count(idx);
+    n = inv_count(other, idx);
     IF ((sk = 1 AND n >= 2) OR (sk >= 2 AND n >= 1)) THEN EXIT;
     UPDATE player p SET p.inv_quad = p.inv_quad + IIF(:idx = 23, 1, 0), p.inv_invuln = p.inv_invuln + IIF(:idx = 24, 1, 0),
            p.inv_silencer = p.inv_silencer + IIF(:idx = 25, 1, 0), p.inv_breather = p.inv_breather + IIF(:idx = 26, 1, 0),
-           p.inv_enviro = p.inv_enviro + IIF(:idx = 27, 1, 0) WHERE p.id = 1;
+           p.inv_enviro = p.inv_enviro + IIF(:idx = 27, 1, 0) WHERE p.ent_id = :other;
   END
   ELSE IF (cls = 'item_adrenaline') THEN
   BEGIN
@@ -1730,14 +1814,14 @@ BEGIN
   END
   ELSE IF (cls = 'item_bandolier') THEN
   BEGIN
-    UPDATE player p SET p.max_bullets = MAXVALUE(p.max_bullets, 250), p.max_shells = MAXVALUE(p.max_shells, 150), p.max_cells = MAXVALUE(p.max_cells, 250), p.max_slugs = MAXVALUE(p.max_slugs, 75) WHERE p.id = 1;
-    n = add_ammo(2, 50); n = add_ammo(1, 10);
+    UPDATE player p SET p.max_bullets = MAXVALUE(p.max_bullets, 250), p.max_shells = MAXVALUE(p.max_shells, 150), p.max_cells = MAXVALUE(p.max_cells, 250), p.max_slugs = MAXVALUE(p.max_slugs, 75) WHERE p.ent_id = :other;
+    n = add_ammo(other, 2, 50); n = add_ammo(other, 1, 10);
   END
   ELSE IF (cls = 'item_pack') THEN
   BEGIN
     UPDATE player p SET p.max_bullets = MAXVALUE(p.max_bullets, 300), p.max_shells = MAXVALUE(p.max_shells, 200), p.max_rockets = MAXVALUE(p.max_rockets, 100),
-           p.max_grenades = MAXVALUE(p.max_grenades, 100), p.max_cells = MAXVALUE(p.max_cells, 300), p.max_slugs = MAXVALUE(p.max_slugs, 100) WHERE p.id = 1;
-    n = add_ammo(2, 50); n = add_ammo(1, 10); n = add_ammo(5, 50); n = add_ammo(3, 5); n = add_ammo(4, 5); n = add_ammo(6, 10);
+           p.max_grenades = MAXVALUE(p.max_grenades, 100), p.max_cells = MAXVALUE(p.max_cells, 300), p.max_slugs = MAXVALUE(p.max_slugs, 100) WHERE p.ent_id = :other;
+    n = add_ammo(other, 2, 50); n = add_ammo(other, 1, 10); n = add_ammo(other, 5, 50); n = add_ammo(other, 3, 5); n = add_ammo(other, 4, 5); n = add_ammo(other, 6, 10);
   END
   ELSE EXIT;
   taken = 1;
@@ -1749,18 +1833,18 @@ END^
 CREATE OR ALTER PROCEDURE item_touch (item INTEGER, other INTEGER)
 AS
 DECLARE taken SMALLINT; DECLARE snd_ VARCHAR(64); DECLARE idx SMALLINT; DECLARE hp INTEGER; DECLARE sf INTEGER;
-DECLARE t DOUBLE PRECISION; DECLARE u SMALLINT;
+DECLARE t DOUBLE PRECISION; DECLARE u SMALLINT; DECLARE stays SMALLINT;
 BEGIN
-  IF (other <> player_ent()) THEN EXIT;
+  IF (client_of(other) IS NULL) THEN EXIT;
   SELECT e.health FROM ents e WHERE e.id = :other INTO hp;
   IF (hp <= 0) THEN EXIT;                                 -- dead people can't pick up
-  EXECUTE PROCEDURE item_pickup(item, other) RETURNING_VALUES taken, snd_, idx;
+  EXECUTE PROCEDURE item_pickup(item, other) RETURNING_VALUES taken, snd_, idx, stays;
   IF (taken = 1) THEN
   BEGIN
     t = now_();
     u = item_usable(idx);
     UPDATE player p SET p.bonus_time = :t, p.pickup_item = :idx, p.pickup_time = :t + 3,
-           p.inv_sel = IIF(:u = 1, :idx, p.inv_sel) WHERE p.id = 1;
+           p.inv_sel = IIF(:u = 1, :idx, p.inv_sel) WHERE p.ent_id = :other;
     EXECUTE PROCEDURE snd(other, 3, snd_, 1, 1);
   END
   SELECT e.spawnflags FROM ents e WHERE e.id = :item INTO sf;
@@ -1769,7 +1853,7 @@ BEGIN
     UPDATE ents e SET e.spawnflags = BIN_OR(e.spawnflags, 262144) WHERE e.id = :item;
     EXECUTE PROCEDURE use_targets(item, other);
   END
-  IF (taken = 1) THEN DELETE FROM ents e WHERE e.id = :item;
+  IF (taken = 1 AND stays = 0) THEN DELETE FROM ents e WHERE e.id = :item;   -- (a coop weapon or key stays for the others)
 END^
 
 -- ── damage (g_combat.c) ──────────────────────────────────────────────────
@@ -1841,14 +1925,24 @@ END^
 -- Killed(): the target's health fell to zero
 CREATE OR ALTER PROCEDURE killed (targ INTEGER, attacker INTEGER)
 AS
-DECLARE cls VARCHAR(40); DECLARE flags INTEGER; DECLARE hp INTEGER; DECLARE gh INTEGER;
+DECLARE cls VARCHAR(40); DECLARE flags INTEGER; DECLARE hp INTEGER; DECLARE gh INTEGER; DECLARE k INTEGER;
 BEGIN
   SELECT e.classname, e.flags, e.health, e.gib_health FROM ents e WHERE e.id = :targ INTO cls, flags, hp, gh;
   IF (hp < -999) THEN UPDATE ents e SET e.health = -999 WHERE e.id = :targ;
+  IF (cls = 'bodyque') THEN
+  BEGIN
+    -- body_die: a body left behind by a coop respawn gibs when hurt enough
+    IF (hp < -40) THEN BEGIN EXECUTE PROCEDURE gib_ent(targ, -hp); DELETE FROM ents e WHERE e.id = :targ; END
+    EXIT;
+  END
   IF (cls = 'player') THEN
   BEGIN
     UPDATE ents e SET e.deadflag = 1, e.solid = 0, e.movetype = 6, e.minz = -24, e.maxz = -8, e.takedamage = 0, e.viewheight = -8 WHERE e.id = :targ;
-    UPDATE player p SET p.dead_time = now_(), p.view_ofs = -8, p.weapon = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0 WHERE p.id = 1;
+    UPDATE player p SET p.dead_time = now_(), p.view_ofs = -8, p.weapon = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0 WHERE p.ent_id = :targ;
+    -- player_die: one of the three death animations (the crouched one when ducked), the frame before its first
+    k = CAST(FLOOR(rnd() * 3) AS INTEGER);
+    UPDATE player p SET p.anim_priority = 5, p.anim_end = IIF(p.ducked = 1, 177, CASE :k WHEN 0 THEN 183 WHEN 1 THEN 189 ELSE 197 END) WHERE p.ent_id = :targ;
+    UPDATE ents e SET e.frame = IIF((SELECT p.ducked FROM player p WHERE p.ent_id = :targ) = 1, 172, CASE :k WHEN 0 THEN 177 WHEN 1 THEN 183 ELSE 189 END) WHERE e.id = :targ;
     IF (hp < -40) THEN
     BEGIN
       EXECUTE PROCEDURE snd(targ, 2, 'misc/udeath.wav', 1, 1);
@@ -1910,7 +2004,7 @@ AS
 DECLARE td SMALLINT; DECLARE cls VARCHAR(40); DECLARE flags INTEGER; DECLARE hp INTEGER; DECLARE mass INTEGER; DECLARE mt SMALLINT;
 DECLARE save INTEGER; DECLARE take INTEGER; DECLARE av INTEGER; DECLARE atype SMALLINT; DECLARE inv DOUBLE PRECISION; DECLARE prot DOUBLE PRECISION;
 DECLARE dx DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; DECLARE dz DOUBLE PRECISION; DECLARE dl DOUBLE PRECISION; DECLARE kv DOUBLE PRECISION;
-DECLARE pe INTEGER; DECLARE qf DOUBLE PRECISION; DECLARE pf DOUBLE PRECISION; DECLARE pa SMALLINT; DECLARE ce INTEGER;
+DECLARE k INTEGER; DECLARE qf DOUBLE PRECISION; DECLARE pf DOUBLE PRECISION; DECLARE pa SMALLINT; DECLARE ce INTEGER;
 DECLARE isc SMALLINT; DECLARE ish SMALLINT; DECLARE pdmg INTEGER; DECLARE dpc SMALLINT; DECLARE front SMALLINT;
 DECLARE fx_ DOUBLE PRECISION; DECLARE fy_ DOUBLE PRECISION; DECLARE ix DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE iz DOUBLE PRECISION;
 DECLARE tx DOUBLE PRECISION; DECLARE ty DOUBLE PRECISION; DECLARE tz DOUBLE PRECISION; DECLARE tyaw DOUBLE PRECISION;
@@ -1918,14 +2012,14 @@ BEGIN
   SELECT e.takedamage, e.classname, e.flags, e.health, e.movetype, e.mass FROM ents e WHERE e.id = :targ INTO td, cls, flags, hp, mt, mass;
   IF (td IS NULL OR td = 0) THEN EXIT;
   -- (what is already dead is not killed again; a secret door takes damage at health 0 and dies of any)
-  IF (hp <= 0 AND cls <> 'player' AND BIN_AND(flags, 32) = 0 AND cls <> 'func_door_secret') THEN EXIT;
-  pe = player_ent();
-  IF (attacker = pe) THEN
+  IF (hp <= 0 AND cls <> 'player' AND BIN_AND(flags, 32) = 0 AND cls NOT IN ('func_door_secret', 'bodyque')) THEN EXIT;
+  -- (the attacker's quad: a client's)
+  IF (client_of(attacker) IS NOT NULL) THEN
   BEGIN
-    SELECT p.quad_finished FROM player p WHERE p.id = 1 INTO qf;
+    SELECT p.quad_finished FROM player p WHERE p.ent_id = :attacker INTO qf;
     IF (qf > now_()) THEN BEGIN damage = damage * 4; knockback = knockback * 4; END
   END
-  IF (BIN_AND(flags, 64) <> 0 AND attacker = pe) THEN EXIT;    -- FL_NOTARGET-style: monsters don't hurt each other here anyway
+  IF (BIN_AND(flags, 64) <> 0 AND client_of(attacker) IS NOT NULL) THEN EXIT;    -- FL_NOTARGET-style: monsters don't hurt each other here anyway
 
   -- knockback
   IF (BIN_AND(dflags, 8) = 0 AND knockback > 0 AND mt NOT IN (0, 7, 8, 10) AND inflictor IS NOT NULL AND inflictor > 0) THEN
@@ -1946,7 +2040,7 @@ BEGIN
   IF (cls = 'player') THEN
   BEGIN
     IF (BIN_AND(flags, 16) <> 0) THEN EXIT;                               -- god mode
-    SELECT p.armor, p.armor_type, p.invincible_finished, p.pain_finished, p.power_armor, p.cells, p.inv_screen, p.inv_shield FROM player p WHERE p.id = 1
+    SELECT p.armor, p.armor_type, p.invincible_finished, p.pain_finished, p.power_armor, p.cells, p.inv_screen, p.inv_shield FROM player p WHERE p.ent_id = :targ
       INTO av, atype, inv, pf, pa, ce, isc, ish;
     pa = IIF(pa = 1, IIF(ish > 0, 2, IIF(isc > 0, 1, 0)), 0);           -- PowerArmorType
     IF (inv > now_() AND BIN_AND(dflags, 32) = 0) THEN
@@ -1954,7 +2048,7 @@ BEGIN
       IF (pf < now_()) THEN
       BEGIN
         EXECUTE PROCEDURE snd(targ, 3, 'items/protect4.wav', 1, 1);
-        UPDATE player p SET p.pain_finished = now_() + 2 WHERE p.id = 1;
+        UPDATE player p SET p.pain_finished = now_() + 2 WHERE p.ent_id = :targ;
       END
       EXIT;
     END
@@ -1982,7 +2076,7 @@ BEGIN
         IF (save > pdmg) THEN save = pdmg;
         IF (save > 0) THEN
         BEGIN
-          UPDATE player p SET p.cells = MAXVALUE(0, p.cells - TRUNC(:save / :dpc)), p.dmg_save = p.dmg_save + :save WHERE p.id = 1;
+          UPDATE player p SET p.cells = MAXVALUE(0, p.cells - TRUNC(:save / :dpc)), p.dmg_save = p.dmg_save + :save WHERE p.ent_id = :targ;
           damage = damage - save;
           dl = vlen(COALESCE(ix, tx) - tx, COALESCE(iy, ty) - ty, COALESCE(iz, tz) - tz);
           IF (dl > 0) THEN BEGIN ix = (ix - tx) / dl; iy = (iy - ty) / dl; iz = (iz - tz) / dl; END ELSE BEGIN ix = 0; iy = 0; iz = 1; END
@@ -1998,9 +2092,9 @@ BEGIN
       prot = IIF(BIN_AND(dflags, 4) <> 0, CASE atype WHEN 1 THEN 0e0 WHEN 2 THEN 0.3e0 ELSE 0.6e0 END, CASE atype WHEN 1 THEN 0.3e0 WHEN 2 THEN 0.6e0 ELSE 0.8e0 END);
       save = CEILING(prot * damage);
       IF (save >= av) THEN save = av;
-      UPDATE player p SET p.armor = p.armor - :save, p.armor_type = IIF(p.armor - :save <= 0, 0, p.armor_type) WHERE p.id = 1;
+      UPDATE player p SET p.armor = p.armor - :save, p.armor_type = IIF(p.armor - :save <= 0, 0, p.armor_type) WHERE p.ent_id = :targ;
     END
-    UPDATE player p SET p.dmg_take = p.dmg_take + (:damage - :save), p.dmg_save = p.dmg_save + :save, p.dmg_time = now_() WHERE p.id = 1;
+    UPDATE player p SET p.dmg_take = p.dmg_take + (:damage - :save), p.dmg_save = p.dmg_save + :save, p.dmg_time = now_() WHERE p.ent_id = :targ;
   END
   take = damage - save;
   IF (take <= 0 AND cls = 'player') THEN EXIT;
@@ -2020,18 +2114,27 @@ BEGIN
   END
   IF (cls = 'player') THEN
   BEGIN
-    SELECT p.pain_finished FROM player p WHERE p.id = 1 INTO pf;
+    SELECT p.pain_finished FROM player p WHERE p.ent_id = :targ INTO pf;
     IF (pf < now_() AND take > 0) THEN
     BEGIN
       EXECUTE PROCEDURE snd(targ, 2, 'player/male/pain' || CASE WHEN hp < 25 THEN '25' WHEN hp < 50 THEN '50' WHEN hp < 75 THEN '75' ELSE '100' END || '_' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav', 1, 1);
-      UPDATE player p SET p.pain_finished = now_() + 0.7e0, p.punchangle = -2 WHERE p.id = 1;
+      UPDATE player p SET p.pain_finished = now_() + 0.7e0, p.punchangle = -2 WHERE p.ent_id = :targ;
+    END
+    -- P_DamageFeedback: the pain animation (one of three in turn, the crouched one when ducked), unless something
+    -- more pressing is playing
+    IF (take > 0) THEN
+    BEGIN
+      SELECT MOD(g.tic, 3) FROM game g WHERE g.id = 1 INTO k;
+      UPDATE player p SET p.anim_priority = 3, p.anim_end = IIF(p.ducked = 1, 172, 57 + 4 * :k) WHERE p.ent_id = :targ AND p.anim_priority < 3;
+      IF (ROW_COUNT > 0) THEN
+        UPDATE ents e SET e.frame = IIF((SELECT p.ducked FROM player p WHERE p.ent_id = :targ) = 1, 168, 53 + 4 * :k) WHERE e.id = :targ;
     END
     EXIT;
   END
   IF (BIN_AND(flags, 32) <> 0) THEN
   BEGIN
     -- monsters get mad at whoever hurt them
-    IF (attacker = pe) THEN
+    IF (client_of(attacker) IS NOT NULL) THEN
       UPDATE ents e SET e.enemy_id = :attacker, e.st = IIF(e.st = 'stand' OR e.st = 'walk', 'run', e.st), e.anim = IIF(e.st = 'stand' OR e.st = 'walk', NULL, e.anim) WHERE e.id = :targ;
     EXECUTE PROCEDURE monster_pain(targ, attacker, take);
   END
@@ -2407,6 +2510,121 @@ END^
 
 -- spawn_map_ents: the spawn functions for every classname we know (SpawnEntities), or, with only_id,
 -- ED_CallSpawn for that one row of map_ents (target_spawner)
+-- ── the clients (p_client.c) ─────────────────────────────────────────────
+-- PutClientInServer: the client's entity afresh at a spawn point: the box, the model, the health it brings
+-- (pers.health), alive, whatever stood there telefragged (KillBox); the client row's per-level fields cleared
+-- (the pers stay: a level change or a coop respawn settles those before calling)
+CREATE OR ALTER PROCEDURE put_client_in_server (pe INTEGER, x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION, hp INTEGER, mhp INTEGER)
+AS
+DECLARE v INTEGER;
+BEGIN
+  UPDATE ents e SET e.classname = 'player', e.x = :x, e.y = :y, e.z = :z + 1, e.yaw = :yaw, e.pitch = 0, e.roll = 0, e.vx = 0, e.vy = 0, e.vz = 0,
+         e.minx = -16, e.miny = -16, e.minz = -24, e.maxx = 16, e.maxy = 16, e.maxz = 32, e.viewheight = 22,
+         e.solid = 3, e.movetype = 3, e.clipmask = 33619971, e.health = :hp, e.max_health = :mhp, e.takedamage = 2, e.mass = 200, e.flags = 0, e.anim = 'stand',
+         e.deadflag = 0, e.effects = 0, e.renderfx = 0, e.frame = 0, e.skin = 0, e.waterlevel = 0, e.watertype = 0, e.alpha = 0, e.teleport_time = now_() + 0.7e0
+   WHERE e.id = :pe;
+  EXECUTE PROCEDURE set_model(pe, 'players/male/tris.md2');
+  -- (memset (client, 0): everything but the pers)
+  UPDATE player p SET p.weaponframe = 0, p.attack_finished = 0, p.attack_start = 0, p.pain_finished = 0, p.punchangle = 0, p.view_ofs = 22, p.dmg_take = 0, p.dmg_save = 0,
+         p.dmg_time = -10, p.bonus_time = -10, p.pickup_item = 0, p.pickup_time = 0, p.dead_time = 0, p.pitch = 0, p.stepz = 0, p.oldz = 0,
+         p.jump_released = 1, p.air_finished = now_() + 12, p.dmg_lava_time = 0, p.next_drown_time = 0, p.drown_dmg = 2, p.weapon_sound = 0, p.machinegun_shots = 0,
+         p.chaingun_spin = 0, p.grenade_time = 0, p.mega_time = 0, p.silencer_shots = 0, p.show_hostile = 0, p.fly_sound_time = 0, p.swim_time = 0,
+         p.ducked = 0, p.bobtime = 0, p.bob_z = 0, p.bob_pitch = 0, p.bob_roll = 0, p.anim_priority = 0, p.anim_end = 0, p.anim_duck = 0, p.anim_run = 0,
+         p.water_x = 1e30, p.water_y = 1e30, p.water_z = 1e30 WHERE p.ent_id = :pe;
+  -- KillBox: anything standing where the client goes in
+  FOR SELECT e.id FROM ents e
+       WHERE e.id <> :pe AND e.takedamage > 0 AND e.health > 0 AND e.solid IN (2, 3)
+         AND e.x + e.maxx >= :x - 16 AND e.x + e.minx <= :x + 16 AND e.y + e.maxy >= :y - 16 AND e.y + e.miny <= :y + 16
+         AND e.z + e.maxz >= :z + 1 - 24 AND e.z + e.minz <= :z + 1 + 32 INTO v DO
+    EXECUTE PROCEDURE t_damage(v, pe, pe, 100000, 0, 32);
+  EXECUTE PROCEDURE link_ent(pe);
+END^
+
+-- SelectCoopSpawnPoint: the (pid - 1)th info_player_coop with the spawnpoint's name, for the second client on;
+-- none, or the first client, takes SelectSpawnPoint's single-player start (the one the changelevel named, else
+-- the one without a name)
+CREATE OR ALTER PROCEDURE coop_spawn_point (pid SMALLINT, spawnpoint VARCHAR(40))
+RETURNS (x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION)
+AS
+DECLARE skip_ INTEGER;
+BEGIN
+  IF (pid > 1) THEN
+  BEGIN
+    skip_ = pid - 2;
+    SELECT FIRST 1 SKIP (:skip_) m.ox, m.oy, m.oz, COALESCE(m.angle, m.ayaw, 0) FROM map_ents m
+     WHERE m.classname = 'info_player_coop' AND COALESCE(m.targetname, '') = COALESCE(:spawnpoint, '') ORDER BY m.id INTO x, y, z, yaw;
+  END
+  IF (x IS NULL) THEN
+    SELECT FIRST 1 m.ox, m.oy, m.oz, COALESCE(m.angle, m.ayaw, 0) FROM map_ents m
+     WHERE m.classname = 'info_player_start' AND COALESCE(m.targetname, '') = COALESCE(:spawnpoint, '') ORDER BY m.id INTO x, y, z, yaw;
+  IF (x IS NULL) THEN
+    SELECT FIRST 1 m.ox, m.oy, m.oz, COALESCE(m.angle, m.ayaw, 0) FROM map_ents m WHERE m.classname = 'info_player_start' ORDER BY m.id INTO x, y, z, yaw;
+  SUSPEND;
+END^
+
+-- ClientBegin for a coop game's second client (the first is the map's start, spawned with the map's
+-- entities): its row made if the game has none yet, its entity put in at its coop spot
+CREATE OR ALTER PROCEDURE client_begin (pid SMALLINT, spawnpoint VARCHAR(40))
+AS
+DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+BEGIN
+  IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = :pid)) THEN INSERT INTO player (id) VALUES (:pid);
+  EXECUTE PROCEDURE coop_spawn_point(pid, spawnpoint) RETURNING_VALUES x, y, z, yaw;
+  IF (x IS NULL) THEN EXIT;
+  EXECUTE PROCEDURE spawn_ent('player', x, y, z) RETURNING_VALUES pe;
+  UPDATE player p SET p.ent_id = :pe WHERE p.id = :pid;
+  EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, 100, 100);
+END^
+
+-- InitClientResp: the respawn copy of every client's pers as the level begins (coop_respawn = pers)
+CREATE OR ALTER PROCEDURE init_client_resp
+AS
+BEGIN
+  DELETE FROM coop_respawn;
+  INSERT INTO coop_respawn (id, health, max_health, armor, armor_type, bullets, shells, rockets, grenades, cells, slugs, max_bullets, max_shells, max_rockets,
+                            max_grenades, max_cells, max_slugs, weapons, weapon, power_cubes, inv_quad, inv_invuln, inv_silencer, inv_breather, inv_enviro, inv_screen, inv_shield, inv_sel)
+    SELECT p.id, e.health, e.max_health, p.armor, p.armor_type, p.bullets, p.shells, p.rockets, p.grenades, p.cells, p.slugs, p.max_bullets, p.max_shells, p.max_rockets,
+           p.max_grenades, p.max_cells, p.max_slugs, p.weapons, p.weapon, p.power_cubes, p.inv_quad, p.inv_invuln, p.inv_silencer, p.inv_breather, p.inv_enviro, p.inv_screen, p.inv_shield, p.inv_sel
+      FROM player p JOIN ents e ON e.id = p.ent_id;
+END^
+
+-- respawn, in coop: the body stays behind (CopyToBodyQue), the client goes back in at its spawn point with
+-- the pers it entered the level with (PutClientInServer from resp.coop_respawn; the keys found since are
+-- kept, as player_die kept them), with a teleport's effect and sound (EV_PLAYER_TELEPORT)
+CREATE OR ALTER PROCEDURE respawn (pe INTEGER)
+AS
+DECLARE pid SMALLINT; DECLARE body INTEGER; DECLARE spawnpoint VARCHAR(40); DECLARE hp INTEGER; DECLARE mhp INTEGER;
+DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+DECLARE mid INTEGER; DECLARE mk CHAR(1); DECLARE mrad DOUBLE PRECISION; DECLARE fr INTEGER; DECLARE mnz DOUBLE PRECISION; DECLARE mxz DOUBLE PRECISION;
+DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION;
+BEGIN
+  SELECT p.id FROM player p WHERE p.ent_id = :pe INTO pid;
+  IF (pid IS NULL) THEN EXIT;
+  -- CopyToBodyQue: the corpse as it lies, a toss that shots clip against, and body_die's gibs if hurt enough
+  SELECT e.x, e.y, e.z, e.yaw, e.model_id, e.mkind, e.mradius, e.frame, e.minz, e.maxz, e.vx, e.vy, e.vz FROM ents e WHERE e.id = :pe
+    INTO x, y, z, yaw, mid, mk, mrad, fr, mnz, mxz, vx, vy, vz;
+  EXECUTE PROCEDURE spawn_ent('bodyque', x, y, z) RETURNING_VALUES body;
+  UPDATE ents b SET b.yaw = :yaw, b.model_id = :mid, b.mkind = :mk, b.mradius = :mrad, b.frame = :fr, b.minx = -16, b.miny = -16, b.minz = :mnz, b.maxx = 16, b.maxy = 16, b.maxz = :mxz,
+         b.vx = :vx, b.vy = :vy, b.vz = :vz, b.solid = 2, b.movetype = 6, b.clipmask = 3, b.takedamage = 2, b.health = 0, b.mass = 200, b.deadflag = 1,
+         b.think = 'remove', b.nextthink = now_() + 30 WHERE b.id = :body;
+  EXECUTE PROCEDURE link_ent(body);
+  -- the pers as the level began (a client dead then gets InitClientPersistant's fresh hundred)
+  MERGE INTO player p USING coop_respawn r ON r.id = p.id AND p.id = :pid
+    WHEN MATCHED THEN UPDATE SET p.armor = r.armor, p.armor_type = r.armor_type, p.bullets = r.bullets, p.shells = r.shells, p.rockets = r.rockets,
+         p.grenades = r.grenades, p.cells = r.cells, p.slugs = r.slugs, p.max_bullets = r.max_bullets, p.max_shells = r.max_shells, p.max_rockets = r.max_rockets,
+         p.max_grenades = r.max_grenades, p.max_cells = r.max_cells, p.max_slugs = r.max_slugs, p.weapons = r.weapons, p.weapon = r.weapon,
+         p.inv_quad = r.inv_quad, p.inv_invuln = r.inv_invuln, p.inv_silencer = r.inv_silencer, p.inv_breather = r.inv_breather, p.inv_enviro = r.inv_enviro,
+         p.inv_screen = r.inv_screen, p.inv_shield = r.inv_shield, p.inv_sel = r.inv_sel, p.power_armor = 0;
+  SELECT r.health, r.max_health FROM coop_respawn r WHERE r.id = :pid INTO hp, mhp;
+  IF (hp IS NULL OR hp <= 0) THEN BEGIN hp = 100; mhp = 100; END
+  SELECT g.spawnpoint FROM game g WHERE g.id = 1 INTO spawnpoint;
+  EXECUTE PROCEDURE coop_spawn_point(pid, spawnpoint) RETURNING_VALUES x, y, z, yaw;
+  IF (x IS NULL) THEN SELECT e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = :pe INTO x, y, z, yaw;
+  EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, hp, mhp);
+  EXECUTE PROCEDURE snd(pe, 0, 'misc/tele1.wav', 1, 1);
+  EXECUTE PROCEDURE fx(5, x, y, z + 1, 0, 0, 0, 0);
+END^
+
 CREATE OR ALTER PROCEDURE spawn_map_ents (skill SMALLINT, spawnpoint VARCHAR(40), only_id INTEGER)
 AS
 DECLARE t0 DOUBLE PRECISION;   -- the level clock: zero at a level start, later for target_spawner
@@ -2479,12 +2697,9 @@ BEGIN
     IF (cls = 'info_player_start') THEN
     BEGIN
       IF (mid <> startid) THEN BEGIN DELETE FROM ents e WHERE e.id = :eid; CONTINUE; END
-      UPDATE ents e SET e.classname = 'player', e.minx = -16, e.miny = -16, e.minz = -24, e.maxx = 16, e.maxy = 16, e.maxz = 32, e.viewheight = 22,
-             e.solid = 3, e.movetype = 3, e.clipmask = 33619971, e.health = 100, e.max_health = 100, e.takedamage = 2, e.mass = 200, e.flags = 0, e.anim = 'stand',
-             e.z = e.z + 1 WHERE e.id = :eid;
-      EXECUTE PROCEDURE set_model(eid, 'players/male/tris.md2');
+      -- the first client's entity is the start itself (ClientBegin's PutClientInServer, here with the map)
       UPDATE player p SET p.ent_id = :eid WHERE p.id = 1;
-      EXECUTE PROCEDURE link_ent(eid);
+      EXECUTE PROCEDURE put_client_in_server(eid, ox, oy, oz, COALESCE(ang, 0), 100, 100);
     END
     -- ── doors ──
     ELSE IF (cls IN ('func_door', 'func_water')) THEN

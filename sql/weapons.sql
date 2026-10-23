@@ -3,7 +3,7 @@
 SET TERM ^ ;
 
 -- the eye and the view vectors
-CREATE OR ALTER PROCEDURE view_vectors
+CREATE OR ALTER PROCEDURE view_vectors (pe INTEGER)
 RETURNS (ex DOUBLE PRECISION, ey DOUBLE PRECISION, ez DOUBLE PRECISION,
          fx DOUBLE PRECISION, fy DOUBLE PRECISION, fz DOUBLE PRECISION,
          rx DOUBLE PRECISION, ry DOUBLE PRECISION, rz DOUBLE PRECISION,
@@ -12,7 +12,7 @@ AS
 DECLARE yaw DOUBLE PRECISION; DECLARE pitch DOUBLE PRECISION;
 DECLARE sy DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE sp DOUBLE PRECISION; DECLARE cp DOUBLE PRECISION;
 BEGIN
-  SELECT e.x, e.y, e.z + p.view_ofs, e.yaw, p.pitch FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1 INTO ex, ey, ez, yaw, pitch;
+  SELECT e.x, e.y, e.z + p.view_ofs, e.yaw, p.pitch FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.ent_id = :pe INTO ex, ey, ez, yaw, pitch;
   sy = SIN(yaw * 0.0174532925e0); cy = COS(yaw * 0.0174532925e0);
   sp = SIN(pitch * 0.0174532925e0); cp = COS(pitch * 0.0174532925e0);
   fx = cp * cy; fy = cp * sy; fz = -sp;
@@ -138,14 +138,14 @@ BEGIN
 END^
 
 -- the weapon's muzzle: 24 forward, 8 right, viewheight - 8 up (P_ProjectSource)
-CREATE OR ALTER PROCEDURE muzzle (side DOUBLE PRECISION, up_ DOUBLE PRECISION)
+CREATE OR ALTER PROCEDURE muzzle (pe INTEGER, side DOUBLE PRECISION, up_ DOUBLE PRECISION)
 RETURNS (mx DOUBLE PRECISION, my DOUBLE PRECISION, mz DOUBLE PRECISION, fx DOUBLE PRECISION, fy DOUBLE PRECISION, fz DOUBLE PRECISION,
          rx DOUBLE PRECISION, ry DOUBLE PRECISION, rz DOUBLE PRECISION)
 AS
 DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
 DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
 BEGIN
-  EXECUTE PROCEDURE view_vectors RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz;
+  EXECUTE PROCEDURE view_vectors(pe) RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz;
   mx = ex + fx * 24 + rx * side + ux * up_;
   my = ey + fy * 24 + ry * side + uy * up_;
   mz = ez + fz * 24 + rz * side + uz * up_;
@@ -153,9 +153,9 @@ BEGIN
 END^
 
 -- Weapon_* think: fire if the button is held, the weapon is ready and there is ammo
-CREATE OR ALTER PROCEDURE player_fire (btn SMALLINT)
+CREATE OR ALTER PROCEDURE player_fire (pe INTEGER, btn SMALLINT)
 AS
-DECLARE pe INTEGER; DECLARE w INTEGER; DECLARE af DOUBLE PRECISION; DECLARE t DOUBLE PRECISION;
+DECLARE w INTEGER; DECLARE af DOUBLE PRECISION; DECLARE t DOUBLE PRECISION;
 DECLARE mx DOUBLE PRECISION; DECLARE my DOUBLE PRECISION; DECLARE mz DOUBLE PRECISION;
 DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
 DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION;
@@ -165,20 +165,21 @@ DECLARE yaw DOUBLE PRECISION; DECLARE gt DOUBLE PRECISION; DECLARE spd DOUBLE PR
 DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
 DECLARE fl_x DOUBLE PRECISION; DECLARE fl_y DOUBLE PRECISION; DECLARE fl_z DOUBLE PRECISION; DECLARE fl_yaw DOUBLE PRECISION;
 BEGIN
-  SELECT p.ent_id, p.weapon, p.attack_finished, p.quad_finished, p.silencer_shots, p.chaingun_spin, p.grenade_time
-    FROM player p WHERE p.id = 1 INTO pe, w, af, quad, sil, spin, gt;
+  SELECT p.weapon, p.attack_finished, p.quad_finished, p.silencer_shots, p.chaingun_spin, p.grenade_time
+    FROM player p WHERE p.ent_id = :pe INTO w, af, quad, sil, spin, gt;
+  IF (w IS NULL) THEN EXIT;
   t = now_();
   vol = IIF(sil > 0, 0.2e0, 1);
 
   -- a lit hand grenade is thrown when the button is released (or after 3 seconds)
   IF (gt > 0 AND (btn = 0 OR t - gt >= 3)) THEN
   BEGIN
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     spd = MINVALUE(800, 400 + (t - gt) * 300);
     EXECUTE PROCEDURE launch_grenade(pe, mx, my, mz, fx_ * spd, fy * spd, fz * spd + 200, 125, 165, MAXVALUE(0.1e0, 3 - (t - gt)), 1);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/hgrent1a.wav', vol, 1);
-    UPDATE player p SET p.grenade_time = 0, p.grenades = p.grenades - 1, p.attack_finished = :t + 1, p.attack_start = :t WHERE p.id = 1;
-    IF (ammo_count(3) <= 0) THEN UPDATE player p SET p.weapons = BIN_AND(p.weapons, BIN_NOT(32)), p.weapon = best_weapon() WHERE p.id = 1;
+    UPDATE player p SET p.grenade_time = 0, p.grenades = p.grenades - 1, p.attack_finished = :t + 1, p.attack_start = :t WHERE p.ent_id = :pe;
+    IF (ammo_count(pe, 3) <= 0) THEN UPDATE player p SET p.weapons = BIN_AND(p.weapons, BIN_NOT(32)), p.weapon = best_weapon(:pe) WHERE p.ent_id = :pe;
     EXIT;
   END
 
@@ -188,9 +189,9 @@ BEGIN
     IF (w = 16 AND spin > 0) THEN
     BEGIN
       EXECUTE PROCEDURE snd(pe, 1, 'weapons/chngnd1a.wav', vol, 1);
-      UPDATE player p SET p.chaingun_spin = 0 WHERE p.id = 1;
+      UPDATE player p SET p.chaingun_spin = 0 WHERE p.ent_id = :pe;
     END
-    UPDATE player p SET p.weapon_sound = 0, p.machinegun_shots = 0 WHERE p.id = 1 AND (p.weapon_sound <> 0 OR p.machinegun_shots <> 0);
+    UPDATE player p SET p.weapon_sound = 0, p.machinegun_shots = 0 WHERE p.ent_id = :pe AND (p.weapon_sound <> 0 OR p.machinegun_shots <> 0);
     EXIT;
   END
   IF (af > t OR w = 0) THEN EXIT;
@@ -199,17 +200,20 @@ BEGIN
   -- ammo
   ak = weapon_ammo(w);
   need = CASE w WHEN 4 THEN 2 WHEN 1024 THEN 50 ELSE 1 END;
-  IF (ak > 0 AND ammo_count(ak) < need) THEN
+  IF (ak > 0 AND ammo_count(pe, ak) < need) THEN
   BEGIN
-    IF (EXISTS (SELECT 1 FROM player p WHERE p.id = 1 AND p.pain_finished < :t)) THEN
+    IF (EXISTS (SELECT 1 FROM player p WHERE p.ent_id = :pe AND p.pain_finished < :t)) THEN
     BEGIN
       EXECUTE PROCEDURE snd(pe, 1, 'weapons/noammo.wav', 1, 1);
-      UPDATE player p SET p.pain_finished = :t + 1 WHERE p.id = 1;
+      UPDATE player p SET p.pain_finished = :t + 1 WHERE p.ent_id = :pe;
     END
-    UPDATE player p SET p.weapon = best_weapon(), p.attack_finished = :t + 0.5e0 WHERE p.id = 1;
+    UPDATE player p SET p.weapon = best_weapon(:pe), p.attack_finished = :t + 0.5e0 WHERE p.ent_id = :pe;
     EXIT;
   END
-  UPDATE player p SET p.show_hostile = :t + 1, p.attack_start = :t, p.silencer_shots = MAXVALUE(0, p.silencer_shots - 1) WHERE p.id = 1;
+  UPDATE player p SET p.show_hostile = :t + 1, p.attack_start = :t, p.silencer_shots = MAXVALUE(0, p.silencer_shots - 1) WHERE p.ent_id = :pe;
+  -- the attack animation (Weapon_Generic: attack1 … attack8, crouched crattak1 … crattak9), unless dying
+  UPDATE player p SET p.anim_priority = 4, p.anim_end = IIF(p.ducked = 1, 168, 53) WHERE p.ent_id = :pe AND p.anim_priority < 5;
+  IF (ROW_COUNT > 0) THEN UPDATE ents e SET e.frame = IIF((SELECT p.ducked FROM player p WHERE p.ent_id = :pe) = 1, 159, 45) WHERE e.id = :pe;
   -- the muzzle flash (MZ_*): CL_ParseMuzzleFlash lit 200 + 0..31 units (100 + 0..31 silenced) for a frame, 18 ahead of
   -- the player and 16 to the right; pulling a hand grenade's pin makes none
   IF (w <> 32) THEN
@@ -222,42 +226,42 @@ BEGIN
 
   IF (w = 1) THEN                                                        -- blaster
   BEGIN
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE launch_bolt(pe, mx, my, mz, fx_, fy, fz, 1000, 15, 8);
     EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 1000);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/blastf1a.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 0.5e0, p.punchangle = -1 WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 0.5e0, p.punchangle = -1 WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 2) THEN                                                   -- shotgun
   BEGIN
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE fire_bullets(pe, 12, mx, my, mz, fx_, fy, fz, 500, 500, 4, 8);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/shotgf1b.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 1, p.shells = p.shells - 1, p.punchangle = -2 WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 1, p.shells = p.shells - 1, p.punchangle = -2 WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 4) THEN                                                   -- super shotgun: two volleys, 5 degrees apart
   BEGIN
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     SELECT e.yaw FROM ents e WHERE e.id = :pe INTO yaw;
     EXECUTE PROCEDURE fire_bullets(pe, 10, mx, my, mz, fx_ * COS(-5 * 0.0174532925e0) - fy * SIN(-5 * 0.0174532925e0), fx_ * SIN(-5 * 0.0174532925e0) + fy * COS(-5 * 0.0174532925e0), fz, 1000, 500, 6, 12);
     EXECUTE PROCEDURE fire_bullets(pe, 10, mx, my, mz, fx_ * COS(5 * 0.0174532925e0) - fy * SIN(5 * 0.0174532925e0), fx_ * SIN(5 * 0.0174532925e0) + fy * COS(5 * 0.0174532925e0), fz, 1000, 500, 6, 12);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/sshotf1b.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 1, p.shells = p.shells - 2, p.punchangle = -4 WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 1, p.shells = p.shells - 2, p.punchangle = -4 WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 8) THEN                                                   -- machinegun: the kick climbs while the trigger is held
   BEGIN
-    SELECT p.machinegun_shots FROM player p WHERE p.id = 1 INTO shots;
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    SELECT p.machinegun_shots FROM player p WHERE p.ent_id = :pe INTO shots;
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE fire_bullets(pe, 1, mx, my, mz, fx_ + crand() * 0.01e0 * shots, fy + crand() * 0.01e0 * shots, fz + 0.005e0 * shots, 300, 500, 8, 2);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/machgf' || CAST(1 + FLOOR(rnd() * 5) AS INTEGER) || 'b.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - 1, p.punchangle = -0.5e0 - 0.5e0 * rnd(), p.machinegun_shots = MINVALUE(9, p.machinegun_shots + 1) WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - 1, p.punchangle = -0.5e0 - 0.5e0 * rnd(), p.machinegun_shots = MINVALUE(9, p.machinegun_shots + 1) WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 16) THEN                                                  -- chaingun: spins up to three barrels a tic
   BEGIN
     IF (spin = 0) THEN BEGIN EXECUTE PROCEDURE snd(pe, 1, 'weapons/chngnu1a.wav', vol, 1); spin = t; END
     shots = IIF(t - spin < 0.6e0, 1, IIF(t - spin < 1.2e0, 2, 3));
-    shots = MINVALUE(shots, ammo_count(2));
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    shots = MINVALUE(shots, ammo_count(pe, 2));
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     i = 0;
     WHILE (i < shots) DO
     BEGIN
@@ -265,73 +269,73 @@ BEGIN
       i = i + 1;
     END
     IF (shots > 0) THEN EXECUTE PROCEDURE snd(pe, 1, 'weapons/machgf' || CAST(1 + FLOOR(rnd() * 5) AS INTEGER) || 'b.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - :shots, p.punchangle = -0.5e0 * :shots, p.chaingun_spin = :spin, p.weapon_sound = 2 WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.bullets = p.bullets - :shots, p.punchangle = -0.5e0 * :shots, p.chaingun_spin = :spin, p.weapon_sound = 2 WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 32) THEN                                                  -- hand grenade: pull the pin; thrown on release
   BEGIN
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/hgrena1b.wav', vol, 1);
-    UPDATE player p SET p.grenade_time = :t WHERE p.id = 1;
+    UPDATE player p SET p.grenade_time = :t WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 64) THEN                                                  -- grenade launcher
   BEGIN
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE launch_grenade(pe, mx, my, mz, fx_ * 600, fy * 600, fz * 600 + 200, 120, 160, 2.5e0, 0);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/grenlf1a.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 1, p.grenades = p.grenades - 1, p.punchangle = -1 WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 1, p.grenades = p.grenades - 1, p.punchangle = -1 WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 128) THEN                                                 -- rocket launcher
   BEGIN
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE launch_rocket(pe, mx, my, mz, fx_, fy, fz, 650, 100 + FLOOR(rnd() * 20), 120, 120);
     EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 650);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/rocklf1a.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 0.8e0, p.rockets = p.rockets - 1, p.punchangle = -2 WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 0.8e0, p.rockets = p.rockets - 1, p.punchangle = -2 WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 256) THEN                                                 -- hyperblaster: bolts from a spinning muzzle
   BEGIN
-    SELECT p.weapon_sound FROM player p WHERE p.id = 1 INTO ws;
-    EXECUTE PROCEDURE muzzle(8 + 4 * COS(t * 25), -8 + 4 * SIN(t * 25)) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    SELECT p.weapon_sound FROM player p WHERE p.ent_id = :pe INTO ws;
+    EXECUTE PROCEDURE muzzle(pe, 8 + 4 * COS(t * 25), -8 + 4 * SIN(t * 25)) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE launch_bolt(pe, mx, my, mz, fx_, fy, fz, 1000, 15, 64);
     EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 1000);
     IF (ws = 0) THEN EXECUTE PROCEDURE snd(pe, 1, 'weapons/hyprbf1a.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.cells = p.cells - 1, p.punchangle = -1, p.weapon_sound = 1 WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 0.1e0, p.cells = p.cells - 1, p.punchangle = -1, p.weapon_sound = 1 WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 512) THEN                                                 -- railgun
   BEGIN
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE fire_rail(pe, mx, my, mz, fx_, fy, fz, 150, 250);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/railgf1a.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 1.5e0, p.slugs = p.slugs - 1, p.punchangle = -3 WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 1.5e0, p.slugs = p.slugs - 1, p.punchangle = -3 WHERE p.ent_id = :pe;
   END
   ELSE IF (w = 1024) THEN                                                -- BFG10K
   BEGIN
-    EXECUTE PROCEDURE muzzle(8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
+    EXECUTE PROCEDURE muzzle(pe, 8, -8) RETURNING_VALUES mx, my, mz, fx_, fy, fz, rx, ry, rz;
     EXECUTE PROCEDURE launch_bfg(pe, mx, my, mz, fx_, fy, fz, 400, 500, 1000);
     EXECUTE PROCEDURE check_dodge(pe, mx, my, mz, fx_, fy, fz, 400);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/bfg__f1y.wav', vol, 1);
-    UPDATE player p SET p.attack_finished = :t + 1.5e0, p.cells = p.cells - 50, p.punchangle = -5 WHERE p.id = 1;
+    UPDATE player p SET p.attack_finished = :t + 1.5e0, p.cells = p.cells - 50, p.punchangle = -5 WHERE p.ent_id = :pe;
   END
   IF (quad > t) THEN EXECUTE PROCEDURE snd(pe, 3, 'items/damage3.wav', 1, 1);
   -- out of ammo for this weapon now: switch after this shot
-  IF (ak > 0 AND ammo_count(ak) < need AND w NOT IN (32)) THEN
-    UPDATE player p SET p.weapon = best_weapon() WHERE p.id = 1;
+  IF (ak > 0 AND ammo_count(pe, ak) < need AND w NOT IN (32)) THEN
+    UPDATE player p SET p.weapon = best_weapon(:pe) WHERE p.ent_id = :pe;
 END^
 
 -- "use <weapon>" for a key 1..0, cycling, and the cheats
-CREATE OR ALTER PROCEDURE player_impulse (imp SMALLINT)
+CREATE OR ALTER PROCEDURE player_impulse (pe INTEGER, imp SMALLINT)
 AS
 DECLARE have INTEGER; DECLARE w INTEGER; DECLARE i INTEGER; DECLARE ak SMALLINT; DECLARE cur INTEGER; DECLARE n INTEGER;
 DECLARE wname VARCHAR(20); DECLARE aname VARCHAR(10);
 BEGIN
-  SELECT p.weapons, p.weapon FROM player p WHERE p.id = 1 INTO have, w;
+  SELECT p.weapons, p.weapon FROM player p WHERE p.ent_id = :pe INTO have, w;
   cur = w;
   IF (imp = 99) THEN                                                     -- give all
   BEGIN
     UPDATE player p SET p.weapons = 2047, p.bullets = p.max_bullets, p.shells = p.max_shells, p.rockets = p.max_rockets, p.grenades = p.max_grenades,
            p.cells = p.max_cells, p.slugs = p.max_slugs, p.armor = 200, p.armor_type = 3, p.keys = 511,
-           p.inv_shield = p.inv_shield + 1, p.inv_sel = 6, p.inv_quad = 1, p.inv_invuln = 1, p.inv_silencer = 1, p.inv_breather = 1, p.inv_enviro = 1 WHERE p.id = 1;
-    UPDATE ents e SET e.health = e.max_health WHERE e.id = player_ent();
-    EXECUTE PROCEDURE sprint('Very impressive');
+           p.inv_shield = p.inv_shield + 1, p.inv_sel = 6, p.inv_quad = 1, p.inv_invuln = 1, p.inv_silencer = 1, p.inv_breather = 1, p.inv_enviro = 1 WHERE p.ent_id = :pe;
+    UPDATE ents e SET e.health = e.max_health WHERE e.id = :pe;
+    EXECUTE PROCEDURE sprint(pe, 'Very impressive');
     EXIT;
   END
   -- the impulses are the weapons in item order (1 blaster … 6 hand grenades … 11 BFG10K); the page maps
@@ -349,7 +353,7 @@ BEGIN
       IF (BIN_AND(have, w) <> 0) THEN
       BEGIN
         ak = weapon_ammo(w);
-        IF (w = 32 OR ak = 0 OR ammo_count(ak) >= IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN LEAVE;
+        IF (w = 32 OR ak = 0 OR ammo_count(pe, ak) >= IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN LEAVE;
       END
       i = i + 1;
     END
@@ -365,47 +369,47 @@ BEGIN
                  WHEN 64 THEN 'Grenade Launcher' WHEN 128 THEN 'Rocket Launcher' WHEN 256 THEN 'HyperBlaster' WHEN 512 THEN 'Railgun' ELSE 'BFG10K' END);
     IF (BIN_AND(have, w) = 0) THEN
     BEGIN
-      EXECUTE PROCEDURE sprint('Out of item: ' || IIF(w = 32, 'grenades', wname));
+      EXECUTE PROCEDURE sprint(pe, 'Out of item: ' || IIF(w = 32, 'grenades', wname));
       EXIT;
     END
     IF (w = cur) THEN EXIT;
     ak = weapon_ammo(w);
     IF (ak > 0 AND w <> 32) THEN
     BEGIN
-      n = ammo_count(ak);
+      n = ammo_count(pe, ak);
       aname = TRIM(CASE ak WHEN 1 THEN 'Shells' WHEN 2 THEN 'Bullets' WHEN 3 THEN 'Grenades' WHEN 4 THEN 'Rockets' WHEN 5 THEN 'Cells' ELSE 'Slugs' END);
-      IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('No ' || aname || ' for ' || wname || '.'); EXIT; END
-      IF (n < IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN BEGIN EXECUTE PROCEDURE sprint('Not enough ' || aname || ' for ' || wname || '.'); EXIT; END
+      IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'No ' || aname || ' for ' || wname || '.'); EXIT; END
+      IF (n < IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'Not enough ' || aname || ' for ' || wname || '.'); EXIT; END
     END
   END
-  UPDATE player p SET p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0, p.attack_finished = MAXVALUE(p.attack_finished, now_() + 0.3e0) WHERE p.id = 1;
+  UPDATE player p SET p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0, p.attack_finished = MAXVALUE(p.attack_finished, now_() + 0.3e0) WHERE p.ent_id = :pe;
 END^
 
 -- Cmd_Use_f for one item (idx, the itemlist index; typed, the name as asked for), then the item's use function
-CREATE OR ALTER PROCEDURE use_item (idx SMALLINT, typed VARCHAR(40))
+CREATE OR ALTER PROCEDURE use_item (pe INTEGER, idx SMALLINT, typed VARCHAR(40))
 AS
-DECLARE n INTEGER; DECLARE pa SMALLINT; DECLARE ce INTEGER; DECLARE pe INTEGER; DECLARE t DOUBLE PRECISION; DECLARE u SMALLINT;
+DECLARE n INTEGER; DECLARE pa SMALLINT; DECLARE ce INTEGER; DECLARE t DOUBLE PRECISION; DECLARE u SMALLINT;
 BEGIN
-  IF (idx IS NULL OR idx <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('unknown item: ' || typed); EXIT; END
+  IF (idx IS NULL OR idx <= 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'unknown item: ' || typed); EXIT; END
   u = item_usable(idx);
-  IF (u = 0) THEN BEGIN EXECUTE PROCEDURE sprint('Item is not usable.'); EXIT; END
-  n = inv_count(idx);
-  IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('Out of item: ' || typed); EXIT; END
-  t = now_(); pe = player_ent();
-  IF (idx BETWEEN 7 AND 17) THEN EXECUTE PROCEDURE player_impulse(idx - 6);       -- Use_Weapon
+  IF (u = 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'Item is not usable.'); EXIT; END
+  n = inv_count(pe, idx);
+  IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'Out of item: ' || typed); EXIT; END
+  t = now_();
+  IF (idx BETWEEN 7 AND 17) THEN EXECUTE PROCEDURE player_impulse(pe, idx - 6);       -- Use_Weapon
   ELSE IF (idx IN (5, 6)) THEN
   BEGIN
     -- Use_PowerArmor: on and off; on only with cells
-    SELECT p.power_armor, p.cells FROM player p WHERE p.id = 1 INTO pa, ce;
+    SELECT p.power_armor, p.cells FROM player p WHERE p.ent_id = :pe INTO pa, ce;
     IF (pa = 1) THEN
     BEGIN
-      UPDATE player p SET p.power_armor = 0 WHERE p.id = 1;
+      UPDATE player p SET p.power_armor = 0 WHERE p.ent_id = :pe;
       EXECUTE PROCEDURE snd(pe, 0, 'misc/power2.wav', 1, 1);
     END
-    ELSE IF (ce <= 0) THEN EXECUTE PROCEDURE sprint('No cells for power armor.');
+    ELSE IF (ce <= 0) THEN EXECUTE PROCEDURE sprint(pe, 'No cells for power armor.');
     ELSE
     BEGIN
-      UPDATE player p SET p.power_armor = 1 WHERE p.id = 1;
+      UPDATE player p SET p.power_armor = 1 WHERE p.ent_id = :pe;
       EXECUTE PROCEDURE snd(pe, 0, 'misc/power1.wav', 1, 1);
     END
   END
@@ -422,8 +426,8 @@ BEGIN
       p.silencer_shots = p.silencer_shots + IIF(:idx = 25, 30, 0),
       p.breather_finished = IIF(:idx = 26, IIF(p.breather_finished > :t, p.breather_finished, :t) + 30, p.breather_finished),
       p.enviro_finished = IIF(:idx = 27, IIF(p.enviro_finished > :t, p.enviro_finished, :t) + 30, p.enviro_finished)
-     WHERE p.id = 1;
-    EXECUTE PROCEDURE inv_validate;
+     WHERE p.ent_id = :pe;
+    EXECUTE PROCEDURE inv_validate(pe);
     IF (idx = 23) THEN EXECUTE PROCEDURE snd(pe, 3, 'items/damage.wav', 1, 1);
     IF (idx = 24) THEN EXECUTE PROCEDURE snd(pe, 3, 'items/protect.wav', 1, 1);
   END
@@ -431,22 +435,22 @@ END^
 
 -- the inventory's impulses: 13 invuse, 14 invnext, 15 invprev, and default.cfg's item keys: 16 "use quad damage",
 -- 17 "use invulnerability", 18 "use silencer", 19 "use rebreather", 20 "use environment suit", 21 "use power shield"
-CREATE OR ALTER PROCEDURE inv_impulse (imp SMALLINT)
+CREATE OR ALTER PROCEDURE inv_impulse (pe INTEGER, imp SMALLINT)
 AS
 DECLARE sel SMALLINT;
 BEGIN
   IF (imp = 13) THEN
   BEGIN
     -- Cmd_InvUse_f
-    EXECUTE PROCEDURE inv_validate;
-    SELECT p.inv_sel FROM player p WHERE p.id = 1 INTO sel;
-    IF (sel < 0) THEN EXECUTE PROCEDURE sprint('No item to use.');
-    ELSE EXECUTE PROCEDURE use_item(sel, item_name(sel));
+    EXECUTE PROCEDURE inv_validate(pe);
+    SELECT p.inv_sel FROM player p WHERE p.ent_id = :pe INTO sel;
+    IF (sel < 0) THEN EXECUTE PROCEDURE sprint(pe, 'No item to use.');
+    ELSE EXECUTE PROCEDURE use_item(pe, sel, item_name(sel));
   END
-  ELSE IF (imp = 14) THEN EXECUTE PROCEDURE inv_select(1);
-  ELSE IF (imp = 15) THEN EXECUTE PROCEDURE inv_select(-1);
+  ELSE IF (imp = 14) THEN EXECUTE PROCEDURE inv_select(pe, 1);
+  ELSE IF (imp = 15) THEN EXECUTE PROCEDURE inv_select(pe, -1);
   ELSE IF (imp BETWEEN 16 AND 21) THEN
-    EXECUTE PROCEDURE use_item(CASE imp WHEN 16 THEN 23 WHEN 17 THEN 24 WHEN 18 THEN 25 WHEN 19 THEN 26 WHEN 20 THEN 27 ELSE 6 END,
+    EXECUTE PROCEDURE use_item(pe, CASE imp WHEN 16 THEN 23 WHEN 17 THEN 24 WHEN 18 THEN 25 WHEN 19 THEN 26 WHEN 20 THEN 27 ELSE 6 END,
       TRIM(CASE imp WHEN 16 THEN 'quad damage' WHEN 17 THEN 'invulnerability' WHEN 18 THEN 'silencer' WHEN 19 THEN 'rebreather'
                     WHEN 20 THEN 'environment suit' ELSE 'power shield' END));
 END^
@@ -456,10 +460,10 @@ END^
 -- powerups as they are (Drop_General); power armour switches off when the last one goes (Drop_PowerArmor).
 -- Drop_Item: the item 24 ahead of and 16 below the origin along the view (as far as a trace lets it), tossed at
 -- 100 forward and 300 up, glowing, DROPPED_ITEM; its dropper cannot take it back for a second (drop_temp_touch).
-CREATE OR ALTER PROCEDURE drop_cmd (typed VARCHAR(64))
+CREATE OR ALTER PROCEDURE drop_cmd (pe INTEGER, typed VARCHAR(64))
 AS
 DECLARE idx SMALLINT; DECLARE n INTEGER; DECLARE cnt INTEGER; DECLARE w INTEGER; DECLARE cur INTEGER; DECLARE pa SMALLINT;
-DECLARE pe INTEGER; DECLARE cls VARCHAR(40); DECLARE it INTEGER;
+DECLARE cls VARCHAR(40); DECLARE it INTEGER;
 DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
 DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION; DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
 DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION; DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
@@ -467,45 +471,44 @@ DECLARE f DOUBLE PRECISION; DECLARE hx DOUBLE PRECISION; DECLARE hy DOUBLE PRECI
 DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
 BEGIN
   idx = item_index(typed);
-  IF (idx = 0) THEN BEGIN EXECUTE PROCEDURE sprint('unknown item: ' || typed); EXIT; END
+  IF (idx = 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'unknown item: ' || typed); EXIT; END
   IF (NOT (idx IN (5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27))) THEN
-  BEGIN EXECUTE PROCEDURE sprint('Item is not dropable.'); EXIT; END
-  n = inv_count(idx);
-  IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('Out of item: ' || typed); EXIT; END
-  SELECT p.weapon, p.power_armor FROM player p WHERE p.id = 1 INTO cur, pa;
+  BEGIN EXECUTE PROCEDURE sprint(pe, 'Item is not dropable.'); EXIT; END
+  n = inv_count(pe, idx);
+  IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'Out of item: ' || typed); EXIT; END
+  SELECT p.weapon, p.power_armor FROM player p WHERE p.ent_id = :pe INTO cur, pa;
   cnt = 0;
   IF (idx IN (12, 18, 19, 20, 21, 22)) THEN
   BEGIN
     cnt = MINVALUE(n, CASE idx WHEN 12 THEN 5 WHEN 18 THEN 10 WHEN 19 THEN 50 WHEN 20 THEN 50 WHEN 21 THEN 5 ELSE 10 END);
-    IF (idx = 12 AND cur = 32 AND n - cnt <= 0) THEN BEGIN EXECUTE PROCEDURE sprint('Can''t drop current weapon'); EXIT; END
+    IF (idx = 12 AND cur = 32 AND n - cnt <= 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'Can''t drop current weapon'); EXIT; END
     UPDATE player p SET p.grenades = p.grenades - IIF(:idx = 12, :cnt, 0), p.shells = p.shells - IIF(:idx = 18, :cnt, 0),
            p.bullets = p.bullets - IIF(:idx = 19, :cnt, 0), p.cells = p.cells - IIF(:idx = 20, :cnt, 0),
-           p.rockets = p.rockets - IIF(:idx = 21, :cnt, 0), p.slugs = p.slugs - IIF(:idx = 22, :cnt, 0) WHERE p.id = 1;
+           p.rockets = p.rockets - IIF(:idx = 21, :cnt, 0), p.slugs = p.slugs - IIF(:idx = 22, :cnt, 0) WHERE p.ent_id = :pe;
   END
   ELSE IF (idx BETWEEN 8 AND 17) THEN
   BEGIN
     w = CASE idx WHEN 8 THEN 2 WHEN 9 THEN 4 WHEN 10 THEN 8 WHEN 11 THEN 16 WHEN 13 THEN 64 WHEN 14 THEN 128 WHEN 15 THEN 256 WHEN 16 THEN 512 ELSE 1024 END;
-    IF (cur = w) THEN BEGIN EXECUTE PROCEDURE sprint('Can''t drop current weapon'); EXIT; END
-    UPDATE player p SET p.weapons = BIN_AND(p.weapons, BIN_NOT(:w)) WHERE p.id = 1;
+    IF (cur = w) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'Can''t drop current weapon'); EXIT; END
+    UPDATE player p SET p.weapons = BIN_AND(p.weapons, BIN_NOT(:w)) WHERE p.ent_id = :pe;
   END
   ELSE
   BEGIN
     IF (idx IN (5, 6) AND pa = 1 AND n = 1) THEN
     BEGIN
-      UPDATE player p SET p.power_armor = 0 WHERE p.id = 1;
-      EXECUTE PROCEDURE snd(player_ent(), 0, 'misc/power2.wav', 1, 1);
+      UPDATE player p SET p.power_armor = 0 WHERE p.ent_id = :pe;
+      EXECUTE PROCEDURE snd(pe, 0, 'misc/power2.wav', 1, 1);
     END
     UPDATE player p SET p.inv_screen = p.inv_screen - IIF(:idx = 5, 1, 0), p.inv_shield = p.inv_shield - IIF(:idx = 6, 1, 0),
            p.inv_quad = p.inv_quad - IIF(:idx = 23, 1, 0), p.inv_invuln = p.inv_invuln - IIF(:idx = 24, 1, 0),
            p.inv_silencer = p.inv_silencer - IIF(:idx = 25, 1, 0), p.inv_breather = p.inv_breather - IIF(:idx = 26, 1, 0),
-           p.inv_enviro = p.inv_enviro - IIF(:idx = 27, 1, 0) WHERE p.id = 1;
-    EXECUTE PROCEDURE inv_validate;
+           p.inv_enviro = p.inv_enviro - IIF(:idx = 27, 1, 0) WHERE p.ent_id = :pe;
+    EXECUTE PROCEDURE inv_validate(pe);
   END
   -- Drop_Item
-  pe = player_ent();
   cls = item_classname(idx);
   SELECT e.x, e.y, e.z FROM ents e WHERE e.id = :pe INTO ox, oy, oz;
-  EXECUTE PROCEDURE view_vectors RETURNING_VALUES ex, ey, ez, fx_, fy, fz, rx, ry, rz, ux, uy, uz;
+  EXECUTE PROCEDURE view_vectors(pe) RETURNING_VALUES ex, ey, ez, fx_, fy, fz, rx, ry, rz, ux, uy, uz;
   EXECUTE PROCEDURE trace_move(pe, -15, -15, -15, 15, 15, 15, ox, oy, oz, ox + fx_ * 24, oy + fy * 24, oz + fz * 24 - 16, 1)
     RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
   EXECUTE PROCEDURE spawn_ent(cls, hx, hy, hz) RETURNING_VALUES it;
@@ -519,7 +522,7 @@ END^
 -- ClientThink + Pmove + ClientEndServerFrame for one tic
 -- The console's commands and cheats (g_cmds.c: Cmd_God_f, Cmd_Notarget_f, Cmd_Noclip_f, Cmd_Give_f,
 -- Cmd_Kill_f). The answer goes to the top-left message line, as gi.cprintf did, and out.
-CREATE OR ALTER PROCEDURE player_command (cmd VARCHAR(32), arg VARCHAR(64))
+CREATE OR ALTER PROCEDURE player_command (cmd VARCHAR(32), arg VARCHAR(64), client SMALLINT = 1)
 RETURNS (msg VARCHAR(80))
 AS
 DECLARE pe INTEGER; DECLARE fl INTEGER; DECLARE mt SMALLINT; DECLARE hp INTEGER;
@@ -527,7 +530,7 @@ DECLARE sp INTEGER; DECLARE a1 VARCHAR(64); DECLARE a2 VARCHAR(64); DECLARE num 
 DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
 BEGIN
   cmd = LOWER(TRIM(COALESCE(cmd, ''))); arg = LOWER(TRIM(COALESCE(arg, '')));
-  pe = player_ent();
+  SELECT p.ent_id FROM player p WHERE p.id = :client INTO pe;
   SELECT e.flags, e.movetype, e.health FROM ents e WHERE e.id = :pe INTO fl, mt, hp;
   IF (hp IS NULL) THEN BEGIN msg = 'no player'; SUSPEND; EXIT; END
   msg = '';
@@ -573,12 +576,12 @@ BEGIN
       ELSE IF (idx IN (12, 18, 19, 20, 21, 22)) THEN
       BEGIN
         -- IT_AMMO: the count given, else one pickup's quantity on top, unclamped as Cmd_Give_f left it
-        IF (idx = 12) THEN UPDATE player p SET p.grenades = COALESCE(:num, p.grenades + 5) WHERE p.id = 1;
-        ELSE IF (idx = 18) THEN UPDATE player p SET p.shells = COALESCE(:num, p.shells + 10) WHERE p.id = 1;
-        ELSE IF (idx = 19) THEN UPDATE player p SET p.bullets = COALESCE(:num, p.bullets + 50) WHERE p.id = 1;
-        ELSE IF (idx = 20) THEN UPDATE player p SET p.cells = COALESCE(:num, p.cells + 50) WHERE p.id = 1;
-        ELSE IF (idx = 21) THEN UPDATE player p SET p.rockets = COALESCE(:num, p.rockets + 5) WHERE p.id = 1;
-        ELSE UPDATE player p SET p.slugs = COALESCE(:num, p.slugs + 10) WHERE p.id = 1;
+        IF (idx = 12) THEN UPDATE player p SET p.grenades = COALESCE(:num, p.grenades + 5) WHERE p.ent_id = :pe;
+        ELSE IF (idx = 18) THEN UPDATE player p SET p.shells = COALESCE(:num, p.shells + 10) WHERE p.ent_id = :pe;
+        ELSE IF (idx = 19) THEN UPDATE player p SET p.bullets = COALESCE(:num, p.bullets + 50) WHERE p.ent_id = :pe;
+        ELSE IF (idx = 20) THEN UPDATE player p SET p.cells = COALESCE(:num, p.cells + 50) WHERE p.ent_id = :pe;
+        ELSE IF (idx = 21) THEN UPDATE player p SET p.rockets = COALESCE(:num, p.rockets + 5) WHERE p.ent_id = :pe;
+        ELSE UPDATE player p SET p.slugs = COALESCE(:num, p.slugs + 10) WHERE p.ent_id = :pe;
       END
       ELSE
       BEGIN
@@ -592,30 +595,30 @@ BEGIN
     ELSE
     BEGIN
       IF (arg IN ('all', 'health')) THEN UPDATE ents e SET e.health = e.max_health WHERE e.id = :pe AND e.health < e.max_health;
-      IF (arg IN ('all', 'weapons')) THEN UPDATE player p SET p.weapons = 2047 WHERE p.id = 1;
+      IF (arg IN ('all', 'weapons')) THEN UPDATE player p SET p.weapons = 2047 WHERE p.ent_id = :pe;
       IF (arg IN ('all', 'ammo')) THEN UPDATE player p SET p.bullets = p.max_bullets, p.shells = p.max_shells, p.rockets = p.max_rockets,
-             p.grenades = p.max_grenades, p.cells = p.max_cells, p.slugs = p.max_slugs WHERE p.id = 1;
-      IF (arg IN ('all', 'armor')) THEN UPDATE player p SET p.armor = 200, p.armor_type = 3 WHERE p.id = 1;     -- body armor, full
-      IF (arg IN ('all', 'keys')) THEN UPDATE player p SET p.keys = 511 WHERE p.id = 1;
+             p.grenades = p.max_grenades, p.cells = p.max_cells, p.slugs = p.max_slugs WHERE p.ent_id = :pe;
+      IF (arg IN ('all', 'armor')) THEN UPDATE player p SET p.armor = 200, p.armor_type = 3 WHERE p.ent_id = :pe;     -- body armor, full
+      IF (arg IN ('all', 'keys')) THEN UPDATE player p SET p.keys = 511 WHERE p.ent_id = :pe;
       IF (arg = 'all') THEN
         UPDATE player p SET p.inv_shield = p.inv_shield + 1, p.inv_sel = 6, p.inv_quad = 1, p.inv_invuln = 1, p.inv_silencer = 1,
-               p.inv_breather = 1, p.inv_enviro = 1 WHERE p.id = 1;
+               p.inv_breather = 1, p.inv_enviro = 1 WHERE p.ent_id = :pe;
     END
   END
-  ELSE IF (cmd = 'use') THEN EXECUTE PROCEDURE use_item(item_index(arg), arg);
-  ELSE IF (cmd = 'drop') THEN EXECUTE PROCEDURE drop_cmd(arg);
-  ELSE IF (cmd = 'invuse') THEN EXECUTE PROCEDURE inv_impulse(13);
-  ELSE IF (cmd = 'invnext') THEN EXECUTE PROCEDURE inv_impulse(14);
-  ELSE IF (cmd = 'invprev') THEN EXECUTE PROCEDURE inv_impulse(15);
+  ELSE IF (cmd = 'use') THEN EXECUTE PROCEDURE use_item(pe, item_index(arg), arg);
+  ELSE IF (cmd = 'drop') THEN EXECUTE PROCEDURE drop_cmd(pe, arg);
+  ELSE IF (cmd = 'invuse') THEN EXECUTE PROCEDURE inv_impulse(pe, 13);
+  ELSE IF (cmd = 'invnext') THEN EXECUTE PROCEDURE inv_impulse(pe, 14);
+  ELSE IF (cmd = 'invprev') THEN EXECUTE PROCEDURE inv_impulse(pe, 15);
   ELSE msg = 'unknown command "' || cmd || '"';
-  IF (msg <> '') THEN EXECUTE PROCEDURE sprint(msg);
+  IF (msg <> '') THEN EXECUTE PROCEDURE sprint(pe, msg);
   SUSPEND;
 END^
 
-CREATE OR ALTER PROCEDURE player_think (dt DOUBLE PRECISION, fwd DOUBLE PRECISION, side DOUBLE PRECISION,
+CREATE OR ALTER PROCEDURE player_think (pe INTEGER, dt DOUBLE PRECISION, fwd DOUBLE PRECISION, side DOUBLE PRECISION,
   yaw_d DOUBLE PRECISION, pitch_d DOUBLE PRECISION, fire SMALLINT, jump SMALLINT, run SMALLINT, imp SMALLINT)
 AS
-DECLARE pe INTEGER; DECLARE t DOUBLE PRECISION; DECLARE dead SMALLINT; DECLARE flags INTEGER; DECLARE wl SMALLINT; DECLARE wt INTEGER; DECLARE owl SMALLINT;
+DECLARE t DOUBLE PRECISION; DECLARE dead SMALLINT; DECLARE flags INTEGER; DECLARE wl SMALLINT; DECLARE wt INTEGER; DECLARE owl SMALLINT;
 DECLARE yaw DOUBLE PRECISION; DECLARE pitch DOUBLE PRECISION;
 DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION;
 DECLARE spd DOUBLE PRECISION; DECLARE ns DOUBLE PRECISION; DECLARE control DOUBLE PRECISION; DECLARE drop_ DOUBLE PRECISION;
@@ -640,13 +643,13 @@ DECLARE gvz DOUBLE PRECISION; DECLARE gflags INTEGER; DECLARE gsolid SMALLINT; D
 DECLARE wcx DOUBLE PRECISION; DECLARE wcy DOUBLE PRECISION; DECLARE wcz DOUBLE PRECISION; DECLARE oldx DOUBLE PRECISION; DECLARE oldy DOUBLE PRECISION;
 DECLARE bvx DOUBLE PRECISION; DECLARE bvy DOUBLE PRECISION; DECLARE xys DOUBLE PRECISION; DECLARE bt DOUBLE PRECISION; DECLARE bts DOUBLE PRECISION;
 DECLARE bfs DOUBLE PRECISION; DECLARE bobz DOUBLE PRECISION; DECLARE bobp DOUBLE PRECISION; DECLARE bobr DOUBLE PRECISION;
-DECLARE noclip SMALLINT; DECLARE ppitch DOUBLE PRECISION; DECLARE pstepz DOUBLE PRECISION; DECLARE gtic INTEGER; DECLARE stepz2 DOUBLE PRECISION; DECLARE jr2 SMALLINT; DECLARE afin2 DOUBLE PRECISION; DECLARE ddmg2 INTEGER;
+DECLARE noclip SMALLINT; DECLARE coop SMALLINT; DECLARE ppitch DOUBLE PRECISION; DECLARE pstepz DOUBLE PRECISION; DECLARE gtic INTEGER; DECLARE stepz2 DOUBLE PRECISION; DECLARE jr2 SMALLINT; DECLARE afin2 DOUBLE PRECISION; DECLARE ddmg2 INTEGER;
 BEGIN
   -- (the player and ents rows are wide: what the think decides is written back once, at the end)
-  SELECT p.ent_id, p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz,
-         p.ducked, p.bobtime, p.water_x, p.water_y, p.water_z
-    FROM player p WHERE p.id = 1 INTO pe, jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz, pducked, pbobtime, wcx, wcy, wcz;
-  IF (pe IS NULL) THEN EXIT;
+  SELECT p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz,
+         p.ducked, p.bobtime, p.water_x, p.water_y, p.water_z, g.coop
+    FROM player p CROSS JOIN game g WHERE p.ent_id = :pe AND g.id = 1 INTO jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz, pducked, pbobtime, wcx, wcy, wcz, coop;
+  IF (jr IS NULL) THEN EXIT;
   SELECT e.deadflag, e.flags, e.waterlevel, e.watertype, e.yaw, e.health, e.z, e.max_health, e.x, e.y FROM ents e WHERE e.id = :pe
     INTO dead, flags, owl, wt, yaw, hp, oldz, mhp, oldx, oldy;
   t = now_();
@@ -654,19 +657,24 @@ BEGIN
 
   IF (dead = 1) THEN
   BEGIN
-    -- the body falls; fire a second after dying is respawn(), which in single player brings up the load menu
+    -- the body falls; a button a second after dying is respawn(), which in single player brings up the load
+    -- menu (fire only) and in coop puts the client back in at its spawn point (ClientBeginServerFrame)
     EXECUTE PROCEDURE toss_move(pe, dt);
-    IF (t > deadt + 1 AND fire = 1) THEN
-      UPDATE game g SET g.exit_kind = 3 WHERE g.id = 1;
-    UPDATE player p SET p.bobtime = 0, p.bob_z = 0, p.bob_pitch = 0, p.bob_roll = 0, p.ducked = 0 WHERE p.id = 1 AND (p.bob_z <> 0 OR p.bob_pitch <> 0 OR p.bob_roll <> 0 OR p.ducked <> 0);
+    IF (t > deadt + 1 AND (fire = 1 OR (coop = 1 AND jump = 1))) THEN
+    BEGIN
+      IF (coop = 1) THEN EXECUTE PROCEDURE respawn(pe);
+      ELSE UPDATE game g SET g.exit_kind = 3 WHERE g.id = 1;
+    END
+    UPDATE player p SET p.bobtime = 0, p.bob_z = 0, p.bob_pitch = 0, p.bob_roll = 0, p.ducked = 0 WHERE p.ent_id = :pe AND (p.bob_z <> 0 OR p.bob_pitch <> 0 OR p.bob_roll <> 0 OR p.ducked <> 0);
+    IF (coop = 1) THEN EXECUTE PROCEDURE set_client_frame(pe, 0, 1, 0);        -- the death animation plays out
     EXIT;
   END
 
   -- view angles
   yaw = anglemod(yaw + yaw_d);
   pitch = MAXVALUE(-89, MINVALUE(89, ppitch + pitch_d));
-  IF (imp BETWEEN 13 AND 21) THEN EXECUTE PROCEDURE inv_impulse(imp);
-  ELSE IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(imp);
+  IF (imp BETWEEN 13 AND 21) THEN EXECUTE PROCEDURE inv_impulse(pe, imp);
+  ELSE IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(pe, imp);
 
   -- P_WorldEffects: water, slime, lava, drowning
   -- (PM_CatagorizePosition's water level, worked out again wherever the player now is: moved by pmove, a
@@ -693,14 +701,14 @@ BEGIN
   IF (wl = 3) THEN
   BEGIN
     IF (breather > t) THEN
-      UPDATE player p SET p.air_finished = :t + 10 WHERE p.id = 1;
+      UPDATE player p SET p.air_finished = :t + 10 WHERE p.ent_id = :pe;
     ELSE IF (afin < t)
     THEN BEGIN
       -- drown: the damage climbs 2 points a second, up to 15
       IF (ndt < t) THEN
       BEGIN
         ddmg = MINVALUE(15, ddmg + 2);
-        UPDATE player p SET p.next_drown_time = :t + 1, p.drown_dmg = :ddmg WHERE p.id = 1;
+        UPDATE player p SET p.next_drown_time = :t + 1, p.drown_dmg = :ddmg WHERE p.ent_id = :pe;
         EXECUTE PROCEDURE snd(pe, 2, IIF(hp <= ddmg, 'player/drown1.wav', 'player/male/gurp' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav'), 1, 1);
         EXECUTE PROCEDURE t_damage(pe, 0, 0, ddmg, 0, 2 + 32);
       END
@@ -709,10 +717,10 @@ BEGIN
   ELSE BEGIN afin2 = t + 12; ddmg2 = 2; END
   IF (wl > 0 AND BIN_AND(wt, 24) <> 0 AND enviro < t) THEN
   BEGIN
-    SELECT p.dmg_lava_time FROM player p WHERE p.id = 1 INTO tlt;
+    SELECT p.dmg_lava_time FROM player p WHERE p.ent_id = :pe INTO tlt;
     IF (tlt < t) THEN
     BEGIN
-      UPDATE player p SET p.dmg_lava_time = :t + 0.1e0 WHERE p.id = 1;
+      UPDATE player p SET p.dmg_lava_time = :t + 0.1e0 WHERE p.ent_id = :pe;
       IF (BIN_AND(wt, 8) <> 0) THEN
       BEGIN
         IF (rnd() < 0.1e0) THEN EXECUTE PROCEDURE snd(pe, 2, 'player/burn' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav', 1, 1);
@@ -931,9 +939,9 @@ BEGIN
     BEGIN
       UPDATE ents e SET e.vx = (SELECT tr.p1x * tr.speed * 10 FROM ents tr WHERE tr.id = :tid), e.vy = (SELECT tr.p1y * tr.speed * 10 FROM ents tr WHERE tr.id = :tid),
              e.vz = (SELECT tr.p1z * tr.speed * 10 FROM ents tr WHERE tr.id = :tid), e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :pe;
-      IF ((SELECT p.fly_sound_time FROM player p WHERE p.id = 1) < t) THEN
+      IF ((SELECT p.fly_sound_time FROM player p WHERE p.ent_id = :pe) < t) THEN
       BEGIN
-        UPDATE player p SET p.fly_sound_time = :t + 1.5e0 WHERE p.id = 1;
+        UPDATE player p SET p.fly_sound_time = :t + 1.5e0 WHERE p.ent_id = :pe;
         EXECUTE PROCEDURE snd(pe, 0, 'misc/windfly.wav', 1, 1);
       END
     END
@@ -985,15 +993,17 @@ BEGIN
   UPDATE player p SET p.pitch = :pitch, p.punchangle = MINVALUE(0, p.punchangle + 10 * :dt), p.jump_released = :jr2, p.stepz = :stepz2,
          p.ducked = :ducked2, p.view_ofs = IIF(:ducked2 = 1, -2, 22), p.bobtime = :bt, p.bob_z = :bobz, p.bob_pitch = :bobp, p.bob_roll = :bobr,
          p.air_finished = COALESCE(:afin2, p.air_finished), p.drown_dmg = COALESCE(:ddmg2, p.drown_dmg),
-         p.water_x = :wcx, p.water_y = :wcy, p.water_z = :wcz WHERE p.id = 1;
+         p.water_x = :wcx, p.water_y = :wcy, p.water_z = :wcz WHERE p.ent_id = :pe;
 
   -- megahealth rots away above the maximum
-  UPDATE player p SET p.mega_time = :t + 1 WHERE p.id = 1 AND p.mega_time < :t AND (SELECT e.health FROM ents e WHERE e.id = :pe) > :mhp;
-  UPDATE ents e SET e.health = e.health - 1 WHERE e.id = :pe AND e.health > e.max_health AND (SELECT p.mega_time FROM player p WHERE p.id = 1) = :t + 1
+  UPDATE player p SET p.mega_time = :t + 1 WHERE p.ent_id = :pe AND p.mega_time < :t AND (SELECT e.health FROM ents e WHERE e.id = :pe) > :mhp;
+  UPDATE ents e SET e.health = e.health - 1 WHERE e.id = :pe AND e.health > e.max_health AND (SELECT p.mega_time FROM player p WHERE p.ent_id = :pe) = :t + 1
      AND MOD((SELECT g.tic FROM game g WHERE g.id = 1), 20) = 0;
 
   -- weapon
-  EXECUTE PROCEDURE player_fire(fire);
+  EXECUTE PROCEDURE player_fire(pe, fire);
+  -- what the other player sees of this one (nobody, in single player: the own model is never drawn)
+  IF (coop = 1) THEN EXECUTE PROCEDURE set_client_frame(pe, IIF(xys > 0, 1, 0), IIF(BIN_AND(flags, 512) <> 0, 1, 0), ducked2);
 END^
 
 SET TERM ; ^
