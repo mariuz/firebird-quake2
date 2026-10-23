@@ -55,7 +55,9 @@ export class Session {
     this.pak = null;
     this.res = null;
     this.map = null;            // { name, bsp }
-    this.last = null;           // the last Q2_TIC row
+    this.last = null;           // the last Q2_TIC row: the first client's
+    this.clients = [];          // every client's last Q2_TIC row, in client order (one in single player, two in coop)
+    this.coop = false;
     this.lastSoundId = 0;
     this.lastFxId = 0;
     this.frameNo = 0;
@@ -79,12 +81,14 @@ export class Session {
 
   /**
    * Load a map. A new game forgets the unit's levels; a level of this unit left earlier comes back as it was
-   * left (SV_ReadLevelFile), the player put in afresh at the spawn point. Returns what the page sets up from:
-   * the sky, the CD track, the worldspawn and the looped speakers.
+   * left (SV_ReadLevelFile), the players put in afresh at the spawn point. Returns what the page sets up from:
+   * the sky, the CD track, the worldspawn and the looped speakers. `coop` puts a second client in (at its
+   * info_player_coop); it holds for the game, so a level change keeps it unless told otherwise.
    */
-  async startMap(name, { newGame = false, spawnpoint = null, skill = 1, faceVerts = false, seed } = {}) {
+  async startMap(name, { newGame = false, spawnpoint = null, skill = 1, faceVerts = false, seed, coop = this.coop } = {}) {
     if (newGame) this.unitLevels.clear();
-    const bsp = await loadMap(this.db, this.pak, this.res, name, { skill, newGame, spawnpoint, faceVerts, seed });
+    this.coop = !!coop;
+    const bsp = await loadMap(this.db, this.pak, this.res, name, { skill, newGame, spawnpoint, faceVerts, seed, coop: this.coop });
     if (!newGame && this.unitLevels.has(name)) await importLevel(this.db, this.unitLevels.get(name));
     this.map = { name, bsp };
     const g = (await this.db.query('SELECT sky, cd_track FROM game')).rows[0];
@@ -110,25 +114,34 @@ export class Session {
     this.lastFxId = 0;
   }
 
-  /** Run tics with the usercmd's parameters (Input.read); the row is `last`. */
-  async tic(cmd) {
-    this.last = (await this.db.query('SELECT * FROM q2_tic(?, ?, ?, ?, ?, ?, ?, ?, ?)', cmd, { rowMode: 'object' })).rows[0];
+  /**
+   * Run tics with the usercmd's parameters (Input.read); the first client's row is `last`, every client's
+   * in `clients`. A coop game's second client sends its usercmd as `cmd2` (the same shape, the tics ignored):
+   * it is written to USERCMD, which the tic reads for it.
+   */
+  async tic(cmd, cmd2 = null) {
+    if (cmd2) {
+      await this.db.query('UPDATE OR INSERT INTO usercmd (client, fwd, side, yaw_d, pitch_d, fire, jump, run, imp) VALUES (2, ?, ?, ?, ?, ?, ?, ?, ?) MATCHING (client)', cmd2.slice(1));
+    }
+    this.clients = (await this.db.query('SELECT * FROM q2_tic(?, ?, ?, ?, ?, ?, ?, ?, ?)', cmd, { rowMode: 'object' })).rows;
+    this.last = this.clients[0];
     return this.last;
   }
 
-  /** The inventory screen's rows: [itemlist index, count]. */
-  async inventory() {
-    return (await this.db.query('SELECT idx, cnt FROM inventory_list', [], ARR)).rows;
+  /** The inventory screen's rows: [itemlist index, count], of the client (1 the first). */
+  async inventory(client = 1) {
+    return (await this.db.query(`SELECT idx, cnt FROM inventory_list(${client})`, [], ARR)).rows;
   }
 
   /**
    * The frame in one round trip (FRAME_ALL), decoded. The looped speakers are asked for every tenth frame.
    * `sqlRenderer` is the renderer mode that projects in SQL; its face vertices load the first time it asks.
+   * `client` is whose view it is (1 the first): the other client's model is in it, its own is not.
    */
-  async frame({ sqlRenderer = false } = {}) {
+  async frame({ sqlRenderer = false, client = 1 } = {}) {
     const wantSpeakers = ++this.frameNo % 10 === 0;
     if (sqlRenderer && this.res.world && !this.res.world.faceVertsLoaded) await ensureFaceVerts(this.db, this.res);
-    const rows = (await this.db.query(`SELECT * FROM frame_all(${sqlRenderer ? 1 : 0}, ${this.lastSoundId}, ${this.lastFxId}, ${wantSpeakers ? 1 : 0})`, [], ARR)).rows;
+    const rows = (await this.db.query(`SELECT * FROM frame_all(${sqlRenderer ? 1 : 0}, ${this.lastSoundId}, ${this.lastFxId}, ${wantSpeakers ? 1 : 0}, ${client})`, [], ARR)).rows;
     const f = decodeFrame(rows, this.styleBase);
     if (f.sounds.length) this.lastSoundId = f.sounds[f.sounds.length - 1][0];
     if (f.fx.length) this.lastFxId = f.fx[f.fx.length - 1][0];

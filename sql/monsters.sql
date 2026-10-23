@@ -194,13 +194,14 @@ BEGIN
     EXECUTE PROCEDURE new_chase_dir(eid, goal, dist, iy, gx, gy);
 END^
 
--- FindTarget: can this monster see the player?
+-- FindTarget: can this monster see the sight client (the client the monsters look for this tic; in coop they take turns)?
 CREATE OR ALTER FUNCTION find_target (eid INTEGER) RETURNS SMALLINT
 AS
 DECLARE pe INTEGER; DECLARE r INTEGER; DECLARE sh DOUBLE PRECISION; DECLARE php INTEGER; DECLARE pflags INTEGER;
 BEGIN
-  pe = player_ent();
-  SELECT p.show_hostile FROM player p WHERE p.id = 1 INTO sh;
+  SELECT g.sight_client FROM game g WHERE g.id = 1 INTO pe;
+  IF (pe IS NULL) THEN RETURN 0;                               -- no client alive to find
+  SELECT p.show_hostile FROM player p WHERE p.ent_id = :pe INTO sh;
   SELECT e.health, e.flags FROM ents e WHERE e.id = :pe INTO php, pflags;
   IF (php <= 0 OR BIN_AND(pflags, 64) <> 0) THEN RETURN 0;    -- dead, or notarget
   r = ent_range(eid, pe);
@@ -219,7 +220,7 @@ BEGIN
   SELECT t.sight_snd, t.run_anim, e.combattarget FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO s, run_, ct;
   EXECUTE PROCEDURE snd(eid, 2, s, 1, 1);
   -- FoundTarget: the sighting is noted (last_sighting, trail_time), the pursuit flags start afresh
-  UPDATE ents e SET e.enemy_id = player_ent(), e.goal_id = NULL, e.st = 'run', e.search_time = now_() + 5, e.attack_finished = now_() + 1,
+  UPDATE ents e SET e.enemy_id = (SELECT g.sight_client FROM game g WHERE g.id = 1), e.goal_id = NULL, e.st = 'run', e.search_time = now_() + 5, e.attack_finished = now_() + 1,
          e.ls_x = (SELECT p.x FROM ents p WHERE p.id = e.enemy_id), e.ls_y = (SELECT p.y FROM ents p WHERE p.id = e.enemy_id),
          e.ls_z = (SELECT p.z FROM ents p WHERE p.id = e.enemy_id), e.trail_time = now_(), e.aiflags = BIN_AND(e.aiflags, BIN_NOT(16 + 32 + 64 + 128)) WHERE e.id = :eid;
   EXECUTE PROCEDURE set_anim(eid, run_);
@@ -249,7 +250,8 @@ BEGIN
   END
   IF (st IN ('stand', 'walk') AND EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.health > 0)) THEN
   BEGIN
-    UPDATE ents e SET e.enemy_id = player_ent(), e.st = 'run', e.anim = NULL WHERE e.id = :eid;
+    -- (monster_use: the activator when it is a client, else whoever the monsters are looking for)
+    UPDATE ents e SET e.enemy_id = COALESCE(IIF(client_of(:activator) IS NOT NULL, :activator, NULL), (SELECT g.sight_client FROM game g WHERE g.id = 1), player_ent()), e.st = 'run', e.anim = NULL WHERE e.id = :eid;
   END
 END^
 
@@ -618,7 +620,7 @@ BEGIN
     EXIT;
   END
   UPDATE game g SET g.killed = g.killed + 1 WHERE g.id = 1;
-  IF (attacker = player_ent()) THEN UPDATE player p SET p.kills = p.kills + 1 WHERE p.id = 1;
+  UPDATE player p SET p.kills = p.kills + 1 WHERE p.ent_id = :attacker;       -- (a client's kill)
   -- monster_death_use: the deathtarget and the drop
   IF (dt IS NOT NULL AND dt <> '') THEN
   BEGIN
@@ -711,9 +713,9 @@ BEGIN
 
   IF (st = 'stand' OR st = 'walk') THEN
   BEGIN
-    -- ai_stand / ai_walk: look for the player (cheaply: only when in the player's PVS;
+    -- ai_stand / ai_walk: look for the sight client (cheaply: only when in its PVS;
     -- out of it, nothing is seen either way, so think at 3 Hz)
-    pe = player_ent();
+    SELECT g.sight_client FROM game g WHERE g.id = 1 INTO pe;
     vis = 0;
     SELECT IIF(COALESCE(c.pvs, '') = '' OR (:cl >= 0 AND BIN_AND(POSITION(SUBSTRING(c.pvs FROM BIN_SHR(:cl, 2) + 1 FOR 1), '0123456789abcdef') - 1, BIN_SHL(1, BIN_AND(:cl, 3))) <> 0), 1, 0)
       FROM ents p JOIN leaves l ON l.id = p.leaf LEFT JOIN clusters c ON c.id = l.cluster WHERE p.id = :pe INTO vis;
@@ -1046,7 +1048,6 @@ BEGIN
     UPDATE ents e SET e.ltime = e.ltime + :movetime WHERE e.id = :eid;
     EXIT;
   END
-  pe = player_ent();
 
   -- rotation: turn, then make sure nobody is caught inside
   IF (ap <> 0 OR ay <> 0 OR ar <> 0) THEN
@@ -1099,7 +1100,7 @@ BEGIN
     IF (test_position(c, cx + mx, cy + my, cz + mz) = 0) THEN
     BEGIN
       EXECUTE PROCEDURE link_ent(c);
-      IF (c = pe) THEN UPDATE player p SET p.oldz = p.oldz + :mz WHERE p.id = 1;
+      UPDATE player p SET p.oldz = p.oldz + :mz WHERE p.ent_id = :c;       -- (a client riding it: the view's step)
       CONTINUE;
     END
     -- if it is ok to leave in the old position, do it
@@ -1228,7 +1229,6 @@ DECLARE eid INTEGER; DECLARE mt SMALLINT; DECLARE think VARCHAR(24); DECLARE t D
 DECLARE flags INTEGER; DECLARE cls VARCHAR(40); DECLARE wl SMALLINT; DECLARE pe INTEGER; DECLARE tid INTEGER; DECLARE tcls VARCHAR(40);
 BEGIN
   t = now_();
-  pe = player_ent();
   -- thinks that are due (non-pushers)
   FOR SELECT e.id, e.think FROM ents e WHERE e.nextthink IS NOT NULL AND e.nextthink <= :t + 1e-6 AND e.movetype <> 7 AND e.think IS NOT NULL ORDER BY e.id INTO eid, think DO
   BEGIN
@@ -1298,33 +1298,48 @@ RETURNS (
   level_msg VARCHAR(200), quad SMALLINT, invincible SMALLINT, breather SMALLINT, enviro SMALLINT, leaf INTEGER, cluster INTEGER, help_msg VARCHAR(400),
   help_msg2 VARCHAR(400), help_changed INTEGER, skill SMALLINT, intermission SMALLINT,
   roll DOUBLE PRECISION, bobtime DOUBLE PRECISION, xyspeed DOUBLE PRECISION, ducked SMALLINT,
-  inv_sel SMALLINT, pickup_item SMALLINT, timer_icon SMALLINT, timer INTEGER)
+  inv_sel SMALLINT, pickup_item SMALLINT, timer_icon SMALLINT, timer INTEGER, client SMALLINT)
 AS
-DECLARE i INTEGER = 0; DECLARE itime DOUBLE PRECISION;
+DECLARE i INTEGER = 0; DECLARE itime DOUBLE PRECISION; DECLARE pe INTEGER;
+DECLARE ufwd DOUBLE PRECISION; DECLARE uside DOUBLE PRECISION; DECLARE uyaw DOUBLE PRECISION; DECLARE upitch DOUBLE PRECISION;
+DECLARE ufire SMALLINT; DECLARE ujump SMALLINT; DECLARE urun SMALLINT; DECLARE uimp SMALLINT;
 BEGIN
+  -- the first client's usercmd is the call's; a coop game's second was written to USERCMD before the tic
+  UPDATE OR INSERT INTO usercmd (client, fwd, side, yaw_d, pitch_d, fire, jump, run, imp) VALUES (1, :fwd, :side, :yaw_d, :pitch_d, :fire, :jump, :run, :imp) MATCHING (client);
   SELECT g.tic, g.intermission_time FROM game g WHERE g.id = 1 INTO tic, itime;
   DELETE FROM sound_events s WHERE s.tic < :tic - 40;
   DELETE FROM fx_events f WHERE f.tic < :tic - 40;
   IF (itime IS NOT NULL) THEN
   BEGIN
-    -- the intermission: the world holds still (PM_FREEZE); after five seconds a button leaves
+    -- the intermission: the world holds still (PM_FREEZE); after five seconds a button (any client's) leaves
     UPDATE game g SET g.tic = g.tic + :tics, g.time_ = g.time_ + 0.05e0 * :tics WHERE g.id = 1;
-    UPDATE game g SET g.exit_kind = 1 WHERE g.id = 1 AND g.exit_kind = 0 AND g.time_ > g.intermission_time + 5 AND (:fire = 1 OR :jump = 1);
+    UPDATE game g SET g.exit_kind = 1 WHERE g.id = 1 AND g.exit_kind = 0 AND g.time_ > g.intermission_time + 5
+       AND EXISTS (SELECT 1 FROM usercmd u JOIN player p ON p.id = u.client WHERE u.fire = 1 OR u.jump = 1);
     i = tics;
   END
   WHILE (i < tics) DO
   BEGIN
     UPDATE game g SET g.tic = g.tic + 1, g.time_ = g.time_ + 0.05e0 WHERE g.id = 1;
+    EXECUTE PROCEDURE ai_set_sight_client;
     IF (MOD(tic + i, 2) = 0) THEN EXECUTE PROCEDURE player_trail_check;
-    EXECUTE PROCEDURE player_think(0.05e0, fwd, side, yaw_d / tics, pitch_d / tics, fire, jump, run, IIF(i = 0, imp, 0));
+    -- ClientThink for each client in the game, in order; the impulse on the first of the tics only
+    FOR SELECT p.ent_id, COALESCE(u.fwd, 0), COALESCE(u.side, 0), COALESCE(u.yaw_d, 0), COALESCE(u.pitch_d, 0), COALESCE(u.fire, 0), COALESCE(u.jump, 0), COALESCE(u.run, 0), COALESCE(u.imp, 0)
+          FROM player p LEFT JOIN usercmd u ON u.client = p.id WHERE p.ent_id IS NOT NULL ORDER BY p.id
+          INTO pe, ufwd, uside, uyaw, upitch, ufire, ujump, urun, uimp DO
+      EXECUTE PROCEDURE player_think(pe, 0.05e0, ufwd, uside, uyaw / tics, upitch / tics, ufire, ujump, urun, IIF(i = 0, uimp, 0));
     EXECUTE PROCEDURE run_pushers(0.05e0);
     EXECUTE PROCEDURE run_physics(0.05e0);
     i = i + 1;
   END
+  UPDATE usercmd u SET u.imp = 0 WHERE u.imp <> 0;    -- an impulse is spent by the tic it came in
   -- G_SetStats: power armour with no cells left switches itself off
-  UPDATE player p SET p.power_armor = 0 WHERE p.id = 1 AND p.power_armor = 1 AND p.cells <= 0 AND (p.inv_screen > 0 OR p.inv_shield > 0);
-  IF (ROW_COUNT > 0) THEN EXECUTE PROCEDURE snd(player_ent(), 3, 'misc/power2.wav', 1, 1);
-  SELECT g.tic, g.time_, e.health, e.max_health, p.armor, p.armor_type, IIF(p.power_armor = 1, IIF(p.inv_shield > 0, 2, IIF(p.inv_screen > 0, 1, 0)), 0), p.bullets, p.shells, p.rockets, p.grenades, p.cells, p.slugs,
+  FOR SELECT p.ent_id FROM player p WHERE p.power_armor = 1 AND p.cells <= 0 AND (p.inv_screen > 0 OR p.inv_shield > 0) INTO pe DO
+  BEGIN
+    UPDATE player p SET p.power_armor = 0 WHERE p.ent_id = :pe;
+    EXECUTE PROCEDURE snd(pe, 3, 'misc/power2.wav', 1, 1);
+  END
+  -- a row per client, the first first: its stats (G_SetStats), the level's, the view's
+  FOR SELECT g.tic, g.time_, e.health, e.max_health, p.armor, p.armor_type, IIF(p.power_armor = 1, IIF(p.inv_shield > 0, 2, IIF(p.inv_screen > 0, 1, 0)), 0), p.bullets, p.shells, p.rockets, p.grenades, p.cells, p.slugs,
          p.weapons, p.keys, p.weapon, p.attack_start, p.attack_finished, p.grenade_time,
          e.x, e.y, e.z, e.yaw, p.pitch + p.punchangle + p.bob_pitch, e.z + p.view_ofs - p.stepz + p.bob_z, p.punchangle,
          IIF(p.msg_time > g.time_, p.msg, NULL), IIF(p.cprint_time > g.time_, p.cprint, NULL),
@@ -1338,19 +1353,24 @@ BEGIN
          CASE WHEN p.quad_finished > g.time_ THEN 1 WHEN p.invincible_finished > g.time_ THEN 2 WHEN p.enviro_finished > g.time_ THEN 3
               WHEN p.breather_finished > g.time_ THEN 4 ELSE 0 END,
          CAST(FLOOR(CASE WHEN p.quad_finished > g.time_ THEN p.quad_finished WHEN p.invincible_finished > g.time_ THEN p.invincible_finished
-              WHEN p.enviro_finished > g.time_ THEN p.enviro_finished WHEN p.breather_finished > g.time_ THEN p.breather_finished ELSE g.time_ END - g.time_ + 1e-9) AS INTEGER)
+              WHEN p.enviro_finished > g.time_ THEN p.enviro_finished WHEN p.breather_finished > g.time_ THEN p.breather_finished ELSE g.time_ END - g.time_ + 1e-9) AS INTEGER),
+         p.id
     FROM game g CROSS JOIN player p JOIN ents e ON e.id = p.ent_id
-   WHERE g.id = 1 AND p.id = 1
+   WHERE g.id = 1
+   ORDER BY p.id
     INTO tic, time_, health, max_health, armor, armor_type, power_armor, bullets, shells, rockets, grenades, cells, slugs, weapons, keys, weapon, attack_start, attack_finished, grenade_time,
          px, py, pz, yaw, pitch, view_z, punch, msg, cprint, dmg_take, dmg_save, dmg_time, bonus_time, dead, exit_kind, next_map,
          killed, total_monsters, found_secrets, total_secrets, found_goals, total_goals, waterlevel, watertype, map_name, level_msg, quad, invincible, breather, enviro, leaf, cluster, help_msg,
-         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked, inv_sel, pickup_item, timer_icon, timer;
-  UPDATE player p SET p.dmg_take = 0, p.dmg_save = 0 WHERE p.id = 1 AND p.dmg_time < :time_ - 0.05e0;
-  SUSPEND;
+         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked, inv_sel, pickup_item, timer_icon, timer, client
+  DO
+  BEGIN
+    UPDATE player p SET p.dmg_take = 0, p.dmg_save = 0 WHERE p.id = :client AND p.dmg_time < :time_ - 0.05e0;
+    SUSPEND;
+  END
 END^
 
--- SpawnEntities + the client's spawn
-CREATE OR ALTER PROCEDURE init_map (map_name VARCHAR(32), world_model INTEGER, skill SMALLINT, new_game SMALLINT, spawnpoint VARCHAR(40))
+-- SpawnEntities + the clients' spawn (ClientBegin); coop 1 puts a second client in at its coop spot
+CREATE OR ALTER PROCEDURE init_map (map_name VARCHAR(32), world_model INTEGER, skill SMALLINT, new_game SMALLINT, spawnpoint VARCHAR(40), coop SMALLINT = 0)
 AS
 DECLARE i INTEGER; DECLARE seed BIGINT;
 BEGIN
@@ -1358,9 +1378,13 @@ BEGIN
   seed = CAST(RDB$GET_CONTEXT('USER_SESSION', 'rng') AS BIGINT);
   IF (seed IS NULL) THEN BEGIN seed = CAST(FLOOR(RAND() * 4294967296) AS BIGINT); RDB$SET_CONTEXT('USER_SESSION', 'rng', seed); END
   UPDATE game g SET g.tic = 0, g.time_ = 0, g.map_name = :map_name, g.next_map = NULL, g.exit_kind = 0, g.skill = :skill, g.world_model = :world_model,
-         g.rng_seed = IIF(:new_game = 1, :seed, g.rng_seed),
+         g.rng_seed = IIF(:new_game = 1, :seed, g.rng_seed), g.coop = :coop, g.spawnpoint = :spawnpoint, g.sight_client = NULL,
          g.total_monsters = 0, g.killed = 0, g.total_secrets = 0, g.found_secrets = 0, g.total_goals = 0, g.found_goals = 0, g.level_msg = NULL,
          g.intermission_time = NULL, g.gravity = 800 WHERE g.id = 1;
+  -- the clients: one in single player, two in coop (the second's row joins the game, or leaves it, pers and all)
+  IF (coop = 0) THEN DELETE FROM player p WHERE p.id > 1;
+  ELSE IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = 2)) THEN INSERT INTO player (id) VALUES (2);
+  DELETE FROM usercmd;
   -- switchable lights back to their patterns
   DELETE FROM lightstyles l WHERE l.style >= 32;
   i = 32;
@@ -1369,11 +1393,12 @@ BEGIN
   IF (new_game = 1) THEN
   BEGIN
     UPDATE game g SET g.serverflags = 0, g.help_msg = NULL, g.help_msg2 = NULL, g.help_changed = 0 WHERE g.id = 1;     -- the unit starts over (the help computer's messages last a game)
+    -- InitClientPersistant, every client
     UPDATE player p SET p.armor = 0, p.armor_type = 0, p.power_armor = 0, p.bullets = 0, p.shells = 0, p.rockets = 0, p.grenades = 0, p.cells = 0, p.slugs = 0,
            p.max_bullets = 200, p.max_shells = 100, p.max_rockets = 50, p.max_grenades = 50, p.max_cells = 200, p.max_slugs = 50,
            p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
            p.silencer_shots = 0, p.kills = 0, p.inv_quad = 0, p.inv_invuln = 0, p.inv_silencer = 0, p.inv_breather = 0, p.inv_enviro = 0,
-           p.inv_screen = 0, p.inv_shield = 0, p.inv_sel = 7 WHERE p.id = 1;
+           p.inv_screen = 0, p.inv_shield = 0, p.inv_sel = 7;
   END
   UPDATE player p SET p.weaponframe = 0, p.attack_finished = 0, p.attack_start = 0, p.pain_finished = 0, p.punchangle = 0, p.view_ofs = 22, p.dmg_take = 0, p.dmg_save = 0,
          p.dmg_time = -10, p.bonus_time = -10, p.pickup_item = 0, p.pickup_time = 0, p.msg = NULL, p.msg_time = 0, p.cprint = NULL, p.cprint_time = 0, p.dead_time = 0, p.pitch = 0, p.stepz = 0,
@@ -1381,22 +1406,25 @@ BEGIN
          p.chaingun_spin = 0, p.grenade_time = 0, p.mega_time = 0, p.keys = 0,
          -- (PutClientInServer clears the client but its pers: a powerup running out does not carry into the next level,
          -- whose clock starts again; held ones, in the inventory, do)
-         p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0 WHERE p.id = 1;
-  -- keys don't carry over; neither do dead weapons
-  UPDATE player p SET p.weapon = best_weapon() WHERE p.id = 1 AND (BIN_AND(p.weapons, p.weapon) = 0 OR p.weapon = 0);
+         p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0;
   UPDATE game g SET g.has_water = IIF(EXISTS (SELECT 1 FROM leaves l WHERE BIN_AND(l.contents, 56) <> 0), 1, 0) WHERE g.id = 1;
   UPDATE viewcfg c SET c.vis_cluster = NULL, c.vis_area = NULL, c.lv_ex = NULL, c.lv_leaf = NULL, c.world_lst = NULL WHERE c.id = 1;
   -- PlayerTrail_Init: no trail yet
   DELETE FROM player_trail;
-  UPDATE player p SET p.trail_x = 1e30, p.trail_y = 1e30, p.trail_z = 1e30 WHERE p.id = 1;
+  UPDATE player p SET p.trail_x = 1e30, p.trail_y = 1e30, p.trail_z = 1e30;
   -- every area portal starts closed (CM_LoadMap); the doors open them
   DELETE FROM portal_state;
   INSERT INTO portal_state (portal, open_) SELECT DISTINCT ap.portal, 0 FROM areaportals ap;
   EXECUTE PROCEDURE flood_areas;
   EXECUTE PROCEDURE spawn_map_ents(skill, spawnpoint, NULL);
+  IF (coop = 1) THEN EXECUTE PROCEDURE client_begin(2, spawnpoint);
+  -- keys don't carry over; neither do dead weapons
+  UPDATE player p SET p.weapon = best_weapon(p.ent_id) WHERE BIN_AND(p.weapons, p.weapon) = 0 OR p.weapon = 0;
+  -- InitClientResp: what a coop respawn comes back with
+  EXECUTE PROCEDURE init_client_resp;
   UPDATE lightstyles l SET l.base_pattern = l.pattern;
   -- the level name
-  UPDATE player p SET p.cprint = (SELECT g.level_msg FROM game g WHERE g.id = 1), p.cprint_time = 3 WHERE p.id = 1;
+  UPDATE player p SET p.cprint = (SELECT g.level_msg FROM game g WHERE g.id = 1), p.cprint_time = 3;
 END^
 
 SET TERM ; ^

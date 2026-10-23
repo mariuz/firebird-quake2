@@ -1,13 +1,14 @@
 // savegame.js – a saved game is the game's tables, copied out as rows and put back.
 //
-// The whole state of a level is five tables: game (the level), player (the client), ents (every
-// edict), lightstyles (the switched lights) and player_trail (the spots the monsters follow). exportSave reads them; importSave, with the same
-// map freshly loaded, empties them and inserts the saved rows, then restarts the entity id
-// sequence above the highest id and forgets the frame's caches. Column names come from the
-// result's field list, so the format follows the schema.
+// The whole state of a level is six tables: game (the level), player (the clients), coop_respawn (what a coop
+// respawn comes back with), ents (every edict), lightstyles (the switched lights) and player_trail (the spots
+// the monsters follow). exportSave reads them; importSave, with the same map freshly loaded, empties them and
+// inserts the saved rows, then restarts the entity id sequence above the highest id and forgets the frame's
+// caches. Column names come from the result's field list, so the format follows the schema: a save from
+// before a column loads with the column's default, one from before a table with the table empty.
 
 export const SAVE_VERSION = 2;   // 2: game lost next_spawn, intermission_tics and finale; gained intermission_time, help_msg2, help_changed
-const TABLES = ['game', 'player', 'ents', 'lightstyles', 'player_trail'];
+const TABLES = ['game', 'player', 'coop_respawn', 'ents', 'lightstyles', 'player_trail'];
 // per-frame caches on ents that are rebuilt rather than saved
 const SKIP = new Set(['FACES_LST', 'FL_STAMP', 'FL_X', 'FL_Y', 'FL_Z', 'FL_P', 'FL_YAW', 'FL_R', 'VIS_CL', 'VIS']);
 
@@ -79,14 +80,19 @@ async function modelNames(db) {
 // the map's fresh spawn and put the player in afresh at the spawn point it came in by. A unit's end, a new game
 // or a loaded game forgets them all.
 
-/** The level as it stands, for coming back to it: its entities but the player, lights, portals and level counts. */
+/** The clients' entity ids, in client order. */
+async function playerEnts(db) {
+  return (await db.query('SELECT ent_id FROM player WHERE ent_id IS NOT NULL ORDER BY id', [], { rowMode: 'array' })).rows.map((r) => r[0]);
+}
+
+/** The level as it stands, for coming back to it: its entities but the players', lights, portals and level counts. */
 export async function exportLevel(db) {
-  const pe = (await db.query('SELECT ent_id FROM player WHERE id = 1')).rows[0].ENT_ID;
+  const pes = await playerEnts(db);
   return {
-    playerId: pe,
+    playerIds: pes,
     models: await modelNames(db),
     game: (await db.query('SELECT tic, time_, total_monsters, killed, total_secrets, found_secrets, total_goals, found_goals FROM game WHERE id = 1')).rows[0],
-    ents: await readRows(db, `SELECT * FROM ents WHERE id <> ${pe}`),
+    ents: await readRows(db, `SELECT * FROM ents WHERE id NOT IN (${pes.join(', ')})`),
     lightstyles: await readRows(db, 'SELECT * FROM lightstyles'),
     portals: await readRows(db, 'SELECT * FROM portal_state'),
   };
@@ -94,33 +100,39 @@ export async function exportLevel(db) {
 
 /**
  * Put a level left earlier back over the same map freshly loaded (not a new game): its entities in place of the
- * spawn's, its lights, portals, time and counts. The player the fresh load placed at the spawn point stays, its
- * id moved above the level's, and whatever in the level pointed at the player then points at it now.
+ * spawn's, its lights, portals, time and counts. The players the fresh load placed at the spawn points stay,
+ * their ids moved above the level's, and whatever in the level pointed at a player then points at it now
+ * (a level left with one client and come back to with two keeps the second where the fresh load put it).
  */
 export async function importLevel(db, lv) {
   const byName = new Map((await db.query('SELECT id, name FROM models', [], { rowMode: 'array' })).rows.map(([id, name]) => [name, id]));
   const remap = (id) => { if (id == null) return id; const name = lv.models?.[id]; const nid = name == null ? undefined : byName.get(name); return nid ?? id; };
   const ids = lv.ents.rows.map((r) => r[lv.ents.cols.indexOf('ID')]);
-  const newPe = Math.max(lv.playerId, ...ids) + 1;
-  const pe = (await db.query('SELECT ent_id FROM player WHERE id = 1')).rows[0].ENT_ID;
-  await db.exec(`UPDATE ents SET id = ${newPe} WHERE id = ${pe}; UPDATE player SET ent_id = ${newPe} WHERE id = 1;`);
-  await db.exec(`DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM vis_faces; DELETE FROM player_trail; DELETE FROM ents WHERE id <> ${newPe};
-    DELETE FROM lightstyles; DELETE FROM portal_state;`);
+  const oldPes = lv.playerIds ?? [lv.playerId];   // (a level left before coop: one player)
+  const pes = await playerEnts(db);
+  const base = Math.max(...oldPes, ...ids, ...pes) + 1;   // (above every id in play: the moves cannot collide)
+  const newPe = new Map(pes.map((pe, i) => [pe, base + i]));   // the fresh load's ids → above the level's
+  const moved = new Map(oldPes.map((old, i) => [old, base + i]));   // the level's references → the same clients
+  let sql = '';
+  for (const [pe, n] of newPe) sql += `UPDATE ents SET id = ${n} WHERE id = ${pe}; UPDATE player SET ent_id = ${n} WHERE ent_id = ${pe};`;
+  await db.exec(`${sql} DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM vis_faces; DELETE FROM player_trail;
+    DELETE FROM ents WHERE id NOT IN (${[...newPe.values()].join(', ')}); DELETE FROM lightstyles; DELETE FROM portal_state;`);
   const refs = new Set(['ENEMY_ID', 'GOAL_ID', 'OWNER_ID', 'MOVETARGET', 'LINKED_ID']);
-  await insertRows(db, 'ents', lv.ents, remap, (c, v) => (refs.has(c) && v === lv.playerId ? newPe : v));
+  await insertRows(db, 'ents', lv.ents, remap, (c, v) => (refs.has(c) && moved.has(v) ? moved.get(v) : v));
   await insertRows(db, 'lightstyles', lv.lightstyles, remap);
   await insertRows(db, 'portal_state', lv.portals, remap);
-  await db.exec(`ALTER SEQUENCE ent_seq RESTART WITH ${newPe + 1}`);
+  await db.exec(`ALTER SEQUENCE ent_seq RESTART WITH ${base + pes.length}`);
   const g = lv.game;
   await db.query(`UPDATE game SET tic = ${g.TIC}, time_ = ?, total_monsters = ${g.TOTAL_MONSTERS},
     killed = ${g.KILLED}, total_secrets = ${g.TOTAL_SECRETS}, found_secrets = ${g.FOUND_SECRETS}, total_goals = ${g.TOTAL_GOALS},
     found_goals = ${g.FOUND_GOALS} WHERE id = 1`, [g.TIME_]);
-  // the player put in afresh at the level's time (PutClientInServer: air for twelve seconds), relinked; the
-  // areas joined as the portals now stand; the frame's caches forgotten
+  // the players put in afresh at the level's time (PutClientInServer: air for twelve seconds), relinked; the
+  // areas joined as the portals now stand; the frame's caches forgotten; the monsters' sight client found again
   await db.query(`EXECUTE BLOCK AS BEGIN
-    UPDATE player p SET p.air_finished = (SELECT g.time_ FROM game g WHERE g.id = 1) + 12 WHERE p.id = 1;
-    EXECUTE PROCEDURE link_ent(${newPe});
+    UPDATE player p SET p.air_finished = (SELECT g.time_ FROM game g WHERE g.id = 1) + 12;
+    ${[...newPe.values()].map((n) => `EXECUTE PROCEDURE link_ent(${n});`).join(' ')}
     EXECUTE PROCEDURE flood_areas;
+    EXECUTE PROCEDURE ai_set_sight_client;
     UPDATE viewcfg SET vis_cluster = NULL, vis_area = NULL, lv_ex = NULL, lv_leaf = NULL, world_lst = NULL, view_stamp = view_stamp + 1;
   END`);
 }
@@ -130,7 +142,7 @@ export async function importSave(db, save) {
   // the saved model ids → this load's, by name
   const byName = new Map((await db.query('SELECT id, name FROM models', [], { rowMode: 'array' })).rows.map(([id, name]) => [name, id]));
   const remap = (id) => { if (id == null) return id; const name = save.models?.[id]; const nid = name == null ? undefined : byName.get(name); return nid ?? id; };
-  await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM vis_faces; DELETE FROM lightstyles; DELETE FROM player_trail; DELETE FROM ents; DELETE FROM player; DELETE FROM game;');
+  await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM vis_faces; DELETE FROM lightstyles; DELETE FROM player_trail; DELETE FROM ents; DELETE FROM coop_respawn; DELETE FROM player; DELETE FROM game; DELETE FROM usercmd;');
   for (const t of TABLES) {
     if (!save.tables[t]) continue;   // a save from before the table: it starts empty
     await insertRows(db, t, save.tables[t], remap);

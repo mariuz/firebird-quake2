@@ -18,7 +18,7 @@
 
 SET TERM ^ ;
 
-CREATE OR ALTER PROCEDURE view_setup
+CREATE OR ALTER PROCEDURE view_setup (client SMALLINT = 1)
 RETURNS (ex DOUBLE PRECISION, ey DOUBLE PRECISION, ez DOUBLE PRECISION,
          fx DOUBLE PRECISION, fy DOUBLE PRECISION, fz DOUBLE PRECISION,
          rx DOUBLE PRECISION, ry DOUBLE PRECISION, rz DOUBLE PRECISION,
@@ -32,9 +32,10 @@ DECLARE stepz DOUBLE PRECISION; DECLARE punch DOUBLE PRECISION; DECLARE dead SMA
 DECLARE roll DOUBLE PRECISION; DECLARE cr DOUBLE PRECISION; DECLARE sr DOUBLE PRECISION;
 DECLARE t1 DOUBLE PRECISION; DECLARE t2 DOUBLE PRECISION; DECLARE t3 DOUBLE PRECISION;
 BEGIN
-  -- the eye with the view's bob (SV_CalcViewOffset), the same q2_tic hands the page
+  -- the client's eye with the view's bob (SV_CalcViewOffset), the same q2_tic hands the page
   SELECT e.x, e.y, e.z + p.view_ofs + p.bob_z, e.yaw, p.pitch + p.punchangle + p.bob_pitch, p.stepz, e.deadflag, p.bob_roll
-    FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1 INTO ex, ey, ez, yaw, pitch, stepz, dead, roll;
+    FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = :client INTO ex, ey, ez, yaw, pitch, stepz, dead, roll;
+  IF (ex IS NULL) THEN EXIT;
   ez = ez - COALESCE(stepz, 0);
   SELECT c.w, c.h, c.fov, c.near_z FROM viewcfg c WHERE c.id = 1 INTO w, h, fov, nearz;
   sy = SIN(yaw * 0.0174532925e0); cy = COS(yaw * 0.0174532925e0);
@@ -275,7 +276,7 @@ BEGIN
 END^
 
 -- FRAME_FACES: the same faces, projected vertex by vertex in SQL.
-CREATE OR ALTER PROCEDURE frame_faces
+CREATE OR ALTER PROCEDURE frame_faces (client SMALLINT = 1)
 RETURNS (face INTEGER, seq INTEGER, vf DOUBLE PRECISION, vr DOUBLE PRECISION, vu DOUBLE PRECISION,
          sx DOUBLE PRECISION, sy DOUBLE PRECISION, s DOUBLE PRECISION, t DOUBLE PRECISION, ent_id INTEGER)
 AS
@@ -299,7 +300,7 @@ DECLARE ntx DOUBLE PRECISION; DECLARE nty DOUBLE PRECISION; DECLARE ntz DOUBLE P
 DECLARE nbx DOUBLE PRECISION; DECLARE nby DOUBLE PRECISION; DECLARE nbz DOUBLE PRECISION; DECLARE enb DOUBLE PRECISION;
 DECLARE bcx DOUBLE PRECISION; DECLARE bcy DOUBLE PRECISION; DECLARE bcz DOUBLE PRECISION; DECLARE brad DOUBLE PRECISION;
 BEGIN
-  EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
+  EXECUTE PROCEDURE view_setup(client) RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
   hw = w / 2e0; hh = h / 2e0;
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
   -- FRAME_ALL's frustum planes, for its whole-model test below
@@ -413,7 +414,7 @@ SET TERM ^ ;
 --   6 brush-model pose (i1 ent, i2 frame, i3 effects: the EF_ANIM ones cycle the frame on the page, d1..3 angles)
 --   7 the looped speakers that are on (lst their ids), when want_speakers = 1
 --   9 an entity's looped sound (s.sound: i1 ent, d3..5 at, s name)
-CREATE OR ALTER PROCEDURE frame_all (mode SMALLINT, last_sound INTEGER, last_fx INTEGER, want_speakers SMALLINT)
+CREATE OR ALTER PROCEDURE frame_all (mode SMALLINT, last_sound INTEGER, last_fx INTEGER, want_speakers SMALLINT, client SMALLINT = 1)
 RETURNS (kind SMALLINT, i1 INTEGER, i2 INTEGER, i3 INTEGER, i4 INTEGER, i5 INTEGER,
          d1 DOUBLE PRECISION, d2 DOUBLE PRECISION, d3 DOUBLE PRECISION, d4 DOUBLE PRECISION, d5 DOUBLE PRECISION,
          d6 DOUBLE PRECISION, d7 DOUBLE PRECISION, d8 DOUBLE PRECISION, s VARCHAR(64),
@@ -438,8 +439,9 @@ DECLARE stamp INTEGER; DECLARE held SMALLINT; DECLARE fl_stamp INTEGER; DECLARE 
 DECLARE bcx DOUBLE PRECISION; DECLARE bcy DOUBLE PRECISION; DECLARE bcz DOUBLE PRECISION; DECLARE brad DOUBLE PRECISION; DECLARE bcf DOUBLE PRECISION; DECLARE vslot SMALLINT;
 BEGIN
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
-  pe = player_ent();
-  EXECUTE PROCEDURE view_setup RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
+  -- the client whose view this is: its own model is not drawn, the other client's is
+  SELECT p.ent_id FROM player p WHERE p.id = :client INTO pe;
+  EXECUTE PROCEDURE view_setup(client) RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
   -- (c - e)·f = c·f - e·f: the eye's part is a constant of the frame, not of the row
   ef = ex * fx + ey * fy + ez * fz; er = ex * rx + ey * ry + ez * rz; eu = ex * ux + ey * uy + ez * uz;
@@ -454,7 +456,7 @@ BEGIN
   IF (mode = 1) THEN
   BEGIN
     kind = 8;
-    FOR SELECT f.face, f.seq, f.ent_id, f.vf, f.vr, f.vu, f.sx, f.sy, f.s, f.t FROM frame_faces f INTO i1, i2, i3, d1, d2, d3, d4, d5, d6, d7 DO SUSPEND;
+    FOR SELECT f.face, f.seq, f.ent_id, f.vf, f.vr, f.vu, f.sx, f.sy, f.s, f.t FROM frame_faces(:client) f INTO i1, i2, i3, d1, d2, d3, d4, d5, d6, d7 DO SUSPEND;
     i3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL; d7 = NULL;
   END
   ELSE
@@ -595,12 +597,14 @@ BEGIN
         FROM ents e WHERE e.movetype = 7 AND e.mv_done IS NOT NULL AND e.noise2 IS NOT NULL AND BIN_AND(e.flags, 2048) = 0
         INTO i1, d3, d4, d5, s DO SUSPEND;
   s = NULL;
-  SELECT e.id, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2,
+  -- (each client's: the lava fry, the hum of the weapon in hand, its firing loop)
+  FOR SELECT e.id, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2,
          TRIM(CASE WHEN e.waterlevel > 0 AND BIN_AND(e.watertype, 24) <> 0 THEN 'player/fry.wav'
                    WHEN p.weapon = 512 THEN 'weapons/rg_hum.wav' WHEN p.weapon = 1024 THEN 'weapons/bfg_hum.wav'
                    WHEN p.weapon_sound = 1 THEN 'weapons/hyprbl1a.wav' WHEN p.weapon_sound = 2 THEN 'weapons/chngnl1a.wav' END)
-    FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1 INTO i1, d3, d4, d5, s;
-  IF (s IS NOT NULL) THEN SUSPEND;
+    FROM player p JOIN ents e ON e.id = p.ent_id ORDER BY p.id INTO i1, d3, d4, d5, s
+  DO
+    IF (s IS NOT NULL) THEN SUSPEND;
   s = NULL;
   IF (want_speakers = 1) THEN
   BEGIN
