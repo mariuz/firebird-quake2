@@ -191,8 +191,10 @@ help, laser, lightramp, changelevel, and the unit's cross-level flags on
 `game.serverflags`: `target_crosslevel_trigger` sets them, `target_crosslevel_target` fires when they
 are set); items from stimpacks to the power
 shield, ammo, keys, timed powerups (g_items.c: `item_pickup` is the pickup functions, `item_touch` is
-`Touch_Item`); the inventory by itemlist index (`inv_count` reads a count from wherever the game keeps it:
-weapon bits, ammo, armour, key bits, the `inv_*` columns for powerups and power armour; `inv_select` and
+`Touch_Item`; the power cubes are `SpawnItem`'s, each with a spawnflag bit of its own that `Pickup_Key`
+sets in the client's `cube_mask` and counts in `power_cubes`, and `trigger_fire` spends one at a time as
+`trigger_key_touch` did); the inventory by itemlist index (`inv_count` reads a count from wherever the game keeps it:
+weapon bits, ammo, armour, key bits and the cube count, the `inv_*` columns for powerups and power armour; `inv_select` and
 `inv_validate` move `inv_sel`; `use_item` is `Cmd_Use_f` with the use functions; `inv_impulse` takes
 impulses 13–21: invuse, invnext, invprev and the item keys; `inventory_list` is the inventory screen's rows);
 the ten weapons (p_weapon.c, g_weapon.c:

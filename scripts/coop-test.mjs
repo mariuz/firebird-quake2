@@ -174,6 +174,35 @@ await place(p2.ENT_ID, ps[0].X, ps[0].Y, ps[0].Z);
 await session.tic(idle, idle);
 check((await players())[1].KEYS === 1, 'the second takes it too');
 await place(p2.ENT_ID, p2.X, p2.Y, p2.Z, 90);
+
+// ── power cubes: each has a bit of its own, a client takes each once, a door spends the same cube from every client ──
+const cubes = () => q('SELECT p.id, p.keys, p.power_cubes, p.cube_mask FROM player p ORDER BY p.id');
+const c1 = await spawnItem('key_power_cube', ps[0].X, ps[0].Y, ps[0].Z);
+await db.exec(`UPDATE ents SET spawnflags = 256 WHERE id = ${c1}`);
+await session.tic(idle, idle);
+let cs = await cubes();
+check(cs[0].POWER_CUBES === 1 && cs[0].CUBE_MASK === 256 && (cs[0].KEYS & 8) === 8 && (await one(`SELECT id FROM ents WHERE id = ${c1}`)), 'the first client takes a cube, and the cube stays');
+await session.tic(idle, idle);
+check((await cubes())[0].POWER_CUBES === 1, 'that cube is not taken twice');
+const c2 = await spawnItem('key_power_cube', ps[0].X, ps[0].Y, ps[0].Z);
+await db.exec(`UPDATE ents SET spawnflags = 512 WHERE id = ${c2}`);
+await session.tic(idle, idle);
+cs = await cubes();
+check(cs[0].POWER_CUBES === 2 && cs[0].CUBE_MASK === 768, `another cube is (mask ${cs[0].CUBE_MASK})`);
+await place(p2.ENT_ID, ps[0].X, ps[0].Y, ps[0].Z);
+await session.tic(idle, idle);
+cs = await cubes();
+check(cs[1].POWER_CUBES === 2 && cs[1].CUBE_MASK === 768 && (await one(`SELECT COUNT(*) n FROM ents WHERE classname = 'key_power_cube'`)).N === 2, 'the second client takes both cubes, and they stay');
+await place(p2.ENT_ID, p2.X, p2.Y, p2.Z, 90);
+const door = async (item) => (await one(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN
+  EXECUTE PROCEDURE spawn_ent('trigger_key', 0, 0, 0) RETURNING_VALUES id;
+  UPDATE ents e SET e.item = '${item}', e.solid = 0 WHERE e.id = :id; SUSPEND; END`)).ID;
+await db.exec(`EXECUTE PROCEDURE trigger_fire(${await door('key_power_cube')}, ${p1.ENT_ID})`);
+cs = await cubes();
+check(cs.every((c) => c.POWER_CUBES === 1 && c.CUBE_MASK === 512 && (c.KEYS & 8) === 8), `a door the first client opens spends the first cube from both (masks ${cs.map((c) => c.CUBE_MASK).join(', ')})`);
+await db.exec(`EXECUTE PROCEDURE trigger_fire(${await door('key_blue_key')}, ${p2.ENT_ID})`);
+cs = await cubes();
+check(cs.every((c) => (c.KEYS & 1) === 0 && (c.KEYS & 8) === 8), `a door the second opens with the blue key takes it from both (keys ${cs.map((c) => c.KEYS).join(', ')})`);
 const hp = await spawnItem('item_health', ps[0].X, ps[0].Y, ps[0].Z);
 await db.exec(`UPDATE ents SET health = 50 WHERE id = ${p1.ENT_ID}`);
 await session.tic(idle, idle);
@@ -187,7 +216,7 @@ const before = await players();
 for (let i = 0; i < 10; i++) await session.tic(idle, cmd({ fwd: 1 }));
 await session.loadSave(await session.readSave(SLOT_KEY(1)), { skill: 2 });
 ps = await players();
-check(session.coop && ps.length === 2 && ps[1].X === before[1].X && ps[1].Y === before[1].Y && ps[1].KEYS === 1,
+check(session.coop && ps.length === 2 && ps[1].X === before[1].X && ps[1].Y === before[1].Y && ps[1].KEYS === before[1].KEYS && (ps[1].KEYS & 8) === 8,
   'a loaded save brings both clients back where they were, with what they had');
 check((await q('SELECT id FROM coop_respawn')).length === 2 && (await one('SELECT coop FROM game')).COOP === 1, 'and the respawn copies and the coop flag');
 

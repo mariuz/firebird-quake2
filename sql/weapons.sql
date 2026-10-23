@@ -599,7 +599,7 @@ BEGIN
       IF (arg IN ('all', 'ammo')) THEN UPDATE player p SET p.bullets = p.max_bullets, p.shells = p.max_shells, p.rockets = p.max_rockets,
              p.grenades = p.max_grenades, p.cells = p.max_cells, p.slugs = p.max_slugs WHERE p.ent_id = :pe;
       IF (arg IN ('all', 'armor')) THEN UPDATE player p SET p.armor = 200, p.armor_type = 3 WHERE p.ent_id = :pe;     -- body armor, full
-      IF (arg IN ('all', 'keys')) THEN UPDATE player p SET p.keys = 511 WHERE p.ent_id = :pe;
+      IF (arg IN ('all', 'keys')) THEN UPDATE player p SET p.keys = 511, p.power_cubes = MAXVALUE(p.power_cubes, 1) WHERE p.ent_id = :pe;   -- (a cube among them)
       IF (arg = 'all') THEN
         UPDATE player p SET p.inv_shield = p.inv_shield + 1, p.inv_sel = 6, p.inv_quad = 1, p.inv_invuln = 1, p.inv_silencer = 1,
                p.inv_breather = 1, p.inv_enviro = 1 WHERE p.ent_id = :pe;

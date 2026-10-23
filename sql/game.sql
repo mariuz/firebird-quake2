@@ -1338,6 +1338,7 @@ END^
 CREATE OR ALTER PROCEDURE trigger_fire (eid INTEGER, activator INTEGER)
 AS
 DECLARE wt DOUBLE PRECISION; DECLARE nt DOUBLE PRECISION; DECLARE cls VARCHAR(40); DECLARE n1 VARCHAR(64); DECLARE item VARCHAR(40); DECLARE kbit INTEGER;
+DECLARE coop SMALLINT; DECLARE cmask INTEGER; DECLARE cbit INTEGER;
 BEGIN
   SELECT e.wait_, e.nextthink, e.classname, e.noise1, e.item FROM ents e WHERE e.id = :eid INTO wt, nt, cls, n1, item;
   IF (nt IS NOT NULL AND nt > now_() AND cls <> 'trigger_relay') THEN EXIT;    -- already been triggered
@@ -1357,8 +1358,18 @@ BEGIN
       EXIT;
     END
     EXECUTE PROCEDURE snd(activator, 2, 'misc/keyuse.wav', 1, 1);
-    -- the key is used up (in coop, Quake 2 took one from every client; 3.14 took the activator's)
-    UPDATE player p SET p.keys = BIN_AND(p.keys, BIN_NOT(:kbit)) WHERE p.ent_id = :activator;
+    -- the key is used up (trigger_key_touch): a power cube one at a time, the activator's first, and in coop
+    -- that same cube from every client that has it; another key in coop from every client
+    SELECT g.coop FROM game g WHERE g.id = 1 INTO coop;
+    IF (kbit = 8) THEN
+    BEGIN
+      SELECT p.cube_mask FROM player p WHERE p.ent_id = :activator INTO cmask;
+      cbit = BIN_AND(cmask, -cmask);   -- the lowest bit set: the activator's first cube
+      UPDATE player p SET p.power_cubes = MAXVALUE(0, p.power_cubes - 1), p.cube_mask = BIN_AND(p.cube_mask, BIN_NOT(:cbit)),
+             p.keys = IIF(p.power_cubes <= 1, BIN_AND(p.keys, BIN_NOT(8)), p.keys)
+       WHERE p.ent_id = :activator OR (:coop = 1 AND :cbit <> 0 AND BIN_AND(p.cube_mask, :cbit) <> 0);
+    END
+    ELSE UPDATE player p SET p.keys = BIN_AND(p.keys, BIN_NOT(:kbit)) WHERE p.ent_id = :activator OR :coop = 1;
     EXECUTE PROCEDURE use_targets(eid, activator);
     DELETE FROM ents e WHERE e.id = :eid;
     EXIT;
@@ -1550,7 +1561,7 @@ BEGIN
     WHEN :idx = 18 THEN p.shells WHEN :idx = 19 THEN p.bullets WHEN :idx = 20 THEN p.cells WHEN :idx = 21 THEN p.rockets WHEN :idx = 22 THEN p.slugs
     WHEN :idx = 23 THEN p.inv_quad WHEN :idx = 24 THEN p.inv_invuln WHEN :idx = 25 THEN p.inv_silencer
     WHEN :idx = 26 THEN p.inv_breather WHEN :idx = 27 THEN p.inv_enviro
-    WHEN :idx = 33 THEN IIF(BIN_AND(p.keys, 8) <> 0, MAXVALUE(p.power_cubes, 1), 0)
+    WHEN :idx = 33 THEN p.power_cubes
     WHEN :idx BETWEEN 32 AND 40 THEN IIF(BIN_AND(p.keys, CASE :idx WHEN 32 THEN 4 WHEN 34 THEN 16 WHEN 35 THEN 32 WHEN 36 THEN 64
                                                          WHEN 37 THEN 1 WHEN 38 THEN 2 WHEN 39 THEN 128 ELSE 256 END) <> 0, 1, 0)
     ELSE 0 END
@@ -1682,7 +1693,7 @@ AS
 DECLARE cls VARCHAR(40); DECLARE hp INTEGER; DECLARE mhp INTEGER;
 DECLARE t DOUBLE PRECISION; DECLARE w INTEGER; DECLARE have INTEGER; DECLARE n INTEGER; DECLARE sk SMALLINT;
 DECLARE av INTEGER; DECLARE atype SMALLINT; DECLARE newtype SMALLINT; DECLARE base INTEGER; DECLARE mx INTEGER; DECLARE kbit INTEGER;
-DECLARE cnt INTEGER; DECLARE ak SMALLINT; DECLARE oldcount INTEGER; DECLARE isf INTEGER; DECLARE coop SMALLINT;
+DECLARE cnt INTEGER; DECLARE ak SMALLINT; DECLARE oldcount INTEGER; DECLARE isf INTEGER; DECLARE coop SMALLINT; DECLARE cbit INTEGER;
 BEGIN
   taken = 0; stays = 0;
   SELECT g.coop FROM game g WHERE g.id = 1 INTO coop;
@@ -1788,13 +1799,28 @@ BEGIN
   BEGIN
     kbit = CASE cls WHEN 'key_blue_key' THEN 1 WHEN 'key_red_key' THEN 2 WHEN 'key_data_cd' THEN 4 WHEN 'key_power_cube' THEN 8 WHEN 'key_pyramid' THEN 16
                     WHEN 'key_data_spinner' THEN 32 WHEN 'key_pass' THEN 64 WHEN 'key_commander_head' THEN 128 WHEN 'key_airstrike_target' THEN 256 ELSE 0 END;
-    -- Pickup_Key in coop: one each, and the key stays for the others (IT_STAY_COOP)
-    IF (coop = 1) THEN
+    IF (cls = 'key_power_cube') THEN
     BEGIN
-      IF (EXISTS (SELECT 1 FROM player p WHERE p.ent_id = :other AND BIN_AND(p.keys, :kbit) <> 0)) THEN EXIT;
-      stays = 1;
+      -- Pickup_Key's cubes: each one counted (pers.inventory) and marked by its spawn bit (pers.power_cubes);
+      -- in coop a client takes each cube once, and the cube stays for the others
+      cbit = BIN_AND(COALESCE(isf, 0), 65280);
+      IF (coop = 1) THEN
+      BEGIN
+        IF (cbit <> 0 AND EXISTS (SELECT 1 FROM player p WHERE p.ent_id = :other AND BIN_AND(p.cube_mask, :cbit) <> 0)) THEN EXIT;
+        stays = 1;
+      END
+      UPDATE player p SET p.keys = BIN_OR(p.keys, 8), p.power_cubes = p.power_cubes + 1, p.cube_mask = BIN_OR(p.cube_mask, :cbit) WHERE p.ent_id = :other;
     END
-    UPDATE player p SET p.keys = BIN_OR(p.keys, :kbit), p.power_cubes = p.power_cubes + IIF(:kbit = 8, 1, 0) WHERE p.ent_id = :other;
+    ELSE
+    BEGIN
+      -- Pickup_Key in coop: one each, and the key stays for the others (IT_STAY_COOP)
+      IF (coop = 1) THEN
+      BEGIN
+        IF (EXISTS (SELECT 1 FROM player p WHERE p.ent_id = :other AND BIN_AND(p.keys, :kbit) <> 0)) THEN EXIT;
+        stays = 1;
+      END
+      UPDATE player p SET p.keys = BIN_OR(p.keys, :kbit) WHERE p.ent_id = :other;
+    END
     snd_ = 'items/pkup.wav';
   END
   -- powerups (Pickup_Powerup): into the inventory, to be used with their key or invuse; hard holds one of each,
@@ -2735,7 +2761,7 @@ DECLARE a DOUBLE PRECISION; DECLARE b DOUBLE PRECISION; DECLARE c DOUBLE PRECISI
 DECLARE skillbit INTEGER; DECLARE wmodel INTEGER; DECLARE startid INTEGER;
 DECLARE n1 VARCHAR(64); DECLARE n2 VARCHAR(64); DECLARE n3 VARCHAR(64);
 DECLARE minp DOUBLE PRECISION; DECLARE maxp DOUBLE PRECISION; DECLARE miny_ DOUBLE PRECISION; DECLARE maxy_ DOUBLE PRECISION;
-DECLARE php INTEGER; DECLARE pmh INTEGER; DECLARE pfl INTEGER;
+DECLARE php INTEGER; DECLARE pmh INTEGER; DECLARE pfl INTEGER; DECLARE ncubes INTEGER = 0;   -- level.power_cubes: the cubes spawned, each with its bit
 BEGIN
   t0 = now_();
   skillbit = CASE skill WHEN 0 THEN 256 WHEN 1 THEN 512 ELSE 1024 END;
@@ -3139,6 +3165,13 @@ BEGIN
       UPDATE ents e SET e.z = e.z + 1 WHERE e.id = :eid;
       EXECUTE PROCEDURE drop_to_floor(eid);
       IF (BIN_AND(sf, 1) <> 0 AND (tn IS NOT NULL AND tn <> '')) THEN UPDATE ents e SET e.solid = 0, e.alpha = 1 WHERE e.id = :eid;   -- TRIGGER_SPAWN
+      -- SpawnItem: each power cube gets a bit of its own (spawnflags 256 on, the filter bits now spent), which
+      -- tells the cubes apart in a client's pers.power_cubes
+      IF (cls = 'key_power_cube' AND ncubes < 8) THEN
+      BEGIN
+        UPDATE ents e SET e.spawnflags = BIN_OR(e.spawnflags, BIN_SHL(1, 8 + :ncubes)) WHERE e.id = :eid;
+        ncubes = ncubes + 1;
+      END
     END
     -- ── monsters ──
     ELSE IF (cls LIKE 'monster_%') THEN
