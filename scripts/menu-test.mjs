@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pak, pic } from '../src/pak.js';
-import { Menu, saveComment } from '../src/menu.js';
+import { Menu, saveComment, PLAYERS } from '../src/menu.js';
 import { defaultBinds, bindKey } from '../src/input.js';
 import { CREDITS } from '../src/credits.js';
 
@@ -57,10 +57,14 @@ assert(menu.current.cursor === 4, `the cursor steps over the blank line to the p
 draw();
 assert(drawn.some(([k, s]) => k === 'str' && s === 'one'), 'the players spin shows one player');
 keys('ArrowRight');
-assert(settings.players === 1, 'turned, it asks the host for a coop game');
+assert(settings.players === 1, 'turned, it asks the host for a coop game of two');
+keys('ArrowRight', 'ArrowRight');
+assert(settings.players === 3, 'turned twice more, four in coop');
 keys('ArrowRight');
-assert(settings.players === 2, 'turned again, a deathmatch');
-keys('ArrowLeft', 'ArrowLeft');
+assert(settings.players === 4, 'then a deathmatch of two');
+keys('ArrowRight', 'ArrowRight', 'ArrowRight');
+assert(settings.players === 6 && PLAYERS.length === 7 && PLAYERS[6] === 'four (deathmatch)', 'up to a deathmatch of four, and no further');
+for (let i = 0; i < 6; i++) keys('ArrowLeft');
 assert(settings.players === 0, 'and back for one player');
 keys('ArrowDown');
 assert(menu.current.cursor === 6, `the cursor steps over the next blank line to load game (${menu.current.cursor})`);

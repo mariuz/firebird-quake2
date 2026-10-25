@@ -404,15 +404,18 @@ canvas, the sound, the status line, the keys and the menus' host. `scripts/sessi
 `Session` headless through the same calls.
 
 A coop game (the Players select, or the game menu's players spin, for the next new game; a save remembers)
-is two clients on one page: the keys, the mouse and the touches are the first player's command, the gamepad
-alone the second's (`Input.read(…, { pad: false })` and `Input.readPad`), both sent with the tic; the frame
-is asked for twice (`frame({ client })`), the sounds and effects with the first (the first player is the
-listener), and the painter draws each view half as high into a screen split along the middle
-(`Renderer.setSize(w, h, 2)`, `present(…, view)`; the SQL's `viewcfg` is the half-height view, the fov being
-horizontal). The menus and the pause take the whole screen again. The help computer and the inventory
-screen are per view: F1 and Tab are the first player's, the pad's Back and Y its player's (the second in
-coop; `Input.padScreens`), its d-pad the inventory's keys (`padImpulse`: invnext, invprev, invuse); the
-particles are run once a frame and drawn in both views.
+is two to four clients on one page (`init_map`'s `nclients`, the second on at the map's `info_player_coop`
+in order; `settings.players`, `Session.players`): the keys, the mouse and the touches are the first player's
+command, a gamepad each the others' in the order the browser lists them (`Input.read(…, { pad: false })` and
+`Input.readPad(tics, settings, index)`), all sent with the tic (`Session.tic(cmd, …cmds)`, a usercmd row per
+client); the frame is asked for once per client (`frame({ client })`), the sounds and effects with the first
+(the first player is the listener), and the painter draws each view into a screen split along the middle for
+two, or in quarters for three or four (`Renderer.setSize(w, h, views)`, `present(…, view)`; the SQL's
+`viewcfg` is the one view's size, the fov being horizontal; 640×480 gives four views of 320×240, and the
+status bar overflows a narrower one at its sides). The menus and the pause take the whole screen again. The
+help computer and the inventory screen are per view: F1 and Tab are the first player's, a pad's Back and Y
+its player's (`Input.padScreens`, `padScreens`), its d-pad the inventory's keys (`padImpulse`: invnext,
+invprev, invuse), its Start the menu; the particles are run once a frame and drawn in every view.
 
 A deathmatch (the Players select's third choice, or the players spin; `init_map(…, 0, 1)`, which sets
 `game.deathmatch` and clears coop, as the cvars did) is two clients against each other. The spawn keeps

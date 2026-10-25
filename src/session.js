@@ -59,6 +59,7 @@ export class Session {
     this.clients = [];          // every client's last Q2_TIC row, in client order (one in single player, two in coop or deathmatch)
     this.coop = false;
     this.deathmatch = false;
+    this.players = 2;           // the clients a coop game or a deathmatch has (two to four)
     this.cvars = { dmflags: 0, fraglimit: 0, timelimit: 0 };   // the deathmatch cvars, given to each map load
     this.lastSoundId = 0;
     this.lastFxId = 0;
@@ -81,22 +82,25 @@ export class Session {
     return this.pak.has('maps/demo1.bsp') ? 'demo1' : 'base1';
   }
 
-  /** Two clients at this game, in coop or against each other. */
+  /** Two or more clients at this game, in coop or against each other. */
   get twoPlayers() { return this.coop || this.deathmatch; }
+  /** How many clients the game has: one, or `players` in coop or deathmatch. */
+  get nclients() { return this.twoPlayers ? this.players : 1; }
 
   /**
    * Load a map. A new game forgets the unit's levels; a level of this unit left earlier comes back as it was
    * left (SV_ReadLevelFile), the players put in afresh at the spawn point. Returns what the page sets up from:
-   * the sky, the CD track, the worldspawn and the looped speakers. `coop` puts a second client in (at its
-   * info_player_coop), `deathmatch` two against each other (at deathmatch spots, with the cvars in `cvars`);
-   * either holds for the game, so a level change keeps it unless told otherwise.
+   * the sky, the CD track, the worldspawn and the looped speakers. `coop` puts more clients in (`players` of them,
+   * two to four, at their info_player_coop), `deathmatch` as many against each other (at deathmatch spots, with
+   * the cvars in `cvars`); either holds for the game, so a level change keeps it unless told otherwise.
    */
-  async startMap(name, { newGame = false, spawnpoint = null, skill = 1, faceVerts = false, seed, coop = this.coop, deathmatch = this.deathmatch, cvars = this.cvars } = {}) {
+  async startMap(name, { newGame = false, spawnpoint = null, skill = 1, faceVerts = false, seed, coop = this.coop, deathmatch = this.deathmatch, players = this.players, cvars = this.cvars } = {}) {
     if (newGame) this.unitLevels.clear();
     this.deathmatch = !!deathmatch;
     this.coop = !!coop && !this.deathmatch;
+    this.players = Math.max(2, Math.min(4, Math.floor(players) || 2));
     this.cvars = { ...this.cvars, ...cvars };
-    const bsp = await loadMap(this.db, this.pak, this.res, name, { skill, newGame, spawnpoint, faceVerts, seed, coop: this.coop, deathmatch: this.deathmatch, ...this.cvars });
+    const bsp = await loadMap(this.db, this.pak, this.res, name, { skill, newGame, spawnpoint, faceVerts, seed, coop: this.coop, deathmatch: this.deathmatch, players: this.players, ...this.cvars });
     if (!newGame && this.unitLevels.has(name)) await importLevel(this.db, this.unitLevels.get(name));
     this.map = { name, bsp };
     const g = (await this.db.query('SELECT sky, cd_track FROM game')).rows[0];
@@ -124,12 +128,14 @@ export class Session {
 
   /**
    * Run tics with the usercmd's parameters (Input.read); the first client's row is `last`, every client's
-   * in `clients`. A coop game's second client sends its usercmd as `cmd2` (the same shape, the tics ignored):
-   * it is written to USERCMD, which the tic reads for it.
+   * in `clients`. The other clients of a coop game or a deathmatch send their usercmds as `cmds` (the same
+   * shape, the tics ignored; the second client's first, a null for one that sends nothing): each is written to
+   * USERCMD, which the tic reads for it.
    */
-  async tic(cmd, cmd2 = null) {
-    if (cmd2) {
-      await this.db.query('UPDATE OR INSERT INTO usercmd (client, fwd, side, yaw_d, pitch_d, fire, jump, run, imp) VALUES (2, ?, ?, ?, ?, ?, ?, ?, ?) MATCHING (client)', cmd2.slice(1));
+  async tic(cmd, ...cmds) {
+    for (let i = 0; i < cmds.length; i++) {
+      if (!cmds[i]) continue;
+      await this.db.query(`UPDATE OR INSERT INTO usercmd (client, fwd, side, yaw_d, pitch_d, fire, jump, run, imp) VALUES (${i + 2}, ?, ?, ?, ?, ?, ?, ?, ?) MATCHING (client)`, cmds[i].slice(1));
     }
     this.clients = (await this.db.query('SELECT * FROM q2_tic(?, ?, ?, ?, ?, ?, ?, ?, ?)', cmd, { rowMode: 'object' })).rows;
     this.last = this.clients[0];
@@ -259,9 +265,10 @@ export class Session {
     this.unitLevels.clear();
     const setup = await this.startMap(save.map, { skill, faceVerts });
     await importSave(this.db, save);
-    const g = (await this.db.query('SELECT coop, deathmatch FROM game')).rows[0];   // the save's game: one player's, coop or deathmatch
+    const g = (await this.db.query('SELECT coop, deathmatch, (SELECT COUNT(*) FROM player) n FROM game')).rows[0];   // the save's game: one player's, coop or deathmatch, with its clients
     this.coop = g?.COOP === 1;
     this.deathmatch = g?.DEATHMATCH === 1;
+    if (this.twoPlayers) this.players = Math.max(2, Math.min(4, Number(g?.N ?? 2)));
     for (const [name, lv] of savedLevels(save)) this.unitLevels.set(name, lv);
     await this.loadStyleBase();
     await this.resetEvents();

@@ -12,6 +12,8 @@ const MAX_SAVEGAMES = 15;
 const NUM_CURSOR_FRAMES = 15;
 const MAIN_ITEMS = ['m_main_game', 'm_main_multiplayer', 'm_main_options', 'm_main_video', 'm_main_quit'];
 const YESNO = ['no', 'yes'];
+/** The players spin's choices, in the order of the page's select (one; two to four in coop; two to four in deathmatch). */
+export const PLAYERS = ['one', 'two (coop)', 'three (coop)', 'four (coop)', 'two (deathmatch)', 'three (deathmatch)', 'four (deathmatch)'];
 
 /** qmenu's item kinds: action (left-justified or not), slider, spin control, separator. */
 const action = (name, y, callback, extra = {}) => ({ type: 'action', name, x: 0, y, callback, ...extra });
@@ -184,8 +186,8 @@ export class Menu {
 
   /**
    * M_Menu_Game_f: easy, medium, hard; load game, save game, credits. The players spin
-   * is this port's: a new game at a skill is for one player, or two in coop or deathmatch (the view split,
-   * the gamepad the second's), which Quake 2 reached through its network menu.
+   * is this port's: a new game at a skill is for one player, or two to four in coop or deathmatch (the view
+   * split, the gamepads the others'), which Quake 2 reached through its network menu.
    */
   game() {
     const h = this.host;
@@ -196,7 +198,7 @@ export class Menu {
         action('medium', 10, start(1), { left: true }),
         action('hard', 20, start(2), { left: true }),
         separator(),
-        spin('players', 40, ['one', 'two (coop)', 'two (deathmatch)'], () => h.get('players') ?? 0, (v) => h.set('players', v)),
+        spin('players', 40, PLAYERS, () => h.get('players') ?? 0, (v) => h.set('players', v)),
         separator(),
         action('load game', 60, () => this.loadMenu(), { left: true }),
         action('save game', 70, () => this.saveMenu(), { left: true }),

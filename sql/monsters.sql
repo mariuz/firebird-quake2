@@ -1374,7 +1374,9 @@ END^
 
 -- SpawnEntities + the clients' spawn (ClientBegin); coop 1 puts a second client in at its coop spot, deathmatch 1
 -- two clients at deathmatch spots with fresh pers (deathmatch wins over coop, as the cvars did)
-CREATE OR ALTER PROCEDURE init_map (map_name VARCHAR(32), world_model INTEGER, skill SMALLINT, new_game SMALLINT, spawnpoint VARCHAR(40), coop SMALLINT = 0, deathmatch SMALLINT = 0)
+-- `nclients`: how many clients a coop game or a deathmatch has (two to four; maxclients), the second on at their
+-- info_player_coop or deathmatch spots
+CREATE OR ALTER PROCEDURE init_map (map_name VARCHAR(32), world_model INTEGER, skill SMALLINT, new_game SMALLINT, spawnpoint VARCHAR(40), coop SMALLINT = 0, deathmatch SMALLINT = 0, nclients SMALLINT = 2)
 AS
 DECLARE i INTEGER; DECLARE seed BIGINT; DECLARE pid SMALLINT; DECLARE pe INTEGER;
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
@@ -1387,9 +1389,16 @@ BEGIN
          g.rng_seed = IIF(:new_game = 1, :seed, g.rng_seed), g.coop = :coop, g.deathmatch = :deathmatch, g.spawnpoint = :spawnpoint, g.sight_client = NULL,
          g.total_monsters = 0, g.killed = 0, g.total_secrets = 0, g.found_secrets = 0, g.total_goals = 0, g.found_goals = 0, g.level_msg = NULL,
          g.intermission_time = NULL, g.gravity = 800 WHERE g.id = 1;
-  -- the clients: one in single player, two in coop or deathmatch (the second's row joins the game, or leaves it, pers and all)
-  IF (coop = 0 AND deathmatch = 0) THEN DELETE FROM player p WHERE p.id > 1;
-  ELSE IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = 2)) THEN INSERT INTO player (id) VALUES (2);
+  -- the clients: one in single player, nclients in coop or deathmatch (a row joins the game, or leaves it, pers and all)
+  IF (coop = 0 AND deathmatch = 0) THEN nclients = 1;
+  ELSE nclients = MAXVALUE(2, MINVALUE(4, COALESCE(nclients, 2)));
+  DELETE FROM player p WHERE p.id > :nclients;
+  pid = 2;
+  WHILE (pid <= nclients) DO
+  BEGIN
+    IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = :pid)) THEN INSERT INTO player (id) VALUES (:pid);
+    pid = pid + 1;
+  END
   DELETE FROM usercmd;
   -- switchable lights back to their patterns
   DELETE FROM lightstyles l WHERE l.style >= 32;
@@ -1424,14 +1433,18 @@ BEGIN
   IF (deathmatch = 1) THEN
   BEGIN
     -- every client starts afresh (InitClientPersistant) at a deathmatch spot: the first was put at the map's start
-    -- by the spawn, so it moves; the second comes in by ClientBegin
+    -- by the spawn, so it moves; the others come in by ClientBegin
     SELECT p.ent_id FROM player p WHERE p.id = 1 INTO pe;
     EXECUTE PROCEDURE init_client_persistant(1);
     EXECUTE PROCEDURE select_spawn_point(1, spawnpoint) RETURNING_VALUES x, y, z, yaw;
     EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, 100, 100, 0);
-    EXECUTE PROCEDURE client_begin(2, spawnpoint);
   END
-  ELSE IF (coop = 1) THEN EXECUTE PROCEDURE client_begin(2, spawnpoint);
+  pid = 2;
+  WHILE (pid <= nclients) DO
+  BEGIN
+    EXECUTE PROCEDURE client_begin(pid, spawnpoint);
+    pid = pid + 1;
+  END
   -- keys don't carry over; neither do dead weapons
   UPDATE player p SET p.weapon = best_weapon(p.ent_id) WHERE BIN_AND(p.weapons, p.weapon) = 0 OR p.weapon = 0;
   -- InitClientResp: what a coop respawn comes back with

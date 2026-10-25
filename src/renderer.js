@@ -43,13 +43,17 @@ export class Renderer {
   /**
    * The screen is w × h; with `views` 2 it is split in two along the middle and the painter draws one view
    * at a time into a frame w × h/2 high, which present(…, view) puts on the screen's top or bottom half
-   * (a coop game: each client's view).
+   * (a coop game: each client's view); with 3 or 4 it is split in four, a view a quarter (the last one black
+   * with three), left to right then top to bottom.
    */
   setSize(w, h, views = 1) {
     this.views = views;
+    this.cols = views > 2 ? 2 : 1;
+    this.rows = views > 1 ? 2 : 1;
+    this.screenW = w;
     this.screenH = h;
-    this.w = w;
-    this.h = Math.floor(h / views);
+    this.w = Math.floor(w / this.cols);
+    this.h = Math.floor(h / this.rows);
     this.canvas.width = w;
     this.canvas.height = h;
     this.fb = new Uint8Array(w * this.h);
@@ -937,6 +941,12 @@ export class Renderer {
    * Convert palette indices to pixels, with a colour blend; `palette24` (768 bytes) overrides the game's palette.
    * `view` is which part of a split screen this frame is (0 the top).
    */
+  /** A view's quarter of the screen painted black (the fourth with three players). */
+  clearView(view) {
+    this.ctx.fillStyle = '#000';
+    this.ctx.fillRect((view % this.cols) * this.w, Math.floor(view / this.cols) * this.h, this.w, this.h);
+  }
+
   present(tint = null, palette24 = null, view = 0) {
     let pal = this.palette;
     if (palette24) {
@@ -955,7 +965,7 @@ export class Renderer {
     }
     const { fb, pixels } = this;
     for (let i = 0; i < fb.length; i++) pixels[i] = p[fb[i]];
-    this.ctx.putImageData(this.image, 0, view * this.h);
+    this.ctx.putImageData(this.image, (view % this.cols) * this.w, Math.floor(view / this.cols) * this.h);
   }
 }
 

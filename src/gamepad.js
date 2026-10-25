@@ -92,9 +92,13 @@ export function padMenuKeys(read, prevStick = { x: 0, y: 0 }) {
   return { keys, stick: { x: sx, y: sy } };
 }
 
+/** The connected pads the browser reports, in order. */
+export function connectedPads(pads) {
+  const out = [];
+  if (pads) for (const p of pads) if (p && p.connected !== false && p.axes) out.push(p);
+  return out;
+}
 /** The first connected pad the browser reports, or null. */
 export function firstPad(pads) {
-  if (!pads) return null;
-  for (const p of pads) if (p && p.connected !== false && p.axes) return p;
-  return null;
+  return connectedPads(pads)[0] ?? null;
 }

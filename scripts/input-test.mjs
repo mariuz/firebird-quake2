@@ -3,7 +3,7 @@
 // run, the buttons once per press, the weapons' impulses, and the menu driven by the d-pad, the stick and A/B.
 //   node scripts/input-test.mjs
 
-import { readPad, padImpulse, padScreens, padMenuKeys, firstPad, axis, DEAD, BUTTON } from '../src/gamepad.js';
+import { readPad, padImpulse, padScreens, padMenuKeys, firstPad, connectedPads, axis, DEAD, BUTTON } from '../src/gamepad.js';
 import { Input, GAME_KEYS, ACTIONS, DEFAULT_BINDS, defaultBinds, bindKey, keyName, normalizeKey } from '../src/input.js';
 
 let failures = 0;
@@ -64,6 +64,7 @@ check(m.keys.join(' ') === 'Escape', 'B presses Escape');
 
 // the pads the browser reports: nulls for empty slots, disconnected ones skipped
 check(firstPad([null, { connected: false, axes: [0, 0, 0, 0], buttons: [] }, pad()]) !== null && firstPad([null, null]) === null && firstPad(null) === null, 'the first connected pad is found among the slots');
+check(connectedPads([null, { connected: false, axes: [0, 0, 0, 0], buttons: [] }, pad(), null, pad()]).length === 2 && connectedPads(null).length === 0, 'and all the connected ones, in order');
 check(readPad(null) === null, 'no pad reads as null');
 
 // ── the Input: everything the page gathers, read as one tic's command ─────────────────────────────
