@@ -66,6 +66,32 @@ the order they are to be taken.
   (m_*.c, m_*.h) and run headless without the models, as a row in `monster_types` and their branches in
   `monsters.sql`; the smoke test's check that every sound exists would have to tolerate the demo pak's
   missing files. Seeing them waits for a registered pak (the list is under *The full game*).
+- **Frames between tics**: the page paints once per tic (`main.js`'s loop: a tic, the frame query, the
+  raster), so motion runs at 20 Hz however fast the display is. Quake 2's client drew at the display rate
+  and moved the entities and the view between two server frames by `cl.lerpfrac` (`CL_AddPacketEntities`,
+  `CL_CalcViewValues`). The same frame's rows could be painted again between tics with the eye and the
+  entities moved by the fraction; at 320×240 a warm raster is under two milliseconds, so two more paints a
+  tic fit. The most visible smoothness left for the demo.
+- **Nightmare skill**: Quake 2's skill 3, reachable only from the console (`skill 3`), the menus stopping at
+  hard. Its effects: the monsters do not flinch (every pain function returned at skill 3), the attack
+  chances are hard's (`M_CheckAttack` doubled them at 2 and above) and the hard spawn filter applies
+  (`SpawnEntities` read `NOT_HARD` for 2 and 3). The port stops at hard: one change in `monster_pain` and
+  `spawn_map_ents`, a case in `test:monsters`.
+- **Player setup: name and handedness**: the obituaries say "player 1" and "player 2". `M_Menu_PlayerConfig_f`
+  gave a name, a model and skin, and a hand; `P_ProjectSource` moved every shot's origin to the right, the
+  left or the centre with it, and the view weapon with the shot. The skins wait on the registered pak's
+  player model; the name (`pers.netname`, in the obituaries and the score board) and the hand do not.
+- **Save files**: saves live in one browser's storage (`src/savestore.js`) and go with its site data. A
+  download of a slot as a file and a load from one would move a game between browsers and keep it; the
+  store's gzipped JSON with its header line is the format already.
+- **Installable and offline**: the page has no manifest and no caching service worker (the retired one only
+  supplied the isolation headers). A manifest and a worker caching the build and the pak would let the page
+  install on a phone and run without a network; the browser test can check the cache and a reload offline.
+- **An audit of the temporary entities**: `src/effects.js` handles the gunshots, blood, the rail trail, the
+  blaster, splashes, bubbles, the power armour sparks, the explosions, the BFG and the parasite. Against
+  cl_tent.c's list, the explosions in water (`TE_ROCKET_EXPLOSION_WATER`, `TE_GRENADE_EXPLOSION_WATER`: no
+  fire, `weapons/xpld_wat.wav`) and the BFG's lasers (`TE_BFG_LASER`, a beam) look absent; a pass with a
+  case per effect in `test:effects`.
 
 ## Playing the demo
 
