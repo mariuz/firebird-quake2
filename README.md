@@ -63,7 +63,7 @@ retired: what is left at its URL removes itself from the browsers that still hav
 
 The long version is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): every table, procedure and pass, the
 frame protocol, the painter, and the measurements behind the design. [docs/ROADMAP.md](docs/ROADMAP.md)
-lists what is missing, from save games to the rest of the monsters. [CLAUDE.md](CLAUDE.md) is the
+lists what is next, from coop over the network to deathmatch, and what waits on the registered pak. [CLAUDE.md](CLAUDE.md) is the
 working memory for whoever (or whatever) works on this next: commands, how to measure, the engine's
 rules learned the hard way.
 

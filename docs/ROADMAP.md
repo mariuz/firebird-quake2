@@ -5,6 +5,68 @@ then for the full game. Each item names where it would go. See [ARCHITECTURE.md]
 for how the existing parts work and the repository's [CLAUDE.md](../CLAUDE.md) for how to work on
 them.
 
+## Next
+
+What the demo pak still allows, now that everything below is done or waits on the registered pak. In
+the order they are to be taken.
+
+- **Networked coop over WebRTC**: the one way past the local limit, since each browser runs its own
+  database. A long-term item. The shape: one peer is the server (the host's page runs `Session` as it
+  does now, the game in its Firebird), the others are clients of it, as Quake 2's `sv_main.c` and
+  `cl_main.c` were to each other. A guest loads the same map into its own database for the geometry and
+  the pak for the textures, runs no game logic, sends its usercmd each tic over a data channel (the
+  nine values `Input.read` makes, `usercmd`'s row), and gets back its frame: the rows `frame_all(…,
+  client)` already returns for that client, its player row for the status bar, the sound and effect
+  events, and the messages (`decodeFrame` takes them as it takes the host's own). The host runs
+  `q2_tic` with every client's command, as the tic already takes the second's, and the frame query once
+  per client. Signalling is the open question: Pages is static, so the offer and answer go by hand
+  (copied through a chat, as the address book's "manual" entry would have it) or through a small
+  signalling service of the player's own; the data channel then carries everything. Latency: a guest sees
+  its own moves a round trip late; Quake 2 predicted the player's own movement on the client (`cl_pred.c`,
+  pmove run ahead of the server's answer), which the SQL's `player_think` cannot run in a guest's
+  browser, so a guest would first play without prediction, and prediction would mean a JS pmove
+  beside the SQL's, kept in step by `test:replay`. Spectating falls out of it: a guest that sends no
+  command and asks for the host's view. Three or more players are the same work as two.
+- **Local deathmatch**: the demo maps carry many deathmatch-only entities, which `spawn_map_ents`
+  skips by their spawnflags (1792): weapons, ammo, demo3's teleporter. Coop already has two local
+  clients, their split views and the score board, so deathmatch is the missing spawn mode:
+  `info_player_deathmatch` chosen as `SelectDeathmatchSpawnPoint` did (the farthest from the others,
+  or at random), items that respawn with `items/respawn1.wav` after their delay (`SetRespawn`,
+  `DoRespawn`), frags counted and the obituaries already written printed for them, `dmflags`'
+  bits as g_local.h listed them (weapons stay, no health, no armor, infinite ammo, falling damage,
+  instant items, same level, spawn farthest), the time and frag limits ending the map. All of it
+  testable with the demo pak: `test:coop`'s pattern with a `deathmatch` flag.
+- **Demo playback**: the pak ships `demos/q2demo1.dm2`. Playing it means reading the server
+  messages (`svc_serverdata`, `svc_configstring`, `svc_spawnbaseline`, `svc_frame` with its
+  `svc_playerinfo` and `svc_packetentities`, as `CL_ParseServerMessage` read them) into entity states
+  and a player view each frame, and painting them: the renderer draws from rows already, so the demo's
+  entities and view become the frame's rows without a game tic. Quake 2 looped the demos behind the
+  main menu as its attract mode (`d1`, `demo1.dm2` in `default.cfg`). Recording follows from the same
+  format: the frame's rows written as the messages (`SV_WriteFrameToClient`), so a recorded game plays in
+  Quake 2 itself.
+- **The credits screen and the key bindings menu**: both left out of the menus. The credits are
+  menu.c's `idcredits` text scrolled up the screen; the keys menu (`M_Menu_Keys_f`) would make the
+  movement, weapon and action keys rebindable through `src/settings.js`, whose storage round trip and
+  checks already exist, and `src/input.js`, which reads them.
+- **Fidelity against the real software renderer**: `test:golden` compares the painter against itself.
+  Screenshots from ref_soft at the same viewpoints (the real engine on a Windows machine, `screenshot`
+  at 320×240 with the same fov, the same frame of the same map), kept beside the docs' shots and
+  compared with a tolerance, would measure how far the painter is from the original rather than from
+  its own last commit. No code: the pictures and a comparison script.
+- **A performance guard in CI**: the repository measures carefully, but nothing stops a slower tic or
+  load from merging. A workflow step that runs `tic-bench` and the load time and fails above the last
+  recorded figures by a margin wide enough for the runner's noise (this machine varies by ±50 % between
+  runs, so the margin is large and the guard catches only what matters) would hold the numbers the docs
+  quote.
+- **More than two local players**: the page's views come from `session.clients.length` and a second
+  gamepad is a second input, so three or four players in a grid are mostly page work on top of coop
+  (`Renderer.setSize(w, h, views)`, `readInput`, the gamepads by index) and a `client` beyond 2 in the
+  SQL, which already takes the client as a parameter everywhere.
+- **The full game's monsters, logic first**: their frame tables and attacks are in the public source
+  (m_*.c, m_*.h) and run headless without the models, as a row in `monster_types` and their branches in
+  `monsters.sql`; the smoke test's check that every sound exists would have to tolerate the demo pak's
+  missing files. Seeing them waits for a registered pak (the list is under *The full game*).
+
 ## Playing the demo
 
 - **Save and load**: done as Quake 2 had them in single player: fifteen slots in the load and save menus
@@ -60,7 +122,7 @@ them.
   lines typed, Tab completes a command's name. `drop <item>` is `Cmd_Drop_f`: ammo a pickup's worth, a weapon
   not in hand, a powerup, power armour (off with the last), thrown ahead and not back to its dropper for a
   second; a dropped weapon carries no ammo.
-- **Demo playback / recording** (the `.dm2` files in the pak) is out of scope for now.
+- **Demo playback / recording** (the `.dm2` file in the pak): see *Next*.
 
 ## Fidelity gaps in what exists
 
@@ -331,7 +393,8 @@ picker). Missing for the rest of the game:
   once and the cube stays for the other; a `trigger_key` wanting one spends the activator's first cube
   (`trigger_key_touch`), in coop the same cube from every client that has it, and the key bit goes with
   the last cube; another key in coop is taken from every client. Left: the trail (`p_trail.c` is single
-  player's: it follows the first client).
+  player's: it follows the first client). Coop over the network, more than two local players and
+  deathmatch are under *Next*.
 
 ## Engineering
 
