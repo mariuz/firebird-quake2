@@ -41,6 +41,7 @@ npm run bench:tic      # the cost of a tic over 200 tics of play (median, p90); 
 npm run bench:calls    # how many traces, leaf lookups and links a tic makes
 npm run bench:ab -- <dir>  # A/B the SQL against another copy of sql/, tics alternating between two databases (--frame [--turn] for the frame)
 npm run bench:raster   # where the painter spends its time (add --cold to rebuild every surface each frame)
+npm run perf           # the guard CI runs: the load, the tics, the frame query and the raster held against docs/perf-baseline.json
 npm run inspect        # what is in the pak (maps, models and their frame runs, sounds)
 ```
 

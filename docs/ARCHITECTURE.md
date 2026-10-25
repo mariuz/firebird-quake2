@@ -574,12 +574,13 @@ query and the raster. The SQL console runs any statement against the live game d
 | `replay-test.mjs` | the same seed and the same 120 tics of input give the same game twice (every entity, the game row, the sounds), another seed another game, and a game loaded from a save goes on exactly as the saved one did |
 | `screenshot.mjs [map] [prefix] [--at=x,y,z,yaw] [--sql] [--compare]` | headless frames to PNG; `--compare` asserts both renderer modes paint identical pixels |
 | `browser-test.mjs [--coi]` | the page itself in a headless Chromium (Playwright), served without COOP/COEP as Pages serves it: not isolated, no service worker, the build without threads (with `--coi`: isolated, the threaded build); the pak downloads, Firebird runs in its worker, frames come, keys move, `F6`/`F9` save and load, Escape pauses; a second page joins the first's game over WebRTC with the offer and answer texts passed between them, paints the frames it is sent at the host's view, its W walks its player at the host, and leaves; the retired service worker removes itself; no console errors, no 404 but the music and the favicon. CI runs it; `CHROME=` points it at a Chromium already installed |
+| `perf-guard.mjs [--record]` | the figures held in CI: demo1's load, an idle and a walking tic, the frame query and the raster, each measured and taken in units of a calibration run just before and after on the same machine (50,000 primary-key fetches of the engine for the SQL figures, a fixed loop over a frame's buffer for the raster), compared with `docs/perf-baseline.json`; a figure past the baseline's units by the file's margin (twice) fails; `--record` writes the baseline from the run (a change that is meant to cost more records it again in the same commit) |
 | `bench.mjs`, `tic-bench.mjs`, `raster-bench.mjs`, `call-counts.mjs`, `ab-bench.mjs` | where the time goes (section 10) |
 | `probe.mjs`, `inspect.mjs` | traces around a point; what is in the pak |
 | `fetch-pak.mjs`, `build.mjs` | the demo download; the esbuild bundle and dev server |
 
 CI (`.github/workflows/pages.yml`) runs every test above, the docs screenshots compared pixel for
-pixel among them, on every push, and deploys the bundle to GitHub Pages.
+pixel and the performance guard among them, on every push, and deploys the bundle to GitHub Pages.
 
 ## 10. Performance: what the engine costs and what that led to
 

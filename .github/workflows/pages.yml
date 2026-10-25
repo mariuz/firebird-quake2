@@ -126,6 +126,12 @@ jobs:
       - name: Demo playback
         run: npm run test:demo
 
+      # The figures held: the load of demo1, an idle and a walking tic, the frame query and the raster, each in
+      # units of a calibration run on this runner (the engine's PK fetches, a JS loop) against docs/perf-baseline.json;
+      # a figure past twice its baseline fails (the runner's noise is well under that; a slip like 17 ms a tic is not)
+      - name: Performance guard
+        run: npm run perf
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
       # quick save and load, the menu, a coop game and a deathmatch from the players select, the pak's demo
