@@ -223,18 +223,28 @@ function geometryRows(bsp, res) {
 const ENT_NUM = ['angle', 'spawnflags', 'wait', 'delay', 'random', 'speed', 'accel', 'decel', 'lip', 'height', 'health', 'light', 'style', 'sounds', 'dmg', 'count',
   'mass', 'volume', 'attenuation', 'distance', 'gravity', 'skyrotate', 'minpitch', 'maxpitch', 'minyaw', 'maxyaw'];
 
-/** SV_SpawnServer: replace the current map with `name` from the PAK. */
-export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null, seed = null, faceVerts = true, coop = false } = {}) {
+/**
+ * The map's geometry for the painter alone: the BSP parsed and its brush models put into `res` (the world
+ * and the `*n` models the frame's rows name), no database touched. A networked game's guest paints the
+ * host's frames with this and nothing else; loadMap does the same first, then fills the tables.
+ */
+export function loadMapModels(pak, res, name, { faceVerts = true } = {}) {
   const bsp = new Bsp(pak.buffer(`maps/${name}.bsp`), `maps/${name}.bsp`);
-  await db.exec(`DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents; DELETE FROM map_ents; DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL;
-    DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM clusters; DELETE FROM leaffaces; DELETE FROM leafbrushes; DELETE FROM areas; DELETE FROM areaportals; DELETE FROM portal_state; DELETE FROM area_flood;
-    DELETE FROM brushes; DELETE FROM brushsides; DELETE FROM models WHERE kind = 'B'`);
   for (const [id, m] of [...res.models]) if (m.kind === 'B') res.models.delete(id);
   const geo = geometryRows(bsp, res);
   for (const [mid, info] of geo.modelInfo) res.models.set(mid, info);
   // face_verts (37 k rows, a fifth of the load) is read only by frame_faces, the SQL-projecting renderer mode: the
   // page loads it on demand (ensureFaceVerts) when that mode is on, the scripts always
   res.world = { bsp, modelIds: geo.modelIds, faceBase: 0, faceVertsLoaded: faceVerts, faceVerts: faceVerts ? null : geo.faceVerts };
+  return { bsp, geo };
+}
+
+/** SV_SpawnServer: replace the current map with `name` from the PAK. */
+export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null, seed = null, faceVerts = true, coop = false } = {}) {
+  await db.exec(`DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents; DELETE FROM map_ents; DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL;
+    DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM clusters; DELETE FROM leaffaces; DELETE FROM leafbrushes; DELETE FROM areas; DELETE FROM areaportals; DELETE FROM portal_state; DELETE FROM area_flood;
+    DELETE FROM brushes; DELETE FROM brushsides; DELETE FROM models WHERE kind = 'B'`);
+  const { bsp, geo } = loadMapModels(pak, res, name, { faceVerts });
 
   await bulkLoad(db, 'models', geo.models);
   await bulkLoad(db, 'textures', geo.textures);

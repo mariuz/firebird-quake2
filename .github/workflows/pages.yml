@@ -110,10 +110,17 @@ jobs:
       - name: Coop
         run: npm run test:coop
 
+      # A game shared over a link, headless (src/net.js over a loopback): the guest's commands merged into the
+      # second client's usercmd, its frames sent with the tic's sounds, the map and a level change, the chunks,
+      # a slow link's dropped frames, the signalling texts
+      - name: A game over the network
+        run: npm run test:net
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
-      # quick save and load, the menu, the retired service worker removing itself, no console
-      # errors. Then the same with the headers, on the threaded build.
+      # quick save and load, the menu, a second page joining the first's game over WebRTC with the texts
+      # passed between them, the retired service worker removing itself, no console errors. Then the same
+      # with the headers, on the threaded build.
       - name: Install Chromium for the browser test
         run: npx playwright install --with-deps chromium
 

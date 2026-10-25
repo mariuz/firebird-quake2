@@ -14,7 +14,8 @@ import weaponsSql from '../sql/weapons.sql';
 import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
-import { createSchema, loadResources, setView } from './loader.js';
+import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
+import { HostLink, GuestLink, Peer } from './net.js';
 import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
 import { Effects } from './effects.js';
 import { Hud, viewFrame } from './hud.js';
@@ -42,6 +43,13 @@ let last = null;         // last Q2_TIC row
 let running = false;
 let paused = false;
 let lastTic = 0;
+// src/net.js: a game shared over a data channel. The host runs the game here and sends the guest its frames
+// (`host`, a HostLink); the guest paints the host's frames and sends its commands (`guest`, a GuestLink)
+let net = null;          // { role: 'host' | 'guest', peer, host | guest }
+const netHost = () => net?.role === 'host' && !!net.host;      // (connected: before that the page plays alone)
+const netGuest = () => net?.role === 'guest' && !!net.guest;
+/** The view's fov: the host's for a guest (the frustum is the host's), the setting otherwise. */
+const viewFov = () => (netGuest() && net.guest.map ? net.guest.map.view.fov : settings.fov);
 // src/effects.js: the explosions, beams, tongues and muzzle flashes between frames, and the frame's dynamic lights
 const tempEnts = new Effects({ model: (name) => model(name), sprite: (name) => sprite(name) });
 // src/settings.js: the defaults, the video modes, and the round trip through localStorage, checked on the way in
@@ -76,7 +84,7 @@ let invItems = [[], []];     // the inventory's rows: [itemlist index, count]
 let helpSeen = [0, 0];       // the help_changed count each player has looked at
 /** The help computer or the inventory toggled for player `p` (0 or 1), the other screen put away. */
 function toggleScreen(p, which) {
-  if (which === 'help') { showHelp[p] = !showHelp[p]; showInv[p] = false; const row = session?.clients[p] ?? last; if (row) helpSeen[p] = row.HELP_CHANGED ?? 0; }
+  if (which === 'help') { showHelp[p] = !showHelp[p]; showInv[p] = false; const row = netGuest() ? last : (session?.clients[p] ?? last); if (row) helpSeen[p] = row.HELP_CHANGED ?? 0; }
   else { showInv[p] = !showInv[p]; showHelp[p] = false; }
 }
 window.addEventListener('keydown', (e) => {
@@ -194,8 +202,15 @@ cmdline.addEventListener('keydown', async (e) => {
 // ── saved games: the game tables and the unit's other levels, gzipped JSON in localStorage (F6 saves, F9 loads) ─────
 /** Save with the comment the slot shows: the level's name after "ENTERING " (the autosave) or the time. */
 const writeSave = async (key, autosave) => session.writeSave(key, saveComment(await session.levelName(), autosave));
+/** A joined game is the host's to save and load. */
+function guestNotice() {
+  if (!netGuest()) return false;
+  setStatus('A joined game is saved and loaded by its host', true);
+  setTimeout(() => setStatus(''), 2000);
+  return true;
+}
 async function saveGame(key = QUICK_KEY) {
-  if (!running || !map) return;
+  if (!running || !map || guestNotice()) return;
   if (last?.DEAD) { setStatus("Can't savegame while dead!", true); setTimeout(() => setStatus(''), 2000); return; }
   try {
     const size = await writeSave(key, false);
@@ -204,6 +219,7 @@ async function saveGame(key = QUICK_KEY) {
   } catch (err) { console.error(err); setStatus(`Save failed: ${err.message}`, true); }
 }
 async function loadGame(key = QUICK_KEY) {
+  if (guestNotice()) return;
   const save = await session.readSave(key);
   if (!save) { setStatus('No saved game', true); setTimeout(() => setStatus(''), 2000); return; }
   if (!pak.has(`maps/${save.map}.bsp`)) { setStatus(`The saved game is on ${save.map}, which is not in this pak`, true); return; }
@@ -245,24 +261,32 @@ if (touchBar) {
 
 /**
  * One tic's commands from the input: the first player's (the keys, the mouse, the touches, and the pad in
- * single player) and, in coop, the second's (the pad alone); the pad's Start is the page's Escape either way.
+ * single player) and, in coop, the second's (the pad alone, or over the network the guest's commands since
+ * the last tic); the pad's Start is the page's Escape either way.
  */
 function readInput(tics) {
-  const cmd = input.read(tics, settings, { pad: !session.coop });
+  const localCoop = session.coop && !net;   // two players at this page: the pad is the second's
+  const cmd = input.read(tics, settings, { pad: !localCoop });
   if (input.menuPressed) escape();
   // the pad's Y and Back: the inventory and the help computer of the player the pad drives
-  const padPlayer = session.coop ? 1 : 0;
+  const padPlayer = localCoop ? 1 : 0;
   if (input.padScreens.inventory) toggleScreen(padPlayer, 'inventory');
   if (input.padScreens.help) toggleScreen(padPlayer, 'help');
-  return [cmd, session.coop ? input.readPad(tics, settings) : null];
+  return [cmd, netHost() ? net.host.takeCommand() : localCoop ? input.readPad(tics, settings) : null];
 }
 
 /**
  * The view's size for the SQL's frustum (viewcfg) and the painter: the whole screen for one player, the
- * screen split along the middle for two (each view half as high; Quake's fov is horizontal, so the same fov).
+ * screen split along the middle for two at this page (each view half as high; Quake's fov is horizontal, so
+ * the same fov); a game over the network has one view a page, the guest's the size the host's frustum has.
  */
 async function applyView(fov = settings.fov) {
-  const views = session?.coop ? 2 : 1;
+  if (netGuest()) {
+    const v = net.guest.map?.view;
+    if (v && renderer) renderer.setSize(v.w, v.h, 1);
+    return;
+  }
+  const views = session?.coop && !netHost() ? 2 : 1;
   await setView(db, viewWidth(), Math.floor(viewHeight() / views), fov);
   if (renderer) renderer.setSize(viewWidth(), viewHeight(), views);
 }
@@ -290,15 +314,20 @@ async function mapLoaded(setup) {
   audio.playMusic(setup.cdTrack);
   $('mapname').textContent = map.name;
   $('map').value = map.name;
+  // the guest's page sets itself up from the same (SV_SpawnServer's configstrings, sent at the connect)
+  if (netHost()) net.host.sendMap({ name: map.name, sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack,
+    speakers: setup.speakers, view: { w: viewWidth(), h: viewHeight(), fov: settings.fov }, nmodels: res.byName.size });
 }
 async function startMap(name, newGame, spawnpoint = null, autosave = true) {
+  if (netGuest()) leaveNet();   // a game of this page's own: the joined one is left
   beginMap();
   if (newGame) helpSeen = [0, 0];
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
   // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on; a new
-  // game has the players the setting says (one, or two in coop), a level change keeps the game's
-  await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...(newGame ? { coop: settings.coop } : {}) }));
+  // game has the players the setting says (one, or two in coop; two when a guest is connected), a level
+  // change keeps the game's
+  await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...(newGame ? { coop: netHost() || settings.coop } : {}) }));
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);
   setStatus('');
   if (autosave) {
@@ -341,6 +370,8 @@ async function frame() {
     lastTic += tics * TIC_MS;
     if (now - lastTic > 200) lastTic = now;
 
+    if (netGuest()) { guestFrame(tics); nextFrame(); return; }
+
     let t = performance.now();
     const [cmd, cmd2] = readInput(tics);
     last = await session.tic(cmd, cmd2);
@@ -359,11 +390,18 @@ async function frame() {
     t = performance.now();
     // one round trip, decoded (FRAME_ALL in sql/render.sql, decodeFrame in src/session.js); in coop a second
     // for the second player's view (the sounds and effects came with the first: the first player is the
-    // listener). The tic's rows say how many clients the game has: a view each.
-    const views = session.clients.length >= 2 ? 2 : 1;
+    // listener). The tic's rows say how many clients the game has: a view each; over the network the second
+    // view is the guest's, sent to it (the faces as the fast mode lists them: the guest projects them itself).
+    const views = session.clients.length >= 2 && !netHost() ? 2 : 1;
     if (renderer.views !== views) renderer.setSize(viewWidth(), viewHeight(), views);
     const f = await session.frame({ sqlRenderer: settings.renderer === 'sql', client: 1 });
     const f2 = views === 2 ? await session.frame({ sqlRenderer: settings.renderer === 'sql', client: 2 }) : null;
+    if (netHost() && session.clients.length >= 2) {
+      const h = net.host;   // (the guest may leave during the query: the link is this frame's)
+      const gf = await session.frame({ sqlRenderer: false, client: 2 });
+      const inv = h.wantInv ? await session.inventory(2) : null;
+      if (h.open) h.sendFrame(session.clients[1], gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
+    }
     if (!running) { nextFrame(); return; }
     const { faces, ents, sounds, fx, loops } = f;
     if (f.speakers) audio.setSpeakersOn(f.speakers);
@@ -397,6 +435,34 @@ async function frame() {
   nextFrame();
 }
 
+/**
+ * A guest's frame: its command goes to the host, and the newest frame the host sent is painted as the
+ * page paints its own (the sounds at this player's ear, the effects and particles run here).
+ */
+function guestFrame(tics) {
+  const [cmd] = readInput(tics);
+  if (!net?.guest?.open) return;
+  net.guest.sendCommand(cmd, { inv: showInv[0] });
+  const got = net.guest.take();
+  if (!got || !map) return;
+  const t = performance.now();
+  last = got.row;
+  const f = got.frame;
+  if (f.speakers) audio.setSpeakersOn(f.speakers);
+  const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
+  if (f.sounds.length) audio.playEvents(f.sounds, listener);
+  audio.setLoops(f.loops);
+  audio.update(listener);
+  if (f.fx.length) tempEnts.add(f.fx, last.TIME_, renderer);
+  if (showInv[0]) invItems[0] = got.inv;
+  renderer.runParticles(got.dt, last.TIME_);
+  brushFrames = f.brushFrames; brushAngles = f.brushAngles;
+  drawFrame(0, last, f.faces, f.ents, f.styles, last.TIME_, got.dt);
+  perf.tic = 0; perf.faces = 0; perf.rows = f.faces.length;
+  perf.draw = performance.now() - t;
+  updateStats();
+}
+
 const sprite = (name) => res.models.get(res.byName.get(name))?.spr;
 const model = (name) => res.models.get(res.byName.get(name))?.mdl;
 
@@ -406,6 +472,7 @@ async function changeLevel(target) {
   // the unit's levels and its cross-level flags (session.leave); then a picture, the next map, or the end
   const c = await session.leave(target);
   if (c.kind === 'pic' && pak.has(`pics/${c.map}`)) {
+    if (netHost()) net.host.sendPic(`pics/${c.map}`);
     await showPicture(`pics/${c.map}`);
     return c.then ? changeLevel(c.then) : endGame();
   }
@@ -443,7 +510,7 @@ async function endGame() {
 function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   const r = renderer;
   r.dlights = tempEnts.lights(ents, time);
-  const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? (last.DEAD ? 40 : 0), fov: settings.fov };
+  const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? (last.DEAD ? 40 : 0), fov: viewFov() };
   // RDF_UNDERWATER: the eye in water, slime or lava draws the view into the 320×240 warp buffer and warps it up
   const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION;
   if (underwater) r.beginUnderwater();
@@ -507,14 +574,14 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   // intermission too, as SCR_DrawStats drew it over the frozen view with no layout in single player), and this
   // player's help computer or inventory when it is up
   last.HELP_ICON = (last.HELP_CHANGED ?? 0) > helpSeen[which] && Math.floor(time * 10) & 8;
-  last.FOV = settings.fov;
+  last.FOV = viewFov();
   last.CROSSHAIR = settings.crosshair;
   hud.draw(r, last, time);
   if (showHelp[which]) hud.drawHelp(r, last);
   else if (showInv[which] && !last.DEAD) hud.drawInventory(r, invItems[which], last.INV_SEL, performance.now() / 1000);
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
   if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
-  if (last.DEAD) hud.drawCenter(r, session.coop ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
+  if (last.DEAD) hud.drawCenter(r, session.coop || net ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
   // the palette blend: damage, bonus, powerups, water
   let tint = null;
   const since = time - last.DMG_TIME;
@@ -535,8 +602,133 @@ function updateStats() {
   fpsN++;
   const now = performance.now();
   if (now - fpsT > 500) { fps = (fpsN * 1000) / (now - fpsT); fpsT = now; fpsN = 0; }
-  statsEl.textContent = `${fps.toFixed(1)} fps · q2_tic ${perf.tic.toFixed(0)} ms · frame queries ${perf.faces.toFixed(0)} ms (${perf.rows} rows) · raster ${perf.draw.toFixed(0)} ms · ${renderer.particles.length} particles`;
+  const link = netGuest() ? ` · joined: ${net.guest.frames} frames from the host` : netHost() ? ` · hosting: ${net.host.sentFrames} frames sent${net.host.droppedFrames ? `, ${net.host.droppedFrames} dropped` : ''}` : '';
+  statsEl.textContent = `${fps.toFixed(1)} fps · q2_tic ${perf.tic.toFixed(0)} ms · frame queries ${perf.faces.toFixed(0)} ms (${perf.rows} rows) · raster ${perf.draw.toFixed(0)} ms · ${renderer.particles.length} particles${link}`;
 }
+
+// ── a game over the network (src/net.js): this page hosts one, or joins one ───────────────────────
+// The offer and the answer are texts the players pass each other (Pages is static: there is no signalling
+// server); the texts are the session descriptions with their candidates, gzipped and base64'd.
+const netEl = { panel: $('net'), help: $('net-help'), text: $('net-text'), go: $('net-go'), state: $('net-state') };
+let netStage = null;   // 'offer' (hosting: the guest's answer goes in the box), 'join' (the host's offer does)
+function netState(msg, error = false) {
+  netEl.state.textContent = msg;
+  netEl.state.classList.toggle('error', error);
+}
+function netPanel(help, text, go) {
+  netEl.panel.hidden = false;
+  netEl.help.textContent = help;
+  netEl.text.value = text;
+  netEl.go.textContent = go;
+  netEl.go.hidden = !go;
+  if (text) { netEl.text.focus(); netEl.text.select(); }
+}
+/** Host: the offer is made, shown to be copied; the guest's answer comes back into the box. */
+async function hostGame() {
+  if (!res) return;
+  leaveNet();
+  try {
+    netState('making the offer…');
+    const peer = new Peer();
+    net = { role: 'host', peer, host: null };
+    const offer = await peer.offer();
+    if (net?.peer !== peer) return;
+    netStage = 'offer';
+    netPanel('Send this offer to the other player (copy it), then paste their answer here and press Connect.', offer, 'Connect');
+    netState('offer made: waiting for the answer');
+  } catch (err) { console.error(err); netState(err.message, true); leaveNet(); }
+}
+/** Guest: the host's offer goes in the box; the answer is made, shown to be copied back. */
+function joinGame() {
+  if (!res) return;
+  leaveNet();
+  netStage = 'join';
+  netPanel('Paste the host\'s offer here and press Answer; send the answer back to the host.', '', 'Answer');
+  netState('waiting for the host\'s offer');
+  netEl.text.focus();
+}
+/** The box's text is used: the answer accepted by a host, the offer answered by a guest. */
+async function netGo() {
+  const text = netEl.text.value;
+  try {
+    if (netStage === 'offer' && net?.role === 'host' && net.peer) {
+      netState('connecting…');
+      await net.peer.accept(text);
+      const peer = net.peer;
+      const link = await peer.ready;
+      if (net?.peer !== peer) return;
+      net.host = new HostLink(link);
+      net.host.onClose = () => { if (netHost()) { netState('the guest left'); net = null; netEl.panel.hidden = true; } };
+      netEl.panel.hidden = true;
+      canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
+      netState('hosting: connected');
+      // a new game with two clients; the guest gets the map from mapLoaded
+      await startMap(session.firstMap(), true);
+    } else if (netStage === 'join') {
+      netState('answering…');
+      const peer = new Peer();
+      net = { role: 'guest', peer, guest: null };
+      const answer = await peer.answer(text);
+      if (net?.peer !== peer) return;
+      netPanel('Send this answer back to the host. The game starts when the host connects.', answer, null);
+      netState('answered: waiting for the host');
+      const link = await peer.ready;
+      if (net?.peer !== peer) return;
+      running = false;   // this page's own game stands; the host's frames are what is painted
+      audio.stopLoops();
+      net.guest = new GuestLink(link);
+      net.guest.onMap = (m) => guestMap(m).catch((err) => { console.error(err); setStatus(err.message, true); });
+      net.guest.onPic = (file) => { if (pak.has(file)) { running = false; const p = loadPcx(pak.get(file)); renderer.drawPicFull(p); renderer.present(null, p.palette); } };
+      net.guest.onClose = () => { if (netGuest()) { net = null; running = false; netState('the host left'); setStatus('The host left. Press a key or click the view for a game of your own.'); anyKey = () => { setStatus(''); endGame(); }; } };
+      netEl.panel.hidden = true;
+      canvas.scrollIntoView?.({ block: 'start' });
+      netState('joined: waiting for the map');
+      setStatus('Connected: waiting for the host\'s map…');
+    }
+  } catch (err) { console.error(err); netState(err.message, true); }
+}
+/** The guest's page takes the host's map: its geometry for the painter, the sky, the music, the view. */
+async function guestMap(m) {
+  if (!netGuest()) return;
+  beginMap();
+  if (!pak.has(`maps/${m.name}.bsp`)) { setStatus(`${m.name} is not in this pak`, true); return; }
+  if (m.nmodels !== res.byName.size) console.warn(`[firebird-quake2] the host's pak has ${m.nmodels} models, this one ${res.byName.size}: the models may not match`);
+  setStatus(`Loading ${m.name} for the host's game…`);
+  const { bsp } = loadMapModels(pak, res, m.name, { faceVerts: false });
+  map = { name: m.name, bsp };
+  await applyView();
+  renderer.setResources(res);
+  renderer.particles = [];
+  tempEnts.clear();
+  renderer.setSky(m.sky);
+  renderer.skyRotate = m.skyRotate;
+  renderer.skyAxis = m.skyAxis;
+  audio.setSpeakers(m.speakers);
+  audio.stopLoops();
+  audio.playMusic(m.cdTrack);
+  $('mapname').textContent = `${m.name} (joined)`;
+  setStatus('');
+  lastTic = performance.now();
+  running = true;
+}
+/** The connection is dropped, whichever side this page was; a game of its own goes on or starts. */
+function leaveNet() {
+  const was = net;
+  net = null;
+  netStage = null;
+  netEl.panel.hidden = true;
+  if (!was) return;
+  was.host?.close();
+  was.guest?.close();
+  was.peer?.close();
+  netState('');
+  if (was.guest) { running = false; map = session.map; }
+}
+$('net-host').addEventListener('click', () => hostGame());
+$('net-join').addEventListener('click', () => joinGame());
+$('net-leave').addEventListener('click', () => { const guest = netGuest(); leaveNet(); if (guest) endGame(); });
+netEl.go.addEventListener('click', () => netGo());
+$('net-copy').addEventListener('click', () => { netEl.text.select(); navigator.clipboard?.writeText(netEl.text.value).catch(() => {}); });
 
 // ── SQL console ─────────────────────────────────────────────────────────
 async function runConsole() {
@@ -606,7 +798,7 @@ async function boot() {
   try {
     db = await openDatabase();
     session = new Session(db, storage);
-    window.quake2 = { db, session, audio, menu, get renderer() { return renderer; }, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
+    window.quake2 = { db, session, audio, menu, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));
     if (!resp.ok) throw new Error(`could not fetch pak0.pak (${resp.status}); pick a PAK file instead`);

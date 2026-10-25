@@ -110,7 +110,12 @@ select, button, textarea, input {
 button { cursor: pointer; }
 button:hover { border-color: var(--accent); }
 .pill { font-family: var(--mono); font-size: 12px; color: var(--accent-2); }
+.pill.error { color: #e66; }
 .keys { color: var(--muted); font-size: 13px; }
+.net { margin: 6px 0; }
+.net p { margin: 4px 0; color: var(--muted); font-size: 13px; }
+.net textarea { width: 100%; resize: vertical; word-break: break-all; }
+.net[hidden] { display: none; }
 
 section { margin: 24px 0; }
 .console textarea { width: 100%; resize: vertical; }
