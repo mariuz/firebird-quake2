@@ -7,6 +7,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pak, pic } from '../src/pak.js';
 import { Menu, saveComment } from '../src/menu.js';
+import { defaultBinds, bindKey } from '../src/input.js';
+import { CREDITS } from '../src/credits.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pak = new Pak(fs.readFileSync(process.env.PAK ?? path.join(root, 'public/pak/pak0.pak')).buffer);
@@ -15,7 +17,7 @@ const assert = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if 
 
 // a host that records what the menus ask for, and a renderer that records what they draw
 const calls = [];
-const settings = { sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false };
+const settings = { sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false, binds: defaultBinds() };
 const slots = Array.from({ length: 15 }, (_, i) => (i === 0 ? { valid: true, name: 'ENTERING Outer Base' } : i === 3 ? { valid: true, name: ' 9:05 10/ 8  Outer Base' } : { valid: false }));
 const cache = new Map();
 const hud = { conchars: pic(pak, 'conchars'), pic: (n) => (cache.has(n) ? cache.get(n) : (cache.set(n, pic(pak, n)), cache.get(n))) };
@@ -24,6 +26,7 @@ const host = {
   newGame: (s) => calls.push(`new ${s}`), loadSlot: (i) => calls.push(`load ${i}`), saveSlot: (i) => calls.push(`save ${i}`),
   get: (k) => settings[k], set: (k, v) => { settings[k] = v; },
   resetDefaults: () => calls.push('defaults'), resetVideo: () => calls.push('video defaults'),
+  bind: (a, code) => bindKey(settings.binds, a, code), unbind: (a) => { settings.binds[a] = []; }, credits: () => CREDITS,
   console: () => calls.push('console'), quit: () => calls.push('quit'), sound: (n) => calls.push(`sound ${n}`),
 };
 const drawn = [];
@@ -92,8 +95,55 @@ assert(settings.alwaysRun === false && settings.invertMouse === true && settings
 draw();
 const slider = drawn.filter(([k, n]) => k === 'char' && n >= 128 && n <= 131).map(([, n]) => n);
 assert(slider.filter((n) => n === 129).length === 20 && slider.includes(131), 'the sliders draw their ends, ten notches and the knob');
-keys('ArrowDown', 'Enter', 'ArrowDown', 'Enter');
+keys('ArrowDown', 'ArrowDown', 'Enter', 'ArrowDown', 'Enter');
 assert(calls.includes('defaults') && calls.includes('console') && !menu.active, 'reset defaults, and go to console puts the menu away');
+
+// the keys menu (M_Menu_Keys_f): every action with its keys, Enter then a key binds, Backspace unbinds
+menu.mainCursor = 0; menu.main(); keys('ArrowDown', 'ArrowDown', 'Enter');
+for (let i = 0; i < 6; i++) keys('ArrowDown');
+keys('Enter');
+assert(menu.current.id === 'keys' && menu.current.items.length === 18, `customize controls opens the keys menu with its ${menu.current?.items.length} actions`);
+draw();
+let rows = drawn.filter(([k]) => k === 'str');
+const attack = rows.find(([, s]) => s === 'attack'), ctrl = rows.find(([, s]) => s === 'CTRL'), or = rows.find(([, s]) => s === 'or'), f = rows.find(([, s]) => s === 'f');
+assert(attack && attack[4] && ctrl && or && f && ctrl[2] === 160 + 16 && or[2] === ctrl[2] + 8 + 32 && f[2] === or[2] + 24 && attack[3] === ctrl[3],
+  'attack is drawn greyed with "CTRL or f" after the column, as DrawKeyBindingFunc laid them out');
+assert(rows.find(([, s]) => s === 'walk forward')[3] - attack[3] === 18 && drawn.some(([k, p]) => k === 'pic' && p === hud.pic('m_banner_customize')), 'the rows are nine pixels apart under the customize banner');
+assert(drawn.some(([k, s]) => k === 'str' && s === 'enter to change, backspace to clear'), 'the status bar says what to do');
+keys('Enter');
+draw();
+assert(menu.current.grab && drawn.some(([k, n, x]) => k === 'char' && n === 61 && x === 160) && drawn.some(([k, s]) => k === 'str' && s === 'press a key or button for this action'),
+  'Enter waits for a key: the cursor is an = and the status bar asks for one');
+keys('KeyK');
+assert(!menu.current.grab && settings.binds.attack.join() === 'KeyK' && calls.at(-1) === 'sound misc/menu3.wav', 'the key pressed binds the action (its two old keys made room, as KeyBindingFunc unbound them first)');
+keys('ArrowDown', 'Enter', 'KeyK');
+assert(settings.binds.weapnext.join() === 'Slash,KeyK' && settings.binds.attack.length === 0, 'bound to another action, the key joins it and leaves the first');
+keys('Enter', 'Escape');
+assert(!menu.current.grab && menu.current.id === 'keys' && settings.binds.weapnext.join() === 'Slash,KeyK', 'Escape while waiting cancels and stays in the menu');
+keys('Enter', 'ControlRight');
+assert(settings.binds.weapnext.join() === 'Control', 'a third key makes the two go first (the right control as CTRL)');
+draw();
+assert(drawn.some(([k, s]) => k === 'str' && s === '???'), 'an action with no key shows ???');
+keys('Backspace');
+assert(settings.binds.weapnext.length === 0, 'Backspace unbinds');
+keys('Escape');
+assert(menu.current.id === 'options', 'Escape goes back to options');
+
+// the credits (M_Menu_Credits_f): the lines scroll up from the bottom, the '+' ones highlighted, Escape leaves
+menu.mainCursor = 0; menu.main(); keys('Enter', 'ArrowUp', 'Enter');
+assert(menu.current.id === 'credits', 'the game menu\'s last item is the credits');
+drawn.length = 0; menu.draw(r, 1000);
+assert(drawn.filter(([k]) => k === 'char').length === 0, 'at the start the first line is just off the bottom');
+drawn.length = 0; menu.draw(r, 1000 + 40 * 60);
+let chars = drawn.filter(([k]) => k === 'char');
+const title = 'QUAKE II BY ID SOFTWARE';
+assert(chars.length >= title.length && chars.slice(0, title.length).every(([, n], i) => n === (title.charCodeAt(i) & 127) + 128) && chars[0][2] === (320 - title.length * 8) / 2 && chars[0][3] === 240 - 60,
+  '2.4 s in the title has risen 60 pixels, centred, in the highlighted font');
+assert(chars.some(([, n, , y]) => n === 'J'.charCodeAt(0) && y === 240 - 60 + 30), 'the plain lines follow ten pixels apart, in the plain font');
+drawn.length = 0; menu.draw(r, 1000 + 40 * (240 + 10 * host.credits().length + 20));
+assert(menu.current.start > 1000, 'once the last line is off the top they start again');
+keys('Space');
+assert(menu.current.id === 'credits' && keys('Escape') === 'game', 'any key but Escape is ignored; Escape goes back to the game menu');
 
 // video: cancel puts the settings back as they were
 menu.mainCursor = 0; menu.main(); keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');

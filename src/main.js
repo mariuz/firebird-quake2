@@ -25,7 +25,8 @@ import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS, ITEMS, ARMOR_ICONS, TIMER_ICONS } from './gamedata.js';
 import { padMenuKeys, BUTTON } from './gamepad.js';
-import { Input, GAME_KEYS } from './input.js';
+import { Input, GAME_KEYS, DEFAULT_BINDS, bindKey } from './input.js';
+import { CREDITS } from './credits.js';
 import { Console } from './console.js';
 import { loadSettings, saveSettings as saveSettingsTo, viewSize, OPTIONS_RESET, VIDEO_RESET } from './settings.js';
 
@@ -78,7 +79,7 @@ function setStatus(msg, isError = false) {
 
 // ── input ────────────────────────────────────────────────────────────────
 // src/input.js holds the keys, the mouse, the touches and the pad between tics and reads them as the usercmd
-const input = new Input();
+const input = new Input({ binds: settings.binds });   // (the keys menu edits settings.binds in place: the Input reads the same object)
 let anyKey = null;      // a picture screen waiting for a key or a click
 // the help computer (F1, or the pad's Back) and the inventory screen (TAB, or the pad's Y), per view: the
 // keys are the first player's, the pad is its player's (the second in coop)
@@ -111,11 +112,14 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'F2') { e.preventDefault(); openMenu(() => menu.saveMenu()); return; }
   if (e.code === 'F10') { e.preventDefault(); openMenu(() => menu.quitMenu()); return; }
   if (e.code === 'Escape') { e.preventDefault(); escape(); return; }
-  if (e.code === 'F1') { e.preventDefault(); toggleScreen(0, 'help'); }
-  if (e.code === 'Tab') { e.preventDefault(); toggleScreen(0, 'inventory'); }         // inven
   if (e.code === 'Backquote') { e.preventDefault(); openConsole(); return; }
-  if (GAME_KEYS.has(e.code)) e.preventDefault();
-  input.key(e.code);   // the movement keys, and the weapon, inventory and item keys as impulses
+  // the bound actions (settings.binds, the keys menu): the help computer and the inventory screen are the page's,
+  // the rest the movement keys, and the weapon, inventory and item keys as impulses
+  const act = input.bound(e.code);
+  if (act === 'help') { e.preventDefault(); toggleScreen(0, 'help'); }
+  if (act === 'inven') { e.preventDefault(); toggleScreen(0, 'inventory'); }         // inven
+  if (act || GAME_KEYS.has(e.code)) e.preventDefault();
+  input.key(e.code);
   if (e.code === 'KeyP' || e.code === 'Pause') paused = !paused;
   if (e.code === 'F6') { e.preventDefault(); saveGame(); }
   if (e.code === 'F9') { e.preventDefault(); loadGame(); }
@@ -151,7 +155,11 @@ const menu = new Menu({
   saveSlot: (i) => saveGame(SLOT_KEY(i)),
   get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : k === 'players' ? (settings.deathmatch ? 2 : settings.coop ? 1 : 0) : settings[k]),
   set: (k, v) => setSetting(k, v),
-  resetDefaults: () => { for (const [k, v] of Object.entries(OPTIONS_RESET)) setSetting(k, v); },
+  // ControlsResetDefaultsFunc ran default.cfg: the options and the keys go back
+  resetDefaults: () => { for (const [k, v] of Object.entries(OPTIONS_RESET)) setSetting(k, v); for (const [a, keys] of Object.entries(DEFAULT_BINDS)) settings.binds[a] = [...keys]; saveSettings(); },
+  bind: (action, code) => { bindKey(settings.binds, action, code); saveSettings(); },
+  unbind: (action) => { settings.binds[action] = []; saveSettings(); },
+  credits: () => CREDITS,
   resetVideo: () => { for (const [k, v] of Object.entries(VIDEO_RESET)) setSetting(k, v); },
   console: () => openConsole(),
   quit: () => quitGame(),
@@ -923,7 +931,7 @@ async function boot() {
   try {
     db = await openDatabase();
     session = new Session(db, storage);
-    window.quake2 = { db, session, audio, menu, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
+    window.quake2 = { db, session, audio, menu, input, settings, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));

@@ -485,7 +485,7 @@ Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
 brightness, renderer mode, sound, music) persist in `localStorage`. Input (`src/input.js`, an `Input`
 the page attaches to the canvas and reads each tic as the usercmd, the page keeping the keys that
-are its own): WASD/arrows, mouse look under pointer lock; on a touch screen the view's left half moves and its right half looks, a tap
+are its own): WASD/arrows, or whatever the keys menu bound (`settings.binds`), mouse look under pointer lock; on a touch screen the view's left half moves and its right half looks, a tap
 fires, and on-screen buttons (shown where the browser reports touch points) fire and jump while
 held, change weapon and open the menu; a gamepad (`src/gamepad.js`, the Gamepad API's standard
 mapping, polled each frame) moves with the left stick, looks with the right at the keyboard's
@@ -516,8 +516,21 @@ menus are frameworks of actions, sliders, spin controls and separators laid out 
 frame after ref_soft's stippled fade. While one is up `frame()` repaints the last view under it and runs
 no tics. The page's `host` object gives the menus what they act on: new games, the save slots
 (`firebird-quake2:save:save0` … `save14` in `localStorage`, each with Quake 2's comment), and the
-settings, which go through the page's own controls so both agree. `scripts/menu-test.mjs` drives it
-headless.
+settings, which go through the page's own controls so both agree. The game menu's `credits` scrolls
+menu.c's `idcredits` (`src/credits.js`) up the screen as `M_Credits_MenuDraw` did: a line every ten
+pixels rising a pixel every 40 ms, the `+` lines in the highlighted font, round again once the last is off
+the top, Escape to leave. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
+high for each of the eighteen bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
+mouse look, keyboard look, sidestep and centre view) with its keys named as `Key_KeynumToString` named them
+(`keyName`: letters and digits as themselves, `UPARROW`, `CTRL`, `PGDN`…, "or" between two, `???` for
+none); Enter waits for a key (the cursor an `=`, the status bar asking) and the next key pressed binds it
+(`bindKey`: the key leaves whatever it was bound to, an action keeps two and a third makes both go first,
+as `KeyBindingFunc` unbound them), Escape and the backquote cancel, Backspace and Delete unbind. The binds
+are `settings.binds` (action → key codes, the two shifts, controls and alts one key each), checked on the
+way in from storage like every setting, and the `Input` reads the same object each tic (`read` asks
+whether any key bound to an action is down; a one-shot action's impulse comes from `key`); the options'
+reset defaults puts them back as `exec default.cfg` did. The weapon and item keys stay fixed, as Quake's
+menu did not list them. `scripts/menu-test.mjs` drives it headless.
 
 Saved games (`src/savegame.js`): `F6` reads the game tables (`game`, `player`, `ents`,
 `lightstyles`, `player_trail`) as rows, with the column names from the result's field list and the

@@ -29,6 +29,16 @@ check(loadSettings(store(JSON.stringify({ fov: 1 }))).fov === 1 && loadSettings(
 check(viewSize({ detail: 'low' }).join('x') === '160x120' && viewSize({ detail: 'ultra' }).join('x') === '640x480' && viewSize({ detail: '?' }).join('x') === '320x240', 'the video modes, 320×240 for anything else');
 check(Object.entries(OPTIONS_RESET).every(([k, v]) => DEFAULTS[k] === v) && Object.entries(VIDEO_RESET).every(([k, v]) => k === 'fullscreen' || DEFAULTS[k] === v), 'the menus\' resets put back the defaults');
 
+// the key bindings: stored as an object of arrays, each checked
+const binds = loadSettings(store(JSON.stringify({ binds: { attack: ['KeyK'], forward: ['KeyW', 'KeyK', 'KeyJ'], back: 'KeyS', left: [], right: ['Arrow Right', 'ShiftLeft'], bogus: ['KeyB'] } }))).binds;
+check(binds.attack.join() === 'KeyK' && binds.forward.join() === 'KeyW' && binds.back.join() === 'KeyS,ArrowDown' && binds.left.length === 0 && binds.right.join() === 'Shift' && !('bogus' in binds)
+  && binds.moveup.join() === 'Space',
+  'the binds come back checked: a key bound twice keeps its first action, a third key is dropped, a bad list keeps the default, a bad code is skipped, a side-key is the key, an unknown action is dropped, a missing one is its default');
+check(loadSettings(store(JSON.stringify({ binds: 'none' }))).binds.attack.join() === 'Control,KeyF' && loadSettings(store()).binds !== DEFAULTS.binds, 'binds that are not an object are the defaults, and the defaults a fresh copy');
+const fresh = loadSettings(store());
+fresh.binds.attack.push('KeyZ');
+check(DEFAULTS.binds.attack.length === 2, 'editing a loaded bind leaves the defaults alone');
+
 const full = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); } };
 let threw = false; try { saveSettings(mine, full); } catch { threw = true; }
 check(!threw, 'a full storage does not throw: the settings live for the page');

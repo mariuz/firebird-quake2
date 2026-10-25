@@ -3,11 +3,13 @@
 // can be (an old or hand-edited value falls back to its default instead of reaching the game).
 // Pure but for the storage passed in, so the tests drive it with a plain object.
 
+import { ACTIONS, DEFAULT_BINDS, defaultBinds, normalizeKey } from './input.js';
+
 export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, crosshair: 1, coop: false, deathmatch: false,
-  dmflags: 0, fraglimit: 0, timelimit: 0 });
+  dmflags: 0, fraglimit: 0, timelimit: 0, binds: DEFAULT_BINDS });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1 });
@@ -37,13 +39,37 @@ const CHECK = {
   coop: bool,            // a new game with two players: the view split, the gamepad the second's
   deathmatch: bool,      // ... against each other (deathmatch wins over coop)
   dmflags: int(0, 65535), fraglimit: int(0, 999), timelimit: int(0, 999),   // the deathmatch cvars
+  binds: checkBinds,     // the key bindings: action → at most two key codes
 };
+
+/**
+ * The stored binds, each action's keys checked (a code is a KeyboardEvent code: letters and digits; a key bound
+ * twice keeps its first action; an action missing or unreadable keeps its default), as a fresh object.
+ */
+function checkBinds(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out = defaultBinds();
+  const taken = new Set();
+  for (const a of ACTIONS) {
+    const keys = v[a.id];
+    if (!Array.isArray(keys)) { for (const c of out[a.id]) taken.add(c); continue; }
+    out[a.id] = [];
+    for (const c of keys.slice(0, 2)) {
+      if (typeof c !== 'string' || !/^[A-Za-z0-9]{1,24}$/.test(c)) continue;
+      const code = normalizeKey(c);
+      if (taken.has(code) || out[a.id].includes(code)) continue;
+      taken.add(code);
+      out[a.id].push(code);
+    }
+  }
+  return out;
+}
 
 /** The settings as stored, each checked; anything missing, unknown or out of its range is its default. */
 export function loadSettings(storage) {
   let stored = {};
   try { stored = JSON.parse(storage?.getItem(KEY) || '{}') ?? {}; } catch { stored = {}; }
-  const out = { ...DEFAULTS };
+  const out = { ...DEFAULTS, binds: defaultBinds() };
   if (stored && typeof stored === 'object') {
     for (const [k, check] of Object.entries(CHECK)) {
       const v = check(stored[k]);
