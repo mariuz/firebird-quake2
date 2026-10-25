@@ -32,15 +32,30 @@ the order they are to be taken.
   `test:replay`), a TURN relay for the networks a STUN cannot cross, a signalling service of the
   player's own in place of the texts, a third page (the SQL takes a client number already; the host's
   loop sends one guest), and spectating.
-- **Local deathmatch**: the demo maps carry many deathmatch-only entities, which `spawn_map_ents`
-  skips by their spawnflags (1792): weapons, ammo, demo3's teleporter. Coop already has two local
-  clients, their split views and the score board, so deathmatch is the missing spawn mode:
-  `info_player_deathmatch` chosen as `SelectDeathmatchSpawnPoint` did (the farthest from the others,
-  or at random), items that respawn with `items/respawn1.wav` after their delay (`SetRespawn`,
-  `DoRespawn`), frags counted and the obituaries already written printed for them, `dmflags`'
-  bits as g_local.h listed them (weapons stay, no health, no armor, infinite ammo, falling damage,
-  instant items, same level, spawn farthest), the time and frag limits ending the map. All of it
-  testable with the demo pak: `test:coop`'s pattern with a `deathmatch` flag.
+- **Local deathmatch**: done for two players at one page (the Players select's "Two (deathmatch)", the
+  game menu's players spin) or over the network (the host's mode is the game's), as g_spawn.c, g_items.c
+  and p_client.c had it. The spawn keeps out `NOT_DEATHMATCH` entities instead of the skill's, so the
+  demo maps' deathmatch-only weapons, ammo, powerups and demo3's teleporter are in, and no monster is
+  (every monster's spawn freed itself in deathmatch). Each client starts afresh (`InitClientPersistant`)
+  at a deathmatch spot (`SelectDeathmatchSpawnPoint`: one at random of all but the two nearest a living
+  client, or the farthest with `DF_SPAWN_FARTHEST`), and comes back the same way a second after dying,
+  on fire or jump, or on its own with `DF_FORCE_RESPAWN`; the weapon in hand is tossed at death
+  (`TossClientWeapon`). A map's item taken goes unseen and untouchable and comes back after its delay
+  (`SetRespawn`, `DoRespawn`: 30 s for weapons, ammo and health, 20 for armour, a powerup's quantity,
+  with `items/respawn1.wav` and its particles), the mega health only once its owner is back at the
+  maximum (`MegaHealth_think`); a dropped one goes. Weapons stay with `DF_WEAPONS_STAY` (one already held
+  is left), a new weapon is raised only over the blaster, a powerup is used as it is taken with
+  `DF_INSTANT_ITEMS`, and `DF_NO_HEALTH`, `DF_NO_ARMOR`, `DF_INFINITE_AMMO` (no ammo spent either) and
+  `DF_NO_FALLING` do what g_local.h says. The frags are `ClientObituary`'s (`player.score`: a kill one for
+  the killer, a suicide or the world's kill one off), on the status bar's top right (`dm_statusbar`) and
+  the score board (`DeathmatchScoreboardMessage`'s layout: F1 or the pad's Back in place of the help
+  computer, and at every intermission). An exit kills whoever touches it ("found a way out") unless
+  `DF_ALLOW_EXIT`; `CheckDMRules` ends the level at the frag or time limit, at the intermission, bound
+  where the map's exit leads or the same map with `DF_SAME_LEVEL`; the next level starts the frags over.
+  `dmflags`, `fraglimit` and `timelimit` are console commands, kept in the settings and in the game
+  row. `test:dm` checks all of it headless; the browser test starts a deathmatch from the select. Left:
+  the dmflags with no bearing here (teams by model or skin, friendly fire), the quad drop, and the
+  player's name and skin (see *Player setup*).
 - **Demo playback**: the pak ships `demos/q2demo1.dm2`. Playing it means reading the server
   messages (`svc_serverdata`, `svc_configstring`, `svc_spawnbaseline`, `svc_frame` with its
   `svc_playerinfo` and `svc_packetentities`, as `CL_ParseServerMessage` read them) into entity states
@@ -261,7 +276,8 @@ the order they are to be taken.
   stipple; the game menu starts a new game at a skill or opens the load and save menus; options and
   video set the page's settings (effects volume, CD music, mouse speed, always run, invert mouse,
   crosshair; driver = the renderer mode, video mode = the detail, brightness, fullscreen); quit shows the
-  quit picture. The score board is a deathmatch and coop screen (`Cmd_Score_f` returns in single player).
+  quit picture. The score board is a deathmatch screen (`Cmd_Score_f` returns in single player; see *Local
+  deathmatch*).
   Left out: the credits (id's text), multiplayer (drawn greyed: there is no network), and the options
   that mean nothing here (sound quality, lookspring, lookstrafe, free look, joystick, the key bindings).
 

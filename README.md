@@ -47,6 +47,9 @@ npm run inspect        # what is in the pak (maps, models and their frame runs, 
 Two can play: the Players select (or the game menu's players spin) starts a coop game, the screen split in
 two views, the keyboard and mouse the first player's and a gamepad the second's, as `p_client.c` had coop
 (the demo pak has no player model, so the other player is unseen until a registered pak supplies it).
+Or against each other: the select's "Two (deathmatch)" plays the maps as deathmatch had them, their
+deathmatch-only weapons and spots in and the monsters out, items that come back after they are taken, frags on
+the status bar and the score board on F1 (`dmflags`, `fraglimit` and `timelimit` at the console).
 Or two pages, over the network: one hosts (Host makes an offer, a short text to send to the other player),
 the other joins (Join takes it and makes an answer to send back), and the host's game runs with the guest's
 player in it, each page painting its own view, the guest's from the frames the host sends it over a WebRTC

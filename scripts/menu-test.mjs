@@ -54,9 +54,11 @@ assert(menu.current.cursor === 4, `the cursor steps over the blank line to the p
 draw();
 assert(drawn.some(([k, s]) => k === 'str' && s === 'one'), 'the players spin shows one player');
 keys('ArrowRight');
-assert(settings.coop === true, 'turned, it asks the host for a coop game');
-keys('ArrowLeft');
-assert(settings.coop === false, 'and back for one player');
+assert(settings.players === 1, 'turned, it asks the host for a coop game');
+keys('ArrowRight');
+assert(settings.players === 2, 'turned again, a deathmatch');
+keys('ArrowLeft', 'ArrowLeft');
+assert(settings.players === 0, 'and back for one player');
 keys('ArrowDown');
 assert(menu.current.cursor === 6, `the cursor steps over the next blank line to load game (${menu.current.cursor})`);
 keys('ArrowUp', 'ArrowUp', 'ArrowUp', 'Enter');

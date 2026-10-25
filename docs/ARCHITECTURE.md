@@ -413,6 +413,25 @@ screen are per view: F1 and Tab are the first player's, the pad's Back and Y its
 coop; `Input.padScreens`), its d-pad the inventory's keys (`padImpulse`: invnext, invprev, invuse); the
 particles are run once a frame and drawn in both views.
 
+A deathmatch (the Players select's third choice, or the players spin; `init_map(…, 0, 1)`, which sets
+`game.deathmatch` and clears coop, as the cvars did) is two clients against each other. The spawn keeps
+out `NOT_DEATHMATCH` entities instead of the skill's and every monster, and `dmflags` leaves out the
+health, the armour, the powerups or the ammo as g_local.h's bits say; each client starts afresh
+(`init_client_persistant`) at a deathmatch spot (`dm_spawn_point`: `SelectRandomDeathmatchSpawnPoint`'s
+one at random of all but the two nearest a living client, or `SelectFarthestDeathmatchSpawnPoint`'s with
+`DF_SPAWN_FARTHEST`; `select_spawn_point` picks that or the coop spot), and `respawn` brings a dead one back
+the same way, its weapon tossed where it died (`toss_client_weapon`). A map's item taken is hidden
+(`set_respawn`: no model, not solid, a think) and `item_respawn` brings it back after `respawn_delay`'s
+seconds with the sound and the particles (fx 17), the mega health through `mega_think`; `item_pickup`
+has the deathmatch rules (weapons stay, a new one raised only over the blaster, instant items, no powerup
+limit) and `player_fire` spends no ammo with `DF_INFINITE_AMMO`. The frags are `client_obituary`'s on
+`player.score`, in the tic's row (`score`, with `deathmatch`) for the status bar's top right and the score
+board (`Hud.drawScores`, F1 in place of the help computer and at the intermission); `changelevel` kills the
+client at an exit unless `DF_ALLOW_EXIT`, `check_dm_rules` (each tic, exiting at once outside a deathmatch)
+ends the level at the frag or time limit through `end_dm_level` and the intermission. The cvars `dmflags`,
+`fraglimit` and `timelimit` are console commands the session gives each map load (`Session.cvars`) and
+the page keeps in its settings.
+
 A game over the network (`src/net.js`) is a coop game whose second client is on another page. The host's
 page is the server, as sv_main.c was: its `Session` runs the game with two clients, and each tic the second
 client's usercmd is what `HostLink.takeCommand` merges from the commands the guest sent since the last tic
@@ -511,6 +530,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `session-test.mjs` | the game as the page plays it, without the page (`src/session.js`): a map started, tics, the frame decoded (the sounds each once, the speakers every tenth frame, both renderer modes the same world faces), a slot saved, listed and loaded back exactly, levels left and come back to as left, a save carrying them, a unit's end and a new game forgetting them, the death screen's load request taken once, no storage no saves |
 | `golden-test.mjs` | the painter's look: the twelve docs screenshots (three maps, four shots each) rendered again by `screenshot.mjs` and compared to `docs/` pixel for pixel, with the count and the box of what differs; the painter is deterministic, so a difference is a change, regenerated with the shots when it is meant |
 | `coop-test.mjs` | a coop game headless, through a `Session`: two clients, the second at its `info_player_coop`; each one's usercmd, row from the tic, view and inventory; the sight client alternating and passing over notarget; a monster hunting the sight client and, that one dead, the other; a death that ends nothing, the respawn a second later at the spot with the level-start pers and the body left (and gibbed); a weapon and a key that stay for the other client; a centerprint to one client; a save and a level change (there and back) with both; single player with one row |
+| `dm-test.mjs` | a deathmatch headless, through a `Session`: two clients at the map's deathmatch spots, no monsters, the deathmatch-only items; a taken item gone 30 s, back with its sound and particles, a new weapon raised only over the blaster; weapons that stay and one held left; a kill's frag, the tossed weapon, the respawn afresh at a spot by button or forced, a suicide's and the world's cost; an exit that kills, or ends the level when allowed; the frag and time limits, the same level flag, the intermission's button; a level change and a save keeping the mode; no health, armour or ammo spawned, infinite ammo, no falling damage, instant items, spawn farthest; the mega health's wait; coop and single player as they were |
 | `net-test.mjs` | a game shared over a link (`src/net.js`), the two ends a loopback in one process: the host's `Session` with two clients, the map message and the guest's geometry from the pak alone, a frame a tic with the guest's own row and every face the map's, the guest's forward command walking its player at the host, two commands in a tic merged (turns summed, buttons held, the last impulse) and none standing, a turn turning it, the shots' sounds arriving, the inventory rows on request, a 48 KB message in four chunks, a frame dropped on a slow link, a level change's map and frames, a picture, the signalling texts packed and unpacked, rubbish refused, one end's close closing the other |
 | `audio-test.mjs` | the sound mix (`src/audio.js`) against a Web Audio that records: `S_Spatialize`'s fall-off (full within 80 units, ATTN_NORM silent from 1080, ATTN_IDLE twice as fast, ATTN_NONE everywhere) and pan (0.8 to the side, the listener's yaw), a one-shot per event cut by the next on its entity's channel but not on CHAN_AUTO, out of range or missing from the pak skipped, each sound decoded once, the loops summed per name at ATTN_STATIC with each side clamped, silent when unlisted and the channel kept, the speakers on and off with the frame, the page hidden and back, and the music: off, the drone, a track file from a picked folder, the volume |
 | `effects-test.mjs` | the temporary entities (`src/effects.js`): each effect row's particles and what it keeps, the explosions' frames, skins, translucency and fading light, the blaster hit turned to its direction, the BFG's sprite, a muzzle flash lighting its frame only, the `EF_` lights, beams lasting 0.1 and 0.12 s, a parasite's tongue (one per parasite, a segment every 30 units, 0.2 s), and an explosion painting a real frame |

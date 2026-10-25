@@ -58,6 +58,8 @@ export class Effects {
         case 12: this.beams.push({ a: [x, y, z], b: [x2, y2, z2], color: 0xd0, until: time + 0.1 }); break;
         case 16: this.tongues.set(n, { a: [x, y, z], b: [x2, y2, z2], until: time + 0.2 }); break;   // TE_PARASITE_ATTACK
         case 13: this.beams.push({ a: [x, y, z], b: [x2, y2, z2], color: n & 2 ? 0xf2 : n & 4 ? 0xd0 : n & 8 ? 0xf3 : n & 16 ? 0xdc : 0xe0, until: time + 0.12 }); break;
+        // EV_ITEM_RESPAWN: CL_ItemRespawnParticles' 64 in the respawn's greens (0xd4 + 0..3), rising slowly
+        case 17: renderer.spawnParticles('gunshot', x, y, z, 64, [0, 0, 1], 0xd4); break;
         default: break;
       }
     }

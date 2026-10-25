@@ -56,8 +56,10 @@ export class Session {
     this.res = null;
     this.map = null;            // { name, bsp }
     this.last = null;           // the last Q2_TIC row: the first client's
-    this.clients = [];          // every client's last Q2_TIC row, in client order (one in single player, two in coop)
+    this.clients = [];          // every client's last Q2_TIC row, in client order (one in single player, two in coop or deathmatch)
     this.coop = false;
+    this.deathmatch = false;
+    this.cvars = { dmflags: 0, fraglimit: 0, timelimit: 0 };   // the deathmatch cvars, given to each map load
     this.lastSoundId = 0;
     this.lastFxId = 0;
     this.frameNo = 0;
@@ -79,16 +81,22 @@ export class Session {
     return this.pak.has('maps/demo1.bsp') ? 'demo1' : 'base1';
   }
 
+  /** Two clients at this game, in coop or against each other. */
+  get twoPlayers() { return this.coop || this.deathmatch; }
+
   /**
    * Load a map. A new game forgets the unit's levels; a level of this unit left earlier comes back as it was
    * left (SV_ReadLevelFile), the players put in afresh at the spawn point. Returns what the page sets up from:
    * the sky, the CD track, the worldspawn and the looped speakers. `coop` puts a second client in (at its
-   * info_player_coop); it holds for the game, so a level change keeps it unless told otherwise.
+   * info_player_coop), `deathmatch` two against each other (at deathmatch spots, with the cvars in `cvars`);
+   * either holds for the game, so a level change keeps it unless told otherwise.
    */
-  async startMap(name, { newGame = false, spawnpoint = null, skill = 1, faceVerts = false, seed, coop = this.coop } = {}) {
+  async startMap(name, { newGame = false, spawnpoint = null, skill = 1, faceVerts = false, seed, coop = this.coop, deathmatch = this.deathmatch, cvars = this.cvars } = {}) {
     if (newGame) this.unitLevels.clear();
-    this.coop = !!coop;
-    const bsp = await loadMap(this.db, this.pak, this.res, name, { skill, newGame, spawnpoint, faceVerts, seed, coop: this.coop });
+    this.deathmatch = !!deathmatch;
+    this.coop = !!coop && !this.deathmatch;
+    this.cvars = { ...this.cvars, ...cvars };
+    const bsp = await loadMap(this.db, this.pak, this.res, name, { skill, newGame, spawnpoint, faceVerts, seed, coop: this.coop, deathmatch: this.deathmatch, ...this.cvars });
     if (!newGame && this.unitLevels.has(name)) await importLevel(this.db, this.unitLevels.get(name));
     this.map = { name, bsp };
     const g = (await this.db.query('SELECT sky, cd_track FROM game')).rows[0];
@@ -217,7 +225,9 @@ export class Session {
     this.unitLevels.clear();
     const setup = await this.startMap(save.map, { skill, faceVerts });
     await importSave(this.db, save);
-    this.coop = (await this.db.query('SELECT coop FROM game')).rows[0]?.COOP === 1;   // the save's game, one player's or two
+    const g = (await this.db.query('SELECT coop, deathmatch FROM game')).rows[0];   // the save's game: one player's, coop or deathmatch
+    this.coop = g?.COOP === 1;
+    this.deathmatch = g?.DEATHMATCH === 1;
     for (const [name, lv] of savedLevels(save)) this.unitLevels.set(name, lv);
     await this.loadStyleBase();
     await this.resetEvents();

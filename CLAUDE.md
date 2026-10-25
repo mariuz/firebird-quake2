@@ -38,6 +38,7 @@ npm run test:audio                    # the sound mix headless: spatialisation, 
 npm run test:golden                   # the docs screenshots rendered again and compared pixel for pixel (a painter change: regenerate them)
 npm run test:coop                     # a coop game headless: two clients, their rows and views, the sight client, respawns, items that stay
 npm run test:net                      # a game shared over a link headless: the guest's commands merged, its frames sent, the map and a level change, chunks, the signalling texts
+npm run test:dm                       # a deathmatch headless: the spots, no monsters, items that come back, the frags, respawns, the exit, the limits, the dmflags
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
@@ -143,7 +144,7 @@ short stories of what changed and what it measured; keep that.
   too, so both trees play the same game.
 - Spawnflags 256/512/1024 keep an entity out of easy/medium/hard; an entity with all three (1792) is
   deathmatch-only, and the demo maps have many (weapons, ammo, demo3's teleporter). Before calling
-  an entity "missing", check its spawnflags.
+  an entity "missing", check its spawnflags. A deathmatch (`game.deathmatch`) spawns them and no monster.
 - `IIF`/`CASE` over string literals of different lengths pads the shorter one with spaces: `TRIM`
   the result when it is compared or shown.
 - An entity Quake kept from the client (`SVF_NOCLIENT`: the ships, the viper and its bomb until used) has

@@ -78,6 +78,8 @@ export class Hud {
     // STAT_HELPICON: news on the help computer, else the weapon in hand when the view's fov hides the gun
     if (hud.HELP_ICON) r.drawPic(this.pic('i_help'), x0 + 148, y2);
     else if (wp && hud.FOV > 91) r.drawPic(this.pic(wp.icon), x0 + 148, y2);
+    // dm_statusbar: the frags at the top right (xr -50 yt 2 num 3 14)
+    if (hud.DEATHMATCH) this.drawNum(r, w - 50, 2, hud.SCORE ?? 0, 3, false);
     // SCR_DrawCrosshair: ch1-ch3 by the crosshair setting, centred
     const ch = hud.CROSSHAIR ? this.pic(`ch${hud.CROSSHAIR}`) : null;
     if (!hud.DEAD && ch) r.drawPic(ch, (w - ch.w) >> 1, (h - ch.h) >> 1);
@@ -129,6 +131,27 @@ export class Hud {
       }
       y += 8;
     }
+  }
+
+  /**
+   * DeathmatchScoreboardMessage as the client laid it out: the clients sorted by score, up to six a column,
+   * each with its tag (tag1 for the one whose screen this is), its name, "Score:" with the frags in the
+   * alternate font, the ping (none here) and the minutes in the game; the skin icon the demo pak lacks.
+   * rows: [{ id, score, time }] (`time` in seconds); self: the client whose screen this is.
+   */
+  drawScores(r, rows, self, time) {
+    const xv = (r.w >> 1) - 160, yv = (r.h >> 1) - 120;
+    const sorted = [...rows].sort((a, b) => b.score - a.score || a.id - b.id).slice(0, 12);
+    sorted.forEach((c, i) => {
+      const x = xv + (i >= 6 ? 160 : 0), y = yv + 32 + 32 * (i % 6);
+      const tag = this.pic(c.id === self ? 'tag1' : 'tag2');
+      if (tag) r.drawPic(tag, x + 32, y);
+      r.drawString(this.conchars, `player ${c.id}`, x + 32, y);
+      r.drawString(this.conchars, 'Score: ', x + 32, y + 8);
+      r.drawString(this.conchars, String(c.score ?? 0), x + 32 + 7 * 8, y + 8, true);
+      r.drawString(this.conchars, 'Ping:  0', x + 32, y + 16);
+      r.drawString(this.conchars, `Time:  ${Math.floor(Math.max(0, time - (c.time ?? 0)) / 60)}`, x + 32, y + 24);
+    });
   }
 
   /** cstring2: each line centred in the 320 wide virtual screen, in the alternate font. */

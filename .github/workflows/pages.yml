@@ -116,11 +116,16 @@ jobs:
       - name: A game over the network
         run: npm run test:net
 
+      # A deathmatch headless: the spots, no monsters, the deathmatch items and their respawns, weapons that stay,
+      # the frags, the respawn afresh, the exit that kills, the frag and time limits, the dmflags, a save and a level change
+      - name: Deathmatch
+        run: npm run test:dm
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
-      # quick save and load, the menu, a second page joining the first's game over WebRTC with the texts
-      # passed between them, the retired service worker removing itself, no console errors. Then the same
-      # with the headers, on the threaded build.
+      # quick save and load, the menu, a coop game and a deathmatch from the players select, a second page
+      # joining the first's game over WebRTC with the texts passed between them, the retired service worker
+      # removing itself, no console errors. Then the same with the headers, on the threaded build.
       - name: Install Chromium for the browser test
         run: npx playwright install --with-deps chromium
 
