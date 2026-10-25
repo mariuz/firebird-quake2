@@ -17,7 +17,9 @@ CREATE OR ALTER PROCEDURE plat_go_down (eid INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE plat_go_up (eid INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE trigger_fire (eid INTEGER, activator INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE counter_use (eid INTEGER, activator INTEGER) AS BEGIN END^
-CREATE OR ALTER PROCEDURE changelevel (eid INTEGER) AS BEGIN END^
+CREATE OR ALTER PROCEDURE changelevel (eid INTEGER, activator INTEGER = NULL) AS BEGIN END^
+CREATE OR ALTER PROCEDURE drop_cmd (pe INTEGER, typed VARCHAR(64)) AS BEGIN END^
+CREATE OR ALTER PROCEDURE use_item (pe INTEGER, idx SMALLINT, typed VARCHAR(40)) AS BEGIN END^
 CREATE OR ALTER PROCEDURE button_fire (eid INTEGER, activator INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE train_next (eid INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE t_radius_damage (inflictor INTEGER, attacker INTEGER, damage DOUBLE PRECISION, ignore INTEGER, radius DOUBLE PRECISION) AS BEGIN END^
@@ -1266,7 +1268,7 @@ BEGIN
       EXECUTE PROCEDURE cprint(activator, (SELECT e.message FROM ents e WHERE e.id = :t));
       EXECUTE PROCEDURE snd(player_ent(), 2, 'misc/pc_up.wav', 1, 0);
     END
-    ELSE IF (tcls = 'target_changelevel') THEN EXECUTE PROCEDURE changelevel(t);
+    ELSE IF (tcls = 'target_changelevel') THEN EXECUTE PROCEDURE changelevel(t, activator);
     ELSE IF (tcls = 'target_laser') THEN
       UPDATE ents e SET e.sounds = 1 - e.sounds WHERE e.id = :t;   -- on/off
     ELSE IF (tcls = 'misc_satellite_dish') THEN
@@ -1448,21 +1450,65 @@ BEGIN
 END^
 
 -- target_changelevel_use: the level's exit. In single player only the end of a unit ("*" in the map)
--- stops at the intermission (BeginIntermission); any other exit is taken at once. The map string is kept
--- as written, and the page reads it the way the server did (src/levels.js).
-CREATE OR ALTER PROCEDURE changelevel (eid INTEGER)
+-- stops at the intermission (BeginIntermission); any other exit is taken at once. In deathmatch an exit
+-- kills the client that touches it unless dmflags allow exits (DF_ALLOW_EXIT), and a level always ends at
+-- the intermission. The map string is kept as written, and the page reads it the way the server did
+-- (src/levels.js).
+CREATE OR ALTER PROCEDURE changelevel (eid INTEGER, activator INTEGER = NULL)
 AS
-DECLARE m VARCHAR(64); DECLARE ek SMALLINT; DECLARE it DOUBLE PRECISION; DECLARE hp INTEGER;
+DECLARE m VARCHAR(64); DECLARE ek SMALLINT; DECLARE it DOUBLE PRECISION; DECLARE hp INTEGER; DECLARE dm SMALLINT; DECLARE dmf INTEGER; DECLARE mhp INTEGER;
 BEGIN
   SELECT e.map FROM ents e WHERE e.id = :eid INTO m;
-  SELECT g.exit_kind, g.intermission_time FROM game g WHERE g.id = 1 INTO ek, it;
+  SELECT g.exit_kind, g.intermission_time, g.deathmatch, g.dmflags FROM game g WHERE g.id = 1 INTO ek, it, dm, dmf;
   IF (ek <> 0 OR it IS NOT NULL OR m IS NULL OR m = '') THEN EXIT;      -- already leaving
+  IF (dm = 1 AND BIN_AND(dmf, 4096) = 0 AND client_of(activator) IS NOT NULL) THEN
+  BEGIN
+    SELECT e.max_health FROM ents e WHERE e.id = :activator INTO mhp;
+    EXECUTE PROCEDURE t_damage(activator, eid, eid, 10 * mhp, 1000, 0);   -- MOD_EXIT
+    EXIT;
+  END
   -- the dead don't leave (use_target_changelevel: in single player only; a coop level is left by whoever lives)
   SELECT e.health FROM ents e WHERE e.id = player_ent() INTO hp;
-  IF (hp <= 0 AND (SELECT g.coop FROM game g WHERE g.id = 1) = 0) THEN EXIT;
+  IF (hp <= 0 AND (SELECT g.coop FROM game g WHERE g.id = 1) = 0 AND dm = 0) THEN EXIT;
   UPDATE game g SET g.next_map = :m WHERE g.id = 1;
-  IF (POSITION('*', m) > 0) THEN EXECUTE PROCEDURE begin_intermission;
+  IF (dm = 1 OR POSITION('*', m) > 0) THEN EXECUTE PROCEDURE begin_intermission;
   ELSE UPDATE game g SET g.exit_kind = 1 WHERE g.id = 1;
+END^
+
+-- EndDMLevel: the same level over with DF_SAME_LEVEL, else where the map's target_changelevel leads (the map
+-- designer's exit), else the same level; always through the intermission
+CREATE OR ALTER PROCEDURE end_dm_level
+AS
+DECLARE m VARCHAR(64); DECLARE dmf INTEGER; DECLARE cur VARCHAR(32);
+BEGIN
+  SELECT g.dmflags, g.map_name FROM game g WHERE g.id = 1 INTO dmf, cur;
+  m = NULL;
+  IF (BIN_AND(dmf, 32) = 0) THEN
+    SELECT FIRST 1 e.map FROM ents e WHERE e.classname = 'target_changelevel' AND e.map IS NOT NULL AND e.map <> '' ORDER BY e.id INTO m;
+  UPDATE game g SET g.next_map = COALESCE(:m, :cur) WHERE g.id = 1;
+  EXECUTE PROCEDURE begin_intermission;
+END^
+
+-- CheckDMRules, each tic of a deathmatch that is not at its intermission: the time limit (minutes) and the
+-- frag limit end the level
+CREATE OR ALTER PROCEDURE check_dm_rules
+AS
+DECLARE dm SMALLINT; DECLARE fl INTEGER; DECLARE tl INTEGER; DECLARE t DOUBLE PRECISION; DECLARE it DOUBLE PRECISION;
+BEGIN
+  SELECT g.deathmatch, g.fraglimit, g.timelimit, g.time_, g.intermission_time FROM game g WHERE g.id = 1 INTO dm, fl, tl, t, it;
+  IF (dm = 0 OR it IS NOT NULL) THEN EXIT;
+  -- (the word after the intermission begins, which clears the lines)
+  IF (tl > 0 AND t >= tl * 60) THEN
+  BEGIN
+    EXECUTE PROCEDURE end_dm_level;
+    EXECUTE PROCEDURE sprint(NULL, 'Timelimit hit.');
+    EXIT;
+  END
+  IF (fl > 0 AND EXISTS (SELECT 1 FROM player p WHERE p.score >= :fl)) THEN
+  BEGIN
+    EXECUTE PROCEDURE end_dm_level;
+    EXECUTE PROCEDURE sprint(NULL, 'Fraglimit hit.');
+  END
 END^
 
 -- teleport_touch (misc_teleporter): send `other` to the destination
@@ -1694,9 +1740,10 @@ DECLARE cls VARCHAR(40); DECLARE hp INTEGER; DECLARE mhp INTEGER;
 DECLARE t DOUBLE PRECISION; DECLARE w INTEGER; DECLARE have INTEGER; DECLARE n INTEGER; DECLARE sk SMALLINT;
 DECLARE av INTEGER; DECLARE atype SMALLINT; DECLARE newtype SMALLINT; DECLARE base INTEGER; DECLARE mx INTEGER; DECLARE kbit INTEGER;
 DECLARE cnt INTEGER; DECLARE ak SMALLINT; DECLARE oldcount INTEGER; DECLARE isf INTEGER; DECLARE coop SMALLINT; DECLARE cbit INTEGER;
+DECLARE dm SMALLINT; DECLARE dmf INTEGER;
 BEGIN
   taken = 0; stays = 0;
-  SELECT g.coop FROM game g WHERE g.id = 1 INTO coop;
+  SELECT g.coop, g.deathmatch, g.dmflags FROM game g WHERE g.id = 1 INTO coop, dm, dmf;
   SELECT e.classname, e.count_, e.spawnflags FROM ents e WHERE e.id = :item INTO cls, cnt, isf;
   SELECT e.health, e.max_health FROM ents e WHERE e.id = :other INTO hp, mhp;
   SELECT p.weapons, p.armor, p.armor_type FROM player p WHERE p.ent_id = :other INTO have, av, atype;
@@ -1780,8 +1827,9 @@ BEGIN
     IF (w = 0) THEN EXIT;
     -- Pickup_Weapon in single player: always taken, with its ammo (as much as fits) unless it was dropped
     -- (DROPPED_ITEM); the first one of its kind is raised at once, whatever is in hand. In coop a weapon
-    -- already held is left for the others, and one taken stays for them (IT_STAY_COOP), unless it was dropped
-    IF (coop = 1 AND BIN_AND(COALESCE(isf, 0), 65536) = 0) THEN
+    -- already held is left for the others, and one taken stays for them (IT_STAY_COOP), unless it was dropped;
+    -- in deathmatch with DF_WEAPONS_STAY the same, and a new weapon is raised only over the blaster
+    IF ((coop = 1 OR (dm = 1 AND BIN_AND(dmf, 4) <> 0)) AND BIN_AND(COALESCE(isf, 0), 65536) = 0) THEN
     BEGIN
       IF (BIN_AND(have, w) <> 0) THEN EXIT;
       stays = 1;
@@ -1790,7 +1838,7 @@ BEGIN
     n = CASE ak WHEN 1 THEN 10 WHEN 2 THEN 50 WHEN 3 THEN 5 WHEN 4 THEN 5 WHEN 5 THEN 50 WHEN 6 THEN 10 ELSE 0 END;
     IF (BIN_AND(COALESCE(isf, 0), 65536) = 0) THEN n = add_ammo(other, ak, n);
     IF (BIN_AND(have, w) = 0) THEN
-      UPDATE player p SET p.weapons = BIN_OR(p.weapons, :w), p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
+      UPDATE player p SET p.weapons = BIN_OR(p.weapons, :w), p.weapon = IIF(:dm = 1 AND p.weapon NOT IN (0, 1), p.weapon, :w), p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
              p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.ent_id = :other;
     snd_ = 'misc/w_pkup.wav';
   END
@@ -1824,15 +1872,16 @@ BEGIN
     snd_ = 'items/pkup.wav';
   END
   -- powerups (Pickup_Powerup): into the inventory, to be used with their key or invuse; hard holds one of each,
-  -- medium two, easy any number
+  -- medium two, easy any number; deathmatch any number, and used at once with DF_INSTANT_ITEMS
   ELSE IF (idx BETWEEN 23 AND 27) THEN
   BEGIN
     SELECT g.skill FROM game g WHERE g.id = 1 INTO sk;
     n = inv_count(other, idx);
-    IF ((sk = 1 AND n >= 2) OR (sk >= 2 AND n >= 1)) THEN EXIT;
+    IF (dm = 0 AND ((sk = 1 AND n >= 2) OR (sk >= 2 AND n >= 1))) THEN EXIT;
     UPDATE player p SET p.inv_quad = p.inv_quad + IIF(:idx = 23, 1, 0), p.inv_invuln = p.inv_invuln + IIF(:idx = 24, 1, 0),
            p.inv_silencer = p.inv_silencer + IIF(:idx = 25, 1, 0), p.inv_breather = p.inv_breather + IIF(:idx = 26, 1, 0),
            p.inv_enviro = p.inv_enviro + IIF(:idx = 27, 1, 0) WHERE p.ent_id = :other;
+    IF (dm = 1 AND BIN_AND(dmf, 16) <> 0) THEN EXECUTE PROCEDURE use_item(other, idx, item_name(idx));
   END
   ELSE IF (cls = 'item_adrenaline') THEN
   BEGIN
@@ -1853,13 +1902,53 @@ BEGIN
   taken = 1;
 END^
 
+-- the seconds an item taken in deathmatch is gone for (SetRespawn's delays in g_items.c: 30 for weapons, ammo
+-- and health, 20 for armour, a powerup's quantity); keys do not come back
+CREATE OR ALTER FUNCTION respawn_delay (cls VARCHAR(40)) RETURNS INTEGER
+AS
+BEGIN
+  RETURN CASE
+    WHEN cls LIKE 'weapon_%' OR cls LIKE 'ammo_%' OR cls LIKE 'item_health%' THEN 30
+    WHEN cls LIKE 'item_armor%' THEN 20
+    WHEN cls IN ('item_power_shield', 'item_power_screen') THEN 60
+    WHEN cls = 'item_quad' THEN 60 WHEN cls = 'item_invulnerability' THEN 300 WHEN cls = 'item_silencer' THEN 30
+    WHEN cls = 'item_breather' THEN 60 WHEN cls = 'item_enviro' THEN 60 WHEN cls = 'item_adrenaline' THEN 60 WHEN cls = 'item_ancient_head' THEN 60
+    WHEN cls = 'item_bandolier' THEN 60 WHEN cls = 'item_pack' THEN 180
+    ELSE 0 END;
+END^
+
+-- SetRespawn: the item goes unseen and untouchable (SVF_NOCLIENT, SOLID_NOT) until DoRespawn brings it back
+CREATE OR ALTER PROCEDURE set_respawn (eid INTEGER, delay DOUBLE PRECISION)
+AS
+BEGIN
+  UPDATE ents e SET e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.think = 'item_respawn', e.nextthink = now_() + :delay WHERE e.id = :eid;
+END^
+
+-- MegaHealth_think: the mega health waits, unseen, while its owner's health is above the maximum (the client's
+-- own row rots it a point a second), then comes back in twenty seconds in deathmatch, or goes
+CREATE OR ALTER PROCEDURE mega_think (eid INTEGER)
+AS
+DECLARE own INTEGER; DECLARE dm SMALLINT;
+BEGIN
+  SELECT e.owner_id FROM ents e WHERE e.id = :eid INTO own;
+  IF (EXISTS (SELECT 1 FROM ents o WHERE o.id = :own AND o.health > o.max_health)) THEN
+  BEGIN
+    UPDATE ents e SET e.nextthink = now_() + 1 WHERE e.id = :eid;
+    EXIT;
+  END
+  SELECT g.deathmatch FROM game g WHERE g.id = 1 INTO dm;
+  IF (dm = 1) THEN EXECUTE PROCEDURE set_respawn(eid, 20);
+  ELSE DELETE FROM ents e WHERE e.id = :eid;
+END^
+
 -- Touch_Item: what was taken flashes the screen, shows its icon and name on the status bar for three seconds,
 -- becomes the selected item if it can be used, and goes; the item's targets fire the first time it is touched,
--- taken or not (ITEM_TARGETS_USED, spawnflags 0x40000)
+-- taken or not (ITEM_TARGETS_USED, spawnflags 0x40000). In deathmatch a map's item comes back after its delay
+-- (SetRespawn), a dropped one goes
 CREATE OR ALTER PROCEDURE item_touch (item INTEGER, other INTEGER)
 AS
 DECLARE taken SMALLINT; DECLARE snd_ VARCHAR(64); DECLARE idx SMALLINT; DECLARE hp INTEGER; DECLARE sf INTEGER;
-DECLARE t DOUBLE PRECISION; DECLARE u SMALLINT; DECLARE stays SMALLINT;
+DECLARE t DOUBLE PRECISION; DECLARE u SMALLINT; DECLARE stays SMALLINT; DECLARE dm SMALLINT; DECLARE cls VARCHAR(40); DECLARE delay INTEGER;
 BEGIN
   IF (client_of(other) IS NULL) THEN EXIT;
   SELECT e.health FROM ents e WHERE e.id = :other INTO hp;
@@ -1873,13 +1962,23 @@ BEGIN
            p.inv_sel = IIF(:u = 1, :idx, p.inv_sel) WHERE p.ent_id = :other;
     EXECUTE PROCEDURE snd(other, 3, snd_, 1, 1);
   END
-  SELECT e.spawnflags FROM ents e WHERE e.id = :item INTO sf;
+  SELECT e.spawnflags, e.classname FROM ents e WHERE e.id = :item INTO sf, cls;
   IF (sf IS NOT NULL AND BIN_AND(sf, 262144) = 0) THEN
   BEGIN
     UPDATE ents e SET e.spawnflags = BIN_OR(e.spawnflags, 262144) WHERE e.id = :item;
     EXECUTE PROCEDURE use_targets(item, other);
   END
-  IF (taken = 1 AND stays = 0) THEN DELETE FROM ents e WHERE e.id = :item;   -- (a coop weapon or key stays for the others)
+  IF (taken = 1 AND stays = 0) THEN
+  BEGIN
+    SELECT g.deathmatch FROM game g WHERE g.id = 1 INTO dm;
+    delay = IIF(dm = 1 AND BIN_AND(COALESCE(sf, 0), 65536) = 0, respawn_delay(cls), 0);
+    IF (dm = 1 AND cls = 'item_health_mega' AND BIN_AND(COALESCE(sf, 0), 65536) = 0) THEN
+    BEGIN
+      UPDATE ents e SET e.owner_id = :other, e.solid = 0, e.model_id = NULL, e.mkind = NULL, e.think = 'mega_think', e.nextthink = now_() + 5 WHERE e.id = :item;
+    END
+    ELSE IF (delay > 0) THEN EXECUTE PROCEDURE set_respawn(item, delay);
+    ELSE DELETE FROM ents e WHERE e.id = :item;   -- (a coop weapon or key stays for the others)
+  END
 END^
 
 -- ── damage (g_combat.c) ──────────────────────────────────────────────────
@@ -1957,11 +2056,12 @@ END^
 CREATE OR ALTER PROCEDURE client_obituary (targ INTEGER, inflictor INTEGER, attacker INTEGER, dflags INTEGER, damage INTEGER)
 AS
 DECLARE me VARCHAR(16); DECLARE who VARCHAR(16); DECLARE icls VARCHAR(40); DECLARE ieff INTEGER; DECLARE wt INTEGER; DECLARE w INTEGER;
-DECLARE msg VARCHAR(80); DECLARE msg2 VARCHAR(40); DECLARE radius SMALLINT;
+DECLARE msg VARCHAR(80); DECLARE msg2 VARCHAR(40); DECLARE radius SMALLINT; DECLARE dm SMALLINT;
 BEGIN
   SELECT 'player ' || p.id FROM player p WHERE p.ent_id = :targ INTO me;
   IF (me IS NULL) THEN EXIT;
   SELECT 'player ' || p.id FROM player p WHERE p.ent_id = :attacker INTO who;
+  SELECT g.deathmatch FROM game g WHERE g.id = 1 INTO dm;
   IF (inflictor > 0) THEN SELECT e.classname, e.effects FROM ents e WHERE e.id = :inflictor INTO icls, ieff;
   radius = IIF(BIN_AND(dflags, 1) <> 0, 1, 0);
   msg = NULL; msg2 = '';
@@ -1974,6 +2074,7 @@ BEGIN
     ELSE IF (BIN_AND(dflags, 2) <> 0 AND BIN_AND(wt, 16) <> 0) THEN msg = 'melted';           -- MOD_SLIME
     ELSE IF (BIN_AND(dflags, 2) <> 0) THEN msg = 'sank like a rock';                           -- MOD_WATER
   END
+  ELSE IF (icls = 'target_changelevel') THEN msg = 'found a way out';                          -- MOD_EXIT (a deathmatch exit)
   ELSE IF (icls IN ('misc_explobox', 'func_explosive')) THEN msg = 'blew up';                  -- MOD_BARREL, MOD_EXPLOSIVE
   ELSE IF (icls = 'target_laser') THEN msg = 'saw the light';                                  -- MOD_TARGET_LASER
   ELSE IF (icls IN ('trigger_hurt', 'misc_viper_bomb', 'target_explosion', 'target_splash')) THEN msg = 'was in the wrong place';   -- MOD_TRIGGER_HURT, MOD_BOMB, MOD_SPLASH
@@ -1991,9 +2092,10 @@ BEGIN
   IF (msg IS NOT NULL) THEN
   BEGIN
     EXECUTE PROCEDURE sprint(NULL, me || ' ' || msg || '.');
+    IF (dm = 1) THEN UPDATE player p SET p.score = p.score - 1 WHERE p.ent_id = :targ;   -- (a deathmatch suicide costs a frag)
     EXIT;
   END
-  -- what the other client did (a weapon's message, with his name)
+  -- what the other client did (a weapon's message, with his name; in deathmatch his frag)
   IF (who IS NOT NULL) THEN
   BEGIN
     SELECT p.weapon FROM player p WHERE p.ent_id = :attacker INTO w;
@@ -2017,16 +2119,33 @@ BEGIN
     IF (msg IS NOT NULL) THEN
     BEGIN
       EXECUTE PROCEDURE sprint(NULL, me || ' ' || msg || ' ' || who || msg2 || '.');
+      IF (dm = 1) THEN UPDATE player p SET p.score = p.score + 1 WHERE p.ent_id = :attacker;
       EXIT;
     END
   END
   EXECUTE PROCEDURE sprint(NULL, me || ' died.');
+  IF (dm = 1) THEN UPDATE player p SET p.score = p.score - 1 WHERE p.ent_id = :targ;
+END^
+
+-- TossClientWeapon: a deathmatch death drops the weapon in hand (not the blaster, not one without ammo)
+CREATE OR ALTER PROCEDURE toss_client_weapon (pe INTEGER)
+AS
+DECLARE w INTEGER; DECLARE ak SMALLINT; DECLARE idx SMALLINT;
+BEGIN
+  SELECT p.weapon FROM player p WHERE p.ent_id = :pe INTO w;
+  IF (w IS NULL OR w <= 1) THEN EXIT;
+  ak = weapon_ammo(w);
+  IF (ak > 0 AND ammo_count(pe, ak) <= 0) THEN EXIT;
+  idx = CASE w WHEN 2 THEN 8 WHEN 4 THEN 9 WHEN 8 THEN 10 WHEN 16 THEN 11 WHEN 32 THEN 12 WHEN 64 THEN 13 WHEN 128 THEN 14 WHEN 256 THEN 15 WHEN 512 THEN 16 WHEN 1024 THEN 17 ELSE 0 END;
+  IF (idx = 0) THEN EXIT;
+  UPDATE player p SET p.weapon = 0 WHERE p.ent_id = :pe;   -- (the dead hold nothing: Drop_Weapon would refuse the weapon in hand)
+  EXECUTE PROCEDURE drop_cmd(pe, item_name(idx));
 END^
 
 -- Killed(): the target's health fell to zero (the inflictor, the damage and its flags for the obituary)
 CREATE OR ALTER PROCEDURE killed (targ INTEGER, attacker INTEGER, inflictor INTEGER = NULL, dflags INTEGER = 0, damage INTEGER = 0)
 AS
-DECLARE cls VARCHAR(40); DECLARE flags INTEGER; DECLARE hp INTEGER; DECLARE gh INTEGER; DECLARE k INTEGER;
+DECLARE cls VARCHAR(40); DECLARE flags INTEGER; DECLARE hp INTEGER; DECLARE gh INTEGER; DECLARE k INTEGER; DECLARE coop SMALLINT; DECLARE dm SMALLINT;
 BEGIN
   SELECT e.classname, e.flags, e.health, e.gib_health FROM ents e WHERE e.id = :targ INTO cls, flags, hp, gh;
   IF (hp < -999) THEN UPDATE ents e SET e.health = -999 WHERE e.id = :targ;
@@ -2038,13 +2157,15 @@ BEGIN
   END
   IF (cls = 'player') THEN
   BEGIN
+    SELECT g.coop, g.deathmatch FROM game g WHERE g.id = 1 INTO coop, dm;
+    IF (dm = 1) THEN EXECUTE PROCEDURE toss_client_weapon(targ);
     UPDATE ents e SET e.deadflag = 1, e.solid = 0, e.movetype = 6, e.minz = -24, e.maxz = -8, e.takedamage = 0, e.viewheight = -8 WHERE e.id = :targ;
     UPDATE player p SET p.dead_time = now_(), p.view_ofs = -8, p.weapon = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0 WHERE p.ent_id = :targ;
     -- player_die: one of the three death animations (the crouched one when ducked), the frame before its first
     k = CAST(FLOOR(rnd() * 3) AS INTEGER);
     UPDATE player p SET p.anim_priority = 5, p.anim_end = IIF(p.ducked = 1, 177, CASE :k WHEN 0 THEN 183 WHEN 1 THEN 189 ELSE 197 END) WHERE p.ent_id = :targ;
     UPDATE ents e SET e.frame = IIF((SELECT p.ducked FROM player p WHERE p.ent_id = :targ) = 1, 172, CASE :k WHEN 0 THEN 177 WHEN 1 THEN 183 ELSE 189 END) WHERE e.id = :targ;
-    IF ((SELECT g.coop FROM game g WHERE g.id = 1) = 1) THEN EXECUTE PROCEDURE client_obituary(targ, inflictor, attacker, dflags, damage);
+    IF (coop = 1 OR dm = 1) THEN EXECUTE PROCEDURE client_obituary(targ, inflictor, attacker, dflags, damage);
     IF (hp < -40) THEN
     BEGIN
       EXECUTE PROCEDURE snd(targ, 2, 'misc/udeath.wav', 1, 1);
@@ -2573,10 +2694,11 @@ BEGIN
   END
   ELSE IF (c1 = 'player' AND e2 = 0 AND vz < -300) THEN
   BEGIN
-    -- P_FallingDamage, in SV_Physics_Client terms: lands hard
+    -- P_FallingDamage, in SV_Physics_Client terms: lands hard (no damage in a deathmatch with DF_NO_FALLING)
     IF (vz < -650) THEN
     BEGIN
-      EXECUTE PROCEDURE t_damage(e1, 0, 0, CAST(MINVALUE(50, (-vz - 650) / 10 + 5) AS INTEGER), 0, 8);
+      IF (NOT EXISTS (SELECT 1 FROM game g WHERE g.id = 1 AND g.deathmatch = 1 AND BIN_AND(g.dmflags, 8) <> 0)) THEN
+        EXECUTE PROCEDURE t_damage(e1, 0, 0, CAST(MINVALUE(50, (-vz - 650) / 10 + 5) AS INTEGER), 0, 8);
       EXECUTE PROCEDURE snd(e1, 2, 'player/fall2.wav', 1, 1);
     END
     ELSE EXECUTE PROCEDURE snd(e1, 2, 'player/fall1.wav', 1, 1);
@@ -2608,6 +2730,20 @@ BEGIN
     WHEN 'item_breather' THEN 'models/items/breather/tris.md2' WHEN 'item_enviro' THEN 'models/items/enviro/tris.md2' WHEN 'item_adrenaline' THEN 'models/items/adrenal/tris.md2'
     WHEN 'item_bandolier' THEN 'models/items/band/tris.md2' WHEN 'item_pack' THEN 'models/items/pack/tris.md2' WHEN 'item_ancient_head' THEN 'models/items/c_head/tris.md2'
     ELSE NULL END;
+END^
+
+-- DoRespawn: back where it was, solid, with its sound and its particles (EV_ITEM_RESPAWN)
+CREATE OR ALTER PROCEDURE item_respawn (eid INTEGER)
+AS
+DECLARE cls VARCHAR(40); DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
+BEGIN
+  SELECT e.classname, e.x, e.y, e.z FROM ents e WHERE e.id = :eid INTO cls, x, y, z;
+  IF (cls IS NULL) THEN EXIT;
+  EXECUTE PROCEDURE set_model(eid, item_model(cls));
+  UPDATE ents e SET e.solid = 1, e.think = NULL, e.nextthink = NULL WHERE e.id = :eid;
+  EXECUTE PROCEDURE link_ent(eid);
+  EXECUTE PROCEDURE snd(eid, 2, 'items/respawn1.wav', 1, 1);
+  EXECUTE PROCEDURE fx(17, x, y, z, 0, 0, 0, 0);
 END^
 
 -- spawn_map_ents: the spawn functions for every classname we know (SpawnEntities), or, with only_id,
@@ -2666,15 +2802,83 @@ BEGIN
   SUSPEND;
 END^
 
--- ClientBegin for a coop game's second client (the first is the map's start, spawned with the map's
--- entities): its row made if the game has none yet, its entity put in at its coop spot
+-- InitClientPersistant: a client's pers afresh: the blaster, no ammo, no armour, nothing held, a hundred of health
+CREATE OR ALTER PROCEDURE init_client_persistant (pid SMALLINT)
+AS
+BEGIN
+  UPDATE player p SET p.armor = 0, p.armor_type = 0, p.power_armor = 0, p.bullets = 0, p.shells = 0, p.rockets = 0, p.grenades = 0, p.cells = 0, p.slugs = 0,
+         p.max_bullets = 200, p.max_shells = 100, p.max_rockets = 50, p.max_grenades = 50, p.max_cells = 200, p.max_slugs = 50,
+         p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.cube_mask = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
+         p.silencer_shots = 0, p.kills = 0, p.inv_quad = 0, p.inv_invuln = 0, p.inv_silencer = 0, p.inv_breather = 0, p.inv_enviro = 0,
+         p.inv_screen = 0, p.inv_shield = 0, p.inv_sel = 7, p.pers_health = 100, p.pers_max_health = 100, p.pers_flags = 0
+   WHERE p.id = :pid;
+END^
+
+-- SelectRandomDeathmatchSpawnPoint and SelectFarthestDeathmatchSpawnPoint: a spot's range is the distance to
+-- the nearest living client (PlayersRangeFromSpot; the client spawning is not counted); with DF_SPAWN_FARTHEST
+-- the spot farthest from everyone, else one at random of all but the two nearest (all of them with two or
+-- fewer spots). A map with no info_player_deathmatch gives the single-player start.
+CREATE OR ALTER PROCEDURE dm_spawn_point (pid SMALLINT)
+RETURNS (x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION)
+AS
+DECLARE n INTEGER; DECLARE mid INTEGER; DECLARE r DOUBLE PRECISION; DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
+DECLARE range1 DOUBLE PRECISION = 99999; DECLARE range2 DOUBLE PRECISION = 99999; DECLARE spot1 INTEGER; DECLARE spot2 INTEGER;
+DECLARE best DOUBLE PRECISION = -1; DECLARE pick INTEGER; DECLARE sel INTEGER; DECLARE dmf INTEGER;
+BEGIN
+  SELECT g.dmflags FROM game g WHERE g.id = 1 INTO dmf;
+  n = 0;
+  FOR SELECT m.id, m.ox, m.oy, m.oz FROM map_ents m WHERE m.classname = 'info_player_deathmatch' ORDER BY m.id INTO mid, ox, oy, oz DO
+  BEGIN
+    n = n + 1;
+    SELECT COALESCE(MIN(SQRT((e.x - :ox) * (e.x - :ox) + (e.y - :oy) * (e.y - :oy) + (e.z - :oz) * (e.z - :oz))), 99999)
+      FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id <> :pid AND e.health > 0 INTO r;
+    IF (BIN_AND(dmf, 512) <> 0) THEN
+    BEGIN
+      IF (r > best) THEN BEGIN best = r; pick = mid; END
+    END
+    ELSE IF (r < range1) THEN BEGIN range1 = r; spot1 = mid; END
+    ELSE IF (r < range2) THEN BEGIN range2 = r; spot2 = mid; END
+  END
+  IF (n > 0 AND BIN_AND(dmf, 512) = 0) THEN
+  BEGIN
+    IF (n <= 2) THEN BEGIN spot1 = NULL; spot2 = NULL; END
+    ELSE n = n - 2;
+    sel = CAST(FLOOR(rnd() * n) AS INTEGER);
+    FOR SELECT m.id FROM map_ents m WHERE m.classname = 'info_player_deathmatch' ORDER BY m.id INTO mid DO
+    BEGIN
+      IF (mid = spot1 OR mid = spot2) THEN CONTINUE;
+      IF (sel = 0) THEN BEGIN pick = mid; LEAVE; END
+      sel = sel - 1;
+    END
+  END
+  IF (pick IS NOT NULL) THEN
+    SELECT m.ox, m.oy, m.oz, COALESCE(m.angle, m.ayaw, 0) FROM map_ents m WHERE m.id = :pick INTO x, y, z, yaw;
+  IF (x IS NULL) THEN
+    SELECT FIRST 1 m.ox, m.oy, m.oz, COALESCE(m.angle, m.ayaw, 0) FROM map_ents m WHERE m.classname = 'info_player_start' ORDER BY m.id INTO x, y, z, yaw;
+  SUSPEND;
+END^
+
+-- SelectSpawnPoint: a deathmatch spot in deathmatch, else the coop spot (or the start)
+CREATE OR ALTER PROCEDURE select_spawn_point (pid SMALLINT, spawnpoint VARCHAR(40))
+RETURNS (x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION)
+AS
+BEGIN
+  IF ((SELECT g.deathmatch FROM game g WHERE g.id = 1) = 1) THEN EXECUTE PROCEDURE dm_spawn_point(pid) RETURNING_VALUES x, y, z, yaw;
+  ELSE EXECUTE PROCEDURE coop_spawn_point(pid, spawnpoint) RETURNING_VALUES x, y, z, yaw;
+  SUSPEND;
+END^
+
+-- ClientBegin for a game's second client (the first is the map's start, spawned with the map's entities): its
+-- row made if the game has none yet, its entity put in at its coop spot, or in deathmatch at a deathmatch spot
+-- with fresh pers
 CREATE OR ALTER PROCEDURE client_begin (pid SMALLINT, spawnpoint VARCHAR(40))
 AS
 DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
 DECLARE php INTEGER; DECLARE pmh INTEGER; DECLARE pfl INTEGER;
 BEGIN
   IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = :pid)) THEN INSERT INTO player (id) VALUES (:pid);
-  EXECUTE PROCEDURE coop_spawn_point(pid, spawnpoint) RETURNING_VALUES x, y, z, yaw;
+  IF ((SELECT g.deathmatch FROM game g WHERE g.id = 1) = 1) THEN EXECUTE PROCEDURE init_client_persistant(pid);
+  EXECUTE PROCEDURE select_spawn_point(pid, spawnpoint) RETURNING_VALUES x, y, z, yaw;
   IF (x IS NULL) THEN EXIT;
   EXECUTE PROCEDURE spawn_ent('player', x, y, z) RETURNING_VALUES pe;
   UPDATE player p SET p.ent_id = :pe WHERE p.id = :pid;
@@ -2707,16 +2911,18 @@ END^
 
 -- respawn, in coop: the body stays behind (CopyToBodyQue), the client goes back in at its spawn point with
 -- the pers it entered the level with (PutClientInServer from resp.coop_respawn; the keys found since are
--- kept, as player_die kept them), with a teleport's effect and sound (EV_PLAYER_TELEPORT)
+-- kept, as player_die kept them), with a teleport's effect and sound (EV_PLAYER_TELEPORT). In deathmatch the
+-- pers are fresh (InitClientPersistant) and the spot a deathmatch spot; the frags stay
 CREATE OR ALTER PROCEDURE respawn (pe INTEGER)
 AS
 DECLARE pid SMALLINT; DECLARE body INTEGER; DECLARE spawnpoint VARCHAR(40); DECLARE hp INTEGER; DECLARE mhp INTEGER;
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
 DECLARE mid INTEGER; DECLARE mk CHAR(1); DECLARE mrad DOUBLE PRECISION; DECLARE fr INTEGER; DECLARE mnz DOUBLE PRECISION; DECLARE mxz DOUBLE PRECISION;
-DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION;
+DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE dm SMALLINT;
 BEGIN
   SELECT p.id FROM player p WHERE p.ent_id = :pe INTO pid;
   IF (pid IS NULL) THEN EXIT;
+  SELECT g.deathmatch FROM game g WHERE g.id = 1 INTO dm;
   -- CopyToBodyQue: the corpse as it lies, a toss that shots clip against, and body_die's gibs if hurt enough
   SELECT e.x, e.y, e.z, e.yaw, e.model_id, e.mkind, e.mradius, e.frame, e.minz, e.maxz, e.vx, e.vy, e.vz FROM ents e WHERE e.id = :pe
     INTO x, y, z, yaw, mid, mk, mrad, fr, mnz, mxz, vx, vy, vz;
@@ -2725,17 +2931,25 @@ BEGIN
          b.vx = :vx, b.vy = :vy, b.vz = :vz, b.solid = 2, b.movetype = 6, b.clipmask = 3, b.takedamage = 2, b.health = 0, b.mass = 200, b.deadflag = 1,
          b.think = 'remove', b.nextthink = now_() + 30 WHERE b.id = :body;
   EXECUTE PROCEDURE link_ent(body);
-  -- the pers as the level began (a client dead then gets InitClientPersistant's fresh hundred)
-  MERGE INTO player p USING coop_respawn r ON r.id = p.id AND p.id = :pid
-    WHEN MATCHED THEN UPDATE SET p.armor = r.armor, p.armor_type = r.armor_type, p.bullets = r.bullets, p.shells = r.shells, p.rockets = r.rockets,
-         p.grenades = r.grenades, p.cells = r.cells, p.slugs = r.slugs, p.max_bullets = r.max_bullets, p.max_shells = r.max_shells, p.max_rockets = r.max_rockets,
-         p.max_grenades = r.max_grenades, p.max_cells = r.max_cells, p.max_slugs = r.max_slugs, p.weapons = r.weapons, p.weapon = r.weapon,
-         p.inv_quad = r.inv_quad, p.inv_invuln = r.inv_invuln, p.inv_silencer = r.inv_silencer, p.inv_breather = r.inv_breather, p.inv_enviro = r.inv_enviro,
-         p.inv_screen = r.inv_screen, p.inv_shield = r.inv_shield, p.inv_sel = r.inv_sel, p.power_armor = 0;
-  SELECT r.health, r.max_health FROM coop_respawn r WHERE r.id = :pid INTO hp, mhp;
-  IF (hp IS NULL OR hp <= 0) THEN BEGIN hp = 100; mhp = 100; END
+  IF (dm = 1) THEN
+  BEGIN
+    EXECUTE PROCEDURE init_client_persistant(pid);
+    hp = 100; mhp = 100;
+  END
+  ELSE
+  BEGIN
+    -- the pers as the level began (a client dead then gets InitClientPersistant's fresh hundred)
+    MERGE INTO player p USING coop_respawn r ON r.id = p.id AND p.id = :pid
+      WHEN MATCHED THEN UPDATE SET p.armor = r.armor, p.armor_type = r.armor_type, p.bullets = r.bullets, p.shells = r.shells, p.rockets = r.rockets,
+           p.grenades = r.grenades, p.cells = r.cells, p.slugs = r.slugs, p.max_bullets = r.max_bullets, p.max_shells = r.max_shells, p.max_rockets = r.max_rockets,
+           p.max_grenades = r.max_grenades, p.max_cells = r.max_cells, p.max_slugs = r.max_slugs, p.weapons = r.weapons, p.weapon = r.weapon,
+           p.inv_quad = r.inv_quad, p.inv_invuln = r.inv_invuln, p.inv_silencer = r.inv_silencer, p.inv_breather = r.inv_breather, p.inv_enviro = r.inv_enviro,
+           p.inv_screen = r.inv_screen, p.inv_shield = r.inv_shield, p.inv_sel = r.inv_sel, p.power_armor = 0;
+    SELECT r.health, r.max_health FROM coop_respawn r WHERE r.id = :pid INTO hp, mhp;
+    IF (hp IS NULL OR hp <= 0) THEN BEGIN hp = 100; mhp = 100; END
+  END
   SELECT g.spawnpoint FROM game g WHERE g.id = 1 INTO spawnpoint;
-  EXECUTE PROCEDURE coop_spawn_point(pid, spawnpoint) RETURNING_VALUES x, y, z, yaw;
+  EXECUTE PROCEDURE select_spawn_point(pid, spawnpoint) RETURNING_VALUES x, y, z, yaw;
   IF (x IS NULL) THEN SELECT e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = :pe INTO x, y, z, yaw;
   EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, hp, mhp);
   EXECUTE PROCEDURE snd(pe, 0, 'misc/tele1.wav', 1, 1);
@@ -2757,6 +2971,7 @@ DECLARE eid INTEGER; DECLARE dx DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; D
 DECLARE sx DOUBLE PRECISION; DECLARE sy DOUBLE PRECISION; DECLARE sz DOUBLE PRECISION; DECLARE d DOUBLE PRECISION;
 DECLARE mname VARCHAR(16); DECLARE mmodel VARCHAR(64); DECLARE mskin INTEGER; DECLARE mhp INTEGER; DECLARE mgh INTEGER; DECLARE mmass INTEGER; DECLARE mflags INTEGER;
 DECLARE mys DOUBLE PRECISION; DECLARE stand VARCHAR(16);
+DECLARE dm SMALLINT; DECLARE dmf INTEGER;   -- the deathmatch and dmflags cvars: what spawns and what does not
 DECLARE a DOUBLE PRECISION; DECLARE b DOUBLE PRECISION; DECLARE c DOUBLE PRECISION; DECLARE e2 DOUBLE PRECISION; DECLARE f2 DOUBLE PRECISION; DECLARE g2 DOUBLE PRECISION;
 DECLARE skillbit INTEGER; DECLARE wmodel INTEGER; DECLARE startid INTEGER;
 DECLARE n1 VARCHAR(64); DECLARE n2 VARCHAR(64); DECLARE n3 VARCHAR(64);
@@ -2765,6 +2980,7 @@ DECLARE php INTEGER; DECLARE pmh INTEGER; DECLARE pfl INTEGER; DECLARE ncubes IN
 BEGIN
   t0 = now_();
   skillbit = CASE skill WHEN 0 THEN 256 WHEN 1 THEN 512 ELSE 1024 END;
+  SELECT g.deathmatch, g.dmflags FROM game g WHERE g.id = 1 INTO dm, dmf;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO wmodel;
   -- SelectSpawnPoint: the start named by the previous level's changelevel, else the one without a name
   SELECT FIRST 1 m.id FROM map_ents m WHERE m.classname = 'info_player_start' AND COALESCE(m.targetname, '') = COALESCE(:spawnpoint, '') ORDER BY m.id INTO startid;
@@ -2782,10 +2998,14 @@ BEGIN
       UPDATE game g SET g.level_msg = :msg, g.sky = COALESCE(:sky, 'unit1_'), g.cd_track = COALESCE(:snds, 0), g.gravity = COALESCE(NULLIF(:grav, 0), 800) WHERE g.id = 1;
       CONTINUE;
     END
-    -- SpawnEntities: 256/512/1024 keep an entity out of easy/medium/hard (all three: deathmatch only);
-    -- 4096 (NOT_COOP) is ignored in single player, and the five filter bits are cleared once read
-    IF (BIN_AND(sf, skillbit) <> 0) THEN CONTINUE;                 -- not on this skill
+    -- SpawnEntities: 256/512/1024 keep an entity out of easy/medium/hard (all three: deathmatch only), and in
+    -- deathmatch only 2048 (NOT_DEATHMATCH) keeps one out; 4096 (NOT_COOP) is ignored in single player, and
+    -- the five filter bits are cleared once read
+    IF (dm = 1) THEN BEGIN IF (BIN_AND(sf, 2048) <> 0) THEN CONTINUE; END
+    ELSE IF (BIN_AND(sf, skillbit) <> 0) THEN CONTINUE;            -- not on this skill
     sf = BIN_AND(sf, BIN_NOT(7936));
+    -- (every monster's spawn function freed itself in deathmatch)
+    IF (dm = 1 AND cls LIKE 'monster_%') THEN CONTINUE;
     -- "angles" overrides "angle"
     IF (ay IS NOT NULL AND ang IS NULL) THEN ang = ay;
     IF (cls IN ('info_player_deathmatch', 'info_player_coop', 'info_player_intermission', 'func_group')) THEN CONTINUE;
@@ -3157,6 +3377,13 @@ BEGIN
     BEGIN
       mdl = item_model(cls);
       IF (mdl IS NULL) THEN BEGIN DELETE FROM ents e WHERE e.id = :eid; CONTINUE; END
+      -- SpawnItem in deathmatch: dmflags leave out the armour (DF_NO_ARMOR), the powerups (DF_NO_ITEMS), the
+      -- health (DF_NO_HEALTH) and, with infinite ammo (DF_INFINITE_AMMO), the ammo and the packs
+      IF (dm = 1 AND ((BIN_AND(dmf, 2048) <> 0 AND (cls LIKE 'item_armor%' OR cls IN ('item_power_shield', 'item_power_screen')))
+          OR (BIN_AND(dmf, 2) <> 0 AND cls IN ('item_quad', 'item_invulnerability', 'item_silencer', 'item_breather', 'item_enviro', 'item_ancient_head', 'item_adrenaline', 'item_bandolier', 'item_pack'))
+          OR (BIN_AND(dmf, 1) <> 0 AND (cls LIKE 'item_health%' OR cls IN ('item_adrenaline', 'item_ancient_head')))
+          OR (BIN_AND(dmf, 8192) <> 0 AND (cls LIKE 'ammo_%' OR cls IN ('item_bandolier', 'item_pack'))))) THEN
+      BEGIN DELETE FROM ents e WHERE e.id = :eid; CONTINUE; END
       EXECUTE PROCEDURE set_model(eid, mdl);
       -- (SpawnItem: items pulse, RF_GLOW, unless they cannot be touched)
       UPDATE ents e SET e.solid = 1, e.movetype = 6, e.clipmask = 3, e.effects = 1, e.yaw = 0, e.renderfx = IIF(BIN_AND(:sf, 2) <> 0, 0, 4),

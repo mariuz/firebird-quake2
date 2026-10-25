@@ -1220,6 +1220,8 @@ BEGIN
   ELSE IF (think = 'dish_think') THEN EXECUTE PROCEDURE dish_think(eid);
   ELSE IF (think = 'remove') THEN DELETE FROM ents e WHERE e.id = :eid;
   ELSE IF (think = 'drop_touchable') THEN UPDATE ents e SET e.owner_id = NULL, e.think = NULL, e.nextthink = NULL WHERE e.id = :eid;   -- drop_make_touchable
+  ELSE IF (think = 'item_respawn') THEN EXECUTE PROCEDURE item_respawn(eid);
+  ELSE IF (think = 'mega_think') THEN EXECUTE PROCEDURE mega_think(eid);
 END^
 
 -- SV_Physics for everything but the player and the pushers
@@ -1298,7 +1300,7 @@ RETURNS (
   level_msg VARCHAR(200), quad SMALLINT, invincible SMALLINT, breather SMALLINT, enviro SMALLINT, leaf INTEGER, cluster INTEGER, help_msg VARCHAR(400),
   help_msg2 VARCHAR(400), help_changed INTEGER, skill SMALLINT, intermission SMALLINT,
   roll DOUBLE PRECISION, bobtime DOUBLE PRECISION, xyspeed DOUBLE PRECISION, ducked SMALLINT,
-  inv_sel SMALLINT, pickup_item SMALLINT, timer_icon SMALLINT, timer INTEGER, client SMALLINT)
+  inv_sel SMALLINT, pickup_item SMALLINT, timer_icon SMALLINT, timer INTEGER, client SMALLINT, score INTEGER, deathmatch SMALLINT)
 AS
 DECLARE i INTEGER = 0; DECLARE itime DOUBLE PRECISION; DECLARE pe INTEGER;
 DECLARE ufwd DOUBLE PRECISION; DECLARE uside DOUBLE PRECISION; DECLARE uyaw DOUBLE PRECISION; DECLARE upitch DOUBLE PRECISION;
@@ -1329,6 +1331,7 @@ BEGIN
       EXECUTE PROCEDURE player_think(pe, 0.05e0, ufwd, uside, uyaw / tics, upitch / tics, ufire, ujump, urun, IIF(i = 0, uimp, 0));
     EXECUTE PROCEDURE run_pushers(0.05e0);
     EXECUTE PROCEDURE run_physics(0.05e0);
+    EXECUTE PROCEDURE check_dm_rules;
     i = i + 1;
   END
   UPDATE usercmd u SET u.imp = 0 WHERE u.imp <> 0;    -- an impulse is spent by the tic it came in
@@ -1354,14 +1357,14 @@ BEGIN
               WHEN p.breather_finished > g.time_ THEN 4 ELSE 0 END,
          CAST(FLOOR(CASE WHEN p.quad_finished > g.time_ THEN p.quad_finished WHEN p.invincible_finished > g.time_ THEN p.invincible_finished
               WHEN p.enviro_finished > g.time_ THEN p.enviro_finished WHEN p.breather_finished > g.time_ THEN p.breather_finished ELSE g.time_ END - g.time_ + 1e-9) AS INTEGER),
-         p.id
+         p.id, p.score, g.deathmatch
     FROM game g CROSS JOIN player p JOIN ents e ON e.id = p.ent_id
    WHERE g.id = 1
    ORDER BY p.id
     INTO tic, time_, health, max_health, armor, armor_type, power_armor, bullets, shells, rockets, grenades, cells, slugs, weapons, keys, weapon, attack_start, attack_finished, grenade_time,
          px, py, pz, yaw, pitch, view_z, punch, msg, cprint, dmg_take, dmg_save, dmg_time, bonus_time, dead, exit_kind, next_map,
          killed, total_monsters, found_secrets, total_secrets, found_goals, total_goals, waterlevel, watertype, map_name, level_msg, quad, invincible, breather, enviro, leaf, cluster, help_msg,
-         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked, inv_sel, pickup_item, timer_icon, timer, client
+         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked, inv_sel, pickup_item, timer_icon, timer, client, score, deathmatch
   DO
   BEGIN
     UPDATE player p SET p.dmg_take = 0, p.dmg_save = 0 WHERE p.id = :client AND p.dmg_time < :time_ - 0.05e0;
@@ -1369,20 +1372,23 @@ BEGIN
   END
 END^
 
--- SpawnEntities + the clients' spawn (ClientBegin); coop 1 puts a second client in at its coop spot
-CREATE OR ALTER PROCEDURE init_map (map_name VARCHAR(32), world_model INTEGER, skill SMALLINT, new_game SMALLINT, spawnpoint VARCHAR(40), coop SMALLINT = 0)
+-- SpawnEntities + the clients' spawn (ClientBegin); coop 1 puts a second client in at its coop spot, deathmatch 1
+-- two clients at deathmatch spots with fresh pers (deathmatch wins over coop, as the cvars did)
+CREATE OR ALTER PROCEDURE init_map (map_name VARCHAR(32), world_model INTEGER, skill SMALLINT, new_game SMALLINT, spawnpoint VARCHAR(40), coop SMALLINT = 0, deathmatch SMALLINT = 0)
 AS
-DECLARE i INTEGER; DECLARE seed BIGINT;
+DECLARE i INTEGER; DECLARE seed BIGINT; DECLARE pid SMALLINT; DECLARE pe INTEGER;
+DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
 BEGIN
+  IF (deathmatch = 1) THEN coop = 0;
   -- the generator's state: seeded by the caller for a replay, else from wherever RAND() lands; a new game records it
   seed = CAST(RDB$GET_CONTEXT('USER_SESSION', 'rng') AS BIGINT);
   IF (seed IS NULL) THEN BEGIN seed = CAST(FLOOR(RAND() * 4294967296) AS BIGINT); RDB$SET_CONTEXT('USER_SESSION', 'rng', seed); END
   UPDATE game g SET g.tic = 0, g.time_ = 0, g.map_name = :map_name, g.next_map = NULL, g.exit_kind = 0, g.skill = :skill, g.world_model = :world_model,
-         g.rng_seed = IIF(:new_game = 1, :seed, g.rng_seed), g.coop = :coop, g.spawnpoint = :spawnpoint, g.sight_client = NULL,
+         g.rng_seed = IIF(:new_game = 1, :seed, g.rng_seed), g.coop = :coop, g.deathmatch = :deathmatch, g.spawnpoint = :spawnpoint, g.sight_client = NULL,
          g.total_monsters = 0, g.killed = 0, g.total_secrets = 0, g.found_secrets = 0, g.total_goals = 0, g.found_goals = 0, g.level_msg = NULL,
          g.intermission_time = NULL, g.gravity = 800 WHERE g.id = 1;
-  -- the clients: one in single player, two in coop (the second's row joins the game, or leaves it, pers and all)
-  IF (coop = 0) THEN DELETE FROM player p WHERE p.id > 1;
+  -- the clients: one in single player, two in coop or deathmatch (the second's row joins the game, or leaves it, pers and all)
+  IF (coop = 0 AND deathmatch = 0) THEN DELETE FROM player p WHERE p.id > 1;
   ELSE IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = 2)) THEN INSERT INTO player (id) VALUES (2);
   DELETE FROM usercmd;
   -- switchable lights back to their patterns
@@ -1394,12 +1400,10 @@ BEGIN
   BEGIN
     UPDATE game g SET g.serverflags = 0, g.help_msg = NULL, g.help_msg2 = NULL, g.help_changed = 0 WHERE g.id = 1;     -- the unit starts over (the help computer's messages last a game)
     -- InitClientPersistant, every client
-    UPDATE player p SET p.armor = 0, p.armor_type = 0, p.power_armor = 0, p.bullets = 0, p.shells = 0, p.rockets = 0, p.grenades = 0, p.cells = 0, p.slugs = 0,
-           p.max_bullets = 200, p.max_shells = 100, p.max_rockets = 50, p.max_grenades = 50, p.max_cells = 200, p.max_slugs = 50,
-           p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.cube_mask = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
-           p.silencer_shots = 0, p.kills = 0, p.inv_quad = 0, p.inv_invuln = 0, p.inv_silencer = 0, p.inv_breather = 0, p.inv_enviro = 0,
-           p.inv_screen = 0, p.inv_shield = 0, p.inv_sel = 7, p.pers_health = 100, p.pers_max_health = 100, p.pers_flags = 0;
+    FOR SELECT p.id FROM player p INTO pid DO EXECUTE PROCEDURE init_client_persistant(pid);
   END
+  -- InitClientResp: the frags start over each level
+  UPDATE player p SET p.score = 0;
   UPDATE player p SET p.weaponframe = 0, p.attack_finished = 0, p.attack_start = 0, p.pain_finished = 0, p.punchangle = 0, p.view_ofs = 22, p.dmg_take = 0, p.dmg_save = 0,
          p.dmg_time = -10, p.bonus_time = -10, p.pickup_item = 0, p.pickup_time = 0, p.msg = NULL, p.msg_time = 0, p.cprint = NULL, p.cprint_time = 0, p.dead_time = 0, p.pitch = 0, p.stepz = 0,
          p.jump_released = 1, p.air_finished = 12, p.dmg_lava_time = 0, p.next_drown_time = 0, p.drown_dmg = 2, p.weapon_sound = 0, p.machinegun_shots = 0,
@@ -1417,7 +1421,17 @@ BEGIN
   INSERT INTO portal_state (portal, open_) SELECT DISTINCT ap.portal, 0 FROM areaportals ap;
   EXECUTE PROCEDURE flood_areas;
   EXECUTE PROCEDURE spawn_map_ents(skill, spawnpoint, NULL);
-  IF (coop = 1) THEN EXECUTE PROCEDURE client_begin(2, spawnpoint);
+  IF (deathmatch = 1) THEN
+  BEGIN
+    -- every client starts afresh (InitClientPersistant) at a deathmatch spot: the first was put at the map's start
+    -- by the spawn, so it moves; the second comes in by ClientBegin
+    SELECT p.ent_id FROM player p WHERE p.id = 1 INTO pe;
+    EXECUTE PROCEDURE init_client_persistant(1);
+    EXECUTE PROCEDURE select_spawn_point(1, spawnpoint) RETURNING_VALUES x, y, z, yaw;
+    EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, 100, 100, 0);
+    EXECUTE PROCEDURE client_begin(2, spawnpoint);
+  END
+  ELSE IF (coop = 1) THEN EXECUTE PROCEDURE client_begin(2, spawnpoint);
   -- keys don't carry over; neither do dead weapons
   UPDATE player p SET p.weapon = best_weapon(p.ent_id) WHERE BIN_AND(p.weapons, p.weapon) = 0 OR p.weapon = 0;
   -- InitClientResp: what a coop respawn comes back with

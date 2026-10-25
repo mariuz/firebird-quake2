@@ -38,7 +38,12 @@ CREATE TABLE game (
   help_changed   INTEGER DEFAULT 0 NOT NULL,            -- counts target_help uses (the page blinks the help icon until F1)
   coop           SMALLINT DEFAULT 0 NOT NULL,           -- the coop cvar: a second client shares the game (one row more in PLAYER)
   spawnpoint     VARCHAR(40),                           -- game.spawnpoint: the start the level was entered by, where a coop respawn goes
-  sight_client   INTEGER                                -- level.sight_client: the client the monsters look for this tic (AI_SetSightClient), NULL when none is alive
+  sight_client   INTEGER,                               -- level.sight_client: the client the monsters look for this tic (AI_SetSightClient), NULL when none is alive
+  deathmatch     SMALLINT DEFAULT 0 NOT NULL,           -- the deathmatch cvar: two clients against each other (no monsters, the DM items, frags)
+  dmflags        INTEGER DEFAULT 0 NOT NULL,            -- the dmflags cvar (g_local.h): 1 no health 2 no items 4 weapons stay 8 no falling 16 instant items 32 same level
+                                                        --   512 spawn farthest 1024 force respawn 2048 no armor 4096 allow exit 8192 infinite ammo
+  fraglimit      INTEGER DEFAULT 0 NOT NULL,            -- the fraglimit and timelimit (minutes) cvars: 0 is none (CheckDMRules)
+  timelimit      INTEGER DEFAULT 0 NOT NULL
 );
 
 -- which cluster and area each kept slot of VIS_FACES (render.sql) holds, when it was last used, and the
@@ -458,6 +463,7 @@ CREATE TABLE player (
   cprint          VARCHAR(400),                           -- centerprint
   cprint_time     DOUBLE PRECISION DEFAULT 0 NOT NULL,
   kills           INTEGER DEFAULT 0 NOT NULL,
+  score           INTEGER DEFAULT 0 NOT NULL,            -- resp.score: the frags in deathmatch (a kill +1, a suicide or the world -1), reset each level
   dead_time       DOUBLE PRECISION DEFAULT 0 NOT NULL,
   show_hostile    DOUBLE PRECISION DEFAULT 0 NOT NULL,
   impulse         SMALLINT DEFAULT 0 NOT NULL,

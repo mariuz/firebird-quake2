@@ -20,7 +20,7 @@
         <canvas id="screen" width="320" height="240" tabindex="0" aria-label="Quake 2 view rendered from Firebird query results"></canvas>
         <div id="status" class="status">Loading…</div>
         <input id="cmdline" class="cmdline" type="text" autocomplete="off" spellcheck="false" hidden
-               placeholder="god · noclip · notarget · give all|health|weapons|ammo|armor|keys · kill · map demo2 · save · load" aria-label="Console">
+               placeholder="god · noclip · notarget · give all|health|weapons|ammo|armor|keys · kill · map demo2 · save · load · dmflags · fraglimit · timelimit" aria-label="Console">
         <!-- on-screen buttons, shown on touch screens: the halves of the view move and look, these fire and jump -->
         <div id="touch" class="touch" hidden>
           <button type="button" data-act="menu" aria-label="Menu">≡</button>
@@ -39,9 +39,10 @@
           <option value="1">Medium</option>
           <option value="2">Hard</option>
         </select></label>
-        <label title="Two players share the game: the view is split, the keyboard and mouse are the first player's, the gamepad the second's">Players <select id="players">
+        <label title="Two players share the game: the view is split, the keyboard and mouse are the first player's, the gamepad the second's; in deathmatch against each other, with the maps' deathmatch items and no monsters (dmflags, fraglimit and timelimit at the console)">Players <select id="players">
           <option value="1">One</option>
           <option value="2">Two (coop)</option>
+          <option value="dm">Two (deathmatch)</option>
         </select></label>
         <label>Detail <select id="detail">
           <option value="ultra">640×480</option>
@@ -89,7 +90,8 @@
         <kbd>Esc</kbd> menu (<kbd>F2</kbd> save, <kbd>F3</kbd> load, <kbd>F10</kbd> quit) · <kbd>F6</kbd> quick save · <kbd>F9</kbd> quick load (saves live in this browser).
         On touch screens the left half of the view moves, the right half looks, a tap fires, and the buttons fire, jump, change weapon and open the menu.
         A gamepad works too: left stick moves, right stick looks, RT fires, A jumps, B crouches, LB/RB change weapon, the d-pad selects (left/right) and uses (up) an inventory item, Y shows the inventory, Back the help computer, Start opens the menu (the d-pad, A and B drive it).
-        With two players (coop) the view is split, the keyboard and mouse are the first player's and the gamepad the second's.
+        With two players (coop, or deathmatch: the maps' deathmatch weapons and spots, no monsters, frags at the top right, <kbd>F1</kbd> the score board;
+        <code>dmflags</code>, <code>fraglimit</code> and <code>timelimit</code> at the console) the view is split, the keyboard and mouse are the first player's and the gamepad the second's.
         Over the network: one page hosts (Host makes an offer to send to the other player), the other joins (Join takes the offer and makes an answer to send back),
         and the host's game runs with the guest's player in it, each page its own view.</p>
     </section>

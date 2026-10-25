@@ -80,12 +80,20 @@ let anyKey = null;      // a picture screen waiting for a key or a click
 // keys are the first player's, the pad is its player's (the second in coop)
 let showHelp = [false, false];
 let showInv = [false, false];
+let showScores = [false, false];   // the deathmatch score board (Cmd_Help_f shows it in place of the help computer)
 let invItems = [[], []];     // the inventory's rows: [itemlist index, count]
 let helpSeen = [0, 0];       // the help_changed count each player has looked at
-/** The help computer or the inventory toggled for player `p` (0 or 1), the other screen put away. */
+/** The help computer (the score board in deathmatch) or the inventory toggled for player `p` (0 or 1), the other screen put away. */
 function toggleScreen(p, which) {
-  if (which === 'help') { showHelp[p] = !showHelp[p]; showInv[p] = false; const row = netGuest() ? last : (session?.clients[p] ?? last); if (row) helpSeen[p] = row.HELP_CHANGED ?? 0; }
-  else { showInv[p] = !showInv[p]; showHelp[p] = false; }
+  const row = netGuest() ? last : (session?.clients[p] ?? last);
+  if (which === 'help' && row?.DEATHMATCH) { showScores[p] = !showScores[p]; showInv[p] = false; showHelp[p] = false; }
+  else if (which === 'help') { showHelp[p] = !showHelp[p]; showInv[p] = false; showScores[p] = false; if (row) helpSeen[p] = row.HELP_CHANGED ?? 0; }
+  else { showInv[p] = !showInv[p]; showHelp[p] = false; showScores[p] = false; }
+}
+/** The score board's rows: every client's frags (a guest's come with its row). */
+function scoreRows() {
+  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, score: last?.SCORE ?? 0 }];
+  return session.clients.map((c) => ({ id: c.CLIENT, score: c.SCORE ?? 0 }));
 }
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
@@ -116,7 +124,7 @@ function openMenu(push) {
   if (menu.active && document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
 }
 function escape() {
-  if (showHelp[0] || showInv[0]) { showHelp[0] = false; showInv[0] = false; return; }
+  if (showHelp[0] || showInv[0] || showScores[0]) { showHelp[0] = false; showInv[0] = false; showScores[0] = false; return; }
   openMenu(() => menu.main());
 }
 // the browser takes Escape to free the mouse, so the page sees the pointer go instead
@@ -135,7 +143,7 @@ const menu = new Menu({
   slots: () => session?.slots() ?? [],
   loadSlot: (i) => loadGame(SLOT_KEY(i)),
   saveSlot: (i) => saveGame(SLOT_KEY(i)),
-  get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : settings[k]),
+  get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : k === 'players' ? (settings.deathmatch ? 2 : settings.coop ? 1 : 0) : settings[k]),
   set: (k, v) => setSetting(k, v),
   resetDefaults: () => { for (const [k, v] of Object.entries(OPTIONS_RESET)) setSetting(k, v); },
   resetVideo: () => { for (const [k, v] of Object.entries(VIDEO_RESET)) setSetting(k, v); },
@@ -146,10 +154,10 @@ const menu = new Menu({
 /** A setting changed from a menu: through the page's own control where there is one, so both agree. */
 function setSetting(k, v) {
   const control = { sfx: ['sfxvol', 'input'], musicMode: ['music', 'change'], alwaysRun: ['run', 'change'], renderer: ['renderer', 'change'],
-    detail: ['detail', 'change'], brightness: ['brightness', 'change'], coop: ['players', 'change'] }[k];
+    detail: ['detail', 'change'], brightness: ['brightness', 'change'], players: ['players', 'change'] }[k];
   if (control) {
     const el = $(control[0]);
-    el.value = k === 'alwaysRun' ? (v ? '1' : '0') : k === 'coop' ? (v ? '2' : '1') : String(v);
+    el.value = k === 'alwaysRun' ? (v ? '1' : '0') : k === 'players' ? ['1', '2', 'dm'][v] ?? '1' : String(v);
     el.dispatchEvent(new Event(control[1]));
   } else if (k === 'fullscreen') {
     if (v && !document.fullscreenElement) canvas.requestFullscreen?.().catch(() => {});
@@ -175,6 +183,8 @@ const con = new Console({
   saveGame: () => saveGame(), loadGame: () => loadGame(),
   toggleInventory: () => toggleScreen(0, 'inventory'),
   isRunning: () => running,
+  // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
+  setCvar: async (name, value) => { session.cvars[name] = value; if (map && !netGuest()) await db.exec(`UPDATE game SET ${name} = ${value} WHERE id = 1`); },
 });
 function openConsole() {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
@@ -265,7 +275,7 @@ if (touchBar) {
  * the last tic); the pad's Start is the page's Escape either way.
  */
 function readInput(tics) {
-  const localCoop = session.coop && !net;   // two players at this page: the pad is the second's
+  const localCoop = session.twoPlayers && !net;   // two players at this page (coop or deathmatch): the pad is the second's
   const cmd = input.read(tics, settings, { pad: !localCoop });
   if (input.menuPressed) escape();
   // the pad's Y and Back: the inventory and the help computer of the player the pad drives
@@ -286,7 +296,7 @@ async function applyView(fov = settings.fov) {
     if (v && renderer) renderer.setSize(v.w, v.h, 1);
     return;
   }
-  const views = session?.coop && !netHost() ? 2 : 1;
+  const views = session?.twoPlayers && !netHost() ? 2 : 1;
   await setView(db, viewWidth(), Math.floor(viewHeight() / views), fov);
   if (renderer) renderer.setSize(viewWidth(), viewHeight(), views);
 }
@@ -298,6 +308,7 @@ function beginMap() {
   menu.off();
   showHelp = [false, false];
   showInv = [false, false];
+  showScores = [false, false];
 }
 /** A map is in (session.startMap's setup): the renderer and the sound set up from it. */
 async function mapLoaded(setup) {
@@ -325,9 +336,10 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
   // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on; a new
-  // game has the players the setting says (one, or two in coop; two when a guest is connected), a level
-  // change keeps the game's
-  await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...(newGame ? { coop: netHost() || settings.coop } : {}) }));
+  // game has the players the setting says (one, or two in coop or deathmatch; two when a guest is connected)
+  // and the deathmatch cvars, a level change keeps the game's
+  const modes = newGame ? { coop: netHost() || settings.coop, deathmatch: settings.deathmatch, cvars: { dmflags: settings.dmflags, fraglimit: settings.fraglimit, timelimit: settings.timelimit } } : {};
+  await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...modes }));
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);
   setStatus('');
   if (autosave) {
@@ -400,7 +412,7 @@ async function frame() {
       const h = net.host;   // (the guest may leave during the query: the link is this frame's)
       const gf = await session.frame({ sqlRenderer: false, client: 2 });
       const inv = h.wantInv ? await session.inventory(2) : null;
-      if (h.open) h.sendFrame(session.clients[1], gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
+      if (h.open) h.sendFrame({ ...session.clients[1], SCORES: scoreRows() }, gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
     }
     if (!running) { nextFrame(); return; }
     const { faces, ents, sounds, fx, loops } = f;
@@ -577,11 +589,13 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   last.FOV = viewFov();
   last.CROSSHAIR = settings.crosshair;
   hud.draw(r, last, time);
-  if (showHelp[which]) hud.drawHelp(r, last);
+  // the deathmatch score board: asked for (F1, Back), and at the intermission for everyone (MoveClientToIntermission)
+  if (showScores[which] || (last.DEATHMATCH && last.INTERMISSION)) hud.drawScores(r, scoreRows(), last.CLIENT, time);
+  else if (showHelp[which]) hud.drawHelp(r, last);
   else if (showInv[which] && !last.DEAD) hud.drawInventory(r, invItems[which], last.INV_SEL, performance.now() / 1000);
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
   if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
-  if (last.DEAD) hud.drawCenter(r, session.coop || net ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
+  if (last.DEAD) hud.drawCenter(r, session.twoPlayers || net ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
   // the palette blend: damage, bonus, powerups, water
   let tint = null;
   const since = time - last.DMG_TIME;
@@ -821,12 +835,12 @@ $('detail').addEventListener('change', async (e) => {
   settings.detail = e.target.value; saveSettings();
   await applyView();
 });
-// the players: one, or two in coop; a change starts a new game with that many (the game cannot gain one midway)
-$('players').value = settings.coop ? '2' : '1';
+// the players: one, two in coop, or two in deathmatch; a change starts a new game with that many (the game cannot gain one midway)
+$('players').value = settings.deathmatch ? 'dm' : settings.coop ? '2' : '1';
 $('players').addEventListener('change', (e) => {
-  const coop = e.target.value === '2';
-  if (coop === settings.coop) return;
-  settings.coop = coop; saveSettings();
+  const coop = e.target.value !== '1', deathmatch = e.target.value === 'dm';
+  if (coop === settings.coop && deathmatch === settings.deathmatch) return;
+  settings.coop = coop; settings.deathmatch = deathmatch; saveSettings();
   if (map) startMap(map.name, true).catch((err) => setStatus(err.message, true));
 });
 $('renderer').value = settings.renderer;

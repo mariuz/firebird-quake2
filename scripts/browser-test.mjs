@@ -115,8 +115,9 @@ try {
 
     // two players: the players select starts a new coop game; both clients come with every tic, the screen is
     // split in two views half as high, the game runs on; then one player again, the whole screen
-    const state = () => page.evaluate(() => ({ coop: window.quake2?.session?.coop, clients: window.quake2?.session?.clients?.length,
-      views: window.quake2?.renderer?.views, h: window.quake2?.renderer?.h, screenH: window.quake2?.renderer?.screenH, canvasH: document.getElementById('screen').height })).catch(() => ({}));
+    const state = () => page.evaluate(() => ({ coop: window.quake2?.session?.coop, deathmatch: window.quake2?.session?.deathmatch, clients: window.quake2?.session?.clients?.length,
+      views: window.quake2?.renderer?.views, h: window.quake2?.renderer?.h, screenH: window.quake2?.renderer?.screenH, canvasH: document.getElementById('screen').height,
+      dm: window.quake2?.session?.clients?.[0]?.DEATHMATCH, monsters: null })).catch(() => ({}));
     await page.selectOption('#players', '2');
     let two = {};
     for (let i = 0; i < 240 && !(two.coop === true && two.clients === 2 && two.views === 2); i++) { await sleep(250); two = await state(); }
@@ -128,6 +129,15 @@ try {
     assert((await state()).views === 1, 'the menu over a coop game takes the whole screen');
     await page.keyboard.press('Escape'); await sleep(700);
     assert((await state()).views === 2, 'and the split view comes back with the game');
+    // a deathmatch: two clients against each other, the split view, the rows marked
+    await page.selectOption('#players', 'dm');
+    let dm = {};
+    for (let i = 0; i < 240 && !(dm.deathmatch === true && dm.clients === 2 && dm.views === 2 && dm.dm === 1); i++) { await sleep(250); dm = await state(); }
+    assert(dm.deathmatch === true && dm.coop === false && dm.clients === 2 && dm.views === 2 && dm.dm === 1, `two players in deathmatch: a new deathmatch with both clients, the split view, the rows marked (${JSON.stringify(dm)})`);
+    const monsters = await page.evaluate(() => window.quake2.sql('SELECT COUNT(*) n FROM ents WHERE mtype IS NOT NULL').then((r) => r[0].N)).catch(() => -1);
+    assert(monsters === 0, `and no monsters (${monsters})`);
+    const d1 = await frames(page); await sleep(700); const d2 = await frames(page);
+    assert(d2 > d1, `the deathmatch runs on (${d2 - d1} frames in 0.7 s)`);
     await page.selectOption('#players', '1');
     let one = {};
     for (let i = 0; i < 240 && !(one.coop === false && one.clients === 1 && one.views === 1); i++) { await sleep(250); one = await state(); }

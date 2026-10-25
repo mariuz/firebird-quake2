@@ -6,12 +6,12 @@
 // Nothing here touches the DOM: the page wires the input element to historyStep(), complete() and
 // submit(), and gives a host with what the commands act on, so the tests can drive it with a fake one.
 
-export const COMMANDS = ['drop', 'fov', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'seed', 'use'];
+export const COMMANDS = ['dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'seed', 'timelimit', 'use'];
 const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
- *         saveGame(), loadGame(), toggleInventory(), isRunning() }
+ *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value) }
  */
 export class Console {
   constructor(host) {
@@ -85,6 +85,17 @@ export class Console {
       }
       case 'save': return h.saveGame();
       case 'load': return h.loadGame();
+      case 'dmflags': case 'fraglimit': case 'timelimit': {
+        // the deathmatch cvars: no argument shows one; a number sets it for the game running and the next ones
+        const name = cmd.toLowerCase();
+        const v = Number(arg);
+        if (!arg || !Number.isFinite(v)) { say(`"${name}" is "${h.settings[name]}"`); return; }
+        const value = Math.max(0, Math.min(name === 'dmflags' ? 65535 : 999, Math.floor(v)));
+        h.settings[name] = value;
+        h.saveSettings();
+        await h.setCvar?.(name, value);
+        return;
+      }
       default:
         if (!h.isRunning()) return;
         try { await h.db.query('SELECT msg FROM player_command(?, ?)', [cmd, arg]); }

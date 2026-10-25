@@ -180,8 +180,8 @@ export class Menu {
 
   /**
    * M_Menu_Game_f: easy, medium, hard; load game, save game (the credits are left out). The players spin
-   * is this port's: a new game at a skill is for one player, or two in coop (the view split, the gamepad
-   * the second's), which Quake 2 reached through its network menu.
+   * is this port's: a new game at a skill is for one player, or two in coop or deathmatch (the view split,
+   * the gamepad the second's), which Quake 2 reached through its network menu.
    */
   game() {
     const h = this.host;
@@ -192,7 +192,7 @@ export class Menu {
         action('medium', 10, start(1), { left: true }),
         action('hard', 20, start(2), { left: true }),
         separator(),
-        spin('players', 40, ['one', 'two (coop)'], () => (h.get('coop') ? 1 : 0), (v) => h.set('coop', !!v)),
+        spin('players', 40, ['one', 'two (coop)', 'two (deathmatch)'], () => h.get('players') ?? 0, (v) => h.set('players', v)),
         separator(),
         action('load game', 60, () => this.loadMenu(), { left: true }),
         action('save game', 70, () => this.saveMenu(), { left: true }),
