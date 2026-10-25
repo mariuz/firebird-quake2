@@ -36,7 +36,8 @@
     "test:golden": "node scripts/golden-test.mjs",
     "test:coop": "node scripts/coop-test.mjs",
     "test:net": "node scripts/net-test.mjs",
-    "test:dm": "node scripts/dm-test.mjs"
+    "test:dm": "node scripts/dm-test.mjs",
+    "test:demo": "node scripts/demo-test.mjs"
   },
   "license": "MIT",
   "dependencies": {

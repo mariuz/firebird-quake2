@@ -156,6 +156,40 @@ export class Session {
     return f;
   }
 
+  // ── a demo (src/demo.js) played over the loaded map: the view and the brush models the demo says, the faces from the SQL ─────
+
+  /**
+   * The map as a demo's stage: the game's own alias models and sprites hidden (the demo brings its own), the
+   * brush models by name for the frames to move. Called once after startMap for the demo's map.
+   */
+  async demoBegin() {
+    await this.db.exec("UPDATE ents SET mkind = NULL, model_id = NULL WHERE mkind IN ('M', 'S') AND classname <> 'player'");
+    this.demoBrushes = new Map();
+    for (const [name, id] of (await this.db.query("SELECT m.name, e.id FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B' AND m.name STARTING WITH '*'", [], ARR)).rows) this.demoBrushes.set(name, id);
+    this.demoBrushState = new Map();
+  }
+
+  /**
+   * One demo frame's faces: the player's entity and row set to the demo's view (the eye the SQL's frustum and PVS
+   * take), each brush model the demo lists moved to where the demo has it (relinked when it moved), then the frame
+   * query as for the page's own game. `view`: { x, y, z, viewZ, yaw, pitch }; `brushes`: [{ name, origin, angles, frame }].
+   */
+  async demoFrame(view, brushes = []) {
+    const pe = (await this.db.query('SELECT ent_id FROM player WHERE id = 1')).rows[0].ENT_ID;
+    await this.db.exec(`UPDATE ents SET x = ${view.x}, y = ${view.y}, z = ${view.z}, yaw = ${view.yaw}, vx = 0, vy = 0, vz = 0, deadflag = 0 WHERE id = ${pe};
+      UPDATE player SET pitch = ${view.pitch}, view_ofs = ${view.viewZ - view.z}, stepz = 0, bob_z = 0, bob_pitch = 0, bob_roll = 0 WHERE id = 1;
+      EXECUTE PROCEDURE link_ent(${pe})`);
+    for (const b of brushes) {
+      const id = this.demoBrushes?.get(b.name);
+      if (!id) continue;
+      const key = [b.origin, b.angles, b.frame, b.effects ?? 0].flat().map((v) => Math.round(v * 8)).join(',');
+      if (this.demoBrushState.get(id) === key) continue;
+      this.demoBrushState.set(id, key);
+      await this.db.exec(`UPDATE ents SET x = ${b.origin[0]}, y = ${b.origin[1]}, z = ${b.origin[2]}, pitch = ${b.angles[0]}, yaw = ${b.angles[1]}, roll = ${b.angles[2]}, frame = ${b.frame}, effects = ${b.effects ?? 0} WHERE id = ${id}; EXECUTE PROCEDURE link_ent(${id})`);
+    }
+    return this.frame({ client: 1 });
+  }
+
   /** The frame's spare time marks the cluster the player is heading into (premark_ahead). */
   async premark() {
     await this.db.query('SELECT marked FROM premark_ahead');

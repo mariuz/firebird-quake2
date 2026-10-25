@@ -142,6 +142,26 @@ try {
     let one = {};
     for (let i = 0; i < 240 && !(one.coop === false && one.clients === 1 && one.views === 1); i++) { await sleep(250); one = await state(); }
     assert(one.coop === false && one.clients === 1 && one.views === 1 && one.h === one.screenH, `one player again: a new single-player game on the whole screen (${JSON.stringify(one)})`);
+
+    // the pak's demo from the select: its map loads, the recording plays (the frame count climbs, the stats line says
+    // so, no tic runs), a key stops it and a new game starts
+    const demoState = () => page.evaluate(() => ({ demo: window.quake2?.demo, running: window.quake2?.running, map: document.getElementById('mapname')?.textContent,
+      options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({}));
+    const ds0 = await demoState();
+    assert(ds0.options?.includes('q2demo1'), `the Demo select lists the pak's demos (${JSON.stringify(ds0.options)})`);
+    await page.selectOption('#demo', 'q2demo1');
+    let ds = {};
+    for (let i = 0; i < 240 && !(ds.demo && ds.demo.frame > 10); i++) { await sleep(250); ds = await demoState(); }
+    assert(ds.demo?.name === 'q2demo1' && ds.demo.frame > 10 && ds.demo.frames === 632 && ds.running === true && /demo2 \(demo q2demo1\)/.test(ds.map),
+      `the demo plays on its map: frame ${ds.demo?.frame} of ${ds.demo?.frames}, ${ds.map}`);
+    assert(/demo q2demo1: frame \d+ of 632/.test(await stats()) && /q2_tic 0 ms/.test(await stats()), `the stats line says so, and no tic runs: ${await stats()}`);
+    const dp1 = ds.demo.frame; await sleep(1000); const dp2 = (await demoState()).demo?.frame ?? -1;
+    assert(dp2 > dp1 && dp2 - dp1 <= 12, `the recording runs at its own pace (${dp2 - dp1} frames in a second)`);
+    await page.keyboard.press('Space');
+    let stopped = {};
+    for (let i = 0; i < 240 && !(stopped.demo === null && stopped.running === true && /^demo1$/.test(stopped.map ?? '')); i++) { await sleep(250); stopped = await demoState(); }
+    assert(stopped.demo === null && stopped.running === true && stopped.map === 'demo1', `a key stops it and a new game starts on the first map (${JSON.stringify({ demo: stopped.demo, map: stopped.map })})`);
+    assert((await page.evaluate(() => document.getElementById('demo').value)) === '', 'the select is back to none');
   }
 
   // two pages over WebRTC: this one hosts, a second joins with the texts passed between them (the offer and

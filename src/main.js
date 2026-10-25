@@ -16,13 +16,14 @@ import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
 import { HostLink, GuestLink, Peer } from './net.js';
+import { parseDemo, DemoPlayer } from './demo.js';
 import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
 import { Effects } from './effects.js';
 import { Hud, viewFrame } from './hud.js';
 import { Menu, saveComment } from './menu.js';
 import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
 import { Q2Audio } from './audio.js';
-import { WEAPONS } from './gamedata.js';
+import { WEAPONS, ITEMS, ARMOR_ICONS, TIMER_ICONS } from './gamedata.js';
 import { padMenuKeys, BUTTON } from './gamepad.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Console } from './console.js';
@@ -48,6 +49,9 @@ let lastTic = 0;
 let net = null;          // { role: 'host' | 'guest', peer, host | guest }
 const netHost = () => net?.role === 'host' && !!net.host;      // (connected: before that the page plays alone)
 const netGuest = () => net?.role === 'guest' && !!net.guest;
+// src/demo.js: a demo of the pak playing (the attract mode): the view and the entities are the recording's, the
+// faces the SQL's for that view; a key or a click stops it and a new game starts
+let demo = null;         // { name, player: DemoPlayer, time, at, frames, cprint, msg }
 /** The view's fov: the host's for a guest (the frustum is the host's), the setting otherwise. */
 const viewFov = () => (netGuest() && net.guest.map ? net.guest.map.view.fov : settings.fov);
 // src/effects.js: the explosions, beams, tongues and muzzle flashes between frames, and the frame's dynamic lights
@@ -98,6 +102,7 @@ function scoreRows() {
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (anyKey && !e.repeat) { e.preventDefault(); const go = anyKey; anyKey = null; go(); return; }
+  if (demo) { if (!e.repeat) { e.preventDefault(); stopDemo(); } return; }   // CL_Disconnect on a key in the attract loop
   if (menu.active) { e.preventDefault(); menu.key(e.code); return; }
   // default.cfg: F2 the save menu, F3 the load menu, F10 quit; Escape puts the help computer or the
   // inventory away (cmd putaway), else brings up the main menu
@@ -131,6 +136,7 @@ function escape() {
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement) return;
   if (quietUnlock) { quietUnlock = false; return; }
+  if (demo) { stopDemo(); return; }   // (Escape under the lock: a key, and the demo stops)
   if (running && !menu.active && !anyKey && cmdline.hidden) escape();
 });
 const menu = new Menu({
@@ -185,6 +191,7 @@ const con = new Console({
   isRunning: () => running,
   // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
   setCvar: async (name, value) => { session.cvars[name] = value; if (map && !netGuest()) await db.exec(`UPDATE game SET ${name} = ${value} WHERE id = 1`); },
+  playDemo: (name) => playDemo(name),
 });
 function openConsole() {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
@@ -246,7 +253,7 @@ async function loadGame(key = QUICK_KEY) {
   } catch (err) { console.error(err); setStatus(`Load failed: ${err.message}`, true); }
 }
 input.attach(canvas, window, { locked: () => document.pointerLockElement === canvas, settings: () => settings });
-canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } });
+canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } else if (demo) stopDemo(); });
 canvas.addEventListener('click', () => {
   if (running && !menu.active && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});
 });
@@ -305,6 +312,7 @@ async function applyView(fov = settings.fov) {
 /** Before a map loads: the menus, the help and inventory screens away. */
 function beginMap() {
   running = false;
+  demo = null;
   menu.off();
   showHelp = [false, false];
   showInv = [false, false];
@@ -383,6 +391,7 @@ async function frame() {
     if (now - lastTic > 200) lastTic = now;
 
     if (netGuest()) { guestFrame(tics); nextFrame(); return; }
+    if (demo) { await demoFrame(now); nextFrame(); return; }
 
     let t = performance.now();
     const [cmd, cmd2] = readInput(tics);
@@ -478,6 +487,99 @@ function guestFrame(tics) {
 const sprite = (name) => res.models.get(res.byName.get(name))?.spr;
 const model = (name) => res.models.get(res.byName.get(name))?.mdl;
 
+// ── a demo played (src/demo.js): CL_PlayDemo_f's attract loop over the demo's map, loaded as a game's ─────────
+/** Play `demos/<name>.dm2`: its map loaded as for a new game, the game's own models hidden, then the recording's frames. */
+async function playDemo(name) {
+  const file = `demos/${name}.dm2`;
+  if (!pak.has(file)) { setStatus(`no demo "${name}" in this pak`, true); setTimeout(() => setStatus(''), 2500); return; }
+  const parsed = parseDemo(pak.get(file));
+  const mapName = parsed.map.replace(/^maps\//, '').replace(/\.bsp$/, '');
+  if (!parsed.frames.length || !pak.has(`maps/${mapName}.bsp`)) { setStatus(`the demo's map ${mapName} is not in this pak`, true); return; }
+  if (net) leaveNet();   // a demo plays on a page alone
+  if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }   // the mouse is free: nothing to look with
+  beginMap();
+  setStatus(`Loading ${mapName} for the demo…`);
+  await mapLoaded(await session.startMap(mapName, { newGame: true, skill: settings.skill, faceVerts: settings.renderer === 'sql', coop: false, deathmatch: false }));
+  await session.demoBegin();
+  const player = new DemoPlayer(parsed, { modelId: (n) => res.byName.get(n) });
+  demo = { name, player, time: 0, at: performance.now(), frames: parsed.frames.length, cprint: null, msg: null };
+  $('mapname').textContent = `${mapName} (demo ${name})`;
+  setStatus('');
+  running = true;
+}
+/** The demo stops (a key, a click, the pad, or its end): a new game, as the attract loop gave way to the menu. */
+function stopDemo() {
+  if (!demo) return;
+  demo = null;
+  $('demo').value = '';
+  endGame().catch((err) => setStatus(err.message, true));
+}
+/**
+ * One display frame of the demo: the clock moves by the real time (at most a fifth of a second: a hidden tab
+ * does not skip ahead), the view and the entities are the recording's at that time, the faces come from the SQL
+ * for that view (session.demoFrame), the frames reached since the last call play their sounds, effects and prints.
+ */
+async function demoFrame(now) {
+  const d = demo;
+  const dt = Math.min(0.2, Math.max(0, now - d.at) / 1000);
+  d.at = now;
+  d.time += dt;
+  const st = d.player.at(d.time);
+  if (d.player.finished && st.frac >= 1) { stopDemo(); return; }
+  const pad = input.pollPad();
+  if (pad && pad.pressed.size) { stopDemo(); return; }
+  let t = performance.now();
+  const f = await session.demoFrame(st.view, st.brushes);
+  if (demo !== d) return;   // (stopped while the query ran: this frame is nobody's)
+  perf.tic = 0;
+  perf.faces = performance.now() - t;
+  perf.rows = f.faces.length;
+  last = demoRow(st);
+  const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
+  const { rows, fx } = d.player.soundRows(st.events, st.frame, st.view);
+  if (rows.length) audio.playEvents(rows, listener);
+  audio.setLoops(st.loops);
+  audio.update(listener);
+  const effects = [...st.events.fx, ...fx];
+  if (effects.length) tempEnts.add(effects, d.time, renderer);
+  t = performance.now();
+  renderer.runParticles(dt, d.time);
+  brushFrames = f.brushFrames; brushAngles = f.brushAngles;
+  drawFrame(0, last, f.faces, st.ents, st.lights, d.time, dt);
+  perf.draw = performance.now() - t;
+  updateStats();
+}
+/**
+ * The demo's player state as the page's Q2_TIC row: the view, the stats the status bar reads (STAT_HEALTH, STAT_AMMO,
+ * STAT_ARMOR with its icon, the selected and the picked-up item by their icons, the timer, the help icon), the gun in
+ * hand with its frame and angles as the server sent them, the blend, and the prints of the frames reached.
+ */
+function demoRow(st) {
+  const d = demo, v = st.view, s = v.stats, dm = d.player.demo;
+  const image = (i) => (i > 0 ? dm.images[i] ?? '' : '');
+  const itemByIcon = (icon) => (icon ? Math.max(0, ITEMS.findIndex((it) => it && it[1] === icon)) : 0);
+  const gunName = v.gunindex > 0 ? dm.models[v.gunindex] ?? '' : '';
+  const weapon = Number(Object.keys(WEAPONS).find((k) => WEAPONS[k].view === gunName) ?? 0);
+  const armorIcon = image(s[4]);
+  // the prints: a centerprint for 2.5 s (scr_centertime), a console print at the top for 3 s (con_notifytime)
+  for (const cp of st.events.centerprints) d.cprint = { text: cp.replace(/\n+$/, ''), until: d.time + 2.5 };
+  for (const [level, text] of st.events.prints) if (level >= 1) d.msg = { text: text.replace(/\n+$/, ''), until: d.time + 3 };
+  const row = {
+    CLIENT: 1, TIME_: d.time, PX: v.x, PY: v.y, PZ: v.z, VIEW_Z: v.viewZ, YAW: v.yaw, PITCH: v.pitch, ROLL: v.roll,
+    HEALTH: s[1], ARMOR: ARMOR_ICONS.includes(armorIcon) ? s[5] : 0, ARMOR_TYPE: Math.max(0, ARMOR_ICONS.indexOf(armorIcon)),
+    POWER_ARMOR: armorIcon === 'i_powershield' ? 1 : 0, CELLS: armorIcon === 'i_powershield' ? s[5] : 0,
+    WEAPON: weapon, GUN_MODEL: gunName, GUNFRAME: v.gunframe, GUN_ANGLES: st.ps.gunAngles, BLEND: v.blend,
+    INV_SEL: itemByIcon(image(s[6])), PICKUP_ITEM: itemByIcon(image(s[7])),
+    TIMER_ICON: Math.max(0, TIMER_ICONS.indexOf(image(s[9]))), TIMER: s[10], HELP_CHANGED: s[11] ? 1 : 0,
+    DMG_TIME: s[15] & 1 ? d.time : -10, BONUS_TIME: -10, DMG_TAKE: 0, DMG_SAVE: 0,
+    WATERLEVEL: v.rdflags & 1 ? 3 : 0, WATERTYPE: 0, INTERMISSION: st.ps.pmType === 4 ? 1 : 0, DEAD: 0, DEATHMATCH: 0,
+    CPRINT: d.cprint && d.cprint.until > d.time ? d.cprint.text : null, MSG: d.msg && d.msg.until > d.time ? d.msg.text : null,
+    BOBTIME: 0, XYSPEED: 0, DUCKED: 0, DEMO: 1,
+  };
+  if (weapon && WEAPONS[weapon].ammo) row[WEAPONS[weapon].ammo.toUpperCase()] = s[3];
+  return row;
+}
+
 // ── leaving a level: what the server did with the map string (SV_Map; src/levels.js) ─────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function changeLevel(target) {
@@ -556,9 +658,11 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   tempEnts.draw(r, bsp, time);
   r.drawParticles();
   // the weapon in hand (depth hack: drawn over everything near); none at the intermission
+  // (a demo's row names the gun model, its frame and its angles as the server sent them: ps.gunindex, gunframe, gunangles)
   const wp = WEAPONS[last.WEAPON];
-  if (!last.DEAD && !last.INTERMISSION && wp) {
-    const vm = res.models.get(res.byName.get(wp.view));
+  const gunName = last.GUN_MODEL ?? wp?.view;
+  if (!last.DEAD && !last.INTERMISSION && gunName) {
+    const vm = res.models.get(res.byName.get(gunName));
     if (vm) {
       // SV_CalcGunOffset: the gun sways with the walk cycle and lags behind turns of the view (the delta over a
       // tenth of a second, at most 45 degrees); it sits at the eye, which already carries the view's bob
@@ -566,7 +670,8 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       let gr = xys * bfs * 0.005, gy = xys * bfs * 0.01;
       if (Math.floor(bt) & 1) { gr = -gr; gy = -gy; }
       let gp = xys * bfs * 0.005;
-      if (gunPrev[which]) {
+      if (last.GUN_ANGLES) [gp, gy, gr] = last.GUN_ANGLES;
+      else if (gunPrev[which]) {
         const lag = (a, b) => { let d = a - b; if (d > 180) d -= 360; if (d < -180) d += 360; d *= 0.1 / Math.max(dt, 0.05); return Math.max(-45, Math.min(45, d)); };
         const dy = lag(gunPrev[which].yaw, last.YAW);
         gr += 0.1 * dy; gy += 0.2 * dy; gp += 0.2 * lag(gunPrev[which].pitch, last.PITCH);
@@ -575,7 +680,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       // the gun: RF_MINLIGHT, lit from the eye (CL_AddViewWeapon)
       const light = lightPoint(bsp, last.PX, last.PY, last.VIEW_Z);
       r.zb.fill(0, 0, r.w * r.h);
-      r.drawAlias(vm.mdl, viewFrame(vm.mdl, last, time), 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light,
+      r.drawAlias(vm.mdl, last.GUNFRAME ?? viewFrame(vm.mdl, last, time), 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light,
         { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z) });
     }
   }
@@ -596,10 +701,11 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
   if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
   if (last.DEAD) hud.drawCenter(r, session.twoPlayers || net ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
-  // the palette blend: damage, bonus, powerups, water
+  // the palette blend: damage, bonus, powerups, water (a demo's row carries the server's ps.blend as it was)
   let tint = null;
   const since = time - last.DMG_TIME;
-  if (since >= 0 && since < 0.5 && (last.DMG_TAKE || last.DMG_SAVE)) {
+  if (last.BLEND) tint = last.BLEND[3] > 0 ? [last.BLEND[0] * 255, last.BLEND[1] * 255, last.BLEND[2] * 255, last.BLEND[3]] : null;
+  else if (since >= 0 && since < 0.5 && (last.DMG_TAKE || last.DMG_SAVE)) {
     const a = Math.min(0.6, (last.DMG_TAKE * 0.03 + last.DMG_SAVE * 0.01) * (1 - since / 0.5) + 0.1);
     tint = [255, 0, 0, a];
   } else if (time - last.BONUS_TIME >= 0 && time - last.BONUS_TIME < 0.4) tint = [215, 186, 69, 0.25 * (1 - (time - last.BONUS_TIME) / 0.4)];
@@ -616,7 +722,8 @@ function updateStats() {
   fpsN++;
   const now = performance.now();
   if (now - fpsT > 500) { fps = (fpsN * 1000) / (now - fpsT); fpsT = now; fpsN = 0; }
-  const link = netGuest() ? ` · joined: ${net.guest.frames} frames from the host` : netHost() ? ` · hosting: ${net.host.sentFrames} frames sent${net.host.droppedFrames ? `, ${net.host.droppedFrames} dropped` : ''}` : '';
+  const link = netGuest() ? ` · joined: ${net.guest.frames} frames from the host` : netHost() ? ` · hosting: ${net.host.sentFrames} frames sent${net.host.droppedFrames ? `, ${net.host.droppedFrames} dropped` : ''}`
+    : demo ? ` · demo ${demo.name}: frame ${demo.player.played + 1} of ${demo.frames}` : '';
   statsEl.textContent = `${fps.toFixed(1)} fps · q2_tic ${perf.tic.toFixed(0)} ms · frame queries ${perf.faces.toFixed(0)} ms (${perf.rows} rows) · raster ${perf.draw.toFixed(0)} ms · ${renderer.particles.length} particles${link}`;
 }
 
@@ -803,6 +910,10 @@ async function usePak(buffer, label) {
   hud = new Hud(pak);
   audio.setPak(pak);
   $('map').innerHTML = maps.map((m) => `<option>${m}</option>`).join('');
+  // the pak's demos (demos/*.dm2): the demo pak's q2demo1, the full game's three
+  const demos = pak.list('demos/', '.dm2').map((n) => n.slice(6, -4));
+  $('demo').innerHTML = ['<option value="">—</option>', ...demos.map((m) => `<option>${m}</option>`)].join('');
+  $('demo').parentElement.hidden = !demos.length;
   $('pakname').textContent = label;
   const first = maps.includes(settings.map) ? settings.map : maps.includes('demo1') ? 'demo1' : maps.includes('base1') ? 'base1' : maps[0];
   await startMap(first, true);
@@ -812,7 +923,8 @@ async function boot() {
   try {
     db = await openDatabase();
     session = new Session(db, storage);
-    window.quake2 = { db, session, audio, menu, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
+    window.quake2 = { db, session, audio, menu, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));
     if (!resp.ok) throw new Error(`could not fetch pak0.pak (${resp.status}); pick a PAK file instead`);
@@ -830,6 +942,7 @@ $('pakfile').addEventListener('change', async (e) => {
   try { await usePak(await f.arrayBuffer(), f.name); } catch (err) { setStatus(err.message, true); }
 });
 $('map').addEventListener('change', (e) => { settings.map = e.target.value; saveSettings(); startMap(e.target.value, true).catch((err) => setStatus(err.message, true)); });
+$('demo').addEventListener('change', (e) => { if (e.target.value) playDemo(e.target.value).catch((err) => setStatus(err.message, true)); else if (demo) stopDemo(); });
 $('detail').value = settings.detail;
 $('detail').addEventListener('change', async (e) => {
   settings.detail = e.target.value; saveSettings();
