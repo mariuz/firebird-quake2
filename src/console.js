@@ -6,12 +6,12 @@
 // Nothing here touches the DOM: the page wires the input element to historyStep(), complete() and
 // submit(), and gives a host with what the commands act on, so the tests can drive it with a fake one.
 
-export const COMMANDS = ['dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'seed', 'timelimit', 'use'];
+export const COMMANDS = ['demomap', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'seed', 'timelimit', 'use'];
 const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
- *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value) }
+ *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), playDemo(name) }
  */
 export class Console {
   constructor(host) {
@@ -56,6 +56,13 @@ export class Console {
         const name = arg.toLowerCase();
         if (!h.pak.has(`maps/${name}.bsp`)) { say(`no map "${name}" in this pak`, true); return; }
         await h.startMap(name);
+        return;
+      }
+      case 'demomap': {
+        // CL_PlayDemo_f: a demo of the pak (demos/<name>.dm2) played over its map
+        const name = arg.toLowerCase().replace(/\.dm2$/, '');
+        if (!name || !h.pak.has(`demos/${name}.dm2`)) { say(`no demo "${name}" in this pak`, true); return; }
+        await h.playDemo?.(name);
         return;
       }
       case 'inven': h.toggleInventory(); return;

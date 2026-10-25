@@ -121,9 +121,15 @@ jobs:
       - name: Deathmatch
         run: npm run test:dm
 
+      # The pak's demo read and played headless (src/demo.js): every block consumed exactly, the frames, the view
+      # and the entities lerped, the events once, the sounds and flashes, the session's demo frame, a frame painted
+      - name: Demo playback
+        run: npm run test:demo
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
-      # quick save and load, the menu, a coop game and a deathmatch from the players select, a second page
+      # quick save and load, the menu, a coop game and a deathmatch from the players select, the pak's demo
+      # played from the select and stopped by a key, a second page
       # joining the first's game over WebRTC with the texts passed between them, the retired service worker
       # removing itself, no console errors. Then the same with the headers, on the threaded build.
       - name: Install Chromium for the browser test

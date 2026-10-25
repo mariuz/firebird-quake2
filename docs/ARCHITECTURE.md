@@ -24,6 +24,7 @@ src/loader.js bulk loads it all  ─────►  sql/game.sql      entities,
 src/main.js   the page: loop, drawing    sql/monsters.sql  AI, pushers, the tic, map init
 src/session.js maps, tics, the frame, saves (no DOM)
 src/net.js     a game shared over a data channel: host, guest, the texts (no DOM)
+src/demo.js    a .dm2 read as the server's messages, played between frames (no DOM)
 src/effects.js  explosions, beams, flashes, lights (no DOM)
    each frame:                           sql/render.sql    visibility and the frame
    SELECT * FROM q2_tic(...)      ─────► 20 Hz game logic, returns the player's view of itself
@@ -459,6 +460,27 @@ with `cl_predict 0` did; the roadmap has what a prediction would take. When the 
 game goes on with its second client standing (the gamepad moves it again); when the host leaves, the
 guest's page says so and starts a game of its own on a key.
 
+A demo of the pak (`src/demo.js`; the Demo select, or `demomap <name>` at the console) plays as the attract
+loop played it. `parseDemo` reads the `.dm2` up front as `CL_ParseServerMessage` read the server's stream: a
+block an int32 length and its messages, the server data, the configstrings (the models, sounds, images and
+light styles by index), the spawn baselines, then a frame a block (`svc_frame`: the player state as
+`CL_ParsePlayerstate` delta-read it from the frame it names, the packet entities as `CL_ParseDelta` read
+each against its last state or baseline), with the sounds, temporary entities, muzzle flashes and prints
+that came before it; a block not consumed to its last byte is an error, which is how the protocol (31, the
+3.14 demo's) is known to be read right. `DemoPlayer.at(t)` gives the view (origin, view offset, angles with
+the kick, the gun, the blend, the stats) and the entities lerped between the frame at `t` and the next
+(`CL_AddPacketEntities`: an entity in both moves, one just come snaps), the brush models apart by name, the
+looped sounds, the light styles from the configstrings, and the events of every frame reached since the
+last call, once; `soundRows` makes the sounds the page's rows (a sound without a position plays where its
+entity is) and a flash its weapon's sound and light. The page loads the demo's map as for a new game and
+`Session.demoBegin` hides the game's own alias models and sprites (the recording brings its own); each
+display frame `Session.demoFrame` moves the player's entity and row to the recording's view (the eye the
+frustum and PVS take) and each brush model to where the demo has it (written only when it moved), and asks
+`frame_all` as for the page's own game: the walls are the database's, everything else the recording's, and
+no tic runs. `demoRow` makes the player state the page's `Q2_TIC` row (the stats as the status bar reads
+them, the gun model, frame and angles the server sent, the blend), so `drawFrame` paints it unchanged. A key,
+a click, the pad or the demo's end stops it and a new game starts, as the attract loop gave way to the menu.
+
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
 brightness, renderer mode, sound, music) persist in `localStorage`. Input (`src/input.js`, an `Input`
@@ -531,6 +553,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `golden-test.mjs` | the painter's look: the twelve docs screenshots (three maps, four shots each) rendered again by `screenshot.mjs` and compared to `docs/` pixel for pixel, with the count and the box of what differs; the painter is deterministic, so a difference is a change, regenerated with the shots when it is meant |
 | `coop-test.mjs` | a coop game headless, through a `Session`: two clients, the second at its `info_player_coop`; each one's usercmd, row from the tic, view and inventory; the sight client alternating and passing over notarget; a monster hunting the sight client and, that one dead, the other; a death that ends nothing, the respawn a second later at the spot with the level-start pers and the body left (and gibbed); a weapon and a key that stay for the other client; a centerprint to one client; a save and a level change (there and back) with both; single player with one row |
 | `dm-test.mjs` | a deathmatch headless, through a `Session`: two clients at the map's deathmatch spots, no monsters, the deathmatch-only items; a taken item gone 30 s, back with its sound and particles, a new weapon raised only over the blaster; weapons that stay and one held left; a kill's frag, the tossed weapon, the respawn afresh at a spot by button or forced, a suicide's and the world's cost; an exit that kills, or ends the level when allowed; the frag and time limits, the same level flag, the intermission's button; a level change and a save keeping the mode; no health, armour or ammo spawned, infinite ammo, no falling damage, instant items, spawn farthest; the mega health's wait; coop and single player as they were |
+| `demo-test.mjs` | the pak's demo read and played headless (`src/demo.js`): every block of `q2demo1.dm2` consumed exactly, the server data, the configstrings' models and sounds all in the pak, the frames in order a tenth of a second apart, the player state and the entities; the view and an entity halfway between two frames, the events of the frames reached given once, the brush models apart, the light styles, the end; a sound placed at its entity, a muzzle flash's sound and light, the monsters' flash sounds; a `Session`'s demo frame: the map's own models hidden, the player's row at the view, the faces from the SQL, a brush model moved where the demo has it and not written again; a frame painted from the faces, the entities and the gun |
 | `net-test.mjs` | a game shared over a link (`src/net.js`), the two ends a loopback in one process: the host's `Session` with two clients, the map message and the guest's geometry from the pak alone, a frame a tic with the guest's own row and every face the map's, the guest's forward command walking its player at the host, two commands in a tic merged (turns summed, buttons held, the last impulse) and none standing, a turn turning it, the shots' sounds arriving, the inventory rows on request, a 48 KB message in four chunks, a frame dropped on a slow link, a level change's map and frames, a picture, the signalling texts packed and unpacked, rubbish refused, one end's close closing the other |
 | `audio-test.mjs` | the sound mix (`src/audio.js`) against a Web Audio that records: `S_Spatialize`'s fall-off (full within 80 units, ATTN_NORM silent from 1080, ATTN_IDLE twice as fast, ATTN_NONE everywhere) and pan (0.8 to the side, the listener's yaw), a one-shot per event cut by the next on its entity's channel but not on CHAN_AUTO, out of range or missing from the pak skipped, each sound decoded once, the loops summed per name at ATTN_STATIC with each side clamped, silent when unlisted and the channel kept, the speakers on and off with the frame, the page hidden and back, and the music: off, the drone, a track file from a picked folder, the volume |
 | `effects-test.mjs` | the temporary entities (`src/effects.js`): each effect row's particles and what it keeps, the explosions' frames, skins, translucency and fading light, the blaster hit turned to its direction, the BFG's sprite, a muzzle flash lighting its frame only, the `EF_` lights, beams lasting 0.1 and 0.12 s, a parasite's tongue (one per parasite, a segment every 30 units, 0.2 s), and an explosion painting a real frame |

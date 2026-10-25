@@ -56,14 +56,20 @@ the order they are to be taken.
   row. `test:dm` checks all of it headless; the browser test starts a deathmatch from the select. Left:
   the dmflags with no bearing here (teams by model or skin, friendly fire), the quad drop, and the
   player's name and skin (see *Player setup*).
-- **Demo playback**: the pak ships `demos/q2demo1.dm2`. Playing it means reading the server
-  messages (`svc_serverdata`, `svc_configstring`, `svc_spawnbaseline`, `svc_frame` with its
-  `svc_playerinfo` and `svc_packetentities`, as `CL_ParseServerMessage` read them) into entity states
-  and a player view each frame, and painting them: the renderer draws from rows already, so the demo's
-  entities and view become the frame's rows without a game tic. Quake 2 looped the demos behind the
-  main menu as its attract mode (`d1`, `demo1.dm2` in `default.cfg`). Recording follows from the same
-  format: the frame's rows written as the messages (`SV_WriteFrameToClient`), so a recorded game plays in
-  Quake 2 itself.
+- **Demo playback**: done (`src/demo.js`, the Demo select, `demomap` at the console). The pak's
+  `demos/q2demo1.dm2` is read as `CL_ParseServerMessage` read the server's messages (`svc_serverdata`,
+  `svc_configstring`, `svc_spawnbaseline`, `svc_frame` with its `svc_playerinfo` and `svc_packetentities`,
+  the sounds, the temporary entities, the muzzle flashes and the prints) into a player view and entity
+  states a frame, every block consumed to its last byte; `DemoPlayer` lerps the view and the entities between
+  frames as `CL_AddPacketEntities` did and gives each frame's events once. The demo's map is loaded as a
+  game's, its own alias models hidden, and each display frame the SQL is asked the faces for the recording's
+  view (`Session.demoFrame`: the player's entity and row moved there, the brush models to where the demo
+  has them), so the walls are the database's and the rest the recording's: no tic runs. A key or a click
+  stops it and a new game starts, as the attract loop gave way to the menu. `test:demo` checks the parsing,
+  the player, the session's frame and a painted frame headless; the browser test plays it from the select.
+  Left: the attract loop itself (the demo behind the main menu when nothing is played; the page starts a
+  game at once), and recording, which follows from the same format: the frame's rows written as the
+  messages (`SV_WriteFrameToClient`), so a recorded game plays in Quake 2 itself.
 - **The credits screen and the key bindings menu**: both left out of the menus. The credits are
   menu.c's `idcredits` text scrolled up the screen; the keys menu (`M_Menu_Keys_f`) would make the
   movement, weapon and action keys rebindable through `src/settings.js`, whose storage round trip and
@@ -168,7 +174,7 @@ the order they are to be taken.
   lines typed, Tab completes a command's name. `drop <item>` is `Cmd_Drop_f`: ammo a pickup's worth, a weapon
   not in hand, a powerup, power armour (off with the last), thrown ahead and not back to its dropper for a
   second; a dropped weapon carries no ammo.
-- **Demo playback / recording** (the `.dm2` file in the pak): see *Next*.
+- **Demo playback**: done (see *Next*); recording is not.
 
 ## Fidelity gaps in what exists
 

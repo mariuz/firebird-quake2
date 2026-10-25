@@ -55,6 +55,11 @@ the other joins (Join takes it and makes an answer to send back), and the host's
 player in it, each page painting its own view, the guest's from the frames the host sends it over a WebRTC
 data channel. There is no signalling server on a static site, so the two texts go by hand.
 
+The Demo select (or `demomap q2demo1` at the console) plays the recording the pak ships, as the attract
+loop played it: the view and the entities are the recording's, read from the server's messages as the
+client read them, and the walls are the database's, asked for that view each frame; any key or click stops
+it and a new game starts.
+
 `fetch-pak` needs 7-Zip or `unzip` to open the demo's self-extracting archive. If you own Quake 2, point
 the page at your own `pak0.pak` with the file picker, or copy it with `PAK=/path/to/pak0.pak npm run fetch-pak`:
 the base unit's maps and monsters work the same way.

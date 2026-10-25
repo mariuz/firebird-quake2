@@ -34,6 +34,7 @@
         <label>PAK <span id="pakname" class="pill">—</span>
           <input id="pakfile" type="file" accept=".pak,.PAK"></label>
         <label>Map <select id="map"></select></label>
+        <label title="The pak's recorded demos (demos/*.dm2), played as the attract mode played them: the view and the entities are the recording's, the walls the database's; any key or click stops it">Demo <select id="demo"><option value="">—</option></select></label>
         <label>Skill <select id="skill">
           <option value="0">Easy</option>
           <option value="1">Medium</option>
@@ -93,7 +94,8 @@
         With two players (coop, or deathmatch: the maps' deathmatch weapons and spots, no monsters, frags at the top right, <kbd>F1</kbd> the score board;
         <code>dmflags</code>, <code>fraglimit</code> and <code>timelimit</code> at the console) the view is split, the keyboard and mouse are the first player's and the gamepad the second's.
         Over the network: one page hosts (Host makes an offer to send to the other player), the other joins (Join takes the offer and makes an answer to send back),
-        and the host's game runs with the guest's player in it, each page its own view.</p>
+        and the host's game runs with the guest's player in it, each page its own view.
+        The Demo select (or <code>demomap q2demo1</code> at the console) plays a recording from the pak; any key or click stops it.</p>
     </section>
 
     <section class="console">
