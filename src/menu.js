@@ -1,7 +1,10 @@
 // menu.js – Quake 2's menus (client/menu.c on client/qmenu.c, win32/vid_menu.c's video menu), drawn
 // into the 8-bit frame over the paused game: the main menu with its spinning cursor, the game menu
-// (a new game at a skill, load, save), the fifteen save slots, the options and video menus bound to
-// the page's settings, and the quit screen. The page supplies `host` for everything the menus act on.
+// (a new game at a skill, load, save, the credits), the fifteen save slots, the options and video menus bound to
+// the page's settings, the keys menu that rebinds them, and the quit screen. The page supplies `host` for
+// everything the menus act on.
+
+import { ACTIONS, keyName } from './input.js';
 
 const MENU_IN = 'misc/menu1.wav', MENU_MOVE = 'misc/menu2.wav', MENU_OUT = 'misc/menu3.wav';
 const RCOLUMN_OFFSET = 16, LCOLUMN_OFFSET = -16, SLIDER_RANGE = 10;
@@ -19,7 +22,8 @@ const separator = () => ({ type: 'separator', x: 0, y: 0 });
 export class Menu {
   /**
    * host: { hud, playing(), newGame(skill), slots() → [{ valid, name }] × 15, loadSlot(i), saveSlot(i),
-   *         get(key), set(key, value), console(), quit(), sound(name) }
+   *         get(key), set(key, value), resetDefaults(), resetVideo(), bind(action, code), unbind(action),
+   *         credits() → lines, console(), quit(), sound(name) }
    */
   constructor(host) {
     this.host = host;
@@ -179,7 +183,7 @@ export class Menu {
   }
 
   /**
-   * M_Menu_Game_f: easy, medium, hard; load game, save game (the credits are left out). The players spin
+   * M_Menu_Game_f: easy, medium, hard; load game, save game, credits. The players spin
    * is this port's: a new game at a skill is for one player, or two in coop or deathmatch (the view split,
    * the gamepad the second's), which Quake 2 reached through its network menu.
    */
@@ -196,9 +200,81 @@ export class Menu {
         separator(),
         action('load game', 60, () => this.loadMenu(), { left: true }),
         action('save game', 70, () => this.saveMenu(), { left: true }),
+        action('credits', 80, () => this.credits(), { left: true }),
       ],
     });
     m.layout = (r) => { m.x = r.w >> 1; m.y = (r.h - (m.items[m.items.length - 1].y + 10)) >> 1; };
+    this.push(m);
+  }
+
+  /**
+   * M_Menu_Credits_f: the credits scrolled up the screen, a line every ten pixels rising a pixel every 40 ms,
+   * a line that starts with '+' in the highlighted font, each centred; once the last line is off the top they
+   * start again from the bottom. Escape leaves.
+   */
+  credits(now = null) {
+    const lines = this.host.credits();
+    let start = now;
+    const draw = (r, realtime) => {
+      start ??= realtime;
+      let y = r.h - (realtime - start) / 40;
+      for (let i = 0; i < lines.length && y < r.h; y += 10, i++) {
+        if (y <= -8) continue;
+        const bold = lines[i][0] === '+';
+        const s = bold ? lines[i].slice(1) : lines[i];
+        const x = (r.w - s.length * 8) >> 1;
+        for (let j = 0; j < s.length; j++) r.drawChar(this.host.hud.conchars, (s.charCodeAt(j) & 127) + (bold ? 128 : 0), x + j * 8, Math.floor(y));
+      }
+      if (y < 0) start = realtime;
+    };
+    const key = (code) => { if (code === 'Escape') this.pop(); return null; };
+    this.push({ id: 'credits', draw, key, get start() { return start; } });
+  }
+
+  /**
+   * M_Menu_Keys_f: every bindable action with its keys (Key_KeynumToString's names, "or" between two), nine
+   * pixels a row, the cursor an '=' while a key is awaited: Enter asks for a key for the action (the next key
+   * pressed binds it, taking it from whatever it was bound to; Escape and the backquote cancel), Backspace or
+   * Delete unbinds. The status bar says which.
+   */
+  keysMenu() {
+    const h = this.host;
+    const IDLE = 'enter to change, backspace to clear', GRAB = 'press a key or button for this action';
+    const m = this.framework({
+      id: 'keys', banner: 'm_banner_customize', statusbar: IDLE,
+      items: ACTIONS.map((a, i) => action(a.name, i * 9, null, { grayed: true, action: a.id })),
+    });
+    m.grab = false;
+    m.layout = (r) => { m.x = r.w >> 1; m.y = (r.h - (ACTIONS.length * 9)) >> 1; };
+    const base = m.draw;
+    m.draw = (r, realtime) => {
+      base(r, realtime);
+      // DrawKeyBindingFunc: the keys after the column, "???" for none
+      const binds = h.get('binds') ?? {};
+      for (const it of m.items) {
+        const keys = binds[it.action] ?? [];
+        const x = m.x + RCOLUMN_OFFSET, y = m.y + it.y;
+        if (!keys.length) { this.str(r, x, y, '???'); continue; }
+        const name = keyName(keys[0]);
+        this.str(r, x, y, name);
+        if (keys[1]) { this.str(r, x + 8 + name.length * 8, y, 'or'); this.str(r, x + 32 + name.length * 8, y, keyName(keys[1])); }
+      }
+      // KeyCursorDrawFunc: '=' while a key is awaited (the framework drew the blinking arrow)
+      if (m.grab) r.drawChar(this.host.hud.conchars, 61, m.x, m.y + m.items[m.cursor].y);
+    };
+    m.key = (code) => {
+      const it = m.items[m.cursor];
+      if (m.grab) {
+        if (code !== 'Escape' && code !== 'Backquote') h.bind(it.action, code);
+        m.grab = false; m.statusbar = IDLE;
+        return MENU_OUT;
+      }
+      switch (code) {
+        case 'Enter': case 'NumpadEnter': m.grab = true; m.statusbar = GRAB; return MENU_IN;   // KeyBindingFunc
+        case 'Backspace': case 'Delete': case 'NumpadDecimal': h.unbind(it.action); return MENU_OUT;
+        default: return this.defaultKey(m, code);
+      }
+    };
     this.push(m);
   }
 
@@ -253,8 +329,9 @@ export class Menu {
         spin('always run', 40, YESNO, () => (h.get('alwaysRun') ? 1 : 0), (v) => h.set('alwaysRun', !!v)),
         spin('invert mouse', 50, YESNO, () => (h.get('invertMouse') ? 1 : 0), (v) => h.set('invertMouse', !!v)),
         spin('crosshair', 60, ['none', 'cross', 'dot', 'angle'], () => h.get('crosshair'), (v) => h.set('crosshair', v)),
-        action('reset defaults', 80, () => h.resetDefaults()),
-        action('go to console', 90, () => { this.off(); h.console(); }),
+        action('customize controls', 80, () => this.keysMenu()),
+        action('reset defaults', 90, () => h.resetDefaults()),
+        action('go to console', 100, () => { this.off(); h.console(); }),
       ],
     });
     m.layout = (r) => { m.x = r.w >> 1; m.y = (r.h >> 1) - 58; };

@@ -70,10 +70,16 @@ the order they are to be taken.
   Left: the attract loop itself (the demo behind the main menu when nothing is played; the page starts a
   game at once), and recording, which follows from the same format: the frame's rows written as the
   messages (`SV_WriteFrameToClient`), so a recorded game plays in Quake 2 itself.
-- **The credits screen and the key bindings menu**: both left out of the menus. The credits are
-  menu.c's `idcredits` text scrolled up the screen; the keys menu (`M_Menu_Keys_f`) would make the
-  movement, weapon and action keys rebindable through `src/settings.js`, whose storage round trip and
-  checks already exist, and `src/input.js`, which reads them.
+- **The credits screen and the key bindings menu**: done. The game menu's `credits` scrolls menu.c's
+  `idcredits` text (`src/credits.js`; the pak has no `credits` file) up the screen as
+  `M_Credits_MenuDraw` did, the `+` lines highlighted, round again once the last is off the top. The
+  options menu's `customize controls` is `M_Menu_Keys_f`: the eighteen actions of `bindnames` that mean
+  something here (no mouse look, keyboard look, sidestep or centre view) with their keys named as
+  `Key_KeynumToString` named them, Enter then a key binds (the key leaves whatever it was bound to; two keys an
+  action, a third makes both go first), Backspace unbinds, and the binds live in `settings.binds`
+  (`src/settings.js` checks them on the way in) which `src/input.js` reads each tic; the options' reset
+  defaults puts them back as `exec default.cfg` did. The weapon and item keys (1–0, G, Q, I, B, E) stay
+  fixed, as Quake's menu did not list them; the mouse button and the wheel are not bindable.
 - **Fidelity against the real software renderer**: `test:golden` compares the painter against itself.
   Screenshots from ref_soft at the same viewpoints (the real engine on a Windows machine, `screenshot`
   at 320×240 with the same fov, the same frame of the same map), kept beside the docs' shots and
@@ -284,8 +290,9 @@ the order they are to be taken.
   crosshair; driver = the renderer mode, video mode = the detail, brightness, fullscreen); quit shows the
   quit picture. The score board is a deathmatch screen (`Cmd_Score_f` returns in single player; see *Local
   deathmatch*).
-  Left out: the credits (id's text), multiplayer (drawn greyed: there is no network), and the options
-  that mean nothing here (sound quality, lookspring, lookstrafe, free look, joystick, the key bindings).
+  The credits and the key bindings menu came later (see *Next*). Left out: multiplayer (drawn greyed:
+  the network game has its own buttons on the page), and the options that mean nothing here (sound
+  quality, lookspring, lookstrafe, free look, joystick).
 
 ## Rendering
 

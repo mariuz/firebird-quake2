@@ -4,7 +4,7 @@
 //   node scripts/input-test.mjs
 
 import { readPad, padImpulse, padScreens, padMenuKeys, firstPad, axis, DEAD, BUTTON } from '../src/gamepad.js';
-import { Input, GAME_KEYS } from '../src/input.js';
+import { Input, GAME_KEYS, ACTIONS, DEFAULT_BINDS, defaultBinds, bindKey, keyName, normalizeKey } from '../src/input.js';
 
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failures++; };
@@ -96,6 +96,29 @@ check(readPad(null) === null, 'no pad reads as null');
   inp.key('Slash'); check(cmd()[8] === 12, '/ is the next weapon (12)');
   inp.key('BracketRight'); check(cmd()[8] === 14, '] is the inventory\'s next (14)');
   check(GAME_KEYS.has('KeyW') && GAME_KEYS.has('Tab') && !GAME_KEYS.has('F6'), 'the game keys the browser must not act on are listed, the page\'s own are not');
+  // the binds (settings.binds, the keys menu): the keys read are whatever each action is bound to
+  check(inp.bound('KeyW') === 'forward' && inp.bound('ControlRight') === 'attack' && inp.bound('F1') === 'help' && inp.bound('KeyZ') === null, 'a key says what it is bound to (the right control as the control)');
+  bindKey(inp.binds, 'forward', 'KeyK');
+  check(inp.binds.forward.join() === 'KeyW,ArrowUp'.replace('KeyW,ArrowUp', 'KeyK') || inp.binds.forward.length === 1, `bound anew with two keys held, the action keeps the new key alone (${inp.binds.forward.join()})`);
+  inp.clear(); inp.key('KeyW'); c = cmd();
+  check(c[1] === 0 && inp.bound('KeyW') === null, 'W no longer walks');
+  inp.clear(); inp.key('KeyK'); c = cmd();
+  check(c[1] === 1, 'K does');
+  bindKey(inp.binds, 'invnext', 'KeyK');
+  inp.clear(); inp.key('KeyK'); c = cmd();
+  check(c[1] === 0 && c[8] === 14 && inp.binds.forward.length === 0, 'bound to the inventory\'s next, K sends its impulse and walks no more (a key has one action)');
+  check(inp.binds.invnext.join() === 'BracketRight,KeyK', 'a second key joins an action with one');
+  bindKey(inp.binds, 'invnext', 'KeyM');
+  check(inp.binds.invnext.join() === 'KeyM', 'a third makes both go first (KeyBindingFunc unbound the two)');
+  inp.binds = defaultBinds();
+  inp.clear(); inp.key('KeyW'); c = cmd();
+  check(c[1] === 1 && inp.binds.attack.join() === 'Control,KeyF', 'the defaults put back');
+  check(keyName('KeyW') === 'w' && keyName('Digit3') === '3' && keyName('ArrowUp') === 'UPARROW' && keyName('ControlLeft') === 'CTRL' && keyName('ShiftRight') === 'SHIFT' && keyName('Space') === 'SPACE'
+    && keyName('BracketLeft') === '[' && keyName('PageDown') === 'PGDN' && keyName('F1') === 'F1' && keyName('Numpad5') === 'KP_5' && keyName('Delete') === 'DEL',
+    'the keys are named as Key_KeynumToString named them');
+  check(normalizeKey('ShiftLeft') === 'Shift' && normalizeKey('AltRight') === 'Alt' && normalizeKey('KeyA') === 'KeyA', 'the two shifts, controls and alts are one key each');
+  check(ACTIONS.length === 18 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
+    'every action has its default keys, no key twice');
   inp.clear();
   inp.mouse(100, -50, settings); c = cmd();
   check(Math.abs(c[3] - (-100 * 0.022 * 7)) < 1e-9 && Math.abs(c[4] - (-50 * 0.022 * 7)) < 1e-9, 'the mouse turns right for right and looks up for up, at 0.022 degrees a count times the sensitivity');

@@ -60,6 +60,10 @@ loop played it: the view and the entities are the recording's, read from the ser
 client read them, and the walls are the database's, asked for that view each frame; any key or click stops
 it and a new game starts.
 
+Escape brings up Quake 2's menus over the game: a new game, the save slots, the credits, the options with
+`customize controls` (the keys menu: Enter then a key rebinds an action, Backspace clears it; the binds are
+kept with the settings in this browser), the video modes, quit.
+
 `fetch-pak` needs 7-Zip or `unzip` to open the demo's self-extracting archive. If you own Quake 2, point
 the page at your own `pak0.pak` with the file picker, or copy it with `PAK=/path/to/pak0.pak npm run fetch-pak`:
 the base unit's maps and monsters work the same way.

@@ -113,6 +113,33 @@ try {
     const m3 = await frames(page); await sleep(700); const m4 = await frames(page);
     assert(m4 > m3, `Escape again closes it and the game goes on (${m4 - m3} frames in 0.7 s)`);
 
+    // the credits scroll from the game menu; the keys menu (options, customize controls) binds K to attack through
+    // the page's keys, kept in the settings, and K then fires; reset defaults puts the keys back
+    const menuId = () => page.evaluate(() => window.quake2?.menu?.current?.id ?? null).catch(() => null);
+    const press = async (...codes) => { for (const c of codes) { await page.keyboard.press(c); await sleep(120); } };
+    await press('Escape', 'Enter', 'ArrowUp', 'Enter');
+    assert((await menuId()) === 'credits', 'the game menu\'s last item opens the credits');
+    await sleep(1200);
+    const scrolled = await page.evaluate(() => performance.now() - (window.quake2.menu.current.start ?? performance.now())).catch(() => 0);
+    assert(scrolled > 1000, `which scroll (${scrolled.toFixed(0)} ms in)`);
+    await press('Escape', 'Escape', 'ArrowDown', 'ArrowDown', 'Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
+    assert((await menuId()) === 'keys', 'options, customize controls opens the keys menu');
+    await press('Enter', 'KeyK');
+    const bound = await page.evaluate(() => ({ attack: window.quake2.settings.binds.attack, stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).binds.attack, input: window.quake2.input.bound('KeyK') })).catch(() => ({}));
+    assert(bound.attack?.join() === 'KeyK' && bound.stored?.join() === 'KeyK' && bound.input === 'attack', `Enter then K binds attack to K, kept in the settings (${JSON.stringify(bound)})`);
+    await press('Escape', 'Escape', 'Escape');
+    assert((await menuId()) === null, 'Escape leaves the menus');
+    const shots = () => page.evaluate(() => window.quake2.sql("SELECT COUNT(*) n FROM sound_events WHERE snd = 'weapons/blastf1a.wav'").then((r) => r[0].N)).catch(() => -1);
+    const sh0 = await shots();
+    await page.keyboard.down('k'); await sleep(700); await page.keyboard.up('k'); await sleep(300);
+    const sh1 = await shots();
+    assert(sh1 > sh0 && sh0 >= 0, `K now fires the blaster (${sh0} → ${sh1} shots)`);
+    await press('Escape', 'Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');   // (the main menu's cursor stayed on options)
+    const reset = await page.evaluate(() => window.quake2.settings.binds.attack.join()).catch(() => '');
+    assert(reset === 'Control,KeyF', `reset defaults puts the keys back (${reset})`);
+    await press('Escape', 'Escape');
+    assert((await menuId()) === null, 'and the menus close');
+
     // two players: the players select starts a new coop game; both clients come with every tic, the screen is
     // split in two views half as high, the game runs on; then one player again, the whole screen
     const state = () => page.evaluate(() => ({ coop: window.quake2?.session?.coop, deathmatch: window.quake2?.session?.deathmatch, clients: window.quake2?.session?.clients?.length,
