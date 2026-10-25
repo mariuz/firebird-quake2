@@ -44,6 +44,7 @@ npm run test:browser                  # the page in a headless Chromium (npx pla
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
 npm run serve -- --coi                # with COOP/COEP: cross-origin isolated, the threaded build
+npm run perf                          # the performance guard CI runs: the load, the tics, the frame query and the raster against docs/perf-baseline.json (--record after a change meant to cost more)
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
 ```
 
@@ -65,6 +66,10 @@ short stories of what changed and what it measured; keep that.
   two in-memory databases and alternates tics, so load noise hits both alike. Make the baseline
   with `for f in schema physics game weapons monsters render; do git show HEAD:sql/$f.sql > /tmp/oldsql/$f.sql; done`
   (the old SQL must still load with the current `src/loader.js`: keep schema-dependent resets in SQL, not in the loader).
+- `perf-guard.mjs` is what CI holds the figures with: each in units of a calibration run on the same machine
+  (so a runner's speed drops out), failing past twice the baseline in `docs/perf-baseline.json`. A change
+  that costs more on purpose records the baseline again with `--record` in the same commit; a red guard
+  on a change that should not cost more is a regression to find with the tools below.
 - `tic-bench.mjs` (median over 200 tics), `raster-bench.mjs` (`--cold` rebuilds every surface),
   `bench.mjs` (a breakdown), and `node --cpu-prof` with `scripts/prof-summary.mjs` for the JS side.
 - Expect, in `firebird-wasm` 0.3.0: PSQL statement ~1.2 µs, PK fetch ~5.5 µs, cursor open ~10 µs,

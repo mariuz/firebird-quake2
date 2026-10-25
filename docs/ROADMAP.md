@@ -85,11 +85,15 @@ the order they are to be taken.
   at 320×240 with the same fov, the same frame of the same map), kept beside the docs' shots and
   compared with a tolerance, would measure how far the painter is from the original rather than from
   its own last commit. No code: the pictures and a comparison script.
-- **A performance guard in CI**: the repository measures carefully, but nothing stops a slower tic or
-  load from merging. A workflow step that runs `tic-bench` and the load time and fails above the last
-  recorded figures by a margin wide enough for the runner's noise (this machine varies by ±50 % between
-  runs, so the margin is large and the guard catches only what matters) would hold the numbers the docs
-  quote.
+- **A performance guard in CI**: done (`scripts/perf-guard.mjs`, `npm run perf`, a step of the workflow).
+  It measures demo1's load, an idle and a walking tic, the frame query and the raster, and takes each in
+  units of a calibration run just before and after on the same machine (50,000 primary-key fetches of the
+  engine for the SQL figures, a fixed loop over a frame's buffer for the raster), so a runner faster or
+  slower than the machine that recorded the baseline compares all the same; `docs/perf-baseline.json`
+  holds the units and the margin, and a figure past twice its baseline fails the build. The calibration
+  holds the units within about ±15 % between runs here, against ±50 % for the milliseconds, so the margin
+  catches only what matters (the 17 ms a tic of the falling barrels was four times the tic). A change that
+  is meant to cost more records the baseline again (`--record`) in the same commit.
 - **More than two local players**: the page's views come from `session.clients.length` and a second
   gamepad is a second input, so three or four players in a grid are mostly page work on top of coop
   (`Renderer.setSize(w, h, views)`, `readInput`, the gamepads by index) and a `client` beyond 2 in the
