@@ -23,6 +23,7 @@ src/loader.js bulk loads it all  ─────►  sql/game.sql      entities,
                                          sql/weapons.sql   the player and the ten weapons
 src/main.js   the page: loop, drawing    sql/monsters.sql  AI, pushers, the tic, map init
 src/session.js maps, tics, the frame, saves (no DOM)
+src/net.js     a game shared over a data channel: host, guest, the texts (no DOM)
 src/effects.js  explosions, beams, flashes, lights (no DOM)
    each frame:                           sql/render.sql    visibility and the frame
    SELECT * FROM q2_tic(...)      ─────► 20 Hz game logic, returns the player's view of itself
@@ -412,6 +413,33 @@ screen are per view: F1 and Tab are the first player's, the pad's Back and Y its
 coop; `Input.padScreens`), its d-pad the inventory's keys (`padImpulse`: invnext, invprev, invuse); the
 particles are run once a frame and drawn in both views.
 
+A game over the network (`src/net.js`) is a coop game whose second client is on another page. The host's
+page is the server, as sv_main.c was: its `Session` runs the game with two clients, and each tic the second
+client's usercmd is what `HostLink.takeCommand` merges from the commands the guest sent since the last tic
+(the turns summed, a button pressed in any held, the latest movement and run, the last impulse; none, the
+guest stands, as a client whose packets did not come stood; a guest sends one every animation frame, so
+only a paused, hidden or menu-bound page is silent). After the tic the host asks the frame once for itself and once for
+client 2 in the fast mode and sends the guest that frame (`sendFrame`: the faces as `[face, entity, origin]`,
+the entities, the loops, the styles, the brush models' frames and angles, the guest's own `Q2_TIC` row, the
+tic's sounds and effects, which came with the host's own frame query, and the inventory rows when the
+guest's screen is up), dropping it when the channel has more than 256 KB queued. The guest's page
+(`GuestLink`) sends `Input.read`'s command each of its own tics and paints the newest frame it holds
+exactly as the page paints its own (`drawFrame`), the sounds at its own ear, the effects and particles run
+there; it loads the pak as every page does and, at each map message (sent from `mapLoaded`: the name, the
+sky and its rotation, the CD track, the looped speakers, the host's view size and fov, which the guest's
+frustum must match), the map's geometry for the painter alone (`loadMapModels`, the BSP and its brush
+models into `res` with no database), so it runs no game logic and its own Firebird stands idle. A picture
+at a unit's end is sent too. The wire is JSON in chunks of 16,000 characters over one ordered data channel
+(`Link`), a frame of demo1 being 10–30 KB; the two sides know nothing of WebRTC and the network test runs
+them over `Loopback.pair()` in one process. `Peer` holds the `RTCPeerConnection`: the host makes an offer,
+gathers its candidates (at most three seconds for the STUN server; one machine or one network needs none)
+and shows the description as a text (`packSignal`: gzipped and base64'd, some six hundred characters), the
+guest answers it the same way, the host accepts the answer, and `ready` resolves with the Link when the
+channel opens. There is no prediction: a guest sees its own move a round trip late, as a Quake 2 client
+with `cl_predict 0` did; the roadmap has what a prediction would take. When the guest leaves, the host's
+game goes on with its second client standing (the gamepad moves it again); when the host leaves, the
+guest's page says so and starts a game of its own on a key.
+
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
 brightness, renderer mode, sound, music) persist in `localStorage`. Input (`src/input.js`, an `Input`
@@ -483,12 +511,13 @@ query and the raster. The SQL console runs any statement against the live game d
 | `session-test.mjs` | the game as the page plays it, without the page (`src/session.js`): a map started, tics, the frame decoded (the sounds each once, the speakers every tenth frame, both renderer modes the same world faces), a slot saved, listed and loaded back exactly, levels left and come back to as left, a save carrying them, a unit's end and a new game forgetting them, the death screen's load request taken once, no storage no saves |
 | `golden-test.mjs` | the painter's look: the twelve docs screenshots (three maps, four shots each) rendered again by `screenshot.mjs` and compared to `docs/` pixel for pixel, with the count and the box of what differs; the painter is deterministic, so a difference is a change, regenerated with the shots when it is meant |
 | `coop-test.mjs` | a coop game headless, through a `Session`: two clients, the second at its `info_player_coop`; each one's usercmd, row from the tic, view and inventory; the sight client alternating and passing over notarget; a monster hunting the sight client and, that one dead, the other; a death that ends nothing, the respawn a second later at the spot with the level-start pers and the body left (and gibbed); a weapon and a key that stay for the other client; a centerprint to one client; a save and a level change (there and back) with both; single player with one row |
+| `net-test.mjs` | a game shared over a link (`src/net.js`), the two ends a loopback in one process: the host's `Session` with two clients, the map message and the guest's geometry from the pak alone, a frame a tic with the guest's own row and every face the map's, the guest's forward command walking its player at the host, two commands in a tic merged (turns summed, buttons held, the last impulse) and none standing, a turn turning it, the shots' sounds arriving, the inventory rows on request, a 48 KB message in four chunks, a frame dropped on a slow link, a level change's map and frames, a picture, the signalling texts packed and unpacked, rubbish refused, one end's close closing the other |
 | `audio-test.mjs` | the sound mix (`src/audio.js`) against a Web Audio that records: `S_Spatialize`'s fall-off (full within 80 units, ATTN_NORM silent from 1080, ATTN_IDLE twice as fast, ATTN_NONE everywhere) and pan (0.8 to the side, the listener's yaw), a one-shot per event cut by the next on its entity's channel but not on CHAN_AUTO, out of range or missing from the pak skipped, each sound decoded once, the loops summed per name at ATTN_STATIC with each side clamped, silent when unlisted and the channel kept, the speakers on and off with the frame, the page hidden and back, and the music: off, the drone, a track file from a picked folder, the volume |
 | `effects-test.mjs` | the temporary entities (`src/effects.js`): each effect row's particles and what it keeps, the explosions' frames, skins, translucency and fading light, the blaster hit turned to its direction, the BFG's sprite, a muzzle flash lighting its frame only, the `EF_` lights, beams lasting 0.1 and 0.12 s, a parasite's tongue (one per parasite, a segment every 30 units, 0.2 s), and an explosion painting a real frame |
 | `settings-test.mjs` | the page's settings (`src/settings.js`): the defaults, the round trip through storage, and each stored value checked against what it can be (a bad one back to its default, a full storage harmless) |
 | `replay-test.mjs` | the same seed and the same 120 tics of input give the same game twice (every entity, the game row, the sounds), another seed another game, and a game loaded from a save goes on exactly as the saved one did |
 | `screenshot.mjs [map] [prefix] [--at=x,y,z,yaw] [--sql] [--compare]` | headless frames to PNG; `--compare` asserts both renderer modes paint identical pixels |
-| `browser-test.mjs [--coi]` | the page itself in a headless Chromium (Playwright), served without COOP/COEP as Pages serves it: not isolated, no service worker, the build without threads (with `--coi`: isolated, the threaded build); the pak downloads, Firebird runs in its worker, frames come, keys move, `F6`/`F9` save and load, Escape pauses; the retired service worker removes itself; no console errors, no 404 but the music and the favicon. CI runs it; `CHROME=` points it at a Chromium already installed |
+| `browser-test.mjs [--coi]` | the page itself in a headless Chromium (Playwright), served without COOP/COEP as Pages serves it: not isolated, no service worker, the build without threads (with `--coi`: isolated, the threaded build); the pak downloads, Firebird runs in its worker, frames come, keys move, `F6`/`F9` save and load, Escape pauses; a second page joins the first's game over WebRTC with the offer and answer texts passed between them, paints the frames it is sent at the host's view, its W walks its player at the host, and leaves; the retired service worker removes itself; no console errors, no 404 but the music and the favicon. CI runs it; `CHROME=` points it at a Chromium already installed |
 | `bench.mjs`, `tic-bench.mjs`, `raster-bench.mjs`, `call-counts.mjs`, `ab-bench.mjs` | where the time goes (section 10) |
 | `probe.mjs`, `inspect.mjs` | traces around a point; what is in the pak |
 | `fetch-pak.mjs`, `build.mjs` | the demo download; the esbuild bundle and dev server |

@@ -70,6 +70,17 @@
           <input id="musicdir" type="file" webkitdirectory multiple title="a folder with track02.ogg … track11.ogg"></label>
         <span id="engine" class="pill">Firebird</span>
         <span id="mapname" class="pill"></span>
+        <label title="Two players on two pages: the host runs the game and sends the other its frames (WebRTC); the offer and the answer are texts you pass each other">Network
+          <button id="net-host" type="button">Host</button>
+          <button id="net-join" type="button">Join</button>
+          <button id="net-leave" type="button">Leave</button>
+          <span id="net-state" class="pill"></span></label>
+      </div>
+      <!-- the offer and the answer, by hand: there is no signalling server on a static site -->
+      <div id="net" class="net" hidden>
+        <p id="net-help"></p>
+        <textarea id="net-text" rows="3" spellcheck="false" aria-label="The offer or the answer"></textarea>
+        <div><button id="net-copy" type="button">Copy</button> <button id="net-go" type="button">Connect</button></div>
       </div>
       <p class="keys">Click the view to capture the mouse ·
         <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows move · mouse looks ·
@@ -78,7 +89,9 @@
         <kbd>Esc</kbd> menu (<kbd>F2</kbd> save, <kbd>F3</kbd> load, <kbd>F10</kbd> quit) · <kbd>F6</kbd> quick save · <kbd>F9</kbd> quick load (saves live in this browser).
         On touch screens the left half of the view moves, the right half looks, a tap fires, and the buttons fire, jump, change weapon and open the menu.
         A gamepad works too: left stick moves, right stick looks, RT fires, A jumps, B crouches, LB/RB change weapon, the d-pad selects (left/right) and uses (up) an inventory item, Y shows the inventory, Back the help computer, Start opens the menu (the d-pad, A and B drive it).
-        With two players (coop) the view is split, the keyboard and mouse are the first player's and the gamepad the second's.</p>
+        With two players (coop) the view is split, the keyboard and mouse are the first player's and the gamepad the second's.
+        Over the network: one page hosts (Host makes an offer to send to the other player), the other joins (Join takes the offer and makes an answer to send back),
+        and the host's game runs with the guest's player in it, each page its own view.</p>
     </section>
 
     <section class="console">

@@ -10,23 +10,28 @@ them.
 What the demo pak still allows, now that everything below is done or waits on the registered pak. In
 the order they are to be taken.
 
-- **Networked coop over WebRTC**: the one way past the local limit, since each browser runs its own
-  database. A long-term item. The shape: one peer is the server (the host's page runs `Session` as it
-  does now, the game in its Firebird), the others are clients of it, as Quake 2's `sv_main.c` and
-  `cl_main.c` were to each other. A guest loads the same map into its own database for the geometry and
-  the pak for the textures, runs no game logic, sends its usercmd each tic over a data channel (the
-  nine values `Input.read` makes, `usercmd`'s row), and gets back its frame: the rows `frame_all(…,
-  client)` already returns for that client, its player row for the status bar, the sound and effect
-  events, and the messages (`decodeFrame` takes them as it takes the host's own). The host runs
-  `q2_tic` with every client's command, as the tic already takes the second's, and the frame query once
-  per client. Signalling is the open question: Pages is static, so the offer and answer go by hand
-  (copied through a chat, as the address book's "manual" entry would have it) or through a small
-  signalling service of the player's own; the data channel then carries everything. Latency: a guest sees
-  its own moves a round trip late; Quake 2 predicted the player's own movement on the client (`cl_pred.c`,
-  pmove run ahead of the server's answer), which the SQL's `player_think` cannot run in a guest's
-  browser, so a guest would first play without prediction, and prediction would mean a JS pmove
-  beside the SQL's, kept in step by `test:replay`. Spectating falls out of it: a guest that sends no
-  command and asks for the host's view. Three or more players are the same work as two.
+- **Networked coop over WebRTC**: done for two pages, the one way past the local limit, since each
+  browser runs its own database (`src/net.js`; ARCHITECTURE.md §8). The host's page is the server, as
+  `sv_main.c` was: its `Session` runs a coop game, and the second client's usercmd is what the guest sent
+  since the last tic, merged (the turns summed, a button pressed in any held, the last impulse). After
+  each tic the host asks the frame for the guest too and sends it with the guest's own player row, the
+  tic's sounds and effects and, when the guest's screen is up, its inventory rows; the guest's page paints
+  it as it paints its own, the sounds at its own ear, from the pak and the map's geometry alone
+  (`loadMapModels`: no database, no game logic; its own Firebird stands idle). A map message at each
+  level (the sky, the music, the speakers, the host's view, which the guest's frustum must match) and
+  the picture at a unit's end come the same way. The wire is JSON in 16 KB chunks over one data channel,
+  10–30 KB a frame, a frame dropped when the channel is 256 KB behind. Signalling is by hand, as Pages
+  is static: Host shows the offer as a text of some six hundred characters (the description with its
+  candidates, gzipped and base64'd), the other player's Join answers it with one to send back, Connect
+  takes it; a STUN server is asked for at most three seconds, a connection on one machine or one network
+  needs none. The guest leaving leaves the host's game with its second client standing (the gamepad
+  moves it again); the host leaving ends the guest's game. `test:net` runs the host and guest sides over
+  a loopback in one process; the browser test joins a second page to the first over real WebRTC. Left:
+  prediction (a guest sees its own move a round trip late, as a client with `cl_predict 0` did; Quake 2
+  ran pmove ahead on the client, which here would be a JS pmove beside the SQL's, kept in step by
+  `test:replay`), a TURN relay for the networks a STUN cannot cross, a signalling service of the
+  player's own in place of the texts, a third page (the SQL takes a client number already; the host's
+  loop sends one guest), and spectating.
 - **Local deathmatch**: the demo maps carry many deathmatch-only entities, which `spawn_map_ents`
   skips by their spawnflags (1792): weapons, ammo, demo3's teleporter. Coop already has two local
   clients, their split views and the score board, so deathmatch is the missing spawn mode:

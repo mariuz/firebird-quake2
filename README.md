@@ -47,6 +47,10 @@ npm run inspect        # what is in the pak (maps, models and their frame runs, 
 Two can play: the Players select (or the game menu's players spin) starts a coop game, the screen split in
 two views, the keyboard and mouse the first player's and a gamepad the second's, as `p_client.c` had coop
 (the demo pak has no player model, so the other player is unseen until a registered pak supplies it).
+Or two pages, over the network: one hosts (Host makes an offer, a short text to send to the other player),
+the other joins (Join takes it and makes an answer to send back), and the host's game runs with the guest's
+player in it, each page painting its own view, the guest's from the frames the host sends it over a WebRTC
+data channel. There is no signalling server on a static site, so the two texts go by hand.
 
 `fetch-pak` needs 7-Zip or `unzip` to open the demo's self-extracting archive. If you own Quake 2, point
 the page at your own `pak0.pak` with the file picker, or copy it with `PAK=/path/to/pak0.pak npm run fetch-pak`:

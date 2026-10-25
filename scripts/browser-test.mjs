@@ -134,6 +134,73 @@ try {
     assert(one.coop === false && one.clients === 1 && one.views === 1 && one.h === one.screenH, `one player again: a new single-player game on the whole screen (${JSON.stringify(one)})`);
   }
 
+  // two pages over WebRTC: this one hosts, a second joins with the texts passed between them (the offer and
+  // the answer, as the players would pass them); the host's game has the guest's player in it, the guest paints
+  // the host's frames, and its keys move its player at the host; when it leaves the host plays on
+  if (ready) {
+    const gctx = await browser.newContext({ viewport: { width: 960, height: 720 } });
+    const gp = await gctx.newPage();
+    gp.on('console', (m) => { if (m.type() === 'error') errors.push('guest: ' + m.text()); });
+    gp.on('pageerror', (e) => errors.push(`guest pageerror: ${e.message}`));
+    gp.on('response', (r) => { if (r.status() === 404) missing.push(new URL(r.url()).pathname); });
+    await gp.goto(base, { waitUntil: 'load' });
+    const gstats = () => gp.evaluate(() => document.getElementById('stats')?.textContent ?? '').catch(() => '');
+    const t2 = Date.now();
+    let gready = false;
+    while (Date.now() - t2 < 300_000) { const s = await gstats(); if (/q2_tic \d+ ms/.test(s) && !/^0\.0 fps/.test(s)) { gready = true; break; } await sleep(1000); }
+    assert(gready, 'a second page loads, to join from');
+    if (gready) {
+      const text = (p) => p.evaluate(() => document.getElementById('net-text')?.value ?? '').catch(() => '');
+      await page.click('#net-host');
+      let offer = '';
+      for (let i = 0; i < 80 && !offer.startsWith('q2net1:'); i++) { await sleep(250); offer = await text(page); }
+      assert(offer.startsWith('q2net1:') && offer.length < 4000, `Host makes an offer text to pass on (${offer.length} characters)`);
+      await gp.click('#net-join');
+      await gp.fill('#net-text', offer);
+      await gp.click('#net-go');
+      let answer = '';
+      for (let i = 0; i < 80 && !(answer.startsWith('q2net1:') && answer !== offer); i++) { await sleep(250); answer = await text(gp); }
+      assert(answer.startsWith('q2net1:') && answer !== offer, `Join answers it with a text to pass back (${answer.length} characters)`);
+      await page.fill('#net-text', answer);
+      await page.click('#net-go');
+      const hstate = () => page.evaluate(() => ({ role: window.quake2?.net?.role, host: !!window.quake2?.net?.host, clients: window.quake2?.session?.clients?.length,
+        coop: window.quake2?.session?.coop, views: window.quake2?.renderer?.views, sent: window.quake2?.net?.host?.sentFrames ?? 0 })).catch(() => ({}));
+      const gstate = () => gp.evaluate(() => ({ role: window.quake2?.net?.role, frames: window.quake2?.net?.guest?.frames ?? 0, map: window.quake2?.net?.guest?.map?.name,
+        w: window.quake2?.renderer?.w, h: window.quake2?.renderer?.h })).catch(() => ({}));
+      let hs = {}, gs = {};
+      for (let i = 0; i < 240 && !(hs.sent > 20 && gs.frames > 20); i++) { await sleep(250); hs = await hstate(); gs = await gstate(); }
+      assert(hs.role === 'host' && hs.host && hs.coop && hs.clients === 2 && hs.views === 1 && hs.sent > 20,
+        `connected, the host runs a game with two clients, one view of its own, and sends the guest its frames (${JSON.stringify(hs)})`);
+      assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
+        `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
+      assert(/joined: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
+      // the guest's keys move its player at the host
+      const p2 = () => page.evaluate(() => { const c = window.quake2.session.clients[1]; return [c.PX, c.PY]; }).catch(() => [0, 0]);
+      const [x0, y0] = await p2();
+      await gp.locator('#screen').click();   // (the page scrolled to the texts: the canvas, wherever it is)
+      await gp.keyboard.down('w'); await sleep(1200); await gp.keyboard.up('w');
+      await sleep(300);
+      const [x1, y1] = await p2();
+      const moved = Math.hypot(x1 - x0, y1 - y0);
+      assert(moved > 50, `the guest's W walks its player at the host (${moved.toFixed(0)} units)`);
+      // the guest leaves: the host plays on, the second player standing; the guest's page starts a game of its own
+      await gp.evaluate(() => document.exitPointerLock?.());   // (the view holds the pointer since the click: a button needs it back)
+      await sleep(300);
+      await gp.click('#net-leave');
+      let left = await hstate();
+      for (let i = 0; i < 40 && left.role !== undefined; i++) { await sleep(250); left = await hstate(); }
+      assert(left.role === undefined && left.clients === 2, `the guest leaves and the host's game goes on with its second player (${JSON.stringify(left)})`);
+      const h1 = await frames(page); await sleep(700); const h2 = await frames(page);
+      assert(h2 > h1, `the host's frames keep coming (${h2 - h1} in 0.7 s)`);
+      let own = false;
+      for (let i = 0; i < 80 && !own; i++) { const g1 = await frames(gp); await sleep(500); own = (await frames(gp)) > g1; }
+      assert(own, 'and the guest\'s page plays a game of its own again');
+      await page.selectOption('#players', '1');
+      await sleep(500);
+    }
+    await gctx.close();
+  }
+
   // a touch screen: the on-screen buttons show, and taps on them and on the view's halves reach the game
   if (ready) {
     const touchCtx = await browser.newContext({ hasTouch: true, viewport: { width: 800, height: 600 } });
