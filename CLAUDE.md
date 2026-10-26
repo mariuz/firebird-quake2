@@ -13,7 +13,7 @@ by the same author (mariuz), which live next to this repository under `C:\fbq\`.
 https://mariuz.github.io/firebird-quake2/ by the Pages workflow on every push to `main`.
 
 Layout: `sql/` (schema, physics, game, weapons, monsters, render — loaded in that order),
-`src/` (pak/bsp/md2 parsers, loader, session, net, demo, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
+`src/` (pak/bsp/md2 parsers, loader, session, net, demo, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
 tools), `public/` (page, the retired service worker, the pak goes in `public/pak/`), `docs/`.
 
 ## Commands
@@ -40,6 +40,7 @@ npm run test:coop                     # a coop game headless: two clients, their
 npm run test:net                      # a game shared over a link headless: the guest's commands merged, its frames sent, the map and a level change, chunks, the signalling texts
 npm run test:dm                       # a deathmatch headless: the spots, no monsters, items that come back, the frags, respawns, the exit, the limits, the dmflags
 npm run test:demo                     # the pak's demo headless: every block read exactly, the view and entities between frames, the events once, the session's demo frame, a frame painted
+npm run test:lerp                     # the frames between tics: the eye, the entities and the brush models moved by the fraction, snaps, the turn immediate
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
@@ -139,6 +140,11 @@ short stories of what changed and what it measured; keep that.
 - Level exits: single-player Quake 2 has no intermission between ordinary levels; only a unit's end
   (`*` in the map string) stops at one. The map string is kept as written in `game.next_map` and
   parsed by `src/levels.js`, never in SQL.
+- The page's loop runs the tics the wall clock owes (`floor((now - lastTic) / 50)`, at most two) and paints every
+  animation frame from the last two tics' frames (`src/lerp.js`): a loop that runs at least a tic a frame plays at
+  the display's rate (it did, at 2.9× on 60 Hz). The game's clock against the wall's is a browser-test check, which
+  must allow a slow page: CI's runner paints four frames a second after the quick load, so the game there runs at
+  two tics a frame and falls behind on purpose (Quake 2's `SV_Frame` clamp: slow motion, never a leap).
 - A tic is 0.05 s (20 Hz): 20 tics are a second. The ground flag (512) must hold every tic the player
   stands on a floor; pmove-style code that runs only `IF (onground = 1)` silently halves otherwise. On the ground the
   player's `vz` is 0 (pmove); any path that skips the move must still write the speed it computed.

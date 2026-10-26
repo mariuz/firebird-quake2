@@ -126,6 +126,11 @@ jobs:
       - name: Demo playback
         run: npm run test:demo
 
+      # The frames between tics (src/lerp.js): the eye and the entities moved between two tics' frames by the
+      # fraction, snaps, the brush models, the input's turn immediate, and the same halfway between two tics of a game
+      - name: Frames between tics
+        run: npm run test:lerp
+
       # The figures held: the load of demo1, an idle and a walking tic, the frame query and the raster, each in
       # units of a calibration run on this runner (the engine's PK fetches, a JS loop) against docs/perf-baseline.json;
       # a figure past twice its baseline fails (the runner's noise is well under that; a slip like 17 ms a tic is not)

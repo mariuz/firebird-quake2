@@ -25,6 +25,7 @@ src/main.js   the page: loop, drawing    sql/monsters.sql  AI, pushers, the tic,
 src/session.js maps, tics, the frame, saves (no DOM)
 src/net.js     a game shared over a data channel: host, guest, the texts (no DOM)
 src/demo.js    a .dm2 read as the server's messages, played between frames (no DOM)
+src/lerp.js    the frames between tics: the last two tics' frames moved by the fraction (no DOM)
 src/effects.js  explosions, beams, flashes, lights (no DOM)
    each frame:                           sql/render.sql    visibility and the frame
    SELECT * FROM q2_tic(...)      ─────► 20 Hz game logic, returns the player's view of itself
@@ -562,10 +563,21 @@ frame's caches. The per-frame cache columns of `ents` are not saved. Each table'
 conversion was off by an ulp for one value in six, and doubles went over as
 `CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)` from an integer mantissa and an exponent.)
 
-The loop: compute the tics owed (one or two), `q2_tic`, then one `frame_all`, split its rows by
-kind, play sounds and effects, draw the frame, the view weapon and the HUD, and present. A hidden
-tab pauses the loop (`document.hidden`). The stats line shows the costs of the tic, the frame
-query and the raster. The SQL console runs any statement against the live game database.
+The loop: each animation frame computes the tics the wall clock owes (20 Hz; at most two, a stall being
+slow motion rather than a leap), runs `q2_tic` for them, then one `frame_all` per view, splits its rows by
+kind, plays sounds and effects, and paints; a frame that owes no tic paints again. Every paint goes through
+`src/lerp.js` (`FrameLerp`, one per view, holding the last two tics' frames): the frame shown is the last
+tic's moved toward the current one by the fraction of the tic gone by, as the Quake 2 client drew the
+server's frames (`CL_AddPacketEntities` by `cl.lerpfrac`, `CL_CalcViewValues` the view's origin): the eye
+between its two origins, each alias model and sprite between its two poses (one just come, or moved 512
+units, snaps), the brush models' face rows with their origins and angles between the two (the doors,
+platforms and fans move smoothly), the particles run by the real time since the last paint; the view's
+angles are the current tic's plus the turn the input holds and has not yet sent with a tic (the mouse's
+delta), so looking around never waits for a tic, as the client's own `cl.viewangles` did not. The
+SQL-projecting renderer mode cannot move its faces, projected at the tic's eye, so it paints a tic's frame
+as it is, once a tic. A guest's page does the same with the host's last two frames by the time since the
+last came. A hidden tab pauses the loop (`document.hidden`). The stats line shows the costs of the tic,
+the frame query and the raster. The SQL console runs any statement against the live game database.
 
 ## 9. Testing and measuring (`scripts/`)
 
@@ -584,6 +596,7 @@ query and the raster. The SQL console runs any statement against the live game d
 | `coop-test.mjs` | a coop game headless, through a `Session`: two clients, the second at its `info_player_coop`; each one's usercmd, row from the tic, view and inventory; the sight client alternating and passing over notarget; a monster hunting the sight client and, that one dead, the other; a death that ends nothing, the respawn a second later at the spot with the level-start pers and the body left (and gibbed); a weapon and a key that stay for the other client; a centerprint to one client; a save and a level change (there and back) with both; single player with one row |
 | `dm-test.mjs` | a deathmatch headless, through a `Session`: two clients at the map's deathmatch spots, no monsters, the deathmatch-only items; a taken item gone 30 s, back with its sound and particles, a new weapon raised only over the blaster; weapons that stay and one held left; a kill's frag, the tossed weapon, the respawn afresh at a spot by button or forced, a suicide's and the world's cost; an exit that kills, or ends the level when allowed; the frag and time limits, the same level flag, the intermission's button; a level change and a save keeping the mode; no health, armour or ammo spawned, infinite ammo, no falling damage, instant items, spawn farthest; the mega health's wait; coop and single player as they were |
 | `demo-test.mjs` | the pak's demo read and played headless (`src/demo.js`): every block of `q2demo1.dm2` consumed exactly, the server data, the configstrings' models and sounds all in the pak, the frames in order a tenth of a second apart, the player state and the entities; the view and an entity halfway between two frames, the events of the frames reached given once, the brush models apart, the light styles, the end; a sound placed at its entity, a muzzle flash's sound and light, the monsters' flash sounds; a `Session`'s demo frame: the map's own models hidden, the player's row at the view, the faces from the SQL, a brush model moved where the demo has it and not written again; a frame painted from the faces, the entities and the gun |
+| `lerp-test.mjs` | the frames between tics (`src/lerp.js`): the eye and the entities halfway between two tics' frames, angles the short way round, a newcomer, a teleport and another model snapping, the brush models' face rows and angles moved, the input's turn added to the current angles, the fraction clamped, the SQL-projecting mode exact; then two tics of walking on demo1 and the frame halfway between them, and a turn showing at once |
 | `net-test.mjs` | a game shared over a link (`src/net.js`), the two ends a loopback in one process: the host's `Session` with two clients, the map message and the guest's geometry from the pak alone, a frame a tic with the guest's own row and every face the map's, the guest's forward command walking its player at the host, two commands in a tic merged (turns summed, buttons held, the last impulse) and none standing, a turn turning it, the shots' sounds arriving, the inventory rows on request, a 48 KB message in four chunks, a frame dropped on a slow link, a level change's map and frames, a picture, the signalling texts packed and unpacked, rubbish refused, one end's close closing the other |
 | `audio-test.mjs` | the sound mix (`src/audio.js`) against a Web Audio that records: `S_Spatialize`'s fall-off (full within 80 units, ATTN_NORM silent from 1080, ATTN_IDLE twice as fast, ATTN_NONE everywhere) and pan (0.8 to the side, the listener's yaw), a one-shot per event cut by the next on its entity's channel but not on CHAN_AUTO, out of range or missing from the pak skipped, each sound decoded once, the loops summed per name at ATTN_STATIC with each side clamped, silent when unlisted and the channel kept, the speakers on and off with the frame, the page hidden and back, and the music: off, the drone, a track file from a picked folder, the volume |
 | `effects-test.mjs` | the temporary entities (`src/effects.js`): each effect row's particles and what it keeps, the explosions' frames, skins, translucency and fading light, the blaster hit turned to its direction, the BFG's sprite, a muzzle flash lighting its frame only, the `EF_` lights, beams lasting 0.1 and 0.12 s, a parasite's tongue (one per parasite, a segment every 30 units, 0.2 s), and an explosion painting a real frame |

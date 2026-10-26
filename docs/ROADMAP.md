@@ -110,12 +110,19 @@ the order they are to be taken.
   test's sound check lets a full-game monster's directory be missing. Seeing them waits for a registered
   pak. Left, under *The full game*: the medic's cable, the mutant's leap, the floater's zap, the chick's
   duck, the insane marines' forms, the commander body.
-- **Frames between tics**: the page paints once per tic (`main.js`'s loop: a tic, the frame query, the
-  raster), so motion runs at 20 Hz however fast the display is. Quake 2's client drew at the display rate
-  and moved the entities and the view between two server frames by `cl.lerpfrac` (`CL_AddPacketEntities`,
-  `CL_CalcViewValues`). The same frame's rows could be painted again between tics with the eye and the
-  entities moved by the fraction; at 320×240 a warm raster is under two milliseconds, so two more paints a
-  tic fit. The most visible smoothness left for the demo.
+- **Frames between tics**: done (`src/lerp.js`). The loop used to run a tic every animation frame
+  (at least one, two at most), so on a 60 Hz display the game ran at three times its speed and painted
+  each tic once; now the tics are the wall clock's (20 Hz) and every animation frame paints the last tic's
+  frame moved toward the current one by the fraction of the tic gone by, as `CL_AddPacketEntities` and
+  `CL_CalcViewValues` lerped the server's frames: the eye, the alias models and sprites (a newcomer or a
+  teleport snaps), the brush models' origins and angles, the particles by the real time; the view's angles
+  are the current tic's plus the mouse's turn not yet sent, so looking around is immediate. The
+  SQL-projecting mode, whose faces are projected at the tic's eye, still paints once a tic. `test:lerp`
+  checks the lerp headless; the browser test measures the game's clock against the wall's (1.00× at 60 fps,
+  where it was 2.9×; a page slower than ten frames a second falls behind at two tics a frame, slow motion as
+  `SV_Frame`'s clamp gave it, which CI's runner showed at four frames a second) and the paints against the
+  tics. Left: the model frames themselves are not lerped
+  (`backlerp`), so a walk cycle still steps at 10 Hz.
 - **Nightmare skill**: Quake 2's skill 3, reachable only from the console (`skill 3`), the menus stopping at
   hard. Its effects: the monsters do not flinch (every pain function returned at skill 3), the attack
   chances are hard's (`M_CheckAttack` doubled them at 2 and above) and the hard spawn filter applies
