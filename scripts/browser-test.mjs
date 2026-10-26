@@ -171,7 +171,9 @@ try {
     await page.setInputFiles('#save-file', { name: 'moved.q2sav', mimeType: 'text/plain', buffer: Buffer.from(dlText) });
     let fileLoaded = '';
     for (let i = 0; i < 240 && !/Game loaded/.test(fileLoaded); i++) { await sleep(250); fileLoaded = await status(); }
-    const tBack = await gameTime();
+    // (the session's row is the last tic's: the first tic after the load brings the file's clock)
+    let tBack = tOn;
+    for (let i = 0; i < 40 && tBack >= tOn; i++) { await sleep(100); tBack = await gameTime(); }
     assert(/Game loaded/.test(fileLoaded) && tOn > tSaved + 0.5 && tBack < tOn && tBack <= tSaved + 0.5,
       `the file loads back and the game is where the file had it (${JSON.stringify(fileLoaded)}: the clock at ${tSaved.toFixed(2)} s when saved, ${tOn.toFixed(2)} s before the load, ${tBack.toFixed(2)} s after)`);
     await page.setInputFiles('#save-file', { name: 'junk.q2sav', mimeType: 'text/plain', buffer: Buffer.from('not a save') });
