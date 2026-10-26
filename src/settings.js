@@ -29,7 +29,7 @@ const CHECK = {
   detail: oneOf(...Object.keys(DETAIL)),
   sfx: int(0, 100), music: int(0, 100),
   musicMode: oneOf('tracks', 'synth', 'off'),
-  skill: oneOf(0, 1, 2),
+  skill: oneOf(0, 1, 2, 3),   // 3 is nightmare: the console's alone (skill 3), the menus and the select stop at hard
   fov: int(1, 160),
   renderer: oneOf('fast', 'sql'),
   brightness: num(0.5, 3),

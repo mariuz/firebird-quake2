@@ -6,12 +6,12 @@
 // Nothing here touches the DOM: the page wires the input element to historyStep(), complete() and
 // submit(), and gives a host with what the commands act on, so the tests can drive it with a fake one.
 
-export const COMMANDS = ['demomap', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'seed', 'timelimit', 'use'];
+export const COMMANDS = ['demomap', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'seed', 'skill', 'timelimit', 'use'];
 const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
- *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), playDemo(name) }
+ *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name) }
  */
 export class Console {
   constructor(host) {
@@ -88,6 +88,20 @@ export class Console {
         const seed = Math.floor(v) >>> 0;
         await h.db.query("SELECT RDB$SET_CONTEXT('USER_SESSION', 'rng', ?) FROM rdb$database", [seed]);
         say(`the next new game starts from seed ${seed}`);
+        return;
+      }
+      case 'skill': {
+        // the skill cvar: no argument shows it; 0 easy, 1 medium, 2 hard, 3 nightmare (SpawnEntities clamped it so),
+        // and nightmare only from here, as the menus stop at hard. It was latched (CVAR_LATCH in g_main.c): set with
+        // a game running it took hold at the next map, "skill will be changed for next game."
+        if (!arg) { say(`"skill" is "${h.settings.skill}"`); return; }
+        const v = Number(arg);
+        if (!Number.isFinite(v)) { say('skill takes a number: 0 easy, 1 medium, 2 hard, 3 nightmare', true); return; }
+        const value = Math.max(0, Math.min(3, Math.floor(v)));
+        h.settings.skill = value;
+        h.saveSettings();
+        h.setSkill?.(value);
+        say(h.isRunning() ? 'skill will be changed for next game.' : `"skill" is "${value}"`);
         return;
       }
       case 'save': return h.saveGame();

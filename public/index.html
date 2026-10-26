@@ -35,10 +35,11 @@
           <input id="pakfile" type="file" accept=".pak,.PAK"></label>
         <label>Map <select id="map"></select></label>
         <label title="The pak's recorded demos (demos/*.dm2), played as the attract mode played them: the view and the entities are the recording's, the walls the database's; any key or click stops it">Demo <select id="demo"><option value="">—</option></select></label>
-        <label>Skill <select id="skill">
+        <label title="The next game's skill; nightmare (the monsters never flinch) is the console's alone: skill 3">Skill <select id="skill">
           <option value="0">Easy</option>
           <option value="1">Medium</option>
           <option value="2">Hard</option>
+          <option value="3" hidden>Nightmare</option>
         </select></label>
         <label title="Two to four players share the game: the view is split in two or four, the keyboard and mouse are the first player's, the gamepads the others'; in deathmatch against each other, with the maps' deathmatch items and no monsters (dmflags, fraglimit and timelimit at the console)">Players <select id="players">
           <option value="1">One</option>
@@ -91,7 +92,7 @@
       <p class="keys">Click the view to capture the mouse ·
         <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows move · mouse looks ·
         <kbd>Ctrl</kbd> or click fires · <kbd>Space</kbd> jumps · <kbd>C</kbd> crouches · <kbd>Shift</kbd> walks (or runs: the Run setting) ·
-        <kbd>1</kbd>–<kbd>0</kbd> weapons · <kbd>G</kbd> hand grenades · <kbd>/</kbd> or wheel cycles · <kbd>Tab</kbd> inventory (<kbd>[</kbd> <kbd>]</kbd> select, <kbd>Enter</kbd> use) · <kbd>Q</kbd> quad · <kbd>I</kbd> invulnerability · <kbd>B</kbd> rebreather · <kbd>E</kbd> environment suit · <kbd>F1</kbd> help computer · <kbd>`</kbd> console (god, noclip, notarget, give, use, kill, map) · <kbd>P</kbd> pause ·
+        <kbd>1</kbd>–<kbd>0</kbd> weapons · <kbd>G</kbd> hand grenades · <kbd>/</kbd> or wheel cycles · <kbd>Tab</kbd> inventory (<kbd>[</kbd> <kbd>]</kbd> select, <kbd>Enter</kbd> use) · <kbd>Q</kbd> quad · <kbd>I</kbd> invulnerability · <kbd>B</kbd> rebreather · <kbd>E</kbd> environment suit · <kbd>F1</kbd> help computer · <kbd>`</kbd> console (god, noclip, notarget, give, use, kill, map, skill 0–3: nightmare is 3, the console's alone) · <kbd>P</kbd> pause ·
         <kbd>Esc</kbd> menu (<kbd>F2</kbd> save, <kbd>F3</kbd> load, <kbd>F10</kbd> quit; the options' customize controls rebinds the movement, fire, inventory and help keys) · <kbd>F6</kbd> quick save · <kbd>F9</kbd> quick load (saves live in this browser).
         On touch screens the left half of the view moves, the right half looks, a tap fires, and the buttons fire, jump, change weapon and open the menu.
         A gamepad works too: left stick moves, right stick looks, RT fires, A jumps, B crouches, LB/RB change weapon, the d-pad selects (left/right) and uses (up) an inventory item, Y shows the inventory, Back the help computer, Start opens the menu (the d-pad, A and B drive it).

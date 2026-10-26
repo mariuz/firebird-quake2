@@ -187,8 +187,8 @@ a coop game's second client has its row in `usercmd`, written before the tic. Ea
    `trigger_hurt` and `trigger_monsterjump` on maps that have any.
 
 The rest of g_*.c lives here too: `spawn_map_ents(skill, spawnpoint)` is `SpawnEntities` with the
-skill spawnflag filter (256/512/1024 keep an entity out of easy/medium/hard; all three mark a deathmatch-only
-entity; 4096, not-in-coop, is ignored in single player) and Quake's spawn-point selection (`info_player_start` with the
+skill spawnflag filter (256/512/1024 keep an entity out of easy/medium/hard, nightmare (3) reading hard's bit;
+all three mark a deathmatch-only entity; 4096, not-in-coop, is ignored in single player) and Quake's spawn-point selection (`info_player_start` with the
 matching or absent targetname); triggers (once, multiple, relay, always, counter, key, push,
 hurt); `use_targets` is the big dispatcher for targets (speaker, explosion, splash, secret, goal,
 help, laser, lightramp, changelevel, and the unit's cross-level flags on
@@ -523,9 +523,10 @@ pictures shown in their own palette, `.cin` cinematics skipped) and loads the ne
 loading plaque. `F1` toggles the help computer (`HelpComputer`): skill, level name, the two
 `target_help` messages and the counts; it is also drawn at the intermission.
 
-The console: the backquote opens a command line over the view. `map <name>`, `save` and `load` are
-the page's; the rest go to `player_command(cmd, arg)` (g_cmds.c: `god`, `notarget`, `noclip`, `give`,
-`kill`), which answers on the top-left message line. Noclip is movetype 2: `player_think` moves the
+The console: the backquote opens a command line over the view. `map <name>`, `save`, `load`, `fov`,
+`seed` and `skill` are the page's (`skill 0`–`3`: the next map's skill, 3 the nightmare the menus stop short
+of, latched as the cvar was: "skill will be changed for next game."); the rest go to `player_command(cmd, arg)`
+(g_cmds.c: `god`, `notarget`, `noclip`, `give`, `kill`), which answers on the top-left message line. Noclip is movetype 2: `player_think` moves the
 player where the view points without tracing and skips the touches, as `ClientThink` did.
 
 The menus (`src/menu.js`) are menu.c on qmenu.c: a stack of menus, each a draw and a key function; list
@@ -585,12 +586,12 @@ the frame query and the raster. The SQL console runs any statement against the l
 |---|---|
 | `sql-check.mjs` | compiles the six SQL files against the engine (run first after any SQL edit) |
 | `sql-smoke.mjs [map]` | end-to-end in Node: load, tics, movement, weapons, doors, all referenced sounds exist |
-| `monsters-test.mjs [MONSTER=a,b]` | every monster: spawned, sees the player, attacks, dies, is counted; the full game's on their frame tables alone (the runs the table gives, every animation named in it, no mesh for the painter), their second ranged attack chosen and fired, Makron's three, Makron rising from Jorg; the insane marines never attacking |
+| `monsters-test.mjs [MONSTER=a,b]` | every monster: spawned, sees the player, attacks, dies, is counted; the full game's on their frame tables alone (the runs the table gives, every animation named in it, no mesh for the painter), their second ranged attack chosen and fired, Makron's three, Makron rising from Jorg; the insane marines never attacking; each hurt on hard (the cry and the flinch) and in nightmare (the cry alone) |
 | `walkthrough-test.mjs` | every trigger the player can walk into on the three maps fires, and its movers move |
 | `entities-test.mjs` | the full game's entities the demo lacks, added to demo1's lump: secret doors, the earthquake, the elevator, the viper and its bomb, the ships, the string display and the clock, the decorations, a turret, target_spawner |
 | `save-test.mjs` | save, play on, load: every entity, mover and light style back as it was; the game keeps running with fresh ids |
 | `input-test.mjs` | the page's input read as Quake's usercmd (`src/input.js`): keys, Shift and the Run setting, the impulses once per press, the mouse, drags and taps on the view's halves, the on-screen buttons; and the gamepad's reading (`src/gamepad.js`): dead zones, the run at the stick's edge, a press counted once, the weapon impulses, the menu driven by d-pad, stick, A and B |
-| `console-test.mjs` | the console line headless (`src/console.js`): `map`, `fov`, `seed`, `save`, `load`, `inven` reach the page's host, the rest reach `player_command`, the history steps and forgets as `Key_Console`'s did, Tab completes |
+| `console-test.mjs` | the console line headless (`src/console.js`): `map`, `fov`, `seed`, `skill` (shown, set for the next game, clamped to 0..3), `save`, `load`, `inven` reach the page's host, the rest reach `player_command`, the history steps and forgets as `Key_Console`'s did, Tab completes |
 | `session-test.mjs` | the game as the page plays it, without the page (`src/session.js`): a map started, tics, the frame decoded (the sounds each once, the speakers every tenth frame, both renderer modes the same world faces), a slot saved, listed and loaded back exactly, levels left and come back to as left, a save carrying them, a unit's end and a new game forgetting them, the death screen's load request taken once, no storage no saves |
 | `golden-test.mjs` | the painter's look: the twelve docs screenshots (three maps, four shots each) rendered again by `screenshot.mjs` and compared to `docs/` pixel for pixel, with the count and the box of what differs; the painter is deterministic, so a difference is a change, regenerated with the shots when it is meant |
 | `coop-test.mjs` | a coop game headless, through a `Session`: two clients, the second at its `info_player_coop`; each one's usercmd, row from the tic, view and inventory; the sight client alternating and passing over notarget; a monster hunting the sight client and, that one dead, the other; a death that ends nothing, the respawn a second later at the spot with the level-start pers and the body left (and gibbed); a weapon and a key that stay for the other client; a centerprint to one client; a save and a level change (there and back) with both; single player with one row |

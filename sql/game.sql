@@ -2980,6 +2980,7 @@ DECLARE minp DOUBLE PRECISION; DECLARE maxp DOUBLE PRECISION; DECLARE miny_ DOUB
 DECLARE php INTEGER; DECLARE pmh INTEGER; DECLARE pfl INTEGER; DECLARE ncubes INTEGER = 0;   -- level.power_cubes: the cubes spawned, each with its bit
 BEGIN
   t0 = now_();
+  -- (SpawnEntities: NOT_HARD for hard and for nightmare, skill 3, alike)
   skillbit = CASE skill WHEN 0 THEN 256 WHEN 1 THEN 512 ELSE 1024 END;
   SELECT g.deathmatch, g.dmflags FROM game g WHERE g.id = 1 INTO dm, dmf;
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO wmodel;

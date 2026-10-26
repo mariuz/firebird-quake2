@@ -153,14 +153,15 @@ for (const m of MONSTERS) {
   let attacked = 0, dmgSeen = 0;
   const HP = 100000;
   await teleport(128, -320, 32, 135);
-  await db.exec(`UPDATE ents SET flags = BIN_AND(flags, BIN_NOT(16)), health = ${HP} WHERE id = ${pe}`);
+  // (the maximum raised with it: health above the maximum rots a point a second, as the megahealth's did)
+  await db.exec(`UPDATE ents SET flags = BIN_AND(flags, BIN_NOT(16)), health = ${HP}, max_health = ${HP} WHERE id = ${pe}`);
   for (let i = 0; i < (harmless ? 100 : 200) && !attacked; i++) {
     s = await tic();
     e = await q1(`SELECT st, anim, anim_frame FROM ents WHERE id = ${id}`);
     if (e.ST === 'melee' || e.ST === 'missile') attacked = 1;
     if (s.HEALTH < HP) dmgSeen = 1;
   }
-  if (harmless) assert(!attacked && !dmgSeen && s.HEALTH === HP, `${m.name} never attacks (state ${e.ST}, anim ${e.ANIM})`);
+  if (harmless) assert(!attacked && !dmgSeen && s.HEALTH === HP, `${m.name} never attacks (state ${e.ST}, anim ${e.ANIM}, the player's health ${s.HEALTH})`);
   else {
     assert(attacked, `${m.name} attacked (state ${e.ST}, anim ${e.ANIM})`);
     for (let i = 0; i < 80 && !dmgSeen; i++) { s = await tic(); if (s.HEALTH < HP) dmgSeen = 1; }
@@ -219,10 +220,29 @@ for (const m of MONSTERS) {
     for (let i = 0; i < 60 && !atk; i++) { await tic(); atk = await fired(); }
     assert(atk > 0, `${m.name} fired or struck (${m.attack_snd}${m.name === 'gunner' ? ' or gunner/gunatck3.wav' : ''})`);
   }
+  // the flinch: hurt, it plays its pain sound and (pain_chance of the time, three seconds between) flinches; in
+  // nightmare (skill 3) every pain function returned before the animation, so it cries out and fights on
+  const flinch = async (skill, tries) => {
+    await db.exec(`UPDATE game SET skill = ${skill}`);
+    let pained = 0, heardPain = 0;
+    for (let i = 0; i < tries && !pained; i++) {
+      await db.exec(`UPDATE ents SET st = 'run', pain_finished = 0, aiflags = 0, maxz = ${box0.MAXZ} WHERE id = ${id}`);
+      const s0 = (await q1('SELECT COALESCE(MAX(id), 0) m FROM sound_events')).M;
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_pain(${id}, ${pe}, 10); END`);
+      if ((await q1(`SELECT st FROM ents WHERE id = ${id}`)).ST === 'pain') pained++;
+      heardPain += (await q1(`SELECT COUNT(*) n FROM sound_events WHERE id > ${s0} AND ent_id = ${id} AND snd = '${m.pain_snd}'`)).N;
+    }
+    return { pained, heardPain };
+  };
+  const hard = await flinch(2, 40);
+  assert(hard.pained === 1 && hard.heardPain >= 1, `${m.name} flinches when hurt on hard (${hard.pained} flinch, ${hard.heardPain} cries)`);
+  const nightmare = await flinch(3, 40);
+  assert(nightmare.pained === 0 && nightmare.heardPain >= 1, `... and in nightmare cries out but never flinches (${nightmare.pained} flinches, ${nightmare.heardPain} cries in 40)`);
+  await db.exec(`UPDATE game SET skill = 1; UPDATE ents SET st = 'run' WHERE id = ${id}`);
   // kill it with the railgun: 150 a shot, both back at their places (a boss's blasts throw the player about)
   await teleport(128, -320, 32, 135);
   await db.exec(`UPDATE ents SET x = spawn_x, y = spawn_y, z = spawn_z, vx = 0, vy = 0, vz = 0 WHERE id = ${id}; EXECUTE PROCEDURE link_ent(${id})`);
-  await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16), health = 100 WHERE id = ${pe}; UPDATE player SET slugs = 50`);   // (the slugs: the bosses take twenty)
+  await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16), health = 100, max_health = 100 WHERE id = ${pe}; UPDATE player SET slugs = 50`);   // (the slugs: the bosses take twenty)
   await tic([1, 0, 0, 0, 0, 0, 0, 1, 10]);
   for (let i = 0; i < 8; i++) await tic();
   let hp = m.health, shots = 0;
@@ -259,7 +279,8 @@ for (const m of MONSTERS) {
     assert(up && up.ST !== 'asleep' && up.SOLID === 3 && (await sounds('makron/popup.wav')), `... and rises four seconds on (${up?.ST})`);
   }
   await run(20);
-  await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL OR classname IN ('gib', 'debris')");
+  // (and whatever it left in flight: a boss's last BFG ball would hurt the player during the next monster's turn)
+  await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL OR classname IN ('gib', 'debris', 'rocket', 'bfg_ball', 'grenade', 'bolt')");
   await db.exec('UPDATE game SET killed = 0');
 }
 
