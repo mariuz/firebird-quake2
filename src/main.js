@@ -100,14 +100,14 @@ function toggleScreen(p, which) {
 }
 /** The score board's rows: every client's frags (a guest's come with its row). */
 function scoreRows() {
-  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, score: last?.SCORE ?? 0 }];
-  return session.clients.map((c) => ({ id: c.CLIENT, score: c.SCORE ?? 0 }));
+  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, name: last?.NETNAME, score: last?.SCORE ?? 0 }];
+  return session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0 }));
 }
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (anyKey && !e.repeat) { e.preventDefault(); const go = anyKey; anyKey = null; go(); return; }
   if (demo) { if (!e.repeat) { e.preventDefault(); stopDemo(); } return; }   // CL_Disconnect on a key in the attract loop
-  if (menu.active) { e.preventDefault(); menu.key(e.code); return; }
+  if (menu.active) { e.preventDefault(); menu.key(e.code, e.key); return; }   // (the key's character too: the player setup's name field types)
   // default.cfg: F2 the save menu, F3 the load menu, F10 quit; Escape puts the help computer or the
   // inventory away (cmd putaway), else brings up the main menu
   if (e.code === 'F3') { e.preventDefault(); openMenu(() => menu.loadMenu()); return; }
@@ -180,6 +180,17 @@ function setSetting(k, v) {
     if (v && !document.fullscreenElement) canvas.requestFullscreen?.().catch(() => {});
     else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   } else { settings[k] = v; saveSettings(); }
+  if (k === 'name' || k === 'hand') applyUserinfo();
+}
+/**
+ * The player setup's name and hand as this client's userinfo (ClientUserinfoChanged): to the game's first client,
+ * or, joined, sent to the host for the guest's client. Given at the start, with every map (the session keeps it)
+ * and whenever the setup changes.
+ */
+function applyUserinfo() {
+  const info = { name: settings.name, hand: settings.hand };
+  if (netGuest()) { if (net.guest?.open) net.guest.sendInfo(info); return; }
+  session?.setUserinfo(1, info).catch((err) => console.warn('userinfo:', err.message));
 }
 /** Quit: the game stops; a key or a click starts a new one. */
 function quitGame() {
@@ -731,9 +742,10 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   r.drawParticles();
   // the weapon in hand (depth hack: drawn over everything near); none at the intermission
   // (a demo's row names the gun model, its frame and its angles as the server sent them: ps.gunindex, gunframe, gunangles)
+  // (the hand: a left-hander's gun is drawn mirrored, a centre-hander's not at all, as ref_soft and ref_gl had hand 1 and 2)
   const wp = WEAPONS[last.WEAPON];
   const gunName = last.GUN_MODEL ?? wp?.view;
-  if (!last.DEAD && !last.INTERMISSION && gunName) {
+  if (!last.DEAD && !last.INTERMISSION && gunName && last.HAND !== 2) {
     const vm = res.models.get(res.byName.get(gunName));
     if (vm) {
       // SV_CalcGunOffset: the gun sways with the walk cycle and lags behind turns of the view (the delta over a
@@ -753,7 +765,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       const light = lightPoint(bsp, last.PX, last.PY, last.VIEW_Z);
       r.zb.fill(0, 0, r.w * r.h);
       r.drawAlias(vm.mdl, last.GUNFRAME ?? viewFrame(vm.mdl, last, time), 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light,
-        { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z) });
+        { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z), mirror: last.HAND === 1 });
     }
   }
   // ... warped (D_WarpScreen) onto the screen; the status bar is drawn over that
@@ -851,7 +863,9 @@ async function netGo() {
       const link = await peer.ready;
       if (net?.peer !== peer) return;
       net.host = new HostLink(link);
-      net.host.onClose = () => { if (netHost()) { netState('the guest left'); net = null; netEl.panel.hidden = true; } };
+      net.host.onClose = () => { if (netHost()) { netState('the guest left'); net = null; delete session.userinfo[2]; netEl.panel.hidden = true; } };
+      // the guest's name and hand are its second client's (ClientUserinfoChanged), now and with every map
+      net.host.onInfo = (info) => { if (netHost()) session.setUserinfo(2, info).catch((err) => console.warn('userinfo:', err.message)); };
       netEl.panel.hidden = true;
       canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
       netState('hosting: connected');
@@ -870,6 +884,7 @@ async function netGo() {
       running = false;   // this page's own game stands; the host's frames are what is painted
       audio.stopLoops();
       net.guest = new GuestLink(link);
+      applyUserinfo();   // (the userinfo goes with the connect, as the client's did)
       net.guest.onMap = (m) => guestMap(m).catch((err) => { console.error(err); setStatus(err.message, true); });
       net.guest.onPic = (file) => { if (pak.has(file)) { running = false; const p = loadPcx(pak.get(file)); renderer.drawPicFull(p); renderer.present(null, p.palette); } };
       net.guest.onClose = () => { if (netGuest()) { net = null; running = false; netState('the host left'); setStatus('The host left. Press a key or click the view for a game of your own.'); anyKey = () => { setStatus(''); endGame(); }; } };
@@ -916,6 +931,7 @@ function leaveNet() {
   was.peer?.close();
   netState('');
   if (was.guest) { running = false; map = session.map; }
+  if (was.host) delete session.userinfo[2];   // (the guest's name and hand leave with it)
 }
 $('net-host').addEventListener('click', () => hostGame());
 $('net-join').addEventListener('click', () => joinGame());
@@ -995,6 +1011,7 @@ async function boot() {
   try {
     db = await openDatabase();
     session = new Session(db, storage);
+    applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, settings, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, get paints() { return paints; },
       sql: (q, p) => db.query(q, p).then((r) => r.rows) };

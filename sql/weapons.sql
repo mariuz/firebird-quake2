@@ -137,14 +137,18 @@ BEGIN
   EXECUTE PROCEDURE fx(4, ox, oy, oz, hx, hy, hz, 0);
 END^
 
--- the weapon's muzzle: 24 forward, 8 right, viewheight - 8 up (P_ProjectSource)
+-- the weapon's muzzle: 24 forward, 8 right, viewheight - 8 up (P_ProjectSource), the right distance turned by
+-- the hand (pers.hand): a left-hander's shots come from the left, a centre-hander's from the middle
 CREATE OR ALTER PROCEDURE muzzle (pe INTEGER, side DOUBLE PRECISION, up_ DOUBLE PRECISION)
 RETURNS (mx DOUBLE PRECISION, my DOUBLE PRECISION, mz DOUBLE PRECISION, fx DOUBLE PRECISION, fy DOUBLE PRECISION, fz DOUBLE PRECISION,
          rx DOUBLE PRECISION, ry DOUBLE PRECISION, rz DOUBLE PRECISION)
 AS
 DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
-DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
+DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION; DECLARE hand SMALLINT;
 BEGIN
+  SELECT p.hand FROM player p WHERE p.ent_id = :pe INTO hand;
+  IF (hand = 1) THEN side = -side;
+  ELSE IF (hand = 2) THEN side = 0;
   EXECUTE PROCEDURE view_vectors(pe) RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz;
   mx = ex + fx * 24 + rx * side + ux * up_;
   my = ey + fy * 24 + ry * side + uy * up_;

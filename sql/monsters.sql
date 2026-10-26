@@ -1365,7 +1365,8 @@ RETURNS (
   level_msg VARCHAR(200), quad SMALLINT, invincible SMALLINT, breather SMALLINT, enviro SMALLINT, leaf INTEGER, cluster INTEGER, help_msg VARCHAR(400),
   help_msg2 VARCHAR(400), help_changed INTEGER, skill SMALLINT, intermission SMALLINT,
   roll DOUBLE PRECISION, bobtime DOUBLE PRECISION, xyspeed DOUBLE PRECISION, ducked SMALLINT,
-  inv_sel SMALLINT, pickup_item SMALLINT, timer_icon SMALLINT, timer INTEGER, client SMALLINT, score INTEGER, deathmatch SMALLINT)
+  inv_sel SMALLINT, pickup_item SMALLINT, timer_icon SMALLINT, timer INTEGER, client SMALLINT, score INTEGER, deathmatch SMALLINT,
+  hand SMALLINT, netname VARCHAR(16))
 AS
 DECLARE i INTEGER = 0; DECLARE itime DOUBLE PRECISION; DECLARE pe INTEGER;
 DECLARE ufwd DOUBLE PRECISION; DECLARE uside DOUBLE PRECISION; DECLARE uyaw DOUBLE PRECISION; DECLARE upitch DOUBLE PRECISION;
@@ -1422,14 +1423,16 @@ BEGIN
               WHEN p.breather_finished > g.time_ THEN 4 ELSE 0 END,
          CAST(FLOOR(CASE WHEN p.quad_finished > g.time_ THEN p.quad_finished WHEN p.invincible_finished > g.time_ THEN p.invincible_finished
               WHEN p.enviro_finished > g.time_ THEN p.enviro_finished WHEN p.breather_finished > g.time_ THEN p.breather_finished ELSE g.time_ END - g.time_ + 1e-9) AS INTEGER),
-         p.id, p.score, g.deathmatch
+         p.id, p.score, g.deathmatch,
+         -- the client's hand (the page draws the gun by it) and name (the score board)
+         p.hand, COALESCE(NULLIF(p.netname, ''), 'player ' || p.id)
     FROM game g CROSS JOIN player p JOIN ents e ON e.id = p.ent_id
    WHERE g.id = 1
    ORDER BY p.id
     INTO tic, time_, health, max_health, armor, armor_type, power_armor, bullets, shells, rockets, grenades, cells, slugs, weapons, keys, weapon, attack_start, attack_finished, grenade_time,
          px, py, pz, yaw, pitch, view_z, punch, msg, cprint, dmg_take, dmg_save, dmg_time, bonus_time, dead, exit_kind, next_map,
          killed, total_monsters, found_secrets, total_secrets, found_goals, total_goals, waterlevel, watertype, map_name, level_msg, quad, invincible, breather, enviro, leaf, cluster, help_msg,
-         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked, inv_sel, pickup_item, timer_icon, timer, client, score, deathmatch
+         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked, inv_sel, pickup_item, timer_icon, timer, client, score, deathmatch, hand, netname
   DO
   BEGIN
     UPDATE player p SET p.dmg_take = 0, p.dmg_save = 0 WHERE p.id = :client AND p.dmg_time < :time_ - 0.05e0;

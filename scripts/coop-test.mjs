@@ -153,8 +153,23 @@ await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${p1.ENT_ID}, ${p1.ENT_ID}
 const rk = (await one(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('rocket', 0, 0, 0) RETURNING_VALUES id; UPDATE ents e SET e.owner_id = ${p1.ENT_ID} WHERE e.id = :id; SUSPEND; END`)).ID;
 await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p1.ENT_ID}, 1000, 0, 1)`, "player 2 almost dodged player 1's rocket.");
 await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p2.ENT_ID}, 1000, 0, 1)`, 'player 2 blew himself up.');
+// the player setup's names (pers.netname, Session.setUserinfo: ClientUserinfoChanged) are the obituaries' and the rows'
+await session.setUserinfo(1, { name: 'Ace', hand: 0 });
+await session.setUserinfo(2, { name: 'Grunt with a long name', hand: 1 });
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p1.ENT_ID}, 1000, 0, 1)`, "Grunt with a lo almost dodged Ace's rocket.");
+check(session.clients[0].NETNAME === 'Ace' && session.clients[1].NETNAME === 'Grunt with a lo' && session.clients[1].HAND === 1 && session.clients[0].HAND === 0,
+  'the rows carry the names (cut at fifteen characters) and the hands');
+await session.setUserinfo(2, { name: '', hand: 0 });
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p1.ENT_ID}, 1000, 0, 1)`, "player 2 almost dodged Ace's rocket.");
 await db.exec(`DELETE FROM ents WHERE id = ${rk}; UPDATE player SET weapon = 1 WHERE id = 1`);
 check((await players())[1].DEADFLAG === 0, 'and the client is back in the game after each');
+// the hand turns the shots' origin (P_ProjectSource): 8 to the right of the eye, 8 to the left, or none
+const muzzleAt = async (hand) => { await session.setUserinfo(1, { name: 'Ace', hand }); return one(`SELECT mx, my, mz, rx, ry FROM muzzle(${p1.ENT_ID}, 8, -8)`); };
+const [mr, ml, mc] = [await muzzleAt(0), await muzzleAt(1), await muzzleAt(2)];
+const sideOf = (m) => (m.MX - mc.MX) * mc.RX + (m.MY - mc.MY) * mc.RY;
+check(Math.abs(sideOf(mr) - 8) < 1e-6 && Math.abs(sideOf(ml) + 8) < 1e-6 && Math.abs(mr.MZ - ml.MZ) < 1e-9 && Math.abs(mr.MZ - mc.MZ) < 1e-9,
+  `a right-hander's muzzle is 8 to the right of a centre-hander's, a left-hander's 8 to the left (${sideOf(mr).toFixed(1)}, ${sideOf(ml).toFixed(1)}), at the same height`);
+await session.setUserinfo(1, { name: '', hand: 0 });
 
 // ── a weapon or a key one client takes stays for the other ──
 ps = await players();

@@ -176,6 +176,10 @@ short stories of what changed and what it measured; keep that.
   animation it names must be in it, and the painter skips a model it has no mesh for. A pak with the MD2 uses
   the MD2's runs instead. Its sounds are queued like any other; the smoke test's sound check lets a monster's
   whole directory be missing from the pak.
+- A client's userinfo (`player.netname`, `player.hand`: the player setup's name and hand) is not the level's:
+  `init_map` and a loaded save make the player table anew, so `Session.userinfo` keeps it and `applyUserinfo`
+  writes it after every load; a guest's comes over the link (`info`). Read the hand from the tic row (`HAND`),
+  never from the page's settings: the other views' clients have their own.
 - Every chance comes from `rnd()` (game.sql), never `RAND()`: a seeded generator in the session context,
   so a game is a function of its seed and its inputs (`test:replay` holds it to that). Seed with
   `loadMap(…, { seed })` or the console's `seed <n>`; `game.rng_seed` records a new game's; a save carries

@@ -139,6 +139,15 @@ assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws ne
   let d = 0;
   for (let i = 0; i < b66.length; i++) if (b66[i] !== b33[i]) d++;
   assert(d > drawn / 2, `66% and 33% translucency differ (${d} pixels)`);
+  // mirrored (a left-hander's view weapon): the same model flipped about the view's centre line, as many pixels, the
+  // winding reversed so the same faces show
+  const mirrored = shot(0, { fullbright: true, mirror: true });
+  const centroid = (fb) => { let n = 0, sx = 0; for (let i = 0; i < fb.length; i++) if (fb[i] !== 40) { n++; sx += i % 320; } return { n, cx: sx / n }; };
+  const cp = centroid(full), cm = centroid(mirrored);
+  let flipped = 0;
+  for (let y = 0; y < 240; y++) for (let x = 0; x < 320; x++) if ((full[y * 320 + x] !== 40) === (mirrored[y * 320 + 319 - x] !== 40)) flipped++;
+  assert(Math.abs(cm.n - cp.n) < cp.n * 0.05 && Math.abs(cp.cx + cm.cx - 319) < 2 && flipped > 320 * 240 - cp.n * 0.1,
+    `mirrored, the model is its own reflection about the centre (${cm.n} of ${cp.n} pixels, centroids ${cp.cx.toFixed(1)} and ${cm.cx.toFixed(1)})`);
 }
 // the sky's turn (ref_gl's R_DrawSkyBox: time × skyrotate degrees about skyaxis)
 {

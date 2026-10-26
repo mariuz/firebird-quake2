@@ -15,11 +15,15 @@ const YESNO = ['no', 'yes'];
 /** The players spin's choices, in the order of the page's select (one; two to four in coop; two to four in deathmatch). */
 export const PLAYERS = ['one', 'two (coop)', 'three (coop)', 'four (coop)', 'two (deathmatch)', 'three (deathmatch)', 'four (deathmatch)'];
 
-/** qmenu's item kinds: action (left-justified or not), slider, spin control, separator. */
+/** qmenu's item kinds: action (left-justified or not), slider, spin control, text field, separator. */
 const action = (name, y, callback, extra = {}) => ({ type: 'action', name, x: 0, y, callback, ...extra });
 const slider = (name, y, min, max, get, set) => ({ type: 'slider', name, x: 0, y, min, max, get, set });
 const spin = (name, y, items, get, set) => ({ type: 'spin', name, x: 0, y, items, get, set });
+/** menufield_s: a text of at most `length` characters, `visible` of them shown. */
+const field = (name, y, length, visible, get, set) => ({ type: 'field', name, x: 0, y, length, visible, get, set });
 const separator = () => ({ type: 'separator', x: 0, y: 0 });
+/** The handedness spin's choices (M_Menu_PlayerConfig_f's handedness_box), in the hand cvar's order. */
+export const HANDS = ['right', 'left', 'center'];
 
 export class Menu {
   /**
@@ -56,10 +60,10 @@ export class Menu {
     this.current = null;
   }
 
-  /** A key (a KeyboardEvent code) while a menu is up. */
-  key(code) {
+  /** A key (a KeyboardEvent code, and its character where the key types one) while a menu is up. */
+  key(code, char = null) {
     if (!this.current) return;
-    const s = this.current.key(code);
+    const s = this.current.key(code, char);
     if (s) this.host.sound(s);
   }
 
@@ -91,7 +95,7 @@ export class Menu {
       adjustCursor(m, 1);
       this.drawFramework(r, m, realtime);
     };
-    m.key = (code) => this.defaultKey(m, code);
+    m.key = (code, char) => this.defaultKey(m, code, char);
     return m;
   }
 
@@ -114,6 +118,18 @@ export class Menu {
       } else if (it.type === 'spin') {
         this.strR2L(r, x + LCOLUMN_OFFSET, y, it.name, true);
         this.str(r, x + RCOLUMN_OFFSET, y, it.items[it.get()] ?? '');
+      } else if (it.type === 'field') {
+        // Field_Draw: the label, a box of the conchars' frame pieces (18-20 above, 24-26 below) around the text's
+        // last `visible` characters, and, with the cursor on it, a blinking cursor after the text
+        this.strR2L(r, x + LCOLUMN_OFFSET, y, it.name, true);
+        const cc = this.host.hud.conchars;
+        r.drawChar(cc, 18, x + RCOLUMN_OFFSET, y - 4); r.drawChar(cc, 24, x + RCOLUMN_OFFSET, y + 4);
+        r.drawChar(cc, 20, x + RCOLUMN_OFFSET + 8 + it.visible * 8, y - 4); r.drawChar(cc, 26, x + RCOLUMN_OFFSET + 8 + it.visible * 8, y + 4);
+        for (let i = 0; i < it.visible; i++) { r.drawChar(cc, 19, x + RCOLUMN_OFFSET + 8 + i * 8, y - 4); r.drawChar(cc, 25, x + RCOLUMN_OFFSET + 8 + i * 8, y + 4); }
+        const text = String(it.get() ?? '');
+        const shown = text.length > it.visible ? text.slice(text.length - it.visible) : text;
+        this.str(r, x + RCOLUMN_OFFSET + 8, y, shown);
+        if (m.items[m.cursor] === it && (Math.floor(realtime / 250) & 1)) r.drawChar(cc, 11, x + RCOLUMN_OFFSET + 8 + Math.min(shown.length, it.visible - 1) * 8, y);
       }
     }
     // the cursor: a blinking arrow left of a left-justified item, else between the label and the value
@@ -128,7 +144,18 @@ export class Menu {
     if (sb) this.str(r, ((r.w >> 3) >> 1) * 8 - (sb.length >> 1) * 8, r.h - 8, sb);
   }
 
-  defaultKey(m, code) {
+  defaultKey(m, code, char = null) {
+    // Field_Key: a text field under the cursor takes the printable keys and Backspace first (Menu_Keydown gave the
+    // field the key before the menu's own keys; the arrows, Tab, Enter and Escape fall through to those)
+    const it = m.items[m.cursor];
+    if (it?.type === 'field') {
+      if (code === 'Backspace') { const t = String(it.get() ?? ''); if (t.length) it.set(t.slice(0, -1)); return null; }
+      if (typeof char === 'string' && char.length === 1 && char >= ' ' && char <= '~' && code !== 'Tab') {
+        const t = String(it.get() ?? '');
+        if (t.length < it.length) it.set(t + char);
+        return null;
+      }
+    }
     switch (code) {
       case 'Escape': if (m.onEscape) m.onEscape(); this.pop(); return null;
       case 'ArrowUp': case 'Numpad8': m.cursor--; adjustCursor(m, -1); return MENU_MOVE;
@@ -307,16 +334,36 @@ export class Menu {
     this.push(m);
   }
 
-  /** M_Menu_Multiplayer_f: shown as it was, but there is no network here */
+  /** M_Menu_Multiplayer_f: the servers greyed (the network game has the page's own buttons), the player setup live */
   multiplayer() {
     const m = this.framework({
-      id: 'multiplayer', banner: 'm_banner_multiplayer', statusbar: 'there is no network in this port', items: [
-        action('join network server', 0, null, { left: true, grayed: true }),
-        action('start network server', 10, null, { left: true, grayed: true }),
-        action('player setup', 20, null, { left: true, grayed: true }),
+      id: 'multiplayer', banner: 'm_banner_multiplayer', items: [
+        action('join network server', 0, null, { left: true, grayed: true, statusbar: 'the network game is joined from the page: Join' }),
+        action('start network server', 10, null, { left: true, grayed: true, statusbar: 'the network game is hosted from the page: Host' }),
+        action('player setup', 20, () => this.playerConfig(), { left: true }),
       ],
     });
     m.layout = (r) => { m.x = (r.w >> 1) - 64; m.y = (r.h - 30) >> 1; };
+    this.push(m);
+  }
+
+  /**
+   * M_Menu_PlayerConfig_f: the name (the netname cvar: the obituaries and the score board; at most 15 characters)
+   * and the handedness (the hand cvar: right, left, center: where the shots come from and how the gun is drawn).
+   * The model and skin boxes wait on a pak with the player model (the demo's has none), the rate on a network
+   * with a rate; the player's preview went with the model.
+   */
+  playerConfig() {
+    const h = this.host;
+    const m = this.framework({
+      id: 'player', banner: 'm_banner_multiplayer', items: [
+        field('name', 0, 15, 15, () => h.get('name') ?? '', (v) => h.set('name', v)),
+        action('model: male', 20, null, { grayed: true, statusbar: 'the player model and its skins wait on a pak that has them' }),
+        action('skin: grunt', 30, null, { grayed: true, statusbar: 'the player model and its skins wait on a pak that has them' }),
+        spin('handedness', 50, HANDS, () => HANDS[h.get('hand')] ? h.get('hand') : 0, (v) => h.set('hand', v)),
+      ],
+    });
+    m.layout = (r) => { m.x = (r.w >> 1) - 40; m.y = (r.h >> 1) - 70; };
     this.push(m);
   }
 

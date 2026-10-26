@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pak, pic } from '../src/pak.js';
-import { Menu, saveComment, PLAYERS } from '../src/menu.js';
+import { Menu, saveComment, PLAYERS, HANDS } from '../src/menu.js';
 import { defaultBinds, bindKey } from '../src/input.js';
 import { CREDITS } from '../src/credits.js';
 
@@ -17,7 +17,7 @@ const assert = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if 
 
 // a host that records what the menus ask for, and a renderer that records what they draw
 const calls = [];
-const settings = { sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false, binds: defaultBinds() };
+const settings = { sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false, binds: defaultBinds(), name: '', hand: 0 };
 const slots = Array.from({ length: 15 }, (_, i) => (i === 0 ? { valid: true, name: 'ENTERING Outer Base' } : i === 3 ? { valid: true, name: ' 9:05 10/ 8  Outer Base' } : { valid: false }));
 const cache = new Map();
 const hud = { conchars: pic(pak, 'conchars'), pic: (n) => (cache.has(n) ? cache.get(n) : (cache.set(n, pic(pak, n)), cache.get(n))) };
@@ -37,6 +37,8 @@ const r = {
 };
 const menu = new Menu(host);
 const keys = (...codes) => { for (const c of codes) menu.key(c); return menu.current?.id ?? '-'; };
+/** Typing, as the page's keydown gives the menu the code and the character. */
+const type = (text) => { for (const ch of text) menu.key(ch === ' ' ? 'Space' : `Key${ch.toUpperCase()}`, ch); };
 const draw = () => { drawn.length = 0; r.fb.fill(100); menu.draw(r, 1234); return drawn; };
 
 // the main menu
@@ -157,11 +159,37 @@ assert(settings.renderer === 'sql' && settings.detail === 'ultra' && settings.br
 keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
 assert(settings.renderer === 'fast' && settings.detail === 'high' && settings.brightness === 1.4 && menu.current.id === 'main', 'cancel puts them back');
 
-// multiplayer and quit
+// multiplayer: the servers greyed, the player setup live (M_Menu_PlayerConfig_f: the name field and the handedness)
 keys('ArrowUp', 'ArrowUp', 'Enter');
-assert(menu.current.id === 'multiplayer' && menu.current.items.every((i) => i.grayed), 'multiplayer shows its items greyed');
+assert(menu.current.id === 'multiplayer' && menu.current.items.filter((i) => i.grayed).length === 2 && !menu.current.items[2].grayed, 'multiplayer shows the servers greyed and player setup live');
 keys('Enter');
-assert(menu.current.id === 'multiplayer', '... which do nothing');
+assert(menu.current.id === 'multiplayer', 'Enter on a greyed item does nothing');
+keys('ArrowDown', 'ArrowDown', 'Enter');
+assert(menu.current.id === 'player' && menu.current.items[0].type === 'field' && menu.current.cursor === 0, 'player setup opens on the name field');
+draw();
+const box = drawn.filter(([k, n]) => k === 'char' && n >= 18 && n <= 26);
+assert(box.length === 4 + 2 * 15 && drawn.some(([k, s]) => k === 'str' && s === 'name' && drawn.find((d) => d[0] === 'str' && d[1] === 'name')[4]), `the field draws its box of frame pieces around fifteen characters (${box.length} pieces) after its label`);
+type('Ace Rimmer');
+assert(settings.name === 'Ace Rimmer', `typing fills the name (${JSON.stringify(settings.name)})`);
+keys('Backspace', 'Backspace', 'Backspace', 'Backspace', 'Backspace', 'Backspace', 'Backspace');
+assert(settings.name === 'Ace', `Backspace takes a character off (${JSON.stringify(settings.name)})`);
+type('0123456789abcdef');
+assert(settings.name === 'Ace012345678' && settings.name.length === 12 || settings.name.length === 15, `the name stops at fifteen characters (${settings.name.length})`);
+draw();
+assert(drawn.some(([k, s]) => k === 'str' && s === settings.name), 'and the field shows it');
+keys('ArrowDown', 'ArrowDown', 'ArrowDown');
+assert(menu.current.cursor === 3 && menu.current.items[3].type === 'spin' && menu.current.items[3].items === HANDS, 'down past the greyed model and skin reaches the handedness spin');
+keys('ArrowRight');
+assert(settings.hand === 1, 'right turns it to left-handed');
+keys('ArrowRight', 'ArrowRight');
+assert(settings.hand === 2, '... then center, and no further');
+keys('ArrowLeft', 'ArrowLeft', 'ArrowLeft');
+assert(settings.hand === 0, 'left back to right-handed, and no further');
+keys('KeyX', 'Tab');
+assert(settings.hand === 0 && menu.current.cursor === 0, 'a letter on the spin types nothing; Tab wraps to the field');
+menu.key('Tab', '\t'); menu.key('Escape', 'Escape');
+assert(menu.current.id === 'multiplayer' && settings.name.length === 15, 'Tab and Escape on the field are the menu\'s keys, not characters');
+settings.name = ''; settings.hand = 0;
 keys('Escape', 'ArrowUp', 'ArrowUp', 'Enter');
 assert(menu.current.id === 'quit', 'quit shows the quit picture');
 keys('KeyN');

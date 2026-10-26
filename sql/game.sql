@@ -2052,16 +2052,16 @@ END^
 -- death through T_Damage; here it is read off the kill: what the inflictor is (a bolt and its effect, a grenade
 -- or a hand grenade, a rocket, the BFG's ball, a barrel, a mover, a trigger), the damage flags (radius, bullet,
 -- energy, no-protection, falling) and the attacker's weapon in hand (the bullets and the rail leave no
--- projectile). A client is "player 1" or "player 2"; the model is the male's, so "his". The line goes to every
--- client's message line, as gi.bprintf did.
+-- projectile). A client is its netname (pers.netname, the player setup's name), "player 1" or "player 2" with
+-- none; the model is the male's, so "his". The line goes to every client's message line, as gi.bprintf did.
 CREATE OR ALTER PROCEDURE client_obituary (targ INTEGER, inflictor INTEGER, attacker INTEGER, dflags INTEGER, damage INTEGER)
 AS
 DECLARE me VARCHAR(16); DECLARE who VARCHAR(16); DECLARE icls VARCHAR(40); DECLARE ieff INTEGER; DECLARE wt INTEGER; DECLARE w INTEGER;
 DECLARE msg VARCHAR(80); DECLARE msg2 VARCHAR(40); DECLARE radius SMALLINT; DECLARE dm SMALLINT;
 BEGIN
-  SELECT 'player ' || p.id FROM player p WHERE p.ent_id = :targ INTO me;
+  SELECT COALESCE(NULLIF(p.netname, ''), 'player ' || p.id) FROM player p WHERE p.ent_id = :targ INTO me;
   IF (me IS NULL) THEN EXIT;
-  SELECT 'player ' || p.id FROM player p WHERE p.ent_id = :attacker INTO who;
+  SELECT COALESCE(NULLIF(p.netname, ''), 'player ' || p.id) FROM player p WHERE p.ent_id = :attacker INTO who;
   SELECT g.deathmatch FROM game g WHERE g.id = 1 INTO dm;
   IF (inflictor > 0) THEN SELECT e.classname, e.effects FROM ents e WHERE e.id = :inflictor INTO icls, ieff;
   radius = IIF(BIN_AND(dflags, 1) <> 0, 1, 0);

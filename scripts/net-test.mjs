@@ -61,6 +61,17 @@ const hostTic = async (cmd1 = idle) => {
 };
 const p2 = async () => (await q('SELECT e.x, e.y, e.z, e.yaw, e.health FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0];
 
+// the guest's userinfo (its player setup's name and hand) reaches the host, which gives it to the second client
+let infoSeen = null;
+host.onInfo = (i) => { infoSeen = i; };
+guest.sendInfo({ name: 'Rimmer, Arnold J.', hand: 1 });
+check(infoSeen && infoSeen.name === 'Rimmer, Arnold ' && infoSeen.hand === 1 && host.info === infoSeen, `the host gets the guest's name (cut at fifteen) and hand (${JSON.stringify(infoSeen)})`);
+await session.setUserinfo(2, host.info);
+check((await q('SELECT netname, hand FROM player WHERE id = 2'))[0].NETNAME === 'Rimmer, Arnold ' && (await q('SELECT hand FROM player WHERE id = 2'))[0].HAND === 1, 'and the second client carries them');
+guest.sendInfo({ name: 'x', hand: 7 });
+check(host.info.hand === 0, 'a hand that is not 0, 1 or 2 is right-handed');
+await session.setUserinfo(2, { name: '', hand: 0 });
+
 // nothing sent yet: the guest stands
 check(JSON.stringify(host.takeCommand()) === JSON.stringify(idle), 'before any command the guest stands still');
 let r = await hostTic();

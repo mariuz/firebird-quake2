@@ -68,7 +68,10 @@ it and a new game starts.
 
 Escape brings up Quake 2's menus over the game: a new game, the save slots, the credits, the options with
 `customize controls` (the keys menu: Enter then a key rebinds an action, Backspace clears it; the binds are
-kept with the settings in this browser), the video modes, quit.
+kept with the settings in this browser), the multiplayer menu's `player setup` (your name, for the
+obituaries and the score board, and your handedness: a left-hander's shots come from the left and the gun is
+drawn mirrored, a centre-hander's from the middle with no gun drawn, as `P_ProjectSource` and the renderers
+had them; a guest's go to the host), the video modes, quit.
 
 `fetch-pak` needs 7-Zip or `unzip` to open the demo's self-extracting archive. If you own Quake 2, point
 the page at your own `pak0.pak` with the file picker, or copy it with `PAK=/path/to/pak0.pak npm run fetch-pak`:

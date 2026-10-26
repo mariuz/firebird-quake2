@@ -486,7 +486,9 @@ CREATE TABLE player (
   anim_priority   SMALLINT DEFAULT 0 NOT NULL,           -- G_SetClientFrame: 0 basic 1 wave 2 jump 3 pain 4 attack 5 death (what the other player sees)
   anim_end        INTEGER DEFAULT 0 NOT NULL,            -- the frame the run started ends at
   anim_duck       SMALLINT DEFAULT 0 NOT NULL,
-  anim_run        SMALLINT DEFAULT 0 NOT NULL
+  anim_run        SMALLINT DEFAULT 0 NOT NULL,
+  netname         VARCHAR(16),                            -- pers.netname (the userinfo's name): the obituaries and the score board; empty, "player N"
+  hand            SMALLINT DEFAULT 0 NOT NULL             -- pers.hand: 0 right, 1 left, 2 centre (P_ProjectSource moves the shots, the client the gun)
 );
 
 -- client_respawn_t's coop_respawn: each client's persistent data as it was when the level began

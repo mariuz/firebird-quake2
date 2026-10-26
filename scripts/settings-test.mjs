@@ -26,6 +26,11 @@ const half = loadSettings(store(JSON.stringify({ fov: 120, detail: 'nope' })));
 check(half.fov === 120 && half.detail === 'high', 'a good value next to a bad one is kept');
 check(loadSettings(store(JSON.stringify({ fov: 1 }))).fov === 1 && loadSettings(store(JSON.stringify({ fov: 160 }))).fov === 160 && loadSettings(store(JSON.stringify({ fov: 161 }))).fov === 90, 'fov is 1 to 160, as ClientUserinfoChanged clamped it');
 
+// the player setup: a name of at most 15 printable characters (empty by default: the game says "player 1"), a hand of 0 to 2
+check(DEFAULTS.name === '' && DEFAULTS.hand === 0 && loadSettings(store(JSON.stringify({ name: 'Ace', hand: 2 }))).name === 'Ace' && loadSettings(store(JSON.stringify({ name: 'Ace', hand: 2 }))).hand === 2
+  && loadSettings(store(JSON.stringify({ name: 'sixteen chars...!', hand: 3 }))).name === '' && loadSettings(store(JSON.stringify({ name: 'bad\nname', hand: -1 }))).hand === 0
+  && loadSettings(store(JSON.stringify({ name: 42 }))).name === '',
+  'the name is kept up to 15 printable characters (longer, a control character or a number fall back to none), the hand 0 to 2');
 check(loadSettings(store(JSON.stringify({ skill: 3 }))).skill === 3 && loadSettings(store(JSON.stringify({ skill: 4 }))).skill === 1, 'the skill goes up to 3, nightmare (the console\'s), and no further');
 check(viewSize({ detail: 'low' }).join('x') === '160x120' && viewSize({ detail: 'ultra' }).join('x') === '640x480' && viewSize({ detail: '?' }).join('x') === '320x240', 'the video modes, 320×240 for anything else');
 check(Object.entries(OPTIONS_RESET).every(([k, v]) => DEFAULTS[k] === v) && Object.entries(VIDEO_RESET).every(([k, v]) => k === 'fullscreen' || DEFAULTS[k] === v), 'the menus\' resets put back the defaults');

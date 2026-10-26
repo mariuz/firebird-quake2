@@ -134,10 +134,17 @@ the order they are to be taken.
   `test:monsters` hurts every monster at hard and at nightmare; the console, settings and browser tests cover
   the command, the setting and the page. Left out: `M_CheckAttack`'s halving of the missile chance on easy and
   doubling at hard and above, which the port's own chance table (`check_attack`, per monster) never had.
-- **Player setup: name and handedness**: the obituaries say "player 1" and "player 2". `M_Menu_PlayerConfig_f`
-  gave a name, a model and skin, and a hand; `P_ProjectSource` moved every shot's origin to the right, the
-  left or the centre with it, and the view weapon with the shot. The skins wait on the registered pak's
-  player model; the name (`pers.netname`, in the obituaries and the score board) and the hand do not.
+- **Player setup: name and handedness**: done. The multiplayer menu's `player setup` is `M_Menu_PlayerConfig_f`
+  with what the demo pak allows: a name field (`menufield_s`: fifteen characters, Backspace, the blinking
+  cursor in its box of frame pieces) and the handedness spin; the model and skin boxes are greyed until a pak
+  has the player model. The name is `pers.netname`, in the obituaries and on the score board ("player N"
+  without one); the hand is `pers.hand`: `muzzle` (`P_ProjectSource`) puts a left-hander's shots 8 to the left
+  and a centre-hander's in the middle, and the gun is drawn mirrored for a left-hander (`drawAlias`'s
+  `mirror`, as ref_soft negated `aliasxscale`) and not at all for a centre-hander. Both are the client's
+  userinfo (`Session.setUserinfo`): the session writes them to the client's row after every map load and
+  loaded game, a guest sends its own to the host at the connect (an `info` message) and on every change, and
+  each `Q2_TIC` row carries its client's `hand` and `netname` for the page. Tested in the menu, settings, coop,
+  net and painter tests. Left: the model and skin (the registered pak), the rate box, the model's preview.
 - **Save files**: saves live in one browser's storage (`src/savestore.js`) and go with its site data. A
   download of a slot as a file and a load from one would move a game between browsers and keep it; the
   store's gzipped JSON with its header line is the format already.
