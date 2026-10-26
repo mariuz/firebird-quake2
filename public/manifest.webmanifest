@@ -1,0 +1,15 @@
+{
+  "name": "Firebird Quake 2",
+  "short_name": "Quake 2 SQL",
+  "description": "Quake 2 simulated and rendered inside the Firebird SQL database, running in your browser on Firebird 6 compiled to WebAssembly.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0c0f0d",
+  "theme_color": "#0c0f0d",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
