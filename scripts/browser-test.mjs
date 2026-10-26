@@ -192,6 +192,26 @@ try {
     for (let i = 0; i < 240 && !(one.coop === false && one.clients === 1 && one.views === 1); i++) { await sleep(250); one = await state(); }
     assert(one.coop === false && one.clients === 1 && one.views === 1 && one.h === one.screenH, `one player again: a new single-player game on the whole screen (${JSON.stringify(one)})`);
 
+    // the console: the backquote opens the line; `skill 3` sets nightmare for the next game (the setting keeps it, the
+    // Skill select shows it through its hidden option, Quake's latched-cvar notice shows), `map demo1` starts a game
+    // whose row says 3, and `skill 1` puts medium back
+    const skillState = () => page.evaluate(() => ({ setting: window.quake2?.settings?.skill, select: document.getElementById('skill').value,
+      shown: document.getElementById('skill').selectedOptions[0]?.textContent, status: document.getElementById('status')?.textContent,
+      stored: JSON.parse(localStorage.getItem('firebird-quake2:settings') ?? '{}').skill })).catch(() => ({}));
+    const typeCommand = async (line) => { await page.mouse.click(480, 360); await sleep(200); await page.keyboard.press('Backquote'); await sleep(200); await page.keyboard.type(line); await page.keyboard.press('Enter'); await sleep(300); };
+    await typeCommand('skill 3');
+    const nm = await skillState();
+    assert(nm.setting === 3 && nm.stored === 3 && nm.select === '3' && nm.shown === 'Nightmare' && /skill will be changed for next game/.test(nm.status ?? ''),
+      `skill 3 at the console sets nightmare for the next game, kept in the settings and shown by the select (${JSON.stringify(nm)})`);
+    await typeCommand('map demo1');
+    let gskill = -1;
+    for (let i = 0; i < 240 && gskill !== 3; i++) { await sleep(250); gskill = await page.evaluate(() => window.quake2.sql('SELECT skill FROM game').then((r) => r[0].SKILL)).catch(() => -1); }
+    assert(gskill === 3, `and the next game is played at nightmare (game.skill ${gskill})`);
+    for (let i = 0; i < 240 && !/q2_tic \d+ ms/.test(await stats()); i++) await sleep(250);
+    await typeCommand('skill 1');
+    const md = await skillState();
+    assert(md.setting === 1 && md.select === '1' && md.shown === 'Medium', `skill 1 puts medium back (${JSON.stringify({ setting: md.setting, shown: md.shown })})`);
+
     // the pak's demo from the select: its map loads, the recording plays (the frame count climbs, the stats line says
     // so, no tic runs), a key stops it and a new game starts
     const demoState = () => page.evaluate(() => ({ demo: window.quake2?.demo, running: window.quake2?.running, map: document.getElementById('mapname')?.textContent,

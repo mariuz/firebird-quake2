@@ -123,11 +123,17 @@ the order they are to be taken.
   `SV_Frame`'s clamp gave it, which CI's runner showed at four frames a second) and the paints against the
   tics. Left: the model frames themselves are not lerped
   (`backlerp`), so a walk cycle still steps at 10 Hz.
-- **Nightmare skill**: Quake 2's skill 3, reachable only from the console (`skill 3`), the menus stopping at
-  hard. Its effects: the monsters do not flinch (every pain function returned at skill 3), the attack
-  chances are hard's (`M_CheckAttack` doubled them at 2 and above) and the hard spawn filter applies
-  (`SpawnEntities` read `NOT_HARD` for 2 and 3). The port stops at hard: one change in `monster_pain` and
-  `spawn_map_ents`, a case in `test:monsters`.
+- **Nightmare skill**: done. Quake 2's skill 3, reachable only from the console (`skill 3`; `skill` alone
+  shows it, the number is clamped to 0..3 as `SpawnEntities` clamped the cvar), the menus and the Skill select
+  stopping at hard (the select shows "Nightmare" through a hidden option when the console set it). The cvar
+  was latched: set with a game running it takes hold at the next map ("skill will be changed for next
+  game."), a new one or the next level. Its effects: the monsters cry out but do not flinch (`monster_pain`
+  returns after the sound at skill 3, as every pain function did: "no pain anims in nightmare"), the hard spawn
+  filter applies (`NOT_HARD` for 2 and 3), and whatever reads `skill >= 2` (the soldiers' crouched fire, the
+  gunner's duck grenade, one powerup held) is hard's; the help computer says "hard+" as `HelpComputer` did.
+  `test:monsters` hurts every monster at hard and at nightmare; the console, settings and browser tests cover
+  the command, the setting and the page. Left out: `M_CheckAttack`'s halving of the missile chance on easy and
+  doubling at hard and above, which the port's own chance table (`check_attack`, per monster) never had.
 - **Player setup: name and handedness**: the obituaries say "player 1" and "player 2". `M_Menu_PlayerConfig_f`
   gave a name, a model and skin, and a hand; `P_ProjectSource` moved every shot's origin to the right, the
   left or the centre with it, and the view weapon with the shot. The skins wait on the registered pak's
@@ -195,7 +201,8 @@ the order they are to be taken.
   (spawned on the player and touched; an ammo adds one pickup's worth, `give shells 20` or `give health 50`
   sets the count), `use <item>`, `kill` (godmode or not), `map <name>` (a new game), `seed [n]` (the game's
   seed and the generator's state, or the next new game's seed: see *Deterministic replays*), `fov <degrees>` (1 to
-  160), `save`, `load` (`player_command` in weapons.sql for the game's part). Up and down step through the
+  160), `skill [0-3]` (the next map's skill; 3 is nightmare, the console's alone: see *Nightmare skill* under
+  *Next*), `save`, `load` (`player_command` in weapons.sql for the game's part). Up and down step through the
   lines typed, Tab completes a command's name. `drop <item>` is `Cmd_Drop_f`: ammo a pickup's worth, a weapon
   not in hand, a powerup, power armour (off with the last), thrown ahead and not back to its dropper for a
   second; a dropped weapon carries no ammo.

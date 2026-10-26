@@ -600,11 +600,12 @@ BEGIN
   EXECUTE PROCEDURE fx(3, (SELECT e.x FROM ents e WHERE e.id = :enemy), (SELECT e.y FROM ents e WHERE e.id = :enemy), (SELECT e.z + 10 FROM ents e WHERE e.id = :enemy), 0, 0, 0, dmg);
 END^
 
--- pain
+-- pain (soldier_pain, infantry_pain, …: the pain skin, three seconds between flinches, the sound, then the
+-- flinch, which every pain function skipped in nightmare: "if (skill->value == 3) return; // no pain anims")
 CREATE OR ALTER PROCEDURE monster_pain (eid INTEGER, attacker INTEGER, damage INTEGER)
 AS
 DECLARE st VARCHAR(12); DECLARE pf DOUBLE PRECISION; DECLARE pc DOUBLE PRECISION; DECLARE anims VARCHAR(80); DECLARE ps VARCHAR(64); DECLARE n INTEGER; DECLARE pick VARCHAR(16);
-DECLARE p INTEGER; DECLARE q INTEGER; DECLARE i INTEGER; DECLARE mt VARCHAR(16); DECLARE hp INTEGER; DECLARE mhp INTEGER;
+DECLARE p INTEGER; DECLARE q INTEGER; DECLARE i INTEGER; DECLARE mt VARCHAR(16); DECLARE hp INTEGER; DECLARE mhp INTEGER; DECLARE sk SMALLINT;
 BEGIN
   EXECUTE PROCEDURE monster_duck_up(eid);
   SELECT e.st, e.pain_finished, t.pain_chance, t.pain_anims, t.pain_snd, e.mtype, e.health, e.max_health FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid
@@ -616,6 +617,8 @@ BEGIN
   UPDATE ents e SET e.pain_finished = now_() + 3 WHERE e.id = :eid;
   IF (rnd() > pc) THEN EXIT;
   EXECUTE PROCEDURE snd(eid, 2, ps, 1, 1);
+  SELECT g.skill FROM game g WHERE g.id = 1 INTO sk;
+  IF (sk = 3) THEN EXIT;                                        -- no pain anims in nightmare
   n = 1; p = 1;
   WHILE (POSITION(',', anims, p) > 0) DO BEGIN n = n + 1; p = POSITION(',', anims, p) + 1; END
   i = FLOOR(rnd() * n); p = 1;
@@ -1444,6 +1447,7 @@ DECLARE i INTEGER; DECLARE seed BIGINT; DECLARE pid SMALLINT; DECLARE pe INTEGER
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
 BEGIN
   IF (deathmatch = 1) THEN coop = 0;
+  skill = MAXVALUE(0, MINVALUE(3, skill));                      -- (SpawnEntities: 0 easy, 1 medium, 2 hard, 3 nightmare)
   -- the generator's state: seeded by the caller for a replay, else from wherever RAND() lands; a new game records it
   seed = CAST(RDB$GET_CONTEXT('USER_SESSION', 'rng') AS BIGINT);
   IF (seed IS NULL) THEN BEGIN seed = CAST(FLOOR(RAND() * 4294967296) AS BIGINT); RDB$SET_CONTEXT('USER_SESSION', 'rng', seed); END

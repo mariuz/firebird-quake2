@@ -151,7 +151,9 @@ short stories of what changed and what it measured; keep that.
 - Items are named by their itemlist index (g_items.c's order: 7 blaster, 12 grenades, 23 quad, 41 health):
   `inv_count`, `inv_sel`, `pickup_item` and the page's `ITEMS` all use it. Usable items (power armour,
   weapons, powerups) are the ones the selection visits.
-- Skill numbers are Quake's: 0 easy, 1 medium, 2 hard. The scripts load maps at skill 2 (hard) and with
+- Skill numbers are Quake's: 0 easy, 1 medium, 2 hard, 3 nightmare (the console's `skill 3` alone; the menus stop at
+  hard). Nightmare is hard with no flinch: `monster_pain` exits after the sound, and every other test of the skill is
+  `>= 2`, never `= 2`. The scripts load maps at skill 2 (hard) and with
   `seed: 1` on their first load, so a failing run replays as it failed; `ab-bench` and the other benches
   too, so both trees play the same game.
 - Spawnflags 256/512/1024 keep an entity out of easy/medium/hard; an entity with all three (1792) is

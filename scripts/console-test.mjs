@@ -12,8 +12,9 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90 },
+  settings: { fov: 90, skill: 1 },
   saveSettings: () => calls.push(['saveSettings']),
+  setSkill: (n) => calls.push(['setSkill', n]),
   setStatus: (msg, isError = false) => status.push([msg, isError]),
   startMap: async (name) => calls.push(['startMap', name]),
   setView: async (fov) => calls.push(['setView', fov]),
@@ -43,6 +44,22 @@ const seeded = calls.at(-1);
 check(seeded[0] === 'query' && seeded[1].startsWith("SELECT RDB$SET_CONTEXT('USER_SESSION'") && seeded[2] === 42 && status.at(-1)?.[0] === 'the next new game starts from seed 42', 'seed 42 seeds the next new game');
 await con.submit('seed x');
 check(status.at(-1)?.[0] === 'seed takes a number' && status.at(-1)?.[1] === true, 'seed x is refused');
+// the skill cvar: shown, set for the next game (latched: a game running keeps its own), clamped to 0..3, nightmare being 3
+await con.submit('skill');
+check(status.at(-1)?.[0] === '"skill" is "1"', 'skill alone shows the skill');
+await con.submit('skill 3');
+check(host.settings.skill === 3 && last() === 'setSkill 3' && calls.at(-2)?.[0] === 'saveSettings' && status.at(-1)?.[0] === 'skill will be changed for next game.',
+  'skill 3 sets nightmare for the next game, kept in the settings and shown on the page, with Quake\'s latched-cvar notice');
+await con.submit('skill 9');
+check(host.settings.skill === 3 && last() === 'setSkill 3', 'skill 9 clamps to 3');
+await con.submit('skill -1');
+check(host.settings.skill === 0 && last() === 'setSkill 0', 'skill -1 clamps to 0');
+await con.submit('skill x');
+check(host.settings.skill === 0 && status.at(-1)?.[0] === 'skill takes a number: 0 easy, 1 medium, 2 hard, 3 nightmare' && status.at(-1)?.[1] === true, 'skill x is refused');
+running = false;
+await con.submit('skill 2');
+check(host.settings.skill === 2 && status.at(-1)?.[0] === '"skill" is "2"', 'with no game running, the skill is set at once');
+running = true;
 await con.submit('save'); check(last() === 'saveGame', 'save saves');
 await con.submit('load'); check(last() === 'loadGame', 'load loads');
 await con.submit('inven'); check(last() === 'inven', 'inven toggles the inventory');

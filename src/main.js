@@ -202,6 +202,8 @@ const con = new Console({
   isRunning: () => running,
   // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
   setCvar: async (name, value) => { session.cvars[name] = value; if (map && !netGuest()) await db.exec(`UPDATE game SET ${name} = ${value} WHERE id = 1`); },
+  // the skill (latched: the next map's): the select shows it, nightmare through its hidden option
+  setSkill: (n) => { $('skill').value = String(n); },
   playDemo: (name) => playDemo(name),
 });
 function openConsole() {
