@@ -973,8 +973,9 @@ BEGIN
     ELSE
       UPDATE ents e SET e.vx = :ox, e.vy = :oy, e.vz = :oz WHERE e.id = :eid;
   END
-  -- check for water transition
-  IF (mt IN (6, 10)) THEN
+  -- check for water transition (SV_Physics_Toss: a toss, a bounce or a missile; the missiles' water level says
+  -- which explosion a rocket makes)
+  IF (mt IN (6, 9, 10)) THEN
   BEGIN
     EXECUTE PROCEDURE check_water(eid) RETURNING_VALUES wl, wt;
     IF (owl = 0 AND wl > 0) THEN

@@ -2547,21 +2547,25 @@ BEGIN
       ign = hit; sx = ex; sy = ey; sz = ez; n = n + 1;
       hmon = NULL;
     END
+    -- TE_LASER_SPARKS where the laser ends (four, in the ball's skin colour, 0), then the laser itself (TE_BFG_LASER)
+    EXECUTE PROCEDURE fx(10, ex, ey, ez, nx, ny, nz, 4 * 256);
     EXECUTE PROCEDURE fx(12, x, y, z, ex, ey, ez, 0);
   END
   UPDATE ents e SET e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
 END^
 
 -- bfg_explode: the frame after the ball strikes, everything within its radius that both the ball and the
--- shooter can see takes up to the ball's full damage, falling off as 1 - sqrt(distance / radius) (energy)
+-- shooter can see takes up to the ball's full damage, falling off as 1 - sqrt(distance / radius) (energy), each
+-- with its own TE_BFG_EXPLOSION; then the ball, now the s_bfg3 sprite, steps a frame a tic and goes at its fifth
 CREATE OR ALTER PROCEDURE bfg_explode (eid INTEGER)
 AS
-DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE own INTEGER;
+DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE own INTEGER; DECLARE fr INTEGER;
 DECLARE rdmg DOUBLE PRECISION; DECLARE rad DOUBLE PRECISION; DECLARE t INTEGER; DECLARE d DOUBLE PRECISION; DECLARE pts DOUBLE PRECISION;
 DECLARE cx DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE cz DOUBLE PRECISION; DECLARE ok SMALLINT;
 BEGIN
-  SELECT e.x, e.y, e.z, e.owner_id, e.dmg, e.dmg_radius FROM ents e WHERE e.id = :eid INTO x, y, z, own, rdmg, rad;
+  SELECT e.x, e.y, e.z, e.owner_id, e.dmg, e.dmg_radius, e.frame FROM ents e WHERE e.id = :eid INTO x, y, z, own, rdmg, rad, fr;
   IF (x IS NULL) THEN EXIT;
+  IF (fr = 0) THEN
   FOR SELECT e.id, e.x + (e.minx + e.maxx) / 2, e.y + (e.miny + e.maxy) / 2, e.z + (e.minz + e.maxz) / 2 FROM ents e
        WHERE e.takedamage > 0 AND e.id <> :eid AND (:own IS NULL OR e.id <> :own)
          AND ABS(e.x - :x) < :rad + 64 AND ABS(e.y - :y) < :rad + 64 AND ABS(e.z - :z) < :rad + 64 INTO t, cx, cy, cz
@@ -2576,19 +2580,23 @@ BEGIN
     EXECUTE PROCEDURE fx(8, cx, cy, cz, 0, 0, 0, 0);
     EXECUTE PROCEDURE t_damage(t, eid, own, CAST(pts AS INTEGER), 0, 4);
   END
-  DELETE FROM ents e WHERE e.id = :eid;
+  IF (fr >= 4) THEN DELETE FROM ents e WHERE e.id = :eid;
+  ELSE UPDATE ents e SET e.frame = :fr + 1, e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
 END^
 
+-- Grenade_Explode: the blast, then the explosion the client shows: a grenade's (TE_GRENADE_EXPLOSION) on the ground,
+-- a rocket's (TE_ROCKET_EXPLOSION) in the air, and under water the same pictures with the water's sound
+-- (TE_GRENADE_EXPLOSION_WATER, TE_ROCKET_EXPLOSION_WATER: weapons/xpld_wat.wav)
 CREATE OR ALTER PROCEDURE grenade_explode (eid INTEGER)
 AS
-DECLARE own INTEGER; DECLARE dmg INTEGER; DECLARE rad DOUBLE PRECISION;
+DECLARE own INTEGER; DECLARE dmg INTEGER; DECLARE rad DOUBLE PRECISION; DECLARE wl SMALLINT; DECLARE fl INTEGER;
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
 BEGIN
-  SELECT e.owner_id, e.dmg, e.dmg_radius, e.x, e.y, e.z FROM ents e WHERE e.id = :eid INTO own, dmg, rad, x, y, z;
+  SELECT e.owner_id, e.dmg, e.dmg_radius, e.x, e.y, e.z, e.waterlevel, e.flags FROM ents e WHERE e.id = :eid INTO own, dmg, rad, x, y, z, wl, fl;
   IF (x IS NULL) THEN EXIT;
   EXECUTE PROCEDURE t_radius_damage(eid, own, dmg, NULL, rad);
-  EXECUTE PROCEDURE snd_at(x, y, z, 'weapons/grenlx1a.wav', 1, 1);
-  EXECUTE PROCEDURE fx(9, x, y, z, 0, 0, 0, 0);
+  EXECUTE PROCEDURE snd_at(x, y, z, IIF(wl > 0, 'weapons/xpld_wat.wav', 'weapons/grenlx1a.wav'), 1, 1);
+  EXECUTE PROCEDURE fx(IIF(BIN_AND(fl, 512) <> 0, 9, 2), x, y, z, 0, 0, 0, 0);
   DELETE FROM ents e WHERE e.id = :eid;
 END^
 
@@ -2649,22 +2657,26 @@ BEGIN
     IF (BIN_AND(sflags, 4) <> 0) THEN BEGIN DELETE FROM ents e WHERE e.id = :e1; EXIT; END
     IF (td2 > 0 AND hp2 > 0) THEN EXECUTE PROCEDURE t_damage(e2, e1, own, dmg, dmg, 0);
     EXECUTE PROCEDURE t_radius_damage(e1, own, rdmg, e2, rad);
-    EXECUTE PROCEDURE snd_at(x, y, z, 'weapons/rocklx1a.wav', 1, 1);
+    -- rocket_touch: TE_ROCKET_EXPLOSION, or TE_ROCKET_EXPLOSION_WATER (the same picture, the water's sound) under water
+    EXECUTE PROCEDURE snd_at(x, y, z, IIF(EXISTS (SELECT 1 FROM ents e WHERE e.id = :e1 AND e.waterlevel > 0), 'weapons/xpld_wat.wav', 'weapons/rocklx1a.wav'), 1, 1);
     EXECUTE PROCEDURE fx(2, x, y, z, 0, 0, 0, 0);
     DELETE FROM ents e WHERE e.id = :e1;
   END
   ELSE IF (c1 = 'bfg_ball') THEN
   BEGIN
     IF (BIN_AND(sflags, 4) <> 0) THEN BEGIN DELETE FROM ents e WHERE e.id = :e1; EXIT; END
-    -- bfg_touch: the core explosion (so firing it into a wall still hurts), then the ball stops a frame back
-    -- along its flight and becomes the explosion that bfg_explode finishes the next frame
+    -- bfg_touch: the core explosion (so firing it into a wall still hurts), TE_BFG_BIGEXPLOSION where it struck, then
+    -- the ball stops a frame back along its flight and becomes the s_bfg3 sprite, which bfg_explode plays through
+    -- its five frames, the blast on the first
     IF (e2 = own) THEN EXIT;
     IF (td2 > 0 AND hp2 > 0) THEN EXECUTE PROCEDURE t_damage(e2, e1, own, 200, 0, 0);
     EXECUTE PROCEDURE t_radius_damage(e1, own, 200, e2, 100);
     EXECUTE PROCEDURE snd_at(x, y, z, 'weapons/bfg__x1b.wav', 1, 1);
-    EXECUTE PROCEDURE fx(8, x, y, z, 0, 0, 0, 0);
+    EXECUTE PROCEDURE fx(18, x, y, z, 0, 0, 0, 0);
     UPDATE ents e SET e.solid = 0, e.movetype = 0, e.x = e.x - e.vx * 0.1e0, e.y = e.y - e.vy * 0.1e0, e.z = e.z - e.vz * 0.1e0,
-           e.vx = 0, e.vy = 0, e.vz = 0, e.model_id = NULL, e.mkind = NULL, e.think = 'bfg_explode', e.nextthink = now_() + 0.1e0 WHERE e.id = :e1;
+           e.vx = 0, e.vy = 0, e.vz = 0, e.frame = 0, e.think = 'bfg_explode', e.nextthink = now_() + 0.1e0 WHERE e.id = :e1;
+    EXECUTE PROCEDURE set_model(e1, 'sprites/s_bfg3.sp2');
+    EXECUTE PROCEDURE link_ent(e1);
   END
   ELSE IF (c1 IN ('grenade', 'hgrenade')) THEN
   BEGIN

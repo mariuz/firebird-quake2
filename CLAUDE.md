@@ -173,6 +173,13 @@ short stories of what changed and what it measured; keep that.
   starts at zero. Something spawned later through them (`target_spawner`) therefore needs no shifting; it used
   to get `now_()` added to its nextthink, which was wrong for a spawned pusher.
 - A pusher's (movetype 7) thinks are scheduled on its own clock, `ltime`; everything else's on `now_()`.
+- The effect kinds (`fx(kind, …)`, listed in docs/ARCHITECTURE.md §6) are the port's own numbers, not `TE_`'s: a new
+  temporary entity gets the next kind in `src/effects.js`, a row in `src/demo.js`'s `TE_KIND` and a line in the list.
+  A kind's `n` packs what the message carried (7: count × 16 + colour; 10: count × 256 + colour). The client's own
+  chances and sounds in `CL_ParseTEnt` (a gunshot's ricochet) are the game's here, drawn from `rnd()`.
+- A projectile's `waterlevel` is read as it flies (`toss_move`'s water check covers movetype 9, the missiles), so a
+  rocket's explosion knows it is under water; a thing spawned under water and hitting the bottom in its first tic
+  explodes dry, as Quake's did.
   Entity pitch is Quake's: positive is downward (`angleMatrix`, `AngleVectors`).
 - A monster whose model the pak lacks (the full game's in the demo pak) runs on a model row without a mesh: its
   `anims` table in `src/gamedata.js` (the m_*.h runs, in the model's order) becomes its `anims` rows, every

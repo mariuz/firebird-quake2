@@ -156,7 +156,9 @@ export const MONSTERS = [
     run_speed: 40, walk_speed: 3, yaw_speed: 20,
     anims: [['attack', 15], ['death1', 9], ['death2', 10], ['pain1', 5], ['pain2', 6], ['pain3', 11], ['run', 6], ['stand', 51], ['walk', 13], ['jump', 8]],
     stand_anim: 'stand', walk_anim: 'walk', run_anim: 'run', pain_anims: 'pain1,pain2,pain3', death_anims: 'death1,death2',
-    melee_anim: 'attack', melee_frame: 3, melee_range: 100, melee_dmg: 10,    // mutant_hit_left: 10 + rand()%6 (the leap is not here yet)
+    // mutant_hit_left: 10 + rand()%6. The leap is not here yet, so the swipe reaches a stride past where SV_CloseEnough
+    // stops a 64-wide monster at the player's box on a diagonal (68 + 40): with Quake's 80 it stood there and never struck
+    melee_anim: 'attack', melee_frame: 3, melee_range: 112, melee_dmg: 10,
     attack_chance: 0, pain_chance: 1,
     sight_snd: 'mutant/mutsght1.wav', idle_snd: 'mutant/mutidle1.wav', search_snd: 'mutant/mutsrch1.wav', pain_snd: 'mutant/mutpain1.wav',
     death_snd: 'mutant/mutdeth1.wav', melee_snd: 'mutant/mutatck2.wav',

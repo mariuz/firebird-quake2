@@ -160,11 +160,24 @@ the order they are to be taken.
   the registration, the caches, the manifest and the icons, and reloads the page offline, where the game
   runs. Left: the music tracks go into the data cache only as they play; the picked pak and music folder are
   not cached (they are the player's files).
-- **An audit of the temporary entities**: `src/effects.js` handles the gunshots, blood, the rail trail, the
-  blaster, splashes, bubbles, the power armour sparks, the explosions, the BFG and the parasite. Against
-  cl_tent.c's list, the explosions in water (`TE_ROCKET_EXPLOSION_WATER`, `TE_GRENADE_EXPLOSION_WATER`: no
-  fire, `weapons/xpld_wat.wav`) and the BFG's lasers (`TE_BFG_LASER`, a beam) look absent; a pass with a
-  case per effect in `test:effects`.
+- **An audit of the temporary entities**: done, against cl_tent.c's `CL_ParseTEnt` and the game's senders
+  (g_weapon.c, g_misc.c). The BFG's lasers were there already (kind 12); what was not: the water explosions
+  (`TE_ROCKET_EXPLOSION_WATER`, `TE_GRENADE_EXPLOSION_WATER`: the same pictures with `weapons/xpld_wat.wav`,
+  and a grenade going off in the air makes a rocket's explosion, as `Grenade_Explode` chose; a missile's water
+  level is now read as it flies, as `SV_Physics_Toss` read it), a gunshot's `CL_SmokeAndFlash` (the smoke
+  model, translucent over four frames and lit where it hangs, and the flash model, fullbright for one tic) and
+  its ricochet (`world/ric1-3.wav`, three of sixteen hits, played by the game since the sounds are its), the
+  sparks' count and colour (kind 10 packs them: `TE_LASER_SPARKS` at the end of each BFG laser, four in the
+  ball's skin colour; the demo's sparks kinds map through the same), and the BFG's strike as Quake had it
+  (`TE_BFG_BIGEXPLOSION`, kind 18, particles alone; the ball becomes the `s_bfg3` sprite and steps a frame a
+  think, the blast on its first, gone after five; `TE_BFG_EXPLOSION` on each thing reached is the `s_bfg2`
+  sprite alone). Checked by `test:effects`, now with the game's side: a rocket and a grenade fired into
+  demo1's water, a grenade in the air and one on the ground, sixty-four bullets into a wall and their
+  ricochets, a BFG shot's lasers, sparks, strike and sprite. Not in the demo's game: `TE_BOSSTPORT` (the
+  final boss's entrance), `TE_MEDIC_CABLE_ATTACK` (with the medic's cable, see *The full game*), the mission
+  packs' effects. Found on the way: the mutant, stopped a stride short of the player's box by `SV_CloseEnough`
+  on a diagonal, stood at 100 units with a swipe of 100 and never struck; its swipe reaches 112 until its leap
+  is here (`test:monsters` has a `MONSTER_DEBUG` trace of a monster's attack window for the next such case).
 
 ## Playing the demo
 
