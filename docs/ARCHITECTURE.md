@@ -569,7 +569,10 @@ Saved games (`src/savegame.js`): `F6` reads the game tables (`game`, `player`, `
 model ids' names, and the unit's other levels as they were left (`exportLevel`'s objects, `savedLevels`
 gets them back), and keeps them in `localStorage` as `src/savestore.js` packs them: a header line
 (the map, the comment, the version) and the JSON gzipped and base64'd, a tenth of the JSON, so the
-fifteen slots fit the origin's quota (a plain JSON save from before still reads); `F9` reloads the map, empties the four tables, inserts the
+fifteen slots fit the origin's quota (a plain JSON save from before still reads). The same text is a save
+file: the page's Download writes the game as `<map>-<time>.q2sav` (`Session.packGame`, no slot) and its
+Load takes a file (`Session.unpackText`: the save, or null for anything else; the page refuses another
+`SAVE_VERSION`) into the same load as a slot's, so a game moves between browsers. `F9` reloads the map, empties the four tables, inserts the
 saved rows with model ids remapped by name, restarts `ent_seq` above the highest id and resets the
 frame's caches. The per-frame cache columns of `ents` are not saved. Each table's rows go in as one
 `execBatch`, and a `DOUBLE PRECISION` column gets the saved double bit for bit: since firebird-wasm

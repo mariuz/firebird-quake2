@@ -145,9 +145,13 @@ the order they are to be taken.
   loaded game, a guest sends its own to the host at the connect (an `info` message) and on every change, and
   each `Q2_TIC` row carries its client's `hand` and `netname` for the page. Tested in the menu, settings, coop,
   net and painter tests. Left: the model and skin (the registered pak), the rate box, the model's preview.
-- **Save files**: saves live in one browser's storage (`src/savestore.js`) and go with its site data. A
-  download of a slot as a file and a load from one would move a game between browsers and keep it; the
-  store's gzipped JSON with its header line is the format already.
+- **Save files**: done. The page's Saves controls: Download writes the game as it stands to a file
+  (`<map>-<time>.q2sav`, the slot text of `src/savestore.js`: the header line, the JSON gzipped and
+  base64'd; `Session.packGame`), and Load takes such a file (`Session.unpackText`, the plain JSON of a save
+  too; another `SAVE_VERSION` or anything else refused with a message) into the same load as a slot's, so a
+  game moves between browsers and outlives the site data. `test:session` packs and unpacks; the browser test
+  downloads a file, walks on, loads it back and finds the player where the file had it, and sees rubbish
+  refused. Left: a slot downloaded from the load menu (the game as it stands covers the use).
 - **Installable and offline**: the page has no manifest and no caching service worker (the retired one only
   supplied the isolation headers). A manifest and a worker caching the build and the pak would let the page
   install on a phone and run without a network; the browser test can check the cache and a reload offline.

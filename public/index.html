@@ -75,6 +75,9 @@
           <option value="off">Off</option>
         </select> <input id="musicvol" type="range" min="0" max="100" step="5">
           <input id="musicdir" type="file" webkitdirectory multiple title="a folder with track02.ogg … track11.ogg"></label>
+        <label title="The game as a file (what a slot stores: the tables gzipped), to keep or to carry to another browser; Load plays one">Saves
+          <button id="save-download" type="button">Download</button>
+          <input id="save-file" type="file" accept=".q2sav,.json,text/plain" aria-label="Load a saved game file"></label>
         <span id="engine" class="pill">Firebird</span>
         <span id="mapname" class="pill"></span>
         <label title="Two players on two pages: the host runs the game and sends the other its frames (WebRTC); the offer and the answer are texts you pass each other">Network
@@ -93,7 +96,7 @@
         <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows move · mouse looks ·
         <kbd>Ctrl</kbd> or click fires · <kbd>Space</kbd> jumps · <kbd>C</kbd> crouches · <kbd>Shift</kbd> walks (or runs: the Run setting) ·
         <kbd>1</kbd>–<kbd>0</kbd> weapons · <kbd>G</kbd> hand grenades · <kbd>/</kbd> or wheel cycles · <kbd>Tab</kbd> inventory (<kbd>[</kbd> <kbd>]</kbd> select, <kbd>Enter</kbd> use) · <kbd>Q</kbd> quad · <kbd>I</kbd> invulnerability · <kbd>B</kbd> rebreather · <kbd>E</kbd> environment suit · <kbd>F1</kbd> help computer · <kbd>`</kbd> console (god, noclip, notarget, give, use, kill, map, skill 0–3: nightmare is 3, the console's alone) · <kbd>P</kbd> pause ·
-        <kbd>Esc</kbd> menu (<kbd>F2</kbd> save, <kbd>F3</kbd> load, <kbd>F10</kbd> quit; the options' customize controls rebinds the movement, fire, inventory and help keys; multiplayer's player setup gives your name, for the obituaries and the score board, and your handedness: the shots come from the left or the centre and the gun is drawn so) · <kbd>F6</kbd> quick save · <kbd>F9</kbd> quick load (saves live in this browser).
+        <kbd>Esc</kbd> menu (<kbd>F2</kbd> save, <kbd>F3</kbd> load, <kbd>F10</kbd> quit; the options' customize controls rebinds the movement, fire, inventory and help keys; multiplayer's player setup gives your name, for the obituaries and the score board, and your handedness: the shots come from the left or the centre and the gun is drawn so) · <kbd>F6</kbd> quick save · <kbd>F9</kbd> quick load (saves live in this browser; the Saves controls write the game as a file and play one back, so a game moves between browsers).
         On touch screens the left half of the view moves, the right half looks, a tap fires, and the buttons fire, jump, change weapon and open the menu.
         A gamepad works too: left stick moves, right stick looks, RT fires, A jumps, B crouches, LB/RB change weapon, the d-pad selects (left/right) and uses (up) an inventory item, Y shows the inventory, Back the help computer, Start opens the menu (the d-pad, A and B drive it).
         With two to four players (coop, or deathmatch: the maps' deathmatch weapons and spots, no monsters, frags at the top right, <kbd>F1</kbd> the score board;

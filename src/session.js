@@ -249,19 +249,35 @@ export class Session {
     return (g?.LEVEL_MSG ?? '').trim() || this.map.name;
   }
 
+  /**
+   * The game as a save's text (src/savestore.js: the header line, the JSON gzipped and base64'd), with its
+   * comment: what a slot stores, and what a save file holds, so a game moves between browsers as a file.
+   */
+  async packGame(comment) {
+    const save = await exportSave(this.db, this.map.name, this.unitLevels);
+    save.comment = comment;
+    return packSave(save);   // gzip + base64: a tenth of the JSON, and the slots fit the origin's quota
+  }
+
+  /** A save back from its text (a slot's, or a file's): the save object, or null for anything else. */
+  async unpackText(text) {
+    try {
+      const save = await unpackSave(text);
+      return save && typeof save === 'object' && typeof save.map === 'string' && save.tables ? save : null;
+    } catch { return null; }
+  }
+
   /** Write the game to `key`, with its comment; returns the stored size. */
   async writeSave(key, comment) {
     if (!this.storage) throw new Error('no storage for saves');
-    const save = await exportSave(this.db, this.map.name, this.unitLevels);
-    save.comment = comment;
-    const text = await packSave(save);   // gzip + base64: a tenth of the JSON, and the slots fit the origin's quota
+    const text = await this.packGame(comment);
     this.storage.setItem(key, text);
     return text.length;
   }
 
   /** The save at `key`, or null when there is none or it does not read. */
   async readSave(key) {
-    try { return await unpackSave(this.storage?.getItem(key)); } catch { return null; }
+    return this.unpackText(this.storage?.getItem(key));
   }
 
   /** The slots' headers for the load and save menus, read without inflating anything. */
