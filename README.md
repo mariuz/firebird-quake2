@@ -47,6 +47,7 @@ npm run bench:ab -- <dir>  # A/B the SQL against another copy of sql/, tics alte
 npm run bench:raster   # where the painter spends its time (add --cold to rebuild every surface each frame)
 npm run perf           # the guard CI runs: the load, the tics, the frame query and the raster held against docs/perf-baseline.json
 npm run inspect        # what is in the pak (maps, models and their frame runs, sounds)
+node scripts/icon.mjs  # the manifest's icons (public/icon-192.png, icon-512.png) from the pak's console font
 ```
 
 Two to four can play: the Players select (or the game menu's players spin) starts a coop game, the screen
@@ -83,6 +84,12 @@ with the headers (`npm run serve -- --coi`) it runs the threaded build. Both pla
 demo1 a tic takes 5 ms either way, and the build without threads starts sooner (the first
 frames in 5.6 s against 6.5 s here). The service worker that used to supply the headers is
 retired: what is left at its URL removes itself from the browsers that still have it.
+
+The page installs as an app (a web app manifest, `public/manifest.webmanifest`, with icons drawn from the
+pak's console font by `scripts/icon.mjs`) and runs without a network once it has run once: a caching
+service worker (`public/sw.js`) serves the build's files and the pak from the caches the page fills after
+its first load (the "offline ready" pill says when), each build in its own cache and the pak in one that
+outlives them. The browser test reloads the page offline and plays.
 
 ## How it works
 

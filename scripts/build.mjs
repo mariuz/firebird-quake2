@@ -79,13 +79,16 @@ for (const f of ['firebird-embedded.js', 'firebird-embedded.wasm', 'firebird-emb
   fs.copyFileSync(path.join(PKG, 'wasm', f), path.join(OUT, f));
 }
 
-// public/ verbatim (index.html, css, service worker, pak/ if present)
+// public/ verbatim (index.html, css, the manifest and icons, the service workers, pak/ if present)
 fs.cpSync(path.join(root, 'public'), OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
 const page = path.join(OUT, 'index.html');
 fs.writeFileSync(page, fs.readFileSync(page, 'utf8')
   .split('src="./main.js"').join(`src="./main.js?v=${BUILD}"`)
   .split('href="./style.css"').join(`href="./style.css?v=${BUILD}"`));
+// The caching service worker carries the build's id: its cache is this build's, and it drops the older builds'.
+const sw = path.join(OUT, 'sw.js');
+fs.writeFileSync(sw, fs.readFileSync(sw, 'utf8').split("'__BUILD__'").join(`'${BUILD}'`));
 
 const size = (dir) => fs.readdirSync(dir, { withFileTypes: true })
   .reduce((s, e) => s + (e.isDirectory() ? size(path.join(dir, e.name)) : fs.statSync(path.join(dir, e.name)).size), 0);

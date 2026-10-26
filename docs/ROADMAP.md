@@ -152,9 +152,14 @@ the order they are to be taken.
   game moves between browsers and outlives the site data. `test:session` packs and unpacks; the browser test
   downloads a file, walks on, loads it back and finds the player where the file had it, and sees rubbish
   refused. Left: a slot downloaded from the load menu (the game as it stands covers the use).
-- **Installable and offline**: the page has no manifest and no caching service worker (the retired one only
-  supplied the isolation headers). A manifest and a worker caching the build and the pak would let the page
-  install on a phone and run without a network; the browser test can check the cache and a reload offline.
+- **Installable and offline**: done. A web app manifest (`public/manifest.webmanifest`: standalone, landscape,
+  icons of "Q2" in the pak's console font from `scripts/icon.mjs`) and a caching service worker
+  (`public/sw.js`, its build id written in by the build): the page fills the build's cache and the data cache
+  (the pak) after its first load and shows "offline ready", the worker serves from them and drops older builds'
+  caches when a new one takes over, a navigation falling back to the cached page. The browser test checks
+  the registration, the caches, the manifest and the icons, and reloads the page offline, where the game
+  runs. Left: the music tracks go into the data cache only as they play; the picked pak and music folder are
+  not cached (they are the player's files).
 - **An audit of the temporary entities**: `src/effects.js` handles the gunshots, blood, the rail trail, the
   blaster, splashes, bubbles, the power armour sparks, the explosions, the BFG and the parasite. Against
   cl_tent.c's list, the explosions in water (`TE_ROCKET_EXPLOSION_WATER`, `TE_GRENADE_EXPLOSION_WATER`: no
@@ -652,6 +657,7 @@ picker). Missing for the rest of the game:
   many rows, one call); 0.4.1 runs the batch as one `IBatch` request, and the map load uses it (see
   *Load time*). 0.8.0 ships a build without threads, which needs no `SharedArrayBuffer`: the page
   runs it wherever it is not cross-origin isolated, so on Pages, and the service worker that only
-  supplied COOP/COEP is retired (what is at its URL now unregisters itself). Measured in a headless
+  supplied COOP/COEP is retired (what is at its URL now unregisters itself; a caching one came later, see
+  *Installable and offline* under *Next*). Measured in a headless
   Chromium on demo1, idle: a 5 ms tic and 3 ms of frame queries on both builds, the first frames in
   5.6 s without threads against 6.5 s with them.

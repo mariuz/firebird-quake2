@@ -67,8 +67,6 @@ try {
 
   // isolation comes from the server's headers or not at all: no service worker supplies it
   assert((await isolated()) === coi, coi ? 'the page is cross-origin isolated (the server\'s headers)' : 'the page is not cross-origin isolated, as on Pages');
-  const workers = await page.evaluate(() => navigator.serviceWorker?.getRegistrations().then((r) => r.length) ?? 0);
-  assert(workers === 0, `no service worker is registered (${workers})`);
 
   // the pak downloads, Firebird starts in its worker, the map loads and the loop runs
   let ready = false;
@@ -84,6 +82,28 @@ try {
   assert((await page.evaluate(() => document.getElementById('engine')?.textContent ?? '')).includes(coi ? ', threads' : 'Firebird'),
     'the page says which build it runs');
   assert((await status()) === '', 'no status message is left showing');
+
+  // the caching service worker (public/sw.js) is registered once the game is up, and the page fills its caches: the
+  // build's files under their ?v= URLs and the pak; the manifest and its icons are served; the "offline ready" pill shows
+  const offline = () => page.evaluate(async () => ({
+    workers: (await navigator.serviceWorker.getRegistrations()).map((r) => (r.active ?? r.waiting ?? r.installing)?.scriptURL ?? '?'),
+    caches: await caches.keys(),
+    pill: !document.getElementById('offline').hidden,
+    build: await caches.open((await caches.keys()).find((k) => k.startsWith('fbq2-build-')) ?? 'none').then((c) => c.keys()).then((ks) => ks.map((r) => new URL(r.url).pathname + new URL(r.url).search)),
+    pak: await caches.open('fbq2-data').then((c) => c.keys()).then((ks) => ks.map((r) => new URL(r.url).pathname)),
+  })).catch((e) => ({ error: e.message }));
+  let off = {};
+  for (let i = 0; i < 240 && !off.pill; i++) { await sleep(250); off = await offline(); }
+  assert(off.workers?.length === 1 && /\/sw\.js$/.test(off.workers[0]), `the caching service worker is registered, and no other (${JSON.stringify(off.workers ?? off.error)})`);
+  const engineFile = coi ? 'firebird-embedded' : 'firebird-embedded-st';
+  assert(off.pill && off.build?.some((p) => /\/main\.js\?v=\w+$/.test(p)) && off.build.some((p) => p.endsWith('/') || p.endsWith('/index.html')) && off.build.some((p) => new RegExp(`/${engineFile}\\.wasm\\?v=`).test(p))
+    && off.build.some((p) => p.endsWith('/manifest.webmanifest')) && off.pak?.some((p) => p.endsWith('/pak/pak0.pak')),
+    `the build's files and the pak are cached and the page says offline ready (${off.build?.length} build files, pak: ${off.pak?.join(', ')})`);
+  const manifest = await page.evaluate(() => fetch('./manifest.webmanifest').then((r) => r.json())).catch(() => null);
+  assert(manifest?.name === 'Firebird Quake 2' && manifest.display === 'standalone' && manifest.icons?.length === 2 && (await page.evaluate(() => document.querySelector('link[rel=manifest]')?.href ?? '')).endsWith('/manifest.webmanifest'),
+    'the web app manifest is linked and served, with its two icons');
+  const icons = await page.evaluate(() => Promise.all(['./icon-192.png', './icon-512.png'].map((u) => fetch(u).then((r) => r.ok && r.headers.get('content-type'))))).catch(() => []);
+  assert(icons.every((t) => /image\/png/.test(t || '')), `the icons are served as PNG (${icons.join(', ')})`);
 
   if (ready) {
     // the loop advances: the frame counter in the stats line changes between reads
@@ -261,6 +281,19 @@ try {
     for (let i = 0; i < 240 && !(stopped.demo === null && stopped.running === true && /^demo1$/.test(stopped.map ?? '')); i++) { await sleep(250); stopped = await demoState(); }
     assert(stopped.demo === null && stopped.running === true && stopped.map === 'demo1', `a key stops it and a new game starts on the first map (${JSON.stringify({ demo: stopped.demo, map: stopped.map })})`);
     assert((await page.evaluate(() => document.getElementById('demo').value)) === '', 'the select is back to none');
+
+    // without a network: the page reloads from the service worker's caches (the page, the build's files, the pak)
+    // and the game runs as before; then the network is back
+    await page.context().setOffline(true);
+    let offReady = false;
+    try {
+      await page.reload({ waitUntil: 'load' });
+      const t1 = Date.now();
+      while (Date.now() - t1 < 120_000) { const s = await stats(); if (/q2_tic \d+ ms/.test(s) && !/^0\.0 fps/.test(s)) { offReady = true; break; } await sleep(1000); }
+    } catch (e) { errors.push(`offline reload: ${e.message}`); }
+    assert(offReady, `offline, the page loads from the caches and the game runs (${await stats()})`);
+    assert(engines.has(want), 'on the same engine build');
+    await page.context().setOffline(false);
   }
 
   // two pages over WebRTC: this one hosts, a second joins with the texts passed between them (the offer and
@@ -377,9 +410,9 @@ try {
     let left = 1;
     for (let i = 0; i < 40 && (left > 0 || loads === 0); i++) {
       await sleep(250);
-      left = await sp.evaluate(() => navigator.serviceWorker.getRegistrations().then((r) => r.length)).catch(() => 1);
+      left = await sp.evaluate(() => navigator.serviceWorker.getRegistrations().then((r) => r.filter((x) => /coi-serviceworker/.test((x.active ?? x.waiting ?? x.installing)?.scriptURL ?? '')).length)).catch(() => 1);
     }
-    assert(left === 0, 'the retired service worker unregisters itself');
+    assert(left === 0, 'the retired service worker unregisters itself (the caching one stays)');
     assert(loads >= 1, `and reloads the page it held (${loads} reload(s))`);
     await ctx.close();
   }
@@ -387,7 +420,7 @@ try {
   // nothing optional is loud: only the music tracks and the favicon may be missing
   const unexpected = missing.filter((p) => !/\/music\/|favicon/.test(p));
   assert(unexpected.length === 0, `no unexpected 404s (${missing.length} optional: ${[...new Set(missing)].join(', ') || 'none'})`);
-  const loud = errors.filter((e) => !/404 \(Not Found\)/.test(e));
+  const loud = errors.filter((e) => !/404 \(Not Found\)/.test(e) && !(/\/music\//.test(e) && /Failed to load resource|ERR_INTERNET_DISCONNECTED|ERR_FAILED/.test(e)));   // (offline, the music is not there)
   assert(loud.length === 0, `no console errors${loud.length ? ':\n  ' + loud.join('\n  ') : ''}`);
 } catch (e) {
   console.error('FAIL:', e.message);

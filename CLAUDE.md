@@ -14,7 +14,8 @@ https://mariuz.github.io/firebird-quake2/ by the Pages workflow on every push to
 
 Layout: `sql/` (schema, physics, game, weapons, monsters, render — loaded in that order),
 `src/` (pak/bsp/md2 parsers, loader, session, net, demo, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
-tools), `public/` (page, the retired service worker, the pak goes in `public/pak/`), `docs/`.
+tools), `public/` (page, the manifest and icons, the caching service worker `sw.js`, the retired `coi-serviceworker.js`,
+the pak goes in `public/pak/`), `docs/`.
 
 ## Commands
 
@@ -197,7 +198,10 @@ short stories of what changed and what it measured; keep that.
   front.
 - Nothing in the page needs sign-in or personal data; the only inputs are the pak and music files.
 - Each build stamps its files with a new `?v=` id, so a reload after a rebuild fetches the new bundle;
-  a page left open from before still runs the old one until it is reloaded. A hidden tab
+  a page left open from before still runs the old one until it is reloaded. The caching service worker
+  (`public/sw.js`) serves a build's files from its own cache (`fbq2-build-<id>`) and the pak from `fbq2-data`:
+  a browser that has run the page keeps playing a build offline until a new one's worker takes over (it does at
+  once, and drops the older caches). In a headless test, `context.setOffline(true)` and a reload play from the caches. A hidden tab
   (`document.visibilityState`) is throttled so hard that a load takes tens of seconds and screenshots
   time out: judge timings in Node, check the page's state with JS.
 

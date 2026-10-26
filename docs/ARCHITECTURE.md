@@ -48,6 +48,20 @@ once supplied the headers on Pages; it is now a script that unregisters itself, 
 that registered it. Every reference carries the build's id (`?v=`), so a fresh deploy never meets
 a script cached from the last one.
 
+Installed and offline: `public/manifest.webmanifest` (standalone, landscape, the icons `scripts/icon.mjs`
+draws from the pak's console font) lets the page install as an app, and `public/sw.js` is a caching service
+worker, registered by the page once the game is up. Two caches: `fbq2-build-<id>` (the id written in by
+`scripts/build.mjs`) holds the build's files under the URLs the page asks for them by, with their `?v=`,
+and `fbq2-data` holds the pak and the music, which a build does not change. The page fills them after its
+first load (`offlineReady` in `src/main.js`: the page, its script and stylesheet, the engine Worker and the
+glue and `.wasm` of the build it runs, from the browser's cache where they just came from; the pak from the
+response it downloaded) and shows "offline ready". The worker serves the pak and the music from the data
+cache, a navigation from the network with the cached page as the fallback, and anything else of the origin
+from the build cache, each missing one fetched and kept (a 200 only: a track's 404 or a range's 206 is not);
+a new build's worker takes over at once and drops the older builds' caches. A browser without service
+workers or the Cache API plays as before. The browser test checks the registration, the caches and the
+manifest, and reloads the page offline.
+
 ## 2. Loading: the pak becomes tables (`src/loader.js`)
 
 `createSchema(db, sql)` executes the six SQL files in order (`SQL_FILES` in loader.js). The WASM
@@ -624,7 +638,8 @@ the frame query and the raster. The SQL console runs any statement against the l
 | `perf-guard.mjs [--record]` | the figures held in CI: demo1's load, an idle and a walking tic, the frame query and the raster, each measured and taken in units of a calibration run just before and after on the same machine (50,000 primary-key fetches of the engine for the SQL figures, a fixed loop over a frame's buffer for the raster), compared with `docs/perf-baseline.json`; a figure past the baseline's units by the file's margin (twice) fails; `--record` writes the baseline from the run (a change that is meant to cost more records it again in the same commit) |
 | `bench.mjs`, `tic-bench.mjs`, `raster-bench.mjs`, `call-counts.mjs`, `ab-bench.mjs` | where the time goes (section 10) |
 | `probe.mjs`, `inspect.mjs` | traces around a point; what is in the pak |
-| `fetch-pak.mjs`, `build.mjs` | the demo download; the esbuild bundle and dev server |
+| `fetch-pak.mjs`, `build.mjs` | the demo download; the esbuild bundle and dev server (the build's id into the page's references and the service worker) |
+| `icon.mjs` | the manifest's icons: "Q2" in the pak's console font, the page's colours, 192 and 512 pixels |
 
 CI (`.github/workflows/pages.yml`) runs every test above, the docs screenshots compared pixel for
 pixel and the performance guard among them, on every push, and deploys the bundle to GitHub Pages.

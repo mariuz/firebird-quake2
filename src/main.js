@@ -1048,12 +1048,36 @@ async function boot() {
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));
     if (!resp.ok) throw new Error(`could not fetch pak0.pak (${resp.status}); pick a PAK file instead`);
+    const forCache = resp.clone();   // (the download goes into the data cache too, for the loads without a network)
     await usePak(await resp.arrayBuffer(), 'pak0.pak');
     nextFrame();
+    offlineReady(forCache).catch((err) => console.warn('offline cache:', err.message));
   } catch (err) {
     console.error(err);
     setStatus(err.message, true);
   }
+}
+
+// ── installable and offline: the service worker (public/sw.js) and the caches it serves from ─────────────
+/**
+ * Once the game is up, everything this load used goes into the caches the service worker serves from: the build's
+ * files (the page, its script and stylesheet, the engine Worker, the glue and the .wasm of the engine build this
+ * page runs, each by the URL it was asked for, with its ?v=) into this build's cache, from the browser's cache
+ * where they just came from, and the pak as it was downloaded into the data cache, which outlives the builds. The
+ * next load, with or without a network, comes from there, and the manifest lets the page install as an app. A
+ * browser without service workers or the Cache API (an insecure origin, a file: URL) plays as before.
+ */
+async function offlineReady(pakResponse) {
+  if (!('serviceWorker' in navigator) || !('caches' in window)) return;
+  const v = typeof __BUILD__ === 'string' ? __BUILD__ : '';   // eslint-disable-line no-undef
+  await navigator.serviceWorker.register(new URL('./sw.js', location.href));
+  const engine = window.crossOriginIsolated ? 'firebird-embedded' : 'firebird-embedded-st';
+  const files = ['./', `./main.js?v=${v}`, `./style.css?v=${v}`, `./firebird-engine-worker.js?v=${v}`, `./${engine}.js?v=${v}`, `./${engine}.wasm?v=${v}`,
+    './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+  const build = await caches.open(`fbq2-build-${v}`);
+  await build.addAll(files.map((f) => new URL(f, location.href).href));
+  if (pakResponse) await (await caches.open('fbq2-data')).put(pakResponse.url, pakResponse);
+  $('offline').hidden = false;
 }
 
 $('pakfile').addEventListener('change', async (e) => {
