@@ -599,7 +599,9 @@ export class Renderer {
    * Draw an MD2 at origin with Quake angles (pitch positive up as
    * vectoangles gives it). light: 0..255 from the lightmap below the entity.
    * Every vertex is transformed, lit and projected once; triangles that
-   * cross the near plane are clipped one by one.
+   * cross the near plane are clipped one by one. opts.mirror flips the model
+   * left to right on the screen (the view weapon of a left-hander: ref_soft
+   * negated aliasxscale for RF_WEAPONMODEL with hand 1), the facing test with it.
    */
   drawAlias(mdl, frameIndex, skin, origin, angles, light, opts = {}) {
     const view = this.view;
@@ -634,6 +636,7 @@ export class Renderer {
     if (shade < 0) shade = 0;
     const depthHack = opts.depthHack ? 3 : 1;
     const vcx = view.cx, vcy = view.cy, sc = view.scale;
+    const mir = opts.mirror ? -1 : 1, scm = sc * mir;   // (mirrored: the screen x about the view's centre, the winding reversed)
     let anyNear = false;
     for (let i = 0; i < n; i++) {
       const mx = verts[i * 4] * scx + trx;
@@ -647,7 +650,7 @@ export class Renderer {
       const o = i * 7;
       av[o] = f; av[o + 1] = r; av[o + 2] = u;
       if (f < near) anyNear = true;
-      else { av[o + 3] = vcx + (r * sc) / f; av[o + 4] = vcy - (u * sc) / f; av[o + 5] = (1 / f) * depthHack; }
+      else { av[o + 3] = vcx + (r * scm) / f; av[o + 4] = vcy - (u * sc) / f; av[o + 5] = (1 / f) * depthHack; }
       const ni = Math.min(verts[i * 4 + 3], 161) * 3;
       const a0 = ANORMS[ni], a1 = ANORMS[ni + 1], a2 = ANORMS[ni + 2];
       const nx = F0 * a0 - R0 * a1 + U0 * a2;
@@ -663,7 +666,7 @@ export class Renderer {
       const ta = tris[t * 6 + 3] * 2, tb = tris[t * 6 + 4] * 2, tc = tris[t * 6 + 5] * 2;
       if (av[ia] >= near && av[ib] >= near && av[ic] >= near) {
         const ax = av[ia + 3], ay = av[ia + 4], bx = av[ib + 3], by = av[ib + 4], cx = av[ic + 3], cy = av[ic + 4];
-        if ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax) <= 0) continue;   // back face (MD2 winding)
+        if (((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)) * mir <= 0) continue;   // back face (MD2 winding)
         this.triangle(ax, ay, av[ia + 5], st[ta], st[ta + 1], av[ia + 6], bx, by, av[ib + 5], st[tb], st[tb + 1], av[ib + 6],
           cx, cy, av[ic + 5], st[tc], st[tc + 1], av[ic + 6], skinData, skinW, skinH, transparent, noZ, alpha, shell);
         continue;
@@ -683,10 +686,10 @@ export class Renderer {
           out.push([near, P[1] + (Q[1] - P[1]) * kk, P[2] + (Q[2] - P[2]) * kk, P[3] + (Q[3] - P[3]) * kk, P[4] + (Q[4] - P[4]) * kk, P[5] + (Q[5] - P[5]) * kk]);
         }
       }
-      const proj = (v) => [vcx + (v[1] * sc) / v[0], vcy - (v[2] * sc) / v[0], (1 / v[0]) * depthHack, v[3], v[4], v[5]];
+      const proj = (v) => [vcx + (v[1] * scm) / v[0], vcy - (v[2] * sc) / v[0], (1 / v[0]) * depthHack, v[3], v[4], v[5]];
       const drawTri = (P, Q, S) => {
         const a = proj(P), b = proj(Q), c = proj(S);
-        if ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) <= 0) return;
+        if (((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) * mir <= 0) return;
         this.triangle(a[0], a[1], a[2], a[3], a[4], a[5], b[0], b[1], b[2], b[3], b[4], b[5], c[0], c[1], c[2], c[3], c[4], c[5], skinData, skinW, skinH, transparent, noZ, alpha, shell);
       };
       drawTri(out[0], out[1], out[2]);

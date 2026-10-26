@@ -61,6 +61,7 @@ export class Session {
     this.deathmatch = false;
     this.players = 2;           // the clients a coop game or a deathmatch has (two to four)
     this.cvars = { dmflags: 0, fraglimit: 0, timelimit: 0 };   // the deathmatch cvars, given to each map load
+    this.userinfo = {};         // each client's userinfo (ClientUserinfoChanged): { name, hand } by client number, written after every load
     this.lastSoundId = 0;
     this.lastFxId = 0;
     this.frameNo = 0;
@@ -102,6 +103,7 @@ export class Session {
     this.cvars = { ...this.cvars, ...cvars };
     const bsp = await loadMap(this.db, this.pak, this.res, name, { skill, newGame, spawnpoint, faceVerts, seed, coop: this.coop, deathmatch: this.deathmatch, players: this.players, ...this.cvars });
     if (!newGame && this.unitLevels.has(name)) await importLevel(this.db, this.unitLevels.get(name));
+    await this.applyUserinfo();
     this.map = { name, bsp };
     const g = (await this.db.query('SELECT sky, cd_track FROM game')).rows[0];
     await this.loadStyleBase();
@@ -111,6 +113,22 @@ export class Session {
     const ws = bsp.entities.find((e) => e.classname === 'worldspawn') ?? {};
     const skyAxis = ws.skyaxis ? ws.skyaxis.trim().split(/\s+/).map(Number).map((v) => (Number.isFinite(v) ? v : 0)) : [0, 0, 0];
     return { bsp, sky: g.SKY, cdTrack: Number(g.CD_TRACK ?? 0), skyRotate: Number(ws.skyrotate) || 0, skyAxis, speakers };
+  }
+
+  /**
+   * ClientUserinfoChanged: a client's name (pers.netname, at most 15 characters, the obituaries' and the score
+   * board's; empty, "player N") and hand (pers.hand: 0 right, 1 left, 2 centre, which turns the shots' origin and
+   * the gun drawn). Kept, and written to the client's row after every map load and loaded game, as the userinfo
+   * came with the client and not with the level; written at once to a game running.
+   */
+  async setUserinfo(client, { name = '', hand = 0 } = {}) {
+    const info = { name: String(name ?? '').replace(/[^\x20-\x7e]/g, '').slice(0, 15), hand: [0, 1, 2].includes(hand) ? hand : 0 };
+    this.userinfo[client] = info;
+    if (this.map) await this.db.query('UPDATE player SET netname = ?, hand = ? WHERE id = ?', [info.name, info.hand, client]);
+    return info;
+  }
+  async applyUserinfo() {
+    for (const [client, info] of Object.entries(this.userinfo)) await this.db.query('UPDATE player SET netname = ?, hand = ? WHERE id = ?', [info.name, info.hand, Number(client)]);
   }
 
   /** The light styles' resting values: the frame lists only the ones that animate or that the map has switched. */
@@ -269,6 +287,7 @@ export class Session {
     this.coop = g?.COOP === 1;
     this.deathmatch = g?.DEATHMATCH === 1;
     if (this.twoPlayers) this.players = Math.max(2, Math.min(4, Number(g?.N ?? 2)));
+    await this.applyUserinfo();   // (the save's names and hands were its players'; these clients' are theirs)
     for (const [name, lv] of savedLevels(save)) this.unitLevels.set(name, lv);
     await this.loadStyleBase();
     await this.resetEvents();

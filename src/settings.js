@@ -9,7 +9,7 @@ export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, crosshair: 1, coop: false, deathmatch: false,
-  dmflags: 0, fraglimit: 0, timelimit: 0, players: 2, binds: DEFAULT_BINDS });
+  dmflags: 0, fraglimit: 0, timelimit: 0, players: 2, binds: DEFAULT_BINDS, name: '', hand: 0 });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1 });
@@ -41,6 +41,10 @@ const CHECK = {
   dmflags: int(0, 65535), fraglimit: int(0, 999), timelimit: int(0, 999),   // the deathmatch cvars
   players: int(2, 4),    // how many at this page in coop or deathmatch (the view split in two or four)
   binds: checkBinds,     // the key bindings: action → at most two key codes
+  // the player setup (M_Menu_PlayerConfig_f): the name (the netname cvar: at most 15 printable characters; empty, the game
+  // says "player 1") and the hand (0 right, 1 left, 2 centre)
+  name: (v) => (typeof v === 'string' && /^[\x20-\x7e]{0,15}$/.test(v) ? v : undefined),
+  hand: int(0, 2),
 };
 
 /**

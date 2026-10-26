@@ -88,10 +88,16 @@ export class HostLink {
     this.pending = [];      // the guest's commands since the last tic
     this.last = null;       // the last command the tic ran
     this.wantInv = false;   // the guest has its inventory screen up
+    this.info = null;       // the guest's userinfo: { name, hand }, as it last sent it (ClientUserinfoChanged)
+    this.onInfo = null;
     this.onClose = null;
     this.sentFrames = 0;
     this.droppedFrames = 0;
-    link.onMessage = (m) => { if (m && m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; } };
+    link.onMessage = (m) => {
+      if (!m) return;
+      if (m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; }
+      else if (m.t === 'info') { this.info = { name: typeof m.name === 'string' ? m.name.slice(0, 15) : '', hand: [0, 1, 2].includes(m.hand) ? m.hand : 0 }; this.onInfo?.(this.info); }
+    };
     link.onClose = () => this.onClose?.();
   }
   get open() { return this.link.open; }
@@ -164,6 +170,8 @@ export class GuestLink {
   }
   /** This tic's usercmd (Input.read's array); `inv` asks for the inventory rows with the frames. */
   sendCommand(cmd, { inv = false } = {}) { this.link.send({ t: 'cmd', c: cmd, inv: !!inv }); }
+  /** The guest's userinfo (the name and the hand of its player setup), at the connect and whenever it changes. */
+  sendInfo({ name = '', hand = 0 } = {}) { this.link.send({ t: 'info', name: String(name).slice(0, 15), hand }); }
   /** The newest frame since the last take, with its row, or null. */
   take() {
     if (!this.fresh) return null;

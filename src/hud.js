@@ -137,7 +137,8 @@ export class Hud {
    * DeathmatchScoreboardMessage as the client laid it out: the clients sorted by score, up to six a column,
    * each with its tag (tag1 for the one whose screen this is), its name, "Score:" with the frags in the
    * alternate font, the ping (none here) and the minutes in the game; the skin icon the demo pak lacks.
-   * rows: [{ id, score, time }] (`time` in seconds); self: the client whose screen this is.
+   * rows: [{ id, name, score, time }] (`name` the client's netname, "player N" without one; `time` in seconds);
+   * self: the client whose screen this is.
    */
   drawScores(r, rows, self, time) {
     const xv = (r.w >> 1) - 160, yv = (r.h >> 1) - 120;
@@ -146,7 +147,7 @@ export class Hud {
       const x = xv + (i >= 6 ? 160 : 0), y = yv + 32 + 32 * (i % 6);
       const tag = this.pic(c.id === self ? 'tag1' : 'tag2');
       if (tag) r.drawPic(tag, x + 32, y);
-      r.drawString(this.conchars, `player ${c.id}`, x + 32, y);
+      r.drawString(this.conchars, c.name || `player ${c.id}`, x + 32, y);
       r.drawString(this.conchars, 'Score: ', x + 32, y + 8);
       r.drawString(this.conchars, String(c.score ?? 0), x + 32 + 7 * 8, y + 8, true);
       r.drawString(this.conchars, 'Ping:  0', x + 32, y + 16);

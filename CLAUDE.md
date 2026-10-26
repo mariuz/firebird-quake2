@@ -143,8 +143,10 @@ short stories of what changed and what it measured; keep that.
 - The page's loop runs the tics the wall clock owes (`floor((now - lastTic) / 50)`, at most two) and paints every
   animation frame from the last two tics' frames (`src/lerp.js`): a loop that runs at least a tic a frame plays at
   the display's rate (it did, at 2.9× on 60 Hz). The game's clock against the wall's is a browser-test check, which
-  must allow a slow page: CI's runner paints four frames a second after the quick load, so the game there runs at
-  two tics a frame and falls behind on purpose (Quake 2's `SV_Frame` clamp: slow motion, never a leap).
+  must allow a slow page: CI's runner paints four frames a second right after the quick load (23 a second with
+  jitter a little later), so the game there runs at two tics a frame and falls behind on purpose (Quake 2's
+  `SV_Frame` clamp: slow motion, never a leap). Measure the clock once the page has settled, and never ask for
+  more than 0.6 of the wall's: a frame past 150 ms drops a tic, and a runner has such frames.
 - A tic is 0.05 s (20 Hz): 20 tics are a second. The ground flag (512) must hold every tic the player
   stands on a floor; pmove-style code that runs only `IF (onground = 1)` silently halves otherwise. On the ground the
   player's `vz` is 0 (pmove); any path that skips the move must still write the speed it computed.
@@ -176,6 +178,10 @@ short stories of what changed and what it measured; keep that.
   animation it names must be in it, and the painter skips a model it has no mesh for. A pak with the MD2 uses
   the MD2's runs instead. Its sounds are queued like any other; the smoke test's sound check lets a monster's
   whole directory be missing from the pak.
+- A client's userinfo (`player.netname`, `player.hand`: the player setup's name and hand) is not the level's:
+  `init_map` and a loaded save make the player table anew, so `Session.userinfo` keeps it and `applyUserinfo`
+  writes it after every load; a guest's comes over the link (`info`). Read the hand from the tic row (`HAND`),
+  never from the page's settings: the other views' clients have their own.
 - Every chance comes from `rnd()` (game.sql), never `RAND()`: a seeded generator in the session context,
   so a game is a function of its seed and its inputs (`test:replay` holds it to that). Seed with
   `loadMap(…, { seed })` or the console's `seed <n>`; `game.rng_seed` records a new game's; a save carries
