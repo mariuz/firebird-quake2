@@ -47,16 +47,31 @@ await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16) WHERE id = ${pe}`);   /
 await tic([1, 0, 0, 0, 0, 0, 0, 1, 99]);                                       // all weapons
 await db.exec('UPDATE player SET armor = 0, armor_type = 0');                  // but no armour: weak shots must register
 
+const only = process.env.MONSTER ? new Set(process.env.MONSTER.split(',')) : null;   // MONSTER=boss2,jorg: these alone
 for (const m of MONSTERS) {
-  console.log(`── ${m.name}`);
+  if (only && !only.has(m.name)) continue;
+  // the full game's monsters have no model in the demo pak: their logic runs on a model row with the frame table's runs
+  const logicOnly = !!m.anims && !pak.has(m.model);
+  const harmless = !m.melee_anim && !m.missile_anim;   // the insane marines
+  console.log(`── ${m.name}${logicOnly ? ' (no model in this pak: the logic alone)' : ''}`);
   await teleport(128, -320, 32, 135);
   await db.exec(`UPDATE ents SET health = 100 WHERE id = ${pe}`);
   heard.clear();
-  const spawned = await q1(`SELECT * FROM spawn_monster('${m.name}', 220)`);
+  // (a swimmer cannot move on land: it is put within its bite's reach)
+  const spawned = await q1(`SELECT * FROM spawn_monster('${m.name}', ${m.flags & 2 ? 60 : 220})`);
   assert(spawned && spawned.ID, `${m.name} spawned`);
   const id = spawned.ID;
   const e0 = await q1(`SELECT model_id, health, st, cluster FROM ents WHERE id = ${id}`);
-  assert(e0.MODEL_ID !== null && e0.HEALTH === m.health, `${m.name} has its model and ${m.health} health`);
+  assert(e0.MODEL_ID !== null && e0.HEALTH === m.health, `${m.name} has its model${logicOnly ? ' row' : ''} and ${m.health} health`);
+  if (logicOnly) {
+    const runs = await qa(`SELECT anim, first_frame, frame_count FROM anims WHERE model_id = ${e0.MODEL_ID} ORDER BY first_frame`);
+    const total = m.anims.reduce((n, [, c]) => n + c, 0);
+    assert(runs.length === m.anims.length && runs.every((r, i) => r.ANIM === m.anims[i][0] && r.FRAME_COUNT === m.anims[i][1]) && runs[runs.length - 1].FIRST_FRAME + runs[runs.length - 1].FRAME_COUNT === total,
+      `its ${runs.length} frame runs are the table's, ${total} frames end to end`);
+    const named = [m.stand_anim, m.walk_anim, m.run_anim, ...m.pain_anims.split(','), ...m.death_anims.split(','), m.melee_anim, m.missile_anim, m.alt_anim].filter(Boolean);
+    assert(named.every((a) => m.anims.some(([n]) => n === a)), `every animation it names is in the table (${named.join(', ')})`);
+    assert(!res.models.has(e0.MODEL_ID), 'and the painter has no mesh for it: it goes unseen');
+  }
   // it notices us
   let s, e;
   for (let i = 0; i < 60; i++) {
@@ -133,18 +148,61 @@ for (const m of MONSTERS) {
     await db.exec(`UPDATE ents SET st = 'run', aiflags = 0, maxz = ${box0.MAXZ} WHERE id = ${id}`);
     assert(duckGrenade === 1, 'on hard a ducking gunner throws a grenade as it goes down');
   }
-  // it attacks: with god mode on, damage shows as dmg_take / attack events
+  // it attacks: god mode off, with health enough that a boss's volley does not kill the player (a dead one neither
+  // takes damage nor fires the railgun below), back at the spot the knockbacks so far may have thrown it from
   let attacked = 0, dmgSeen = 0;
-  await db.exec(`UPDATE ents SET flags = BIN_AND(flags, BIN_NOT(16)) WHERE id = ${pe}`);
-  for (let i = 0; i < 200 && !attacked; i++) {
+  const HP = 100000;
+  await teleport(128, -320, 32, 135);
+  await db.exec(`UPDATE ents SET flags = BIN_AND(flags, BIN_NOT(16)), health = ${HP} WHERE id = ${pe}`);
+  for (let i = 0; i < (harmless ? 100 : 200) && !attacked; i++) {
     s = await tic();
     e = await q1(`SELECT st, anim, anim_frame FROM ents WHERE id = ${id}`);
     if (e.ST === 'melee' || e.ST === 'missile') attacked = 1;
-    if (s.HEALTH < 100) dmgSeen = 1;
+    if (s.HEALTH < HP) dmgSeen = 1;
   }
-  assert(attacked, `${m.name} attacked (state ${e.ST}, anim ${e.ANIM})`);
-  for (let i = 0; i < 80 && !dmgSeen; i++) { s = await tic(); if (s.HEALTH < 100) dmgSeen = 1; }
-  assert(dmgSeen, `${m.name} hurt the player (health ${s.HEALTH})`);
+  if (harmless) assert(!attacked && !dmgSeen && s.HEALTH === HP, `${m.name} never attacks (state ${e.ST}, anim ${e.ANIM})`);
+  else {
+    assert(attacked, `${m.name} attacked (state ${e.ST}, anim ${e.ANIM})`);
+    for (let i = 0; i < 80 && !dmgSeen; i++) { s = await tic(); if (s.HEALTH < HP) dmgSeen = 1; }
+    assert(dmgSeen, `${m.name} hurt the player (health ${s.HEALTH})`);
+  }
+  if (m.alt_anim && m.name !== 'makron') {   // (Makron's three are checked below)
+    // a second ranged attack: over many missile starts both animations come up, and the second's kind fires
+    const seen = new Set();
+    for (let i = 0; i < 300 && seen.size < 2; i++) {
+      await db.exec(`UPDATE ents SET st = 'run', attack_state = 4, attack_finished = 0, aiflags = 0 WHERE id = ${id}`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_think(${id}); END`);
+      const a = await q1(`SELECT st, anim FROM ents WHERE id = ${id}`);
+      if (a.ST === 'missile') seen.add(a.ANIM);
+    }
+    assert(seen.has(m.missile_anim) && seen.has(m.alt_anim), `${m.name} chooses between ${m.missile_anim} and ${m.alt_anim} (${[...seen].join(', ')})`);
+    await db.exec(`UPDATE ents SET st = 'missile', attack_state = 1, anim_frame = 0 WHERE id = ${id}`);
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_anim(${id}, '${m.alt_anim}'); END`);
+    const fx0 = (await q1('SELECT COALESCE(MAX(id), 0) m FROM fx_events')).M;
+    const before = await qa(`SELECT id FROM ents WHERE classname IN ('rocket', 'bfg_ball') AND owner_id = ${id}`);
+    let fired = 0;
+    for (let i = 0; i < 40; i++) { await tic(); if ((await q1(`SELECT st FROM ents WHERE id = ${id}`)).ST !== 'missile') break; }
+    if (m.alt_kind === 'rocket' || m.alt_kind === 'bfg') fired = (await qa(`SELECT id FROM ents WHERE classname IN ('rocket', 'bfg_ball') AND owner_id = ${id}`)).length - before.length + (await q1(`SELECT COUNT(*) n FROM fx_events WHERE id > ${fx0} AND kind IN (2, 9)`)).N;
+    else fired = (await q1(`SELECT COUNT(*) n FROM fx_events WHERE id > ${fx0} AND kind = 15`)).N;
+    assert(fired > 0 || (await sounds(m.attack_snd)), `... and ${m.alt_anim} fires its ${m.alt_kind} (${fired} seen)`);
+    await db.exec(`DELETE FROM ents WHERE classname IN ('rocket', 'bfg_ball', 'grenade')`);
+  }
+  if (m.name === 'makron') {
+    const seen = new Set();
+    for (let i = 0; i < 300 && seen.size < 3; i++) {
+      await db.exec(`UPDATE ents SET st = 'run', attack_state = 4, attack_finished = 0, aiflags = 0 WHERE id = ${id}`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_think(${id}); END`);
+      const a = await q1(`SELECT st, anim FROM ents WHERE id = ${id}`);
+      if (a.ST === 'missile') seen.add(a.ANIM);
+    }
+    assert(seen.size === 3, `Makron picks the BFG, the railgun or the hyperblaster (${[...seen].sort().join(', ')})`);
+    await db.exec(`UPDATE ents SET st = 'missile', attack_state = 1, anim_frame = 0 WHERE id = ${id}`);
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_anim(${id}, 'attack5'); END`);
+    let bolts = 0;
+    for (let i = 0; i < 30; i++) { await tic(); bolts = Math.max(bolts, (await q1(`SELECT COUNT(*) n FROM ents WHERE classname = 'bolt' AND owner_id = ${id} AND BIN_AND(effects, 64) <> 0`)).N); if ((await q1(`SELECT st FROM ents WHERE id = ${id}`)).ST !== 'missile') break; }
+    assert(bolts > 0, `its hyperblaster fires hyperblaster bolts (${bolts} in flight at once)`);
+    await db.exec(`DELETE FROM ents WHERE classname IN ('bolt', 'bfg_ball')`);
+  }
   if (m.name === 'parasite') {
     // parasite_drain_attack: the launch, the tongue's impact and the drain, each heard; the tongue drawn (fx 16)
     for (let i = 0; i < 40 && !(await sounds('parasite/paratck3.wav')); i++) await tic();
@@ -153,19 +211,27 @@ for (const m of MONSTERS) {
       `the parasite's tongue reaches out, strikes and drains (${tongue} tongue frames)`);
   }
   if (m.missile_kind) {
-    // (one that closed in for melee instead counts too, and a gunner that threw grenades rather than firing its chain gun)
-    const atk = (m.attack_snd ? await sounds(m.attack_snd) : 1) || (m.melee_snd ? await sounds(m.melee_snd) : 0) ||
+    // (one that closed in for melee instead counts too, and a gunner that threw grenades rather than firing its chain gun;
+    // the hurt above may have come before the firing frame's sound: a few seconds more for it)
+    const fired = async () => (m.attack_snd ? await sounds(m.attack_snd) : 1) || (m.melee_snd ? await sounds(m.melee_snd) : 0) ||
       (m.name === 'gunner' ? await sounds('gunner/gunatck3.wav') : 0);
+    let atk = await fired();
+    for (let i = 0; i < 60 && !atk; i++) { await tic(); atk = await fired(); }
     assert(atk > 0, `${m.name} fired or struck (${m.attack_snd}${m.name === 'gunner' ? ' or gunner/gunatck3.wav' : ''})`);
   }
-  // kill it with the railgun: 150 a shot
-  await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16), health = 100 WHERE id = ${pe}`);
+  // kill it with the railgun: 150 a shot, both back at their places (a boss's blasts throw the player about)
+  await teleport(128, -320, 32, 135);
+  await db.exec(`UPDATE ents SET x = spawn_x, y = spawn_y, z = spawn_z, vx = 0, vy = 0, vz = 0 WHERE id = ${id}; EXECUTE PROCEDURE link_ent(${id})`);
+  await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16), health = 100 WHERE id = ${pe}; UPDATE player SET slugs = 50`);   // (the slugs: the bosses take twenty)
   await tic([1, 0, 0, 0, 0, 0, 0, 1, 10]);
   for (let i = 0; i < 8; i++) await tic();
   let hp = m.health, shots = 0;
-  while (hp > 0 && shots < 12) {
+  const maxShots = Math.ceil(m.health / 150) + 6;   // (a boss takes twenty)
+  while (hp > 0 && shots < maxShots) {
     const mon = await q1(`SELECT x, y, z, health FROM ents WHERE id = ${id}`);
     if (!mon) break;
+    // (a boss's rockets and BFG balls in flight would take the rail: the shot is at the monster)
+    await db.exec(`DELETE FROM ents WHERE classname IN ('rocket', 'bfg_ball', 'grenade', 'bolt') AND owner_id = ${id}`);
     // face it
     const p = await q1(`SELECT x, y, z FROM ents WHERE id = ${pe}`);
     const yaw = (Math.atan2(mon.Y - p.Y, mon.X - p.X) * 180) / Math.PI;
@@ -183,6 +249,15 @@ for (const m of MONSTERS) {
   assert((await sounds(m.death_snd)) > 0 || !corpse, `${m.name} died loudly (${m.death_snd}) or was gibbed`);
   const killed = (await q1('SELECT killed k FROM game')).K;
   assert(killed >= 1, `the kill was counted (${killed})`);
+  if (m.name === 'jorg') {
+    // jorg_dead, MakronToss: Makron waits unseen where Jorg fell and comes to life four seconds on
+    const mk = await q1("SELECT id, st, solid, x, y FROM ents WHERE mtype = 'makron'");
+    const jx = await q1(`SELECT x, y FROM ents WHERE id = ${id}`);
+    assert(mk && mk.ST === 'asleep' && mk.SOLID === 0 && (!jx || (Math.abs(mk.X - jx.X) < 1 && Math.abs(mk.Y - jx.Y) < 1)), `Makron waits unseen where Jorg fell (${mk?.ST})`);
+    await run(85);
+    const up = mk ? await q1(`SELECT st, solid FROM ents WHERE id = ${mk.ID}`) : null;
+    assert(up && up.ST !== 'asleep' && up.SOLID === 3 && (await sounds('makron/popup.wav')), `... and rises four seconds on (${up?.ST})`);
+  }
   await run(20);
   await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL OR classname IN ('gib', 'debris')");
   await db.exec('UPDATE game SET killed = 0');

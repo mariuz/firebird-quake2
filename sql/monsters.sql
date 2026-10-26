@@ -446,18 +446,22 @@ BEGIN
   RETURN res;
 END^
 
--- a monster's missile at the frame that fires (monster_fire_*)
+-- a monster's missile at the frame that fires (monster_fire_*); in its second attack's animation (alt_anim) the kind is the
+-- second's, and Makron's attack5 is its hyperblaster
 CREATE OR ALTER PROCEDURE monster_missile (eid INTEGER)
 AS
-DECLARE mk VARCHAR(16); DECLARE enemy INTEGER; DECLARE asnd VARCHAR(64);
+DECLARE mk VARCHAR(16); DECLARE enemy INTEGER; DECLARE asnd VARCHAR(64); DECLARE mt VARCHAR(16); DECLARE anim VARCHAR(16); DECLARE aanim VARCHAR(16); DECLARE ak VARCHAR(16);
 DECLARE x1 DOUBLE PRECISION; DECLARE y1 DOUBLE PRECISION; DECLARE z1 DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION; DECLARE vh DOUBLE PRECISION;
 DECLARE x2 DOUBLE PRECISION; DECLARE y2 DOUBLE PRECISION; DECLARE z2 DOUBLE PRECISION;
 DECLARE dx DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; DECLARE dz DOUBLE PRECISION; DECLARE dl DOUBLE PRECISION;
 DECLARE sx DOUBLE PRECISION; DECLARE sy DOUBLE PRECISION; DECLARE sz DOUBLE PRECISION; DECLARE af INTEGER;
 BEGIN
-  SELECT t.missile_kind, e.enemy_id, t.attack_snd, e.x, e.y, e.z, e.yaw, e.viewheight, e.anim_frame FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid
-    INTO mk, enemy, asnd, x1, y1, z1, yaw, vh, af;
+  SELECT t.missile_kind, e.enemy_id, t.attack_snd, e.x, e.y, e.z, e.yaw, e.viewheight, e.anim_frame, e.mtype, e.anim, t.alt_anim, t.alt_kind
+    FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid
+    INTO mk, enemy, asnd, x1, y1, z1, yaw, vh, af, mt, anim, aanim, ak;
   IF (enemy IS NULL) THEN EXIT;
+  IF (aanim IS NOT NULL AND anim = aanim) THEN mk = ak;
+  IF (mt = 'makron' AND anim = 'attack5') THEN mk = 'hyperblaster';
   SELECT e.x, e.y, e.z + e.viewheight FROM ents e WHERE e.id = :enemy INTO x2, y2, z2;
   IF (x2 IS NULL) THEN EXIT;
   -- the muzzle: ahead and to the right of the eye
@@ -495,6 +499,29 @@ BEGIN
   BEGIN
     EXECUTE PROCEDURE snd(eid, 1, asnd, 1, 1);
     EXECUTE PROCEDURE launch_rocket(eid, sx, sy, sz + 20, dx, dy, dz - 20, 550, 50, 50, 70);
+  END
+  -- the full game's: hover's and floater's 1-damage bolts, the medic's 2, Makron's hyperblaster at 15 (monster_fire_blaster);
+  -- the bosses' machine guns at 6 (monster_fire_bullet); the gladiator's and Makron's railgun at 50 (monster_fire_railgun);
+  -- Jorg's and Makron's BFG at 50, 300 a second, 200 and 300 around (monster_fire_bfg)
+  ELSE IF (mk IN ('bolt1', 'bolt2', 'hyperblaster')) THEN
+  BEGIN
+    EXECUTE PROCEDURE snd(eid, 1, asnd, 1, 1);
+    EXECUTE PROCEDURE launch_bolt(eid, sx, sy, sz, dx, dy, dz, 1000, CASE mk WHEN 'bolt1' THEN 1 WHEN 'bolt2' THEN 2 ELSE 15 END, IIF(mk = 'hyperblaster', 64, 8));
+  END
+  ELSE IF (mk = 'chaingun') THEN
+  BEGIN
+    EXECUTE PROCEDURE snd(eid, 1, asnd, 1, 1);
+    EXECUTE PROCEDURE fire_bullets(eid, 1, sx, sy, sz, dx, dy, dz, 300, 500, 6, 4);
+  END
+  ELSE IF (mk = 'railgun') THEN
+  BEGIN
+    EXECUTE PROCEDURE snd(eid, 1, asnd, 1, 1);
+    EXECUTE PROCEDURE fire_rail(eid, sx, sy, sz, dx, dy, dz, 50, 100);
+  END
+  ELSE IF (mk = 'bfg') THEN
+  BEGIN
+    EXECUTE PROCEDURE snd(eid, 1, asnd, 1, 1);
+    EXECUTE PROCEDURE launch_bfg(eid, sx, sy, sz, dx, dy, dz, 300, 50, IIF(mt = 'makron', 300, 200));
   END
 END^
 
@@ -643,6 +670,12 @@ BEGIN
     EXIT;
   END
   EXECUTE PROCEDURE snd(eid, 2, ds, 1, 1);
+  -- jorg_dead → MakronToss: Makron rises from Jorg's body, four seconds on (makron/popup.wav as he appears)
+  IF (mt = 'jorg') THEN
+  BEGIN
+    EXECUTE PROCEDURE spawn_monster_at('makron', x, y, z, (SELECT e.yaw FROM ents e WHERE e.id = :eid)) RETURNING_VALUES bp;
+    UPDATE ents e SET e.solid = 0, e.alpha = 1, e.st = 'asleep', e.takedamage = 0, e.think = 'makron_toss', e.nextthink = now_() + 4 WHERE e.id = :bp;
+  END
   -- one of the death animations
   n = 1; p = 1;
   WHILE (POSITION(',', anims, p) > 0) DO BEGIN n = n + 1; p = POSITION(',', anims, p) + 1; END
@@ -668,6 +701,7 @@ DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISI
 DECLARE d DOUBLE PRECISION; DECLARE gt VARCHAR(40); DECLARE gw DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE cl INTEGER;
 DECLARE nt DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE pe INTEGER; DECLARE vis SMALLINT;
 DECLARE aif INTEGER; DECLARE itime DOUBLE PRECISION; DECLARE sflags INTEGER; DECLARE ca SMALLINT; DECLARE lf SMALLINT;
+DECLARE alt_a VARCHAR(16); DECLARE alt_f VARCHAR(60); DECLARE alt_c DOUBLE PRECISION;
 BEGIN
   -- (an UPDATE of the wide ents row costs as much as a trace step: the next think time rides
   -- along with whatever else the think writes, and a path that writes nothing thinks again next tic)
@@ -676,8 +710,12 @@ BEGIN
   SELECT e.st, e.anim, e.anim_frame, e.model_id, e.enemy_id, e.flags, e.mtype, e.attack_state, e.target, e.goal_id, e.x, e.y, e.z, e.cluster,
          e.aiflags, e.idle_time, e.spawnflags
     FROM ents e WHERE e.id = :eid INTO st, anim, af, mid, enemy, flags, mt, atkst, tgt, goal, x, y, z, cl, aif, itime, sflags;
-  SELECT t.run_speed, t.walk_speed, t.stand_anim, t.walk_anim, t.run_anim, t.melee_anim, t.melee_frame, t.missile_anim, t.missile_frames, t.idle_snd, t.search_snd
-    FROM monster_types t WHERE t.name = :mt INTO run_spd, walk_spd, stand_a, walk_a, run_a, melee_a, melee_f, missile_a, missile_f, idle_s, search_s;
+  SELECT t.run_speed, t.walk_speed, t.stand_anim, t.walk_anim, t.run_anim, t.melee_anim, t.melee_frame, t.missile_anim, t.missile_frames, t.idle_snd, t.search_snd,
+         t.alt_anim, t.alt_frames, t.alt_chance
+    FROM monster_types t WHERE t.name = :mt INTO run_spd, walk_spd, stand_a, walk_a, run_a, melee_a, melee_f, missile_a, missile_f, idle_s, search_s, alt_a, alt_f, alt_c;
+  -- in the second attack's animation its frames fire; Makron's railgun and hyperblaster frames (attack4, attack5)
+  IF (alt_a IS NOT NULL AND anim = alt_a) THEN missile_f = alt_f;
+  ELSE IF (mt = 'makron' AND anim = 'attack5') THEN missile_f = '3,4,5,6,7,8,9,10,11,12';
   IF (st = 'dead' OR st = 'asleep') THEN
   BEGIN
     UPDATE ents e SET e.nextthink = NULL WHERE e.id = :eid;
@@ -845,6 +883,11 @@ BEGIN
         -- gunner_attack: out of melee range, half the time the grenades (attak1), else the chain gun (gunner_opengun)
         IF (mt = 'gunner' AND rnd() <= 0.5e0 AND (SELECT vlen(n.x - :x, n.y - :y, n.z - :z) FROM ents n WHERE n.id = :enemy) >= 80) THEN
           EXECUTE PROCEDURE set_anim(eid, 'attak1');
+        -- Makron_CheckAttack: the BFG, the railgun or the hyperblaster, a third each
+        ELSE IF (mt = 'makron') THEN
+          EXECUTE PROCEDURE set_anim(eid, CASE CAST(FLOOR(rnd() * 3) AS INTEGER) WHEN 0 THEN 'attack3' WHEN 1 THEN 'attack4' ELSE 'attack5' END);
+        -- a second ranged attack (the supertank's rockets, the hornet's, Jorg's BFG): its chance of being the one
+        ELSE IF (alt_a IS NOT NULL AND rnd() < alt_c) THEN EXECUTE PROCEDURE set_anim(eid, alt_a);
         ELSE
         BEGIN
           EXECUTE PROCEDURE set_anim(eid, missile_a);
@@ -999,27 +1042,45 @@ BEGIN
 END^
 
 -- a console helper: put a monster in front of the player
-CREATE OR ALTER PROCEDURE spawn_monster (mname VARCHAR(16), dist DOUBLE PRECISION)
+-- a monster of `mname` put at a place, facing `yaw`, awake (the console's spawn, Makron out of Jorg)
+CREATE OR ALTER PROCEDURE spawn_monster_at (mname VARCHAR(16), x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION)
 RETURNS (id INTEGER)
 AS
-DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
 DECLARE mmodel VARCHAR(64); DECLARE mskin INTEGER; DECLARE mhp INTEGER; DECLARE mgh INTEGER; DECLARE mmass INTEGER; DECLARE mflags INTEGER; DECLARE mys DOUBLE PRECISION; DECLARE stand VARCHAR(16);
 DECLARE a DOUBLE PRECISION; DECLARE b DOUBLE PRECISION; DECLARE c DOUBLE PRECISION; DECLARE d DOUBLE PRECISION; DECLARE e_ DOUBLE PRECISION; DECLARE f DOUBLE PRECISION;
 BEGIN
-  SELECT e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = player_ent() INTO px, py, pz, yaw;
   SELECT t.model, t.skin, t.health, t.gib_health, t.mass, t.flags, t.yaw_speed, t.stand_anim, t.minx, t.miny, t.minz, t.maxx, t.maxy, t.maxz
     FROM monster_types t WHERE t.name = :mname INTO mmodel, mskin, mhp, mgh, mmass, mflags, mys, stand, a, b, c, d, e_, f;
   IF (mmodel IS NULL) THEN EXIT;
-  EXECUTE PROCEDURE spawn_ent('monster_' || mname, px + COS(yaw * 0.0174532925e0) * dist, py + SIN(yaw * 0.0174532925e0) * dist, pz + 8) RETURNING_VALUES id;
+  EXECUTE PROCEDURE spawn_ent('monster_' || mname, x, y, z) RETURNING_VALUES id;
   EXECUTE PROCEDURE set_model(id, mmodel);
   UPDATE ents e SET e.mtype = :mname, e.skin = :mskin, e.health = :mhp, e.max_health = :mhp, e.gib_health = :mgh, e.mass = :mmass, e.solid = 3, e.takedamage = 2,
-         e.movetype = IIF(BIN_AND(:mflags, 3) <> 0, 5, 4), e.clipmask = 33685507, e.flags = BIN_OR(32, :mflags), e.yaw_speed = :mys, e.yaw = anglemod(:yaw + 180),
+         e.movetype = IIF(BIN_AND(:mflags, 3) <> 0, 5, 4), e.clipmask = 33685507, e.flags = BIN_OR(32, :mflags), e.yaw_speed = :mys, e.yaw = anglemod(:yaw),
          e.minx = :a, e.miny = :b, e.minz = :c, e.maxx = :d, e.maxy = :e_, e.maxz = :f, e.viewheight = :f - 8,
          e.st = 'stand', e.anim = :stand, e.ideal_yaw = e.yaw, e.spawn_x = e.x, e.spawn_y = e.y, e.spawn_z = e.z,
          e.think = 'monster_think', e.nextthink = now_() + 0.1e0 WHERE e.id = :id;
   UPDATE game g SET g.total_monsters = g.total_monsters + 1 WHERE g.id = 1;
   IF (BIN_AND(mflags, 3) = 0) THEN EXECUTE PROCEDURE drop_to_floor(id); ELSE EXECUTE PROCEDURE link_ent(id);
   SUSPEND;
+END^
+
+-- MakronToss's end: Makron, kept unseen while Jorg's body fell, comes to life where it lies
+CREATE OR ALTER PROCEDURE makron_toss (eid INTEGER)
+AS
+BEGIN
+  UPDATE ents e SET e.solid = 3, e.alpha = 0, e.st = 'stand', e.takedamage = 2, e.think = 'monster_think', e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
+  EXECUTE PROCEDURE snd(eid, 2, 'makron/popup.wav', 1, 1);
+  EXECUTE PROCEDURE link_ent(eid);
+END^
+
+CREATE OR ALTER PROCEDURE spawn_monster (mname VARCHAR(16), dist DOUBLE PRECISION)
+RETURNS (id INTEGER)
+AS
+DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+BEGIN
+  SELECT e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = player_ent() INTO px, py, pz, yaw;
+  EXECUTE PROCEDURE spawn_monster_at(mname, px + COS(yaw * 0.0174532925e0) * dist, py + SIN(yaw * 0.0174532925e0) * dist, pz + 8, yaw + 180) RETURNING_VALUES id;
+  IF (id IS NOT NULL) THEN SUSPEND;
 END^
 
 -- ── the pushers (SV_Physics_Pusher) ─────────────────────────────────────
@@ -1221,6 +1282,7 @@ BEGIN
   ELSE IF (think = 'remove') THEN DELETE FROM ents e WHERE e.id = :eid;
   ELSE IF (think = 'drop_touchable') THEN UPDATE ents e SET e.owner_id = NULL, e.think = NULL, e.nextthink = NULL WHERE e.id = :eid;   -- drop_make_touchable
   ELSE IF (think = 'item_respawn') THEN EXECUTE PROCEDURE item_respawn(eid);
+  ELSE IF (think = 'makron_toss') THEN EXECUTE PROCEDURE makron_toss(eid);
   ELSE IF (think = 'mega_think') THEN EXECUTE PROCEDURE mega_think(eid);
 END^
 

@@ -111,6 +111,19 @@ export async function loadResources(db, pak, { width = 320, height = 200, fov = 
     res.byName.set(name, id);
     modelRows.push([id, name, 'S', null, null, null, null, null, null, null, null, null, s.frames.length, 0, s.radius]);
   }
+  // the full game's monsters without their models (the demo pak): a model row with no mesh, its frame runs from
+  // the monster's table (m_*.h), so the logic animates, attacks and dies as it would; the painter skips a model
+  // it has no mesh for. A pak that has the model (a registered one) uses the MD2 and its own frames instead.
+  for (const m of MONSTERS) {
+    if (!m.anims || res.byName.has(m.model)) continue;
+    const id = res.nextModel++;
+    const total = m.anims.reduce((n, [, c]) => n + c, 0);
+    const radius = Math.hypot(Math.max(Math.abs(m.minx ?? -16), Math.abs(m.maxx ?? 16)), Math.max(Math.abs(m.miny ?? -16), Math.abs(m.maxy ?? 16)), Math.max(Math.abs(m.minz ?? -24), Math.abs(m.maxz ?? 32)));
+    modelRows.push([id, m.model, 'M', null, null, null, null, null, null, null, null, null, total, 0, radius]);
+    let first = 0;
+    for (const [name, count] of m.anims) { animRows.push([id, name, first, count]); first += count; }
+    res.placeholders = (res.placeholders ?? new Map()).set(m.model, id);
+  }
   await bulkLoad(db, 'models', modelRows);
   await bulkLoad(db, 'anims', animRows);
 
@@ -127,7 +140,7 @@ async function loadMonsterTypes(db, pak) {
   const cols = ['name', 'model', 'skin', 'health', 'gib_health', 'mass', 'minx', 'miny', 'minz', 'maxx', 'maxy', 'maxz', 'flags', 'run_speed', 'walk_speed', 'yaw_speed',
     'stand_anim', 'walk_anim', 'run_anim', 'pain_anims', 'death_anims', 'melee_anim', 'melee_frame', 'melee_range', 'melee_dmg',
     'missile_anim', 'missile_frames', 'missile_kind', 'attack_chance', 'pain_chance', 'sight_snd', 'idle_snd', 'search_snd', 'pain_snd',
-    'death_snd', 'attack_snd', 'melee_snd', 'drop_item'];
+    'death_snd', 'attack_snd', 'melee_snd', 'drop_item', 'alt_anim', 'alt_frames', 'alt_kind', 'alt_chance'];
   const body = MONSTERS.map((m) => `INSERT INTO monster_types (${cols.join(', ')}) VALUES (${cols.map((c) => lit(m[c] ?? null)).join(', ')});`).join('\n');
   await db.exec(`SET TERM ^ ;\nEXECUTE BLOCK AS BEGIN\n${body}\nEND^\nSET TERM ; ^`);
 }

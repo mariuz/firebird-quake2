@@ -606,5 +606,11 @@ CREATE TABLE monster_types (
   death_snd   VARCHAR(64),
   attack_snd  VARCHAR(64),
   melee_snd   VARCHAR(64),
-  drop_item   VARCHAR(40)                          -- what it leaves behind
+  drop_item   VARCHAR(40),                         -- what it leaves behind
+  -- a second ranged attack (the supertank's rockets beside its machine gun, the hornet's, Jorg's BFG): its
+  -- animation, the frames that fire, its kind, and the chance it is the one chosen when a missile is due
+  alt_anim    VARCHAR(16),
+  alt_frames  VARCHAR(60),
+  alt_kind    VARCHAR(16),
+  alt_chance  DOUBLE PRECISION DEFAULT 0.5 NOT NULL
 );

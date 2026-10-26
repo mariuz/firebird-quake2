@@ -213,10 +213,11 @@ if (adoor) assert((adoor.EFFECTS & 4096) !== 0, `an ANIMATED door has EF_ANIM_AL
 const snds = (await db.query('SELECT DISTINCT snd FROM sound_events')).rows.map((r) => r.SND);
 const missing = snds.filter((n) => !pak.has('sound/' + n));
 assert(missing.length === 0, `all queued sounds exist in the pak (${missing.join(', ') || 'none missing'})`);
-// and every sound name in the SQL exists
+// and every sound name in the SQL exists (but a full-game monster's, whose whole directory the demo pak lacks: makron/)
 const refs = [...new Set([...Object.values(sql).join('\n').matchAll(/'([a-z0-9_\/]+\.wav)'/g)].map((m) => m[1]))].filter((n) => n.includes('/'));
-const missing2 = refs.filter((n) => !pak.has('sound/' + n));
-assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing2.join(', ') || 'none missing'})`);
+const fullGameDir = (n) => pak.list(`sound/${n.slice(0, n.indexOf('/') + 1)}`).length === 0;
+const missing2 = refs.filter((n) => !pak.has('sound/' + n) && !fullGameDir(n));
+assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing2.join(', ') || 'none missing'}; ${refs.filter(fullGameDir).length} of the full game's monsters' not expected)`);
 
 // area portals: a closed door cuts the areas behind it off; opening it joins them, closing parts them again
 {

@@ -31,7 +31,7 @@ npm run fetch-pak      # downloads the Quake 2 demo (q2-314-demo-x86.exe) and ex
 npm test               # SQL smoke test in Node against the real Firebird WASM engine: the Outer Base
 npm run test:base2     # the same on the Installation (demo2)
 npm run test:base3     # and on demo3
-npm run test:monsters  # every monster of the demo: spawned, it sees the player, attacks, and dies
+npm run test:monsters  # every monster, the demo's and the full game's: spawned, it sees the player, attacks, and dies
 npm run test:save      # save, play on, load: the game comes back exactly and keeps running
 # in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, save, load); F1 the help computer
 npm run serve          # http://localhost:8080/ (as Pages serves it); add -- --coi for the threaded engine

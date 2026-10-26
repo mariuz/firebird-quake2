@@ -100,10 +100,16 @@ the order they are to be taken.
   each in the order the browser lists them; the painter splits the screen in quarters for three or four
   (the fourth black with three), the SQL's view the quarter's size. The status bar is 320 wide and overflows
   a narrower view at its sides: 640×480 is the detail for four. Left: the HUD drawn to a view's width.
-- **The full game's monsters, logic first**: their frame tables and attacks are in the public source
-  (m_*.c, m_*.h) and run headless without the models, as a row in `monster_types` and their branches in
-  `monsters.sql`; the smoke test's check that every sound exists would have to tolerate the demo pak's
-  missing files. Seeing them waits for a registered pak (the list is under *The full game*).
+- **The full game's monsters, logic first**: done for thirteen (gladiator, iron maiden, brain, medic,
+  mutant, icarus, technician, barracuda shark, the supertank, the hornet, Jorg, Makron, the insane
+  marines): a row each in `src/gamedata.js` with the frame runs of its m_*.h as a table, which the loader
+  makes a model row without a mesh from when the pak lacks the MD2, so the logic runs headless and the
+  painter skips what it has no mesh for; their attack kinds (bolts of 1, 2 and 15, the bosses' machine
+  guns, the railgun, the BFG) and a second ranged attack per monster (`alt_*`) in `monsters.sql`, Makron's
+  three, Makron out of Jorg's body. `test:monsters` runs every one of them as it runs the demo's; the smoke
+  test's sound check lets a full-game monster's directory be missing. Seeing them waits for a registered
+  pak. Left, under *The full game*: the medic's cable, the mutant's leap, the floater's zap, the chick's
+  duck, the insane marines' forms, the commander body.
 - **Frames between tics**: the page paints once per tic (`main.js`'s loop: a tic, the frame query, the
   raster), so motion runs at 20 Hz however fast the display is. Quake 2's client drew at the display rate
   and moved the entities and the view between two server frames by `cl.lerpfrac` (`CL_AddPacketEntities`,
@@ -390,11 +396,14 @@ the order they are to be taken.
 The base unit's maps load (`npm run fetch-pak` with `PAK=/path/to/pak0.pak`, or the page's file
 picker). Missing for the rest of the game:
 
-- **Monsters**: gladiator, iron maiden (chick), brain, medic (and its resurrection), mutant,
-  icarus (hover), technician (floater), barracuda shark (flipper), the supertank, the hornet
-  (boss2), Makron with Jorg (boss3), the insane marines, the commander body. Each is a row in
-  `monster_types` (`src/gamedata.js`) plus whatever special attack or behaviour it has in
-  `monsters.sql` (`check_attack`, `monster_missile`, `monster_melee`).
+- **Monsters**: the logic of gladiator, iron maiden (chick), brain, medic, mutant, icarus (hover),
+  technician (floater), barracuda shark (flipper), the supertank, the hornet (boss2), Makron with Jorg
+  (boss3) and the insane marines is in (see *Next*): each a row in `monster_types` (`src/gamedata.js`) with
+  its frame table, its attacks kinds of `monster_missile`. Their frame runs come from memory of the m_*.h
+  headers; a registered pak's MD2 supplies the real ones, and is where their timing is to be checked. Not
+  yet: the medic's cable (`medic_cable_attack`, raising a dead monster), the mutant's leap
+  (`mutant_jump`), the floater's zap beam, the chick's duck, the insane marines' crawling and crucified
+  spawnflags, the commander body (`monster_commander_body`, which only sits up when used).
 - **Map entities**: done for `func_door_secret` (back, a second, aside, its wait, and home; shot open
   unless named, or with ALWAYS_SHOOT; silent, as its own moves never played the sounds it loaded),
   `target_earthquake` (a grounded player thrown up and about every 0.1 s, the rumble every half second,

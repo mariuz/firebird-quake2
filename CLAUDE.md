@@ -22,7 +22,7 @@ tools), `public/` (page, the retired service worker, the pak goes in `public/pak
 npm install && npm run fetch-pak      # once: the demo's pak0.pak (needs 7-Zip or unzip)
 node scripts/sql-check.mjs            # compile the SQL (run after every SQL edit; ~20 s)
 npm test && npm run test:base2 && npm run test:base3   # smoke tests, demo1, demo2 and demo3 (~1 min each)
-npm run test:monsters                 # every monster: sees, attacks, dies
+npm run test:monsters                 # every monster: sees, attacks, dies (MONSTER=a,b runs these alone; the full game's run on their frame tables, no model)
 npm run test:save                     # save, play on, load: the game comes back exactly
 npm run test:menu                     # the menus, headless: keys, slots, settings, pictures
 npm run test:painter                  # the painter headless: dynamic lights, mip levels
@@ -163,6 +163,11 @@ short stories of what changed and what it measured; keep that.
   to get `now_()` added to its nextthink, which was wrong for a spawned pusher.
 - A pusher's (movetype 7) thinks are scheduled on its own clock, `ltime`; everything else's on `now_()`.
   Entity pitch is Quake's: positive is downward (`angleMatrix`, `AngleVectors`).
+- A monster whose model the pak lacks (the full game's in the demo pak) runs on a model row without a mesh: its
+  `anims` table in `src/gamedata.js` (the m_*.h runs, in the model's order) becomes its `anims` rows, every
+  animation it names must be in it, and the painter skips a model it has no mesh for. A pak with the MD2 uses
+  the MD2's runs instead. Its sounds are queued like any other; the smoke test's sound check lets a monster's
+  whole directory be missing from the pak.
 - Every chance comes from `rnd()` (game.sql), never `RAND()`: a seeded generator in the session context,
   so a game is a function of its seed and its inputs (`test:replay` holds it to that). Seed with
   `loadMap(…, { seed })` or the console's `seed <n>`; `game.rng_seed` records a new game's; a save carries
