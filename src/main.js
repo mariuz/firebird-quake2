@@ -17,6 +17,7 @@ import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
 import { HostLink, GuestLink, Peer } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
+import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
 import { Effects } from './effects.js';
 import { Hud, viewFrame } from './hud.js';
@@ -340,6 +341,8 @@ const localViews = () => (session?.twoPlayers && !netHost() ? session.nclients :
 function beginMap() {
   running = false;
   demo = null;
+  for (const L of lerps) { L.prev = null; L.cur = null; }   // (the frames of the map being left)
+  lastPaint = 0;
   menu.off();
   showHelp = perPlayer(false);
   showInv = perPlayer(false);
@@ -396,6 +399,11 @@ function nextFrame() {
 // the brush models' frames and angles in the frame being drawn (FRAME_ALL's kind 6)
 let brushFrames = new Map();
 let brushAngles = new Map();
+// src/lerp.js: the last two tics' frames of each view, painted between tics moved by the fraction of the tic gone by
+const lerps = perPlayer(() => new FrameLerp());
+let lastPaint = 0;
+let paints = 0;          // frames painted (the tics are session.frameNo)
+let guestGotAt = 0, guestDt = 0.05, guestSentAt = 0;   // a guest: when the host's last frame came and how long it stands for
 
 async function frame() {
   if (!running || paused || document.hidden || menu.active) {
@@ -414,12 +422,20 @@ async function frame() {
   }
   try {
     const now = performance.now();
-    const tics = Math.max(1, Math.min(2, Math.round((now - lastTic) / TIC_MS)));   // at most two tics a frame: better slow motion than a stall
-    lastTic += tics * TIC_MS;
-    if (now - lastTic > 200) lastTic = now;
+    // the tics owed by the wall clock (20 Hz), at most two a frame: a stall is slow motion, never a leap; a frame
+    // that owes none paints the last tic's frame again, moved toward the current one (src/lerp.js)
+    let owed = Math.floor((now - lastTic) / TIC_MS);
+    if (owed > 2) { owed = 2; lastTic = now - 2 * TIC_MS; }
 
-    if (netGuest()) { guestFrame(tics); nextFrame(); return; }
+    if (netGuest()) { guestFrame(now); nextFrame(); return; }
     if (demo) { await demoFrame(now); nextFrame(); return; }
+    if (owed === 0) {
+      if (lerps[0].frame && settings.renderer !== 'sql') paintFrames(now);   // (the SQL-projecting mode paints a tic's frame as it is)
+      nextFrame();
+      return;
+    }
+    const tics = owed;
+    lastTic += tics * TIC_MS;
 
     let t = performance.now();
     const [cmd, cmd2] = readInput(tics);
@@ -463,17 +479,10 @@ async function frame() {
     audio.update(listener);
     if (fx.length) tempEnts.add(fx, last.TIME_, renderer);
 
-    t = performance.now();
-    renderer.runParticles(tics * 0.05, last.TIME_);   // once a frame, whatever the views
-    brushFrames = f.brushFrames; brushAngles = f.brushAngles;
-    drawFrame(0, last, faces, ents, f.styles, last.TIME_, tics * 0.05);
-    more.forEach((m, i) => {
-      brushFrames = m.brushFrames; brushAngles = m.brushAngles;
-      drawFrame(i + 1, session.clients[i + 1] ?? last, m.faces, m.ents, m.styles, last.TIME_, tics * 0.05);
-    });
-    if (views === 3) renderer.clearView(3);   // (the fourth quarter stays black)
-    perf.draw = performance.now() - t;
-    updateStats();
+    // this tic's frames become the current ones (the last tic's the previous), and are painted at the fraction gone by
+    lerps[0].push(last, f);
+    more.forEach((m, i) => lerps[i + 1].push(session.clients[i + 1] ?? last, m));
+    paintFrames(now);
     // the frame's spare time marks the cluster the player is heading into (premark_ahead), so the
     // crossing is a switch of slot and not a hitch; a call that finds nothing to do costs ~0.3 ms
     if (perf.tic + perf.faces + perf.draw < 30) await session.premark();
@@ -486,31 +495,63 @@ async function frame() {
 }
 
 /**
- * A guest's frame: its command goes to the host, and the newest frame the host sent is painted as the
- * page paints its own (the sounds at this player's ear, the effects and particles run here).
+ * Every view painted once from its last two tics' frames (src/lerp.js), moved toward the current one by the
+ * fraction of the tic gone by at `now`; the first view's angles take the turn the input holds, not yet sent
+ * with a tic, so looking around is immediate. The particles run by the real time since the last paint.
  */
-function guestFrame(tics) {
-  const [cmd] = readInput(tics);
+function paintFrames(now) {
+  const t = performance.now();
+  const dt = lastPaint ? Math.min(0.1, Math.max(0, (now - lastPaint) / 1000)) : 0.05;
+  lastPaint = now;
+  const exact = settings.renderer === 'sql';
+  const frac = netGuest() ? (now - guestGotAt) / (guestDt * 1000) : (now - lastTic) / TIC_MS;
+  const f0 = Math.max(0, Math.min(1, frac));
+  const cur = lerps[0].cur.row;
+  const time = cur.TIME_ - (exact ? 0 : (1 - f0) * 0.05);   // the clock between the two tics
+  renderer.runParticles(dt, time);
+  const views = renderer.views;
+  for (let v = 0; v < views; v++) {
+    const L = lerps[v];
+    if (!L.frame) continue;
+    const turn = v === 0 && !netGuest() ? { yaw: input.mouseYaw, pitch: input.mousePitch } : {};
+    const s = L.at(frac, turn, exact);
+    brushFrames = L.frame.brushFrames; brushAngles = s.brushAngles;
+    drawFrame(v, s.row, s.faces, s.ents, L.frame.styles, time, dt);
+  }
+  if (views === 3) renderer.clearView(3);   // (the fourth quarter stays black)
+  paints++;
+  perf.draw = performance.now() - t;
+  updateStats();
+}
+
+/**
+ * A guest's frame: its command goes to the host every frame (the turning keys scaled by the fraction of a tic
+ * since the last), and the newest frame the host sent is painted as the page paints its own (the sounds at this
+ * player's ear, the effects and particles run here), moved between the host's last two by the time since it came.
+ */
+function guestFrame(now) {
+  const frameTics = guestSentAt ? Math.min(2, (now - guestSentAt) / TIC_MS) : 1;
+  guestSentAt = now;
+  const [cmd] = readInput(frameTics);
   if (!net?.guest?.open) return;
   net.guest.sendCommand(cmd, { inv: showInv[0] });
   const got = net.guest.take();
-  if (!got || !map) return;
-  const t = performance.now();
-  last = got.row;
-  const f = got.frame;
-  if (f.speakers) audio.setSpeakersOn(f.speakers);
-  const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
-  if (f.sounds.length) audio.playEvents(f.sounds, listener);
-  audio.setLoops(f.loops);
-  audio.update(listener);
-  if (f.fx.length) tempEnts.add(f.fx, last.TIME_, renderer);
-  if (showInv[0]) invItems[0] = got.inv;
-  renderer.runParticles(got.dt, last.TIME_);
-  brushFrames = f.brushFrames; brushAngles = f.brushAngles;
-  drawFrame(0, last, f.faces, f.ents, f.styles, last.TIME_, got.dt);
-  perf.tic = 0; perf.faces = 0; perf.rows = f.faces.length;
-  perf.draw = performance.now() - t;
-  updateStats();
+  if (!map) return;
+  if (got) {
+    last = got.row;
+    const f = got.frame;
+    if (f.speakers) audio.setSpeakersOn(f.speakers);
+    const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
+    if (f.sounds.length) audio.playEvents(f.sounds, listener);
+    audio.setLoops(f.loops);
+    audio.update(listener);
+    if (f.fx.length) tempEnts.add(f.fx, last.TIME_, renderer);
+    if (showInv[0]) invItems[0] = got.inv;
+    lerps[0].push(last, f);
+    guestGotAt = now; guestDt = got.dt || 0.05;
+    perf.tic = 0; perf.faces = 0; perf.rows = f.faces.length;
+  }
+  if (lerps[0].frame) paintFrames(now);
 }
 
 const sprite = (name) => res.models.get(res.byName.get(name))?.spr;
@@ -953,7 +994,8 @@ async function boot() {
     db = await openDatabase();
     session = new Session(db, storage);
     window.quake2 = { db, session, audio, menu, input, settings, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
-      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, sql: (q, p) => db.query(q, p).then((r) => r.rows) };
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, get paints() { return paints; },
+      sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));
     if (!resp.ok) throw new Error(`could not fetch pak0.pak (${resp.status}); pick a PAK file instead`);

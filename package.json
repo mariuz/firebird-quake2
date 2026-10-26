@@ -38,6 +38,7 @@
     "test:net": "node scripts/net-test.mjs",
     "test:dm": "node scripts/dm-test.mjs",
     "test:demo": "node scripts/demo-test.mjs",
+    "test:lerp": "node scripts/lerp-test.mjs",
     "perf": "node scripts/perf-guard.mjs"
   },
   "license": "MIT",
