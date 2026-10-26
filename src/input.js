@@ -8,7 +8,7 @@
 // (menus, the console, the F keys) and hands the rest to key(). Nothing here touches the page's
 // state, so a test can drive it with plain calls.
 
-import { readPad, padImpulse, padScreens, firstPad, BUTTON, TURN, LOOK } from './gamepad.js';
+import { readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON, TURN, LOOK } from './gamepad.js';
 
 // default.cfg's keys the browser must not act on itself (scrolling, the menu bar, tabbing away)
 export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
@@ -90,6 +90,7 @@ export class Input {
     this.impulse = 0;
     this.touch = { move: null, look: null };
     this.pad = { held: new Set(), stick: { x: 0, y: 0 }, last: null };
+    this.pads = [];              // the other pads' last reads, by index after the first (the third and fourth players')
     this.menuPressed = false;    // the pad's Start went down at the last read
     this.padScreens = { inventory: false, help: false };   // ... and its Y or Back
     this.getPads = getPads;
@@ -215,14 +216,24 @@ export class Input {
   }
 
   /**
-   * The pad alone as a tic's command, for a coop game's second player: the pad read by this frame's read()
-   * (call after it). Without a pad, a command that does nothing.
+   * A pad alone as a tic's command, for a coop game's second player on: `index` 0 is the first pad, read by this
+   * frame's read() (call after it), 1 the second pad and so on (the third and fourth players'), read here once a
+   * frame. Without a pad, a command that does nothing.
    */
-  readPad(tics, settings) {
-    const pad = this.pad.last;
+  readPad(tics, settings, index = 0) {
+    const pad = index === 0 ? this.pad.last : this.pollPadAt(index);
     if (!pad) return [tics, 0, 0, 0, 0, 0, 0, settings.alwaysRun ? 1 : 0, 0];
     const yaw = pad.turn * TURN * tics * settings.sensitivity / 7;
     const pitch = pad.look * LOOK * tics * settings.sensitivity / 7 * (settings.invertMouse ? -1 : 1);
     return [tics, pad.fwd, pad.side, yaw, pitch, pad.fire ? 1 : 0, (pad.jump ? 1 : 0) - (pad.crouch ? 1 : 0), settings.alwaysRun || pad.run ? 1 : 0, padImpulse(pad)];
+  }
+  /** The pad at `index` among the connected ones (1 the second), read once: a press counts once; null without one. */
+  pollPadAt(index) {
+    const p = connectedPads(this.getPads())[index];
+    const rec = this.pads[index] ?? (this.pads[index] = { held: new Set(), last: null });
+    const pad = readPad(p ?? null, rec.held);
+    if (pad) rec.held = pad.held;
+    rec.last = pad;
+    return pad;
   }
 }

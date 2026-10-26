@@ -301,6 +301,7 @@ DECLARE nbx DOUBLE PRECISION; DECLARE nby DOUBLE PRECISION; DECLARE nbz DOUBLE P
 DECLARE bcx DOUBLE PRECISION; DECLARE bcy DOUBLE PRECISION; DECLARE bcz DOUBLE PRECISION; DECLARE brad DOUBLE PRECISION;
 BEGIN
   EXECUTE PROCEDURE view_setup(client) RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
+  IF (ex IS NULL) THEN EXIT;   -- (no such client, or its entity gone: a map being replaced under the frame; nothing to draw)
   hw = w / 2e0; hh = h / 2e0;
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
   -- FRAME_ALL's frustum planes, for its whole-model test below
@@ -442,6 +443,7 @@ BEGIN
   -- the client whose view this is: its own model is not drawn, the other client's is
   SELECT p.ent_id FROM player p WHERE p.id = :client INTO pe;
   EXECUTE PROCEDURE view_setup(client) RETURNING_VALUES ex, ey, ez, fx, fy, fz, rx, ry, rz, ux, uy, uz, w, h, sc, nearz, kx, ky, pvs, vcl, vleaf;
+  IF (ex IS NULL) THEN EXIT;   -- (no such client, or its entity gone: a map being replaced under the frame; nothing to draw)
   qx = SQRT(1 + kx * kx); qy = SQRT(1 + ky * ky);
   -- (c - e)·f = c·f - e·f: the eye's part is a constant of the frame, not of the row
   ef = ex * fx + ey * fy + ez * fz; er = ex * rx + ey * ry + ez * rz; eu = ex * ux + ey * uy + ez * uz;

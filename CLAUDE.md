@@ -121,7 +121,7 @@ short stories of what changed and what it measured; keep that.
   probes all land in solid (the fan's hub) has no cluster and must be drawn anyway.
 - Firebird evaluates `AND` left to right and short-circuits: put the cheap, selective test first.
 - The player's `pitch` lives on `player`, the yaw on `ents`; `view_setup` reads both.
-- There is a `player` row per client (two in coop), found by its entity: a routine that has the player's edict
+- There is a `player` row per client (two to four in coop or deathmatch: `init_map(…, coop, deathmatch, nclients)`), found by its entity: a routine that has the player's edict
   in hand (`pe`, `other`, `targ`, `attacker`) reads and writes `player p WHERE p.ent_id = :pe`, never `p.id = 1`;
   `client_of(eid)` says whether an entity is a client at all. `player_ent()` is the first client's entity, for
   what is the page's own (the console, `premark_ahead`, the trail) or a default activator. Messages take the

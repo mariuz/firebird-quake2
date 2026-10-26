@@ -154,6 +154,14 @@ check((await db.query('SELECT exit_kind FROM game WHERE id = 1')).rows[0].EXIT_K
 session.last = await session.tic(cmd());
 check(!(await session.takeLoadRequest()), 'no request, nothing taken');
 
+// a frame asked for a client that has no entity (none such, or the map being replaced under the page's loop) is
+// empty, not an error: the loop lives to paint the next map
+let empty = null, threw = null;
+try { empty = await session.frame({ client: 9 }); } catch (err) { threw = err; }
+check(!threw && empty && empty.faces.length === 0 && empty.ents.length === 0, `a client with no entity gets an empty frame, no error (${threw?.message ?? 'ok'})`);
+try { empty = await session.frame({ client: 9, sqlRenderer: true }); } catch (err) { threw = err; }
+check(!threw && empty.faces.length === 0, 'in the SQL-projecting mode too');
+
 // no storage, no saves
 const bare = new Session(db);
 bare.use(pak, res);

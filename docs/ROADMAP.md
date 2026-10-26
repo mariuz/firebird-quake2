@@ -94,10 +94,12 @@ the order they are to be taken.
   holds the units within about ±15 % between runs here, against ±50 % for the milliseconds, so the margin
   catches only what matters (the 17 ms a tic of the falling barrels was four times the tic). A change that
   is meant to cost more records the baseline again (`--record`) in the same commit.
-- **More than two local players**: the page's views come from `session.clients.length` and a second
-  gamepad is a second input, so three or four players in a grid are mostly page work on top of coop
-  (`Renderer.setSize(w, h, views)`, `readInput`, the gamepads by index) and a `client` beyond 2 in the
-  SQL, which already takes the client as a parameter everywhere.
+- **More than two local players**: done. The Players select (and the players spin) offers two to four in
+  coop and in deathmatch; `init_map` takes the count (`nclients`) and puts the second client on at the map's
+  `info_player_coop` in order, or at deathmatch spots; `Session.tic` takes a usercmd per client, a gamepad
+  each in the order the browser lists them; the painter splits the screen in quarters for three or four
+  (the fourth black with three), the SQL's view the quarter's size. The status bar is 320 wide and overflows
+  a narrower view at its sides: 640×480 is the detail for four. Left: the HUD drawn to a view's width.
 - **The full game's monsters, logic first**: their frame tables and attacks are in the public source
   (m_*.c, m_*.h) and run headless without the models, as a row in `monster_types` and their branches in
   `monsters.sql`; the smoke test's check that every sound exists would have to tolerate the demo pak's

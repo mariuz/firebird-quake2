@@ -45,10 +45,11 @@ npm run perf           # the guard CI runs: the load, the tics, the frame query 
 npm run inspect        # what is in the pak (maps, models and their frame runs, sounds)
 ```
 
-Two can play: the Players select (or the game menu's players spin) starts a coop game, the screen split in
-two views, the keyboard and mouse the first player's and a gamepad the second's, as `p_client.c` had coop
-(the demo pak has no player model, so the other player is unseen until a registered pak supplies it).
-Or against each other: the select's "Two (deathmatch)" plays the maps as deathmatch had them, their
+Two to four can play: the Players select (or the game menu's players spin) starts a coop game, the screen
+split in two views or in quarters, the keyboard and mouse the first player's and a gamepad each the others',
+as `p_client.c` had coop (the demo pak has no player model, so the other players are unseen until a
+registered pak supplies it; 640×480 gives four views of 320×240).
+Or against each other: the select's deathmatch choices play the maps as deathmatch had them, their
 deathmatch-only weapons and spots in and the monsters out, items that come back after they are taken, frags on
 the status bar and the score board on F1 (`dmflags`, `fraglimit` and `timelimit` at the console).
 Or two pages, over the network: one hosts (Host makes an offer, a short text to send to the other player),

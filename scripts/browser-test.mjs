@@ -165,6 +165,16 @@ try {
     assert(monsters === 0, `and no monsters (${monsters})`);
     const d1 = await frames(page); await sleep(700); const d2 = await frames(page);
     assert(d2 > d1, `the deathmatch runs on (${d2 - d1} frames in 0.7 s)`);
+    // four players: four clients, the screen in quarters (each view half as wide and half as high), the game runs on
+    await page.selectOption('#players', '4');
+    let fourp = {};
+    const state4 = () => page.evaluate(() => ({ coop: window.quake2?.session?.coop, clients: window.quake2?.session?.clients?.length, views: window.quake2?.renderer?.views,
+      w: window.quake2?.renderer?.w, h: window.quake2?.renderer?.h, screenW: window.quake2?.renderer?.screenW, screenH: window.quake2?.renderer?.screenH, players: window.quake2?.settings?.players })).catch(() => ({}));
+    for (let i = 0; i < 240 && !(fourp.coop === true && fourp.clients === 4 && fourp.views === 4); i++) { await sleep(250); fourp = await state4(); }
+    assert(fourp.coop === true && fourp.clients === 4 && fourp.views === 4 && fourp.players === 4, `four players: a new coop game with four clients and four views (${JSON.stringify(fourp)})`);
+    assert(fourp.w * 2 === fourp.screenW && fourp.h * 2 === fourp.screenH, `each view a quarter of the screen (${fourp.w}×${fourp.h} of ${fourp.screenW}×${fourp.screenH})`);
+    const q1 = await frames(page); await sleep(700); const q2 = await frames(page);
+    assert(q2 > q1, `the game of four runs on (${q2 - q1} frames in 0.7 s)`);
     await page.selectOption('#players', '1');
     let one = {};
     for (let i = 0; i < 240 && !(one.coop === false && one.clients === 1 && one.views === 1); i++) { await sleep(250); one = await state(); }

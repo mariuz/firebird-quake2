@@ -24,7 +24,7 @@ import { Menu, saveComment } from './menu.js';
 import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS, ITEMS, ARMOR_ICONS, TIMER_ICONS } from './gamedata.js';
-import { padMenuKeys, BUTTON } from './gamepad.js';
+import { padMenuKeys, padScreens, BUTTON } from './gamepad.js';
 import { Input, GAME_KEYS, DEFAULT_BINDS, bindKey } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
@@ -83,11 +83,13 @@ const input = new Input({ binds: settings.binds });   // (the keys menu edits se
 let anyKey = null;      // a picture screen waiting for a key or a click
 // the help computer (F1, or the pad's Back) and the inventory screen (TAB, or the pad's Y), per view: the
 // keys are the first player's, the pad is its player's (the second in coop)
-let showHelp = [false, false];
-let showInv = [false, false];
-let showScores = [false, false];   // the deathmatch score board (Cmd_Help_f shows it in place of the help computer)
-let invItems = [[], []];     // the inventory's rows: [itemlist index, count]
-let helpSeen = [0, 0];       // the help_changed count each player has looked at
+const MAX_PLAYERS = 4;       // at this page: the view split in two or four
+const perPlayer = (v) => Array.from({ length: MAX_PLAYERS }, () => (typeof v === 'function' ? v() : v));
+let showHelp = perPlayer(false);
+let showInv = perPlayer(false);
+let showScores = perPlayer(false);   // the deathmatch score board (Cmd_Help_f shows it in place of the help computer)
+let invItems = perPlayer(() => []);  // the inventory's rows: [itemlist index, count]
+let helpSeen = perPlayer(0);         // the help_changed count each player has looked at
 /** The help computer (the score board in deathmatch) or the inventory toggled for player `p` (0 or 1), the other screen put away. */
 function toggleScreen(p, which) {
   const row = netGuest() ? last : (session?.clients[p] ?? last);
@@ -153,7 +155,7 @@ const menu = new Menu({
   slots: () => session?.slots() ?? [],
   loadSlot: (i) => loadGame(SLOT_KEY(i)),
   saveSlot: (i) => saveGame(SLOT_KEY(i)),
-  get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : k === 'players' ? (settings.deathmatch ? 2 : settings.coop ? 1 : 0) : settings[k]),
+  get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : k === 'players' ? PLAYER_CHOICES.indexOf(playersValue()) : settings[k]),
   set: (k, v) => setSetting(k, v),
   // ControlsResetDefaultsFunc ran default.cfg: the options and the keys go back
   resetDefaults: () => { for (const [k, v] of Object.entries(OPTIONS_RESET)) setSetting(k, v); for (const [a, keys] of Object.entries(DEFAULT_BINDS)) settings.binds[a] = [...keys]; saveSettings(); },
@@ -171,7 +173,7 @@ function setSetting(k, v) {
     detail: ['detail', 'change'], brightness: ['brightness', 'change'], players: ['players', 'change'] }[k];
   if (control) {
     const el = $(control[0]);
-    el.value = k === 'alwaysRun' ? (v ? '1' : '0') : k === 'players' ? ['1', '2', 'dm'][v] ?? '1' : String(v);
+    el.value = k === 'alwaysRun' ? (v ? '1' : '0') : k === 'players' ? PLAYER_CHOICES[v] ?? '1' : String(v);
     el.dispatchEvent(new Event(control[1]));
   } else if (k === 'fullscreen') {
     if (v && !document.fullscreenElement) canvas.requestFullscreen?.().catch(() => {});
@@ -286,24 +288,38 @@ if (touchBar) {
 
 /**
  * One tic's commands from the input: the first player's (the keys, the mouse, the touches, and the pad in
- * single player) and, in coop, the second's (the pad alone, or over the network the guest's commands since
- * the last tic); the pad's Start is the page's Escape either way.
+ * single player) and, in coop or deathmatch, the others' (a pad each, in order, or over the network the guest's
+ * commands since the last tic); a pad's Start is the page's Escape either way.
  */
 function readInput(tics) {
-  const localCoop = session.twoPlayers && !net;   // two players at this page (coop or deathmatch): the pad is the second's
-  const cmd = input.read(tics, settings, { pad: !localCoop });
+  const local = session.twoPlayers && !net ? session.nclients : 1;   // the players at this page: past the first, a pad each
+  const cmd = input.read(tics, settings, { pad: local === 1 });
   if (input.menuPressed) escape();
   // the pad's Y and Back: the inventory and the help computer of the player the pad drives
-  const padPlayer = localCoop ? 1 : 0;
+  const padPlayer = local > 1 ? 1 : 0;
   if (input.padScreens.inventory) toggleScreen(padPlayer, 'inventory');
   if (input.padScreens.help) toggleScreen(padPlayer, 'help');
-  return [cmd, netHost() ? net.host.takeCommand() : localCoop ? input.readPad(tics, settings) : null];
+  if (netHost()) return [cmd, net.host.takeCommand()];
+  const cmds = [cmd];
+  for (let p = 1; p < local; p++) {
+    cmds.push(input.readPad(tics, settings, p - 1));
+    // the other pads' Start, Y and Back: the menu, and their players' screens
+    const pad = p > 1 ? input.pads[p - 1]?.last : null;
+    if (pad) {
+      if (pad.pressed.has(BUTTON.START)) escape();
+      const s = padScreens(pad);
+      if (s.inventory) toggleScreen(p, 'inventory');
+      if (s.help) toggleScreen(p, 'help');
+    }
+  }
+  return cmds;
 }
 
 /**
  * The view's size for the SQL's frustum (viewcfg) and the painter: the whole screen for one player, the
  * screen split along the middle for two at this page (each view half as high; Quake's fov is horizontal, so
- * the same fov); a game over the network has one view a page, the guest's the size the host's frustum has.
+ * the same fov), in four for three or four (a quarter each); a game over the network has one view a page, the
+ * guest's the size the host's frustum has.
  */
 async function applyView(fov = settings.fov) {
   if (netGuest()) {
@@ -311,10 +327,13 @@ async function applyView(fov = settings.fov) {
     if (v && renderer) renderer.setSize(v.w, v.h, 1);
     return;
   }
-  const views = session?.twoPlayers && !netHost() ? 2 : 1;
-  await setView(db, viewWidth(), Math.floor(viewHeight() / views), fov);
+  const views = localViews();
+  const cols = views > 2 ? 2 : 1, rows = views > 1 ? 2 : 1;
+  await setView(db, Math.floor(viewWidth() / cols), Math.floor(viewHeight() / rows), fov);
   if (renderer) renderer.setSize(viewWidth(), viewHeight(), views);
 }
+/** The views this page paints: one per client of its own game, one when it hosts (the guest paints its own). */
+const localViews = () => (session?.twoPlayers && !netHost() ? session.nclients : 1);
 
 // ── maps ─────────────────────────────────────────────────────────────────
 /** Before a map loads: the menus, the help and inventory screens away. */
@@ -322,9 +341,9 @@ function beginMap() {
   running = false;
   demo = null;
   menu.off();
-  showHelp = [false, false];
-  showInv = [false, false];
-  showScores = [false, false];
+  showHelp = perPlayer(false);
+  showInv = perPlayer(false);
+  showScores = perPlayer(false);
 }
 /** A map is in (session.startMap's setup): the renderer and the sound set up from it. */
 async function mapLoaded(setup) {
@@ -348,13 +367,14 @@ async function mapLoaded(setup) {
 async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   if (netGuest()) leaveNet();   // a game of this page's own: the joined one is left
   beginMap();
-  if (newGame) helpSeen = [0, 0];
+  if (newGame) helpSeen = perPlayer(0);
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
   // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on; a new
-  // game has the players the setting says (one, or two in coop or deathmatch; two when a guest is connected)
+  // game has the players the setting says (one, or two to four in coop or deathmatch; two when a guest is connected)
   // and the deathmatch cvars, a level change keeps the game's
-  const modes = newGame ? { coop: netHost() || settings.coop, deathmatch: settings.deathmatch, cvars: { dmflags: settings.dmflags, fraglimit: settings.fraglimit, timelimit: settings.timelimit } } : {};
+  const modes = newGame ? { coop: netHost() || settings.coop, deathmatch: !netHost() && settings.deathmatch, players: netHost() ? 2 : settings.players,
+    cvars: { dmflags: settings.dmflags, fraglimit: settings.fraglimit, timelimit: settings.timelimit } } : {};
   await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...modes }));
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);
   setStatus('');
@@ -421,10 +441,11 @@ async function frame() {
     // for the second player's view (the sounds and effects came with the first: the first player is the
     // listener). The tic's rows say how many clients the game has: a view each; over the network the second
     // view is the guest's, sent to it (the faces as the fast mode lists them: the guest projects them itself).
-    const views = session.clients.length >= 2 && !netHost() ? 2 : 1;
+    const views = netHost() ? 1 : Math.min(MAX_PLAYERS, session.clients.length);
     if (renderer.views !== views) renderer.setSize(viewWidth(), viewHeight(), views);
     const f = await session.frame({ sqlRenderer: settings.renderer === 'sql', client: 1 });
-    const f2 = views === 2 ? await session.frame({ sqlRenderer: settings.renderer === 'sql', client: 2 }) : null;
+    const more = [];   // the other views' frames, the second client's first (a map that began loading meanwhile ends the frame)
+    for (let c = 2; c <= views && running; c++) more.push(await session.frame({ sqlRenderer: settings.renderer === 'sql', client: c }));
     if (netHost() && session.clients.length >= 2) {
       const h = net.host;   // (the guest may leave during the query: the link is this frame's)
       const gf = await session.frame({ sqlRenderer: false, client: 2 });
@@ -435,7 +456,7 @@ async function frame() {
     const { faces, ents, sounds, fx, loops } = f;
     if (f.speakers) audio.setSpeakersOn(f.speakers);
     perf.faces = performance.now() - t;
-    perf.rows = faces.length + (f2?.faces.length ?? 0);
+    perf.rows = faces.length + more.reduce((n, m) => n + m.faces.length, 0);
     const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
     if (sounds.length) audio.playEvents(sounds, listener);
     audio.setLoops(loops);
@@ -446,10 +467,11 @@ async function frame() {
     renderer.runParticles(tics * 0.05, last.TIME_);   // once a frame, whatever the views
     brushFrames = f.brushFrames; brushAngles = f.brushAngles;
     drawFrame(0, last, faces, ents, f.styles, last.TIME_, tics * 0.05);
-    if (f2) {
-      brushFrames = f2.brushFrames; brushAngles = f2.brushAngles;
-      drawFrame(1, session.clients[1] ?? last, f2.faces, f2.ents, f2.styles, last.TIME_, tics * 0.05);
-    }
+    more.forEach((m, i) => {
+      brushFrames = m.brushFrames; brushAngles = m.brushAngles;
+      drawFrame(i + 1, session.clients[i + 1] ?? last, m.faces, m.ents, m.styles, last.TIME_, tics * 0.05);
+    });
+    if (views === 3) renderer.clearView(3);   // (the fourth quarter stays black)
     perf.draw = performance.now() - t;
     updateStats();
     // the frame's spare time marks the cluster the player is heading into (premark_ahead), so the
@@ -458,8 +480,7 @@ async function frame() {
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message}`, true);
-    running = false;
-    return;
+    running = false;   // the game stops on an error; the loop idles on, so a new map (the select, a load) plays again
   }
   nextFrame();
 }
@@ -723,7 +744,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   else if (last.WATERLEVEL >= 3) tint = last.WATERTYPE & 8 ? [255, 80, 0, 0.6] : last.WATERTYPE & 16 ? [0, 25, 5, 0.6] : [0, 40, 100, 0.4];
   r.present(tint, null, which);
 }
-const gunPrev = [null, null];     // each view's angles of the last frame (the gun's lag)
+const gunPrev = perPlayer(null);     // each view's angles of the last frame (the gun's lag)
 
 let fpsT = performance.now(), fpsN = 0, fps = 0;
 function updateStats() {
@@ -956,12 +977,16 @@ $('detail').addEventListener('change', async (e) => {
   settings.detail = e.target.value; saveSettings();
   await applyView();
 });
-// the players: one, two in coop, or two in deathmatch; a change starts a new game with that many (the game cannot gain one midway)
-$('players').value = settings.deathmatch ? 'dm' : settings.coop ? '2' : '1';
+// the players: one, two to four in coop, or two to four in deathmatch; a change starts a new game with that many (the
+// game cannot gain one midway). The select's values, in the game menu's spin's order.
+const PLAYER_CHOICES = ['1', '2', '3', '4', 'dm', 'dm3', 'dm4'];
+const playersValue = () => (settings.deathmatch ? (settings.players > 2 ? `dm${settings.players}` : 'dm') : settings.coop ? String(settings.players) : '1');
+$('players').value = playersValue();
 $('players').addEventListener('change', (e) => {
-  const coop = e.target.value !== '1', deathmatch = e.target.value === 'dm';
-  if (coop === settings.coop && deathmatch === settings.deathmatch) return;
-  settings.coop = coop; settings.deathmatch = deathmatch; saveSettings();
+  const v = e.target.value;
+  const coop = v !== '1', deathmatch = v.startsWith('dm'), players = coop ? Math.max(2, Math.min(4, Number(v.replace('dm', '')) || 2)) : settings.players;
+  if (coop === settings.coop && deathmatch === settings.deathmatch && players === settings.players) return;
+  settings.coop = coop; settings.deathmatch = deathmatch; settings.players = players; saveSettings();
   if (map) startMap(map.name, true).catch((err) => setStatus(err.message, true));
 });
 $('renderer').value = settings.renderer;

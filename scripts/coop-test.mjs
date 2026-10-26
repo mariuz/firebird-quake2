@@ -238,6 +238,40 @@ check(ps.length === 2 && ps[0].ENT_ID !== ps[1].ENT_ID && (await q("SELECT id FR
 await session.tic(idle, idle);
 check(session.clients.length === 2, 'and the game runs on with two');
 
+// ── three and four players: a client each at the next info_player_coop, a usercmd each, a row and a view each ──
+await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, players: 4 });
+ps = await players();
+check(session.nclients === 4 && ps.length === 4 && ps.every((p) => p.CLASSNAME === 'player' && p.HEALTH === 100), `four players: four clients, all players (${ps.map((p) => p.ENT_ID).join(', ')})`);
+check(new Set(ps.slice(1).map((p) => Math.round(p.X))).size === 3 && ps.slice(1).every((p) => [32, 96, 168].some((x) => Math.abs(p.X - x) < 1) && Math.abs(p.Y + 224) < 1),
+  `the second to fourth at the three info_player_coop, one each (${ps.slice(1).map((p) => p.X.toFixed(0)).join(', ')})`);
+check((await q('SELECT id FROM coop_respawn')).length === 4, 'four respawn copies');
+rows = await session.tic(idle, idle, cmd({ fwd: 1 }), idle);
+check(session.clients.length === 4 && session.clients.map((c) => c.CLIENT).join() === '1,2,3,4' && rows === session.clients[0], 'the tic returns four rows, in client order');
+for (let i = 0; i < 10; i++) await session.tic(idle, idle, cmd({ fwd: 1 }), idle);
+const four = await players();
+check(Math.abs(four[2].Y - ps[2].Y) > 40 && Math.abs(four[1].Y - ps[1].Y) < 1 && Math.abs(four[3].Y - ps[3].Y) < 1, `the third's command moves the third alone (${(four[2].Y - ps[2].Y).toFixed(0)} units)`);
+await session.tic(idle, null, null, cmd({ fwd: 1 }));
+check(Math.abs((await players())[3].Y - four[3].Y) > 3, 'a null stands for a client that sends nothing; the fourth\'s command moves the fourth');
+const f4 = await session.frame({ client: 4 });
+check(f4.faces.length > 0 && !f4.ents.some((e) => e[0] === four[3].ENT_ID), 'the fourth client\'s frame has its view (its own entity not in it)');
+await session.writeSave(SLOT_KEY(2), 'four');
+await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, players: 2 });
+check((await players()).length === 2 && session.nclients === 2, 'a new game with two has two again');
+await session.loadSave(await session.readSave(SLOT_KEY(2)), { skill: 2 });
+check((await players()).length === 4 && session.players === 4 && session.nclients === 4, 'a save of four loads four, and the session knows it');
+await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, players: 3 });
+ps = await players();
+check(ps.length === 3 && (await q('SELECT id FROM coop_respawn')).length === 3, 'three players: three clients');
+const to3 = await session.leave('demo2$base1');
+await session.startMap('demo2', { skill: 2, spawnpoint: to3.spawn });
+check((await players()).length === 3, 'a level change keeps the three');
+await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, deathmatch: true, players: 4 });
+ps = await players();
+check(session.deathmatch && ps.length === 4 && new Set(ps.map((p) => `${p.X.toFixed(0)},${p.Y.toFixed(0)}`)).size === 4, 'a deathmatch of four: four clients at four spots');
+check((await one('SELECT COUNT(*) n FROM ents WHERE mtype IS NOT NULL')).N === 0, 'and no monsters');
+await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, deathmatch: false, players: 9 });
+check((await players()).length === 4 && session.coop, 'more than four is four');
+
 // ── single player is as it was ──
 await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: false });
 ps = await players();

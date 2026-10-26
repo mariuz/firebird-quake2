@@ -240,11 +240,11 @@ export function loadMapModels(pak, res, name, { faceVerts = true } = {}) {
 }
 
 /**
- * SV_SpawnServer: replace the current map with `name` from the PAK. `coop` puts a second client in; `deathmatch`
- * (which wins over coop) two clients against each other, with `dmflags`, `fraglimit` and `timelimit` as the
- * cvars were (written to the game row before the spawn, which reads them).
+ * SV_SpawnServer: replace the current map with `name` from the PAK. `coop` puts more clients in (`players` of
+ * them, two to four); `deathmatch` (which wins over coop) as many against each other, with `dmflags`, `fraglimit`
+ * and `timelimit` as the cvars were (written to the game row before the spawn, which reads them).
  */
-export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null, seed = null, faceVerts = true, coop = false, deathmatch = false,
+export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null, seed = null, faceVerts = true, coop = false, deathmatch = false, players = 2,
   dmflags = null, fraglimit = null, timelimit = null } = {}) {
   await db.exec(`DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents; DELETE FROM map_ents; DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL;
     DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM clusters; DELETE FROM leaffaces; DELETE FROM leafbrushes; DELETE FROM areas; DELETE FROM areaportals; DELETE FROM portal_state; DELETE FROM area_flood;
@@ -282,8 +282,10 @@ export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, s
   const cvar = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.floor(Number(v))) : null);
   const cvars = [['dmflags', cvar(dmflags)], ['fraglimit', cvar(fraglimit)], ['timelimit', cvar(timelimit)]].filter(([, v]) => v !== null);
   if (cvars.length) await db.exec(`UPDATE game SET ${cvars.map(([k, v]) => `${k} = ${v}`).join(', ')} WHERE id = 1`);
-  // (the coop and deathmatch arguments only when one is on: an SQL tree from before them still loads, for ab-bench)
-  const modes = deathmatch ? ', 0, 1' : coop ? ', 1' : '';
+  // (the coop and deathmatch arguments only when one is on, the client count only past two: an SQL tree from before
+  // them still loads, for ab-bench)
+  const n = Math.min(4, Math.floor(players));
+  const modes = (deathmatch || coop) && n > 2 ? `${deathmatch ? ', 0, 1' : ', 1, 0'}, ${n}` : deathmatch ? ', 0, 1' : coop ? ', 1' : '';
   await db.exec(`EXECUTE PROCEDURE init_map('${name}', ${geo.modelIds[0]}, ${skill}, ${newGame ? 1 : 0}, ${spawnpoint ? "'" + String(spawnpoint).replace(/'/g, '') + "'" : 'NULL'}${modes})`);
   return bsp;
 }

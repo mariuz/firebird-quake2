@@ -40,10 +40,14 @@
           <option value="1">Medium</option>
           <option value="2">Hard</option>
         </select></label>
-        <label title="Two players share the game: the view is split, the keyboard and mouse are the first player's, the gamepad the second's; in deathmatch against each other, with the maps' deathmatch items and no monsters (dmflags, fraglimit and timelimit at the console)">Players <select id="players">
+        <label title="Two to four players share the game: the view is split in two or four, the keyboard and mouse are the first player's, the gamepads the others'; in deathmatch against each other, with the maps' deathmatch items and no monsters (dmflags, fraglimit and timelimit at the console)">Players <select id="players">
           <option value="1">One</option>
           <option value="2">Two (coop)</option>
+          <option value="3">Three (coop)</option>
+          <option value="4">Four (coop)</option>
           <option value="dm">Two (deathmatch)</option>
+          <option value="dm3">Three (deathmatch)</option>
+          <option value="dm4">Four (deathmatch)</option>
         </select></label>
         <label>Detail <select id="detail">
           <option value="ultra">640×480</option>
@@ -91,8 +95,8 @@
         <kbd>Esc</kbd> menu (<kbd>F2</kbd> save, <kbd>F3</kbd> load, <kbd>F10</kbd> quit; the options' customize controls rebinds the movement, fire, inventory and help keys) · <kbd>F6</kbd> quick save · <kbd>F9</kbd> quick load (saves live in this browser).
         On touch screens the left half of the view moves, the right half looks, a tap fires, and the buttons fire, jump, change weapon and open the menu.
         A gamepad works too: left stick moves, right stick looks, RT fires, A jumps, B crouches, LB/RB change weapon, the d-pad selects (left/right) and uses (up) an inventory item, Y shows the inventory, Back the help computer, Start opens the menu (the d-pad, A and B drive it).
-        With two players (coop, or deathmatch: the maps' deathmatch weapons and spots, no monsters, frags at the top right, <kbd>F1</kbd> the score board;
-        <code>dmflags</code>, <code>fraglimit</code> and <code>timelimit</code> at the console) the view is split, the keyboard and mouse are the first player's and the gamepad the second's.
+        With two to four players (coop, or deathmatch: the maps' deathmatch weapons and spots, no monsters, frags at the top right, <kbd>F1</kbd> the score board;
+        <code>dmflags</code>, <code>fraglimit</code> and <code>timelimit</code> at the console) the view is split in two or four, the keyboard and mouse are the first player's and the gamepads the others' (640×480 gives four views of 320×240).
         Over the network: one page hosts (Host makes an offer to send to the other player), the other joins (Join takes the offer and makes an answer to send back),
         and the host's game runs with the guest's player in it, each page its own view.
         The Demo select (or <code>demomap q2demo1</code> at the console) plays a recording from the pak; any key or click stops it.</p>
