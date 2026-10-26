@@ -83,7 +83,13 @@ BEGIN
         EXECUTE PROCEDURE t_damage(hit, shooter, shooter, dmg, kick, 16);
       END
       ELSE IF (BIN_AND(sf, 4) = 0) THEN
+      BEGIN
+        -- TE_GUNSHOT (one bullet) or TE_SHOTGUN (a pellet), and the ricochet the client played with three of sixteen
+        -- of them (CL_ParseTEnt: world/ric1-3.wav)
         EXECUTE PROCEDURE fx(IIF(cnt > 1, 11, 1), hx, hy, hz, nx, ny, nz, 0);
+        c = CAST(FLOOR(rnd() * 16) AS INTEGER);
+        IF (c BETWEEN 1 AND 3) THEN EXECUTE PROCEDURE snd_at(hx, hy, hz, 'world/ric' || c || '.wav', 1, 1);
+      END
     END
     IF (water = 1) THEN
     BEGIN

@@ -160,6 +160,12 @@ for (const m of MONSTERS) {
     e = await q1(`SELECT st, anim, anim_frame FROM ents WHERE id = ${id}`);
     if (e.ST === 'melee' || e.ST === 'missile') attacked = 1;
     if (s.HEALTH < HP) dmgSeen = 1;
+    if (process.env.MONSTER_DEBUG && i % 20 === 0) {
+      const mo = await q1(`SELECT x, y, z, minx, miny, minz, maxx, maxy, maxz, st, anim, enemy_id, goal_id, aiflags, CAST(ideal_yaw AS INTEGER) iy FROM ents WHERE id = ${id}`);
+      const tr = await q1(`SELECT fraction f, hit_ent hit, ex, ey, ez, startsolid ss, allsolid als FROM trace_move(${id}, ${mo.MINX}, ${mo.MINY}, ${mo.MINZ}, ${mo.MAXX}, ${mo.MAXY}, ${mo.MAXZ}, ${mo.X}, ${mo.Y}, ${mo.Z}, ${s.PX}, ${s.PY}, ${mo.Z}, 33620019)`).catch((e) => ({ err: e.message }));
+      const near = await qa(`SELECT id, classname, solid, CAST(x AS INTEGER) x, CAST(y AS INTEGER) y, CAST(z AS INTEGER) z FROM ents WHERE solid >= 2 AND id <> ${id} AND ABS(x - ${mo.X}) < 160 AND ABS(y - ${mo.Y}) < 160`);
+      console.log(`     ${i}: ${mo.X.toFixed(0)},${mo.Y.toFixed(0)},${mo.Z.toFixed(0)} ${mo.ST}/${mo.ANIM} iy ${mo.IY} → player ${s.PX.toFixed(0)},${s.PY.toFixed(0)}: trace ${JSON.stringify(tr)}; near: ${JSON.stringify(near)}`);
+    }
   }
   if (harmless) assert(!attacked && !dmgSeen && s.HEALTH === HP, `${m.name} never attacks (state ${e.ST}, anim ${e.ANIM}, the player's health ${s.HEALTH})`);
   else {
@@ -395,7 +401,9 @@ for (const m of MONSTERS) {
   const want = Math.trunc(500 * (1 - Math.sqrt(150 / 1000)));
   const got = before - (await hp());
   assert(Math.abs(got - want) <= 1, `the BFG's final blast 150 units off takes 500 × (1 − √0.15) = ${want} (took ${got})`);
-  assert((await q1(`SELECT COUNT(*) n FROM ents WHERE id = ${b}`)).N === 0, '... and the explosion is gone after it');
+  // (the explosion plays four frames more, hurting no one again, then goes)
+  for (let i = 0; i < 4; i++) await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE bfg_explode(${b}); END`);
+  assert(before - (await hp()) === got && (await q1(`SELECT COUNT(*) n FROM ents WHERE id = ${b}`)).N === 0, '... and the explosion is gone after its five frames, hurting once');
   // and the real thing: the player fires the BFG10K at it (flight, lasers, the strike, the blast a frame later)
   await db.exec(`UPDATE player SET cells = 200, weapon = 1024, attack_finished = 0 WHERE id = 1`);
   const m2 = await q1(`SELECT x, y, z FROM ents WHERE id = ${id}`);
@@ -406,7 +414,8 @@ for (const m of MONSTERS) {
   await tic([1, 0, 0, 0, 0, 1, 0, 1, 0]);
   for (let i = 0; i < 40; i++) await tic();
   const took = before - (await hp());
-  const balls = (await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'bfg_ball'")).N;
+  let balls = (await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'bfg_ball'")).N;   // (the strike's sprite plays half a second)
+  for (let i = 0; i < 12 && balls > 0; i++) { await tic(); balls = (await q1("SELECT COUNT(*) n FROM ents WHERE classname = 'bfg_ball'")).N; }
   assert(took >= 200 + 150 && balls === 0, `a BFG10K shot hits it with the strike and the blast (took ${took}), and leaves nothing behind`);
   await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL");
 }

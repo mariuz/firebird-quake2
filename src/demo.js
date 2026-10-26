@@ -32,7 +32,9 @@ const SND = { VOLUME: 1, ATTENUATION: 2, POS: 4, ENT: 8, OFFSET: 16 };
 const TE = { GUNSHOT: 0, BLOOD: 1, BLASTER: 2, RAILTRAIL: 3, SHOTGUN: 4, EXPLOSION1: 5, EXPLOSION2: 6, ROCKET_EXPLOSION: 7, GRENADE_EXPLOSION: 8,
   SPARKS: 9, SPLASH: 10, BUBBLETRAIL: 11, SCREEN_SPARKS: 12, SHIELD_SPARKS: 13, BULLET_SPARKS: 14, LASER_SPARKS: 15, PARASITE_ATTACK: 16,
   ROCKET_EXPLOSION_WATER: 17, GRENADE_EXPLOSION_WATER: 18, MEDIC_CABLE_ATTACK: 19, BFG_EXPLOSION: 20, BFG_BIGEXPLOSION: 21, BOSSTPORT: 22, BFG_LASER: 23 };
-const TE_KIND = { 0: 1, 1: 3, 2: 6, 3: 4, 4: 11, 5: 2, 6: 9, 7: 2, 8: 9, 9: 10, 10: 7, 11: 14, 12: 10, 13: 10, 14: 10, 15: 10, 16: 16, 17: 2, 18: 9, 19: 13, 20: 8, 21: 8, 22: 5, 23: 12 };
+const TE_KIND = { 0: 1, 1: 3, 2: 6, 3: 4, 4: 11, 5: 2, 6: 9, 7: 2, 8: 9, 9: 10, 10: 7, 11: 14, 12: 10, 13: 10, 14: 10, 15: 10, 16: 16, 17: 2, 18: 9, 19: 13, 20: 8, 21: 18, 22: 5, 23: 12 };
+/** The sparks' count and colour (CL_ParseTEnt: TE_SPARKS and TE_BULLET_SPARKS 6 of 0xe0, the power screen's 40 of 0xd0, the shield's 40 of 0xb0), packed as kind 10's n. */
+const SPARKS_N = { 9: (6 << 8) | 0xe0, 14: (6 << 8) | 0xe0, 12: (40 << 8) | 0xd0, 13: (40 << 8) | 0xb0 };
 // the weapon muzzle flashes (MZ_*): the sound the client played for each, and its light
 const MZ_SOUND = ['weapons/blastf1a.wav', 'weapons/machgf1b.wav', 'weapons/shotgf1b.wav', 'weapons/machgf1b.wav', 'weapons/machgf1b.wav', 'weapons/machgf1b.wav',
   'weapons/railgf1a.wav', 'weapons/rocklf1a.wav', 'weapons/grenlf1a.wav', 'weapons/grenlf1a.wav', 'weapons/grenlf1a.wav', null, 'weapons/bfg__f1y.wav',
@@ -154,9 +156,9 @@ function parseTempEntity(r, id) {
   let pos, dir, pos2, n = 0, cnt, color, ent;
   switch (type) {
     case TE.BLOOD: case TE.GUNSHOT: case TE.SPARKS: case TE.BULLET_SPARKS: case TE.SCREEN_SPARKS: case TE.SHIELD_SPARKS: case TE.SHOTGUN: case TE.BLASTER:
-      pos = r.pos3(); dir = r.dir(); n = type === TE.BLOOD ? 30 : 0; return [id, kind, ...pos, ...dir, n];
+      pos = r.pos3(); dir = r.dir(); n = type === TE.BLOOD ? 30 : SPARKS_N[type] ?? 0; return [id, kind, ...pos, ...dir, n];
     case TE.SPLASH: case TE.LASER_SPARKS:
-      cnt = r.byte(); pos = r.pos3(); dir = r.dir(); color = r.byte(); return [id, kind, ...pos, ...dir, type === TE.SPLASH ? (cnt << 4) | (color & 7) : cnt];
+      cnt = r.byte(); pos = r.pos3(); dir = r.dir(); color = r.byte(); return [id, kind, ...pos, ...dir, type === TE.SPLASH ? (cnt << 4) | (color & 7) : (cnt << 8) | color];
     case TE.RAILTRAIL: case TE.BUBBLETRAIL: case TE.BFG_LASER:
       pos = r.pos3(); pos2 = r.pos3(); return [id, kind, ...pos, ...pos2, 0];
     case TE.EXPLOSION2: case TE.GRENADE_EXPLOSION: case TE.GRENADE_EXPLOSION_WATER: case TE.ROCKET_EXPLOSION: case TE.ROCKET_EXPLOSION_WATER:

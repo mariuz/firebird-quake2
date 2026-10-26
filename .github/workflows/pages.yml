@@ -97,7 +97,8 @@ jobs:
       - name: The session
         run: npm run test:session
 
-      # The temporary entities headless: explosions, beams, the tongue, flashes, their lights and drawing
+      # The temporary entities headless: explosions, beams, the tongue, flashes, a gunshot's smoke and flash, their lights
+      # and drawing; then the game's own: the water explosions, the ricochets, the BFG's lasers, sparks, strike and sprite
       - name: The effects
         run: npm run test:effects
 

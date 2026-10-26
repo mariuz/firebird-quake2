@@ -388,10 +388,24 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
 - **Explosions** are `CL_AddExplosions`' list in `src/effects.js` (an `Effects`, cl_tent.c's temporary
   entities, which also keeps the beams, the parasite's tongue and the muzzle flashes): the `r_explode` and
   `explode` models and the `s_bfg2` sprite, stepped at 10 frames a second, skins and translucency by frame and
-  alpha, drawn fullbright (`drawAlias`'s `fullbright`, `alpha` 1 for 33% and 2 for 66%); their lights come from
-  the same list in `Effects.lights`. `add` takes the frame's effect rows, `lights` gives the frame's dynamic
-  lights and drops what has played out, `draw` paints after the entities; the chances come from a `random`
-  a test can give.
+  alpha, drawn fullbright (`drawAlias`'s `fullbright`, `alpha` 1 for 33% and 2 for 66%), and a gunshot's smoke
+  and flash (`CL_SmokeAndFlash`: the smoke model translucent over four frames and lit where it hangs, the flash
+  model fullbright for a tic, no light); their lights come from the same list in `Effects.lights`. `add` takes
+  the frame's effect rows, `lights` gives the frame's dynamic lights and drops what has played out, `draw`
+  paints after the entities; the chances come from a `random` a test can give.
+- **The effect kinds** (`fx_events.kind`, from the game's `fx(kind, x, y, z, x2, y2, z2, n)` and the demo's
+  `TE_` types through `src/demo.js`): 1 gunshot and 11 shotgun pellet (`TE_GUNSHOT`, `TE_SHOTGUN`, the
+  direction in x2..z2), 2 a rocket's or any `TE_EXPLOSION1` and 9 a grenade's (`TE_GRENADE_EXPLOSION`; under
+  water the game sends the same with `weapons/xpld_wat.wav`, and a grenade in the air sends 2, as
+  `Grenade_Explode` chose), 3 blood (n the damage), 4 the rail trail, 5 the teleport fog, 6 the blaster's hit,
+  7 a splash (n packs count × 16 + colour: `TE_SPLASH`, and the power screen's and shield's sparks), 8 the
+  BFG's blast on a thing it reached (`TE_BFG_EXPLOSION`: the `s_bfg2` sprite alone), 10 sparks (n packs
+  count × 256 + colour: `TE_SPARKS`, `TE_LASER_SPARKS` at a BFG laser's end, the demo's screen and shield
+  sparks), 12 a BFG laser (`TE_BFG_LASER`, 0.1 s), 13 a `target_laser`'s beam (n its colour bits), 14 a bubble
+  trail, 15 a muzzle flash's light (n its radius), 16 a parasite's tongue (n the parasite), 17 an item's
+  respawn particles, 18 the BFG's strike (`TE_BFG_BIGEXPLOSION`: particles alone; the ball itself becomes the
+  `s_bfg3` sprite for five thinks). Not sent by the demo's game: `TE_BOSSTPORT`, `TE_MEDIC_CABLE_ATTACK`, the
+  mission packs' kinds.
 - **2D** (`src/hud.js`): `single_statusbar` from `pics/` (health, ammo, armour flashing with power
   armour, the selected item; the pickup's icon and name, the powerup timer, the help icon), the
   crosshair, centre prints, the help computer and the inventory screen (`CL_DrawInventory`), with
@@ -630,7 +644,7 @@ the frame query and the raster. The SQL console runs any statement against the l
 | `lerp-test.mjs` | the frames between tics (`src/lerp.js`): the eye and the entities halfway between two tics' frames, angles the short way round, a newcomer, a teleport and another model snapping, the brush models' face rows and angles moved, the input's turn added to the current angles, the fraction clamped, the SQL-projecting mode exact; then two tics of walking on demo1 and the frame halfway between them, and a turn showing at once |
 | `net-test.mjs` | a game shared over a link (`src/net.js`), the two ends a loopback in one process: the host's `Session` with two clients, the map message and the guest's geometry from the pak alone, the guest's userinfo (its name cut at fifteen, its hand checked) reaching the second client, a frame a tic with the guest's own row and every face the map's, the guest's forward command walking its player at the host, two commands in a tic merged (turns summed, buttons held, the last impulse) and none standing, a turn turning it, the shots' sounds arriving, the inventory rows on request, a 48 KB message in four chunks, a frame dropped on a slow link, a level change's map and frames, a picture, the signalling texts packed and unpacked, rubbish refused, one end's close closing the other |
 | `audio-test.mjs` | the sound mix (`src/audio.js`) against a Web Audio that records: `S_Spatialize`'s fall-off (full within 80 units, ATTN_NORM silent from 1080, ATTN_IDLE twice as fast, ATTN_NONE everywhere) and pan (0.8 to the side, the listener's yaw), a one-shot per event cut by the next on its entity's channel but not on CHAN_AUTO, out of range or missing from the pak skipped, each sound decoded once, the loops summed per name at ATTN_STATIC with each side clamped, silent when unlisted and the channel kept, the speakers on and off with the frame, the page hidden and back, and the music: off, the drone, a track file from a picked folder, the volume |
-| `effects-test.mjs` | the temporary entities (`src/effects.js`): each effect row's particles and what it keeps, the explosions' frames, skins, translucency and fading light, the blaster hit turned to its direction, the BFG's sprite, a muzzle flash lighting its frame only, the `EF_` lights, beams lasting 0.1 and 0.12 s, a parasite's tongue (one per parasite, a segment every 30 units, 0.2 s), and an explosion painting a real frame |
+| `effects-test.mjs` | the temporary entities (`src/effects.js`): each effect row's particles and what it keeps, the explosions' frames, skins, translucency and fading light, the blaster hit turned to its direction, a gunshot's smoke and flash (four frames lit, one tic fullbright, no light), the sparks' packed count and colour, the BFG's strike (particles) and blast (the sprite), a muzzle flash lighting its frame only, the `EF_` lights, beams lasting 0.1 and 0.12 s, a parasite's tongue (one per parasite, a segment every 30 units, 0.2 s), an explosion painting a real frame; then the game's side on demo1: a rocket and a grenade into the water (the water's sound, the pictures as they were), a grenade in the air (a rocket's explosion) and on the ground (a grenade's), sixty-four bullets into a wall and their ricochets, a BFG shot's lasers ending in sparks, its strike, the ball as the `s_bfg3` sprite stepping its five frames |
 | `settings-test.mjs` | the page's settings (`src/settings.js`): the defaults, the round trip through storage, and each stored value checked against what it can be (a bad one back to its default, a full storage harmless; the name fifteen printable characters at most, the hand 0 to 2) |
 | `replay-test.mjs` | the same seed and the same 120 tics of input give the same game twice (every entity, the game row, the sounds), another seed another game, and a game loaded from a save goes on exactly as the saved one did |
 | `screenshot.mjs [map] [prefix] [--at=x,y,z,yaw] [--sql] [--compare]` | headless frames to PNG; `--compare` asserts both renderer modes paint identical pixels |
