@@ -55,7 +55,8 @@ fed as one script each.
 
 `loadResources(db, pak)` runs once per pak: every `.md2` with its PCX skins, every `.sp2`, the
 frame runs (`anims`, from the frame names, with the sequence digit kept for names like `attak1`),
-the 64 light styles, the `monster_types` table built from `src/gamedata.js`, and the single `game`,
+the 64 light styles, the `monster_types` table built from `src/gamedata.js` (and, for a monster whose
+model the pak lacks, a model row without a mesh with the frame runs its table gives), and the single `game`,
 `player` and `viewcfg` rows.
 
 `loadMap(db, pak, res, name, { skill, newGame, spawnpoint })` parses the BSP (`src/bsp.js`) and
@@ -225,8 +226,21 @@ says whether the enemy is in sight (1 attack, 0 seen, 2 not) and notes the sight
 `trail_time`, `search_time`); out of sight, `ai_pursue` steers by `aiflags` 16/32/64 to the last sighting
 (detouring by a spot to one side, `aiflags` 128 and `sg_x/y/z`, when the box cannot go straight) and then
 the `player_trail` markers that `player_trail_check` drops at 10 Hz (`move_to_goal` and
-`new_chase_dir` take a spot as well as an entity for that). Supported: soldier (light, shotgun, machinegun),
-infantry, gunner, berserker, flyer, parasite, tank; see ROADMAP.md for the rest.
+`new_chase_dir` take a spot as well as an entity for that). The demo's monsters: soldier (light, shotgun,
+machinegun), infantry, gunner, berserker, flyer, parasite, tank. The full game's, as logic: gladiator, iron
+maiden (chick), brain, medic, mutant, icarus (hover), technician (floater), barracuda shark (flipper), the
+supertank, the hornet (boss2), Jorg and Makron (boss3), the insane marines. Each is a row like the others
+with a frame table of its own (`anims`: the runs of m_*.h, in the model's order), which the loader turns
+into a model row without a mesh and its `anims` rows when the pak lacks the MD2 (the demo pak does), so the
+logic animates, fires and dies on the right frames and the painter, having no mesh, skips it; a registered
+pak's MD2 takes over. Their attacks are kinds of `monster_missile`: 1- and 2-damage bolts (hover, floater,
+medic), Makron's hyperblaster, the bosses' 6-damage machine guns (`chaingun`), the gladiator's and Makron's
+railgun, Jorg's and Makron's BFG; a second ranged attack (`alt_anim`, `alt_frames`, `alt_kind`,
+`alt_chance`: the supertank's rockets beside its machine gun, the hornet's, Jorg's BFG) is chosen by its
+chance when a missile is due and fires its own kind on its own frames, and Makron picks the BFG, the railgun
+or the hyperblaster a third each (`Makron_CheckAttack`). Jorg's death spawns Makron where it fell, unseen for
+four seconds (`makron_toss`, as `MakronToss`). What is not there yet is in ROADMAP.md: the medic's cable,
+the mutant's leap, the floater's zap, the chick's duck, the insane marines' crawling and crucified forms.
 
 ## 5. Visibility and the frame (`sql/render.sql`)
 
@@ -559,7 +573,7 @@ query and the raster. The SQL console runs any statement against the live game d
 |---|---|
 | `sql-check.mjs` | compiles the six SQL files against the engine (run first after any SQL edit) |
 | `sql-smoke.mjs [map]` | end-to-end in Node: load, tics, movement, weapons, doors, all referenced sounds exist |
-| `monsters-test.mjs` | every monster of the demo: spawned, sees the player, attacks, dies, is counted |
+| `monsters-test.mjs [MONSTER=a,b]` | every monster: spawned, sees the player, attacks, dies, is counted; the full game's on their frame tables alone (the runs the table gives, every animation named in it, no mesh for the painter), their second ranged attack chosen and fired, Makron's three, Makron rising from Jorg; the insane marines never attacking |
 | `walkthrough-test.mjs` | every trigger the player can walk into on the three maps fires, and its movers move |
 | `entities-test.mjs` | the full game's entities the demo lacks, added to demo1's lump: secret doors, the earthquake, the elevator, the viper and its bomb, the ships, the string display and the clock, the decorations, a turret, target_spawner |
 | `save-test.mjs` | save, play on, load: every entity, mover and light style back as it was; the game keeps running with fresh ids |
