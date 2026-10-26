@@ -100,6 +100,13 @@ check(drifted.TIC !== saved.TIC, 'the game moved on');
 const save = await session.readSave(SLOT_KEY(3));
 check(save?.map === 'demo1', 'the slot reads back');
 check(await session.readSave(QUICK_KEY) === null, 'an empty slot reads as none');
+// a save as a file: the game packed to the slot's text without a slot, and the text back to a save
+const fileText = await session.packGame('as a file');
+const fromFile = await session.unpackText(fileText);
+check(fileText.startsWith('q2gz1\n') && fromFile?.map === 'demo1' && fromFile.comment === 'as a file' && JSON.stringify(fromFile.tables.ents?.cols) === JSON.stringify(save.tables.ents?.cols),
+  `the game packs to a save's text (${(fileText.length / 1024).toFixed(0)} KB) and the text unpacks to the save`);
+check(await session.unpackText('not a save') === null && await session.unpackText('{"version":2}') === null && await session.unpackText(JSON.stringify(save)) !== null,
+  'rubbish, or JSON that is not a save, unpacks to none; the plain JSON of a save still does');
 await session.loadSave(save, { skill: 2 });
 const loaded = await playerPos();
 check(loaded.TIC === saved.TIC && loaded.X === saved.X && loaded.Y === saved.Y && loaded.BULLETS === saved.BULLETS,

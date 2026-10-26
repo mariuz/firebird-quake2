@@ -23,6 +23,7 @@ import { Effects } from './effects.js';
 import { Hud, viewFrame } from './hud.js';
 import { Menu, saveComment } from './menu.js';
 import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
+import { SAVE_VERSION } from './savegame.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS, ITEMS, ARMOR_ICONS, TIMER_ICONS } from './gamedata.js';
 import { padMenuKeys, padScreens, BUTTON } from './gamepad.js';
@@ -263,6 +264,35 @@ async function loadGame(key = QUICK_KEY) {
   if (guestNotice()) return;
   const save = await session.readSave(key);
   if (!save) { setStatus('No saved game', true); setTimeout(() => setStatus(''), 2000); return; }
+  await loadSaved(save);
+}
+/**
+ * The game as a file, and a file as the game: a save file is what a slot stores (src/savestore.js: the header
+ * line, the JSON gzipped and base64'd), so a game moves between browsers, which `localStorage` does not.
+ * Download writes the game as it stands, named with the map and the time; Load takes a file and plays it.
+ */
+async function downloadSave() {
+  if (!running || !map || guestNotice()) return;
+  if (last?.DEAD) { setStatus("Can't savegame while dead!", true); setTimeout(() => setStatus(''), 2000); return; }
+  try {
+    const text = await session.packGame(saveComment(await session.levelName(), false));
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: `${map.name}-${stamp}.q2sav` });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setStatus(`Game saved as a file (${map.name}, ${(text.length / 1024).toFixed(0)} KB)`);
+    setTimeout(() => { if (statusEl.textContent.startsWith('Game saved')) setStatus(''); }, 2000);
+  } catch (err) { console.error(err); setStatus(`Save failed: ${err.message}`, true); }
+}
+async function loadSaveFile(file) {
+  if (!file || guestNotice()) return;
+  const save = await session.unpackText(await file.text());
+  if (!save) { setStatus(`${file.name} is not a saved game of this port`, true); return; }
+  if (save.version !== SAVE_VERSION) { setStatus(`${file.name} is a saved game of another version (${save.version}, this is ${SAVE_VERSION})`, true); return; }
+  await loadSaved(save);
+}
+async function loadSaved(save) {
   if (!pak.has(`maps/${save.map}.bsp`)) { setStatus(`The saved game is on ${save.map}, which is not in this pak`, true); return; }
   running = false;
   try {
@@ -1032,6 +1062,12 @@ $('pakfile').addEventListener('change', async (e) => {
   try { await usePak(await f.arrayBuffer(), f.name); } catch (err) { setStatus(err.message, true); }
 });
 $('map').addEventListener('change', (e) => { settings.map = e.target.value; saveSettings(); startMap(e.target.value, true).catch((err) => setStatus(err.message, true)); });
+$('save-download').addEventListener('click', () => downloadSave());
+$('save-file').addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  e.target.value = '';   // (the same file again is a change again)
+  try { await loadSaveFile(f); } catch (err) { console.error(err); setStatus(`Load failed: ${err.message}`, true); }
+});
 $('demo').addEventListener('change', (e) => { if (e.target.value) playDemo(e.target.value).catch((err) => setStatus(err.message, true)); else if (demo) stopDemo(); });
 $('detail').value = settings.detail;
 $('detail').addEventListener('change', async (e) => {

@@ -13,6 +13,7 @@
 // through DirectTransport; this is the one that runs the page.
 
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -155,6 +156,31 @@ try {
     else assert(rate < 1.3 && gameTics >= ticFrames && gameTics <= 2 * ticFrames + 2,
       `a page slower than the tic rate (${fps.toFixed(1)} fps) plays in slow motion, at most two tics a frame (${rate.toFixed(2)}×, ${gameTics} tics in ${ticFrames} frames)`);
     assert(k1.paints - k0.paints >= ticFrames - 1, `the frames painted (${k1.paints - k0.paints}) are at least the frames that ticked (${ticFrames})`);
+
+    // the game as a file (the pointer is not locked here, so the page's controls take clicks): Download writes a
+    // .q2sav (a slot's text), and the Saves file input loads one back
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), page.click('#save-download')]);
+    const dlPath = dl ? await dl.path() : null;
+    const dlText = dlPath ? fs.readFileSync(dlPath, 'utf8') : '';
+    assert(dl && /^demo1-\d{4}-\d\d-\d\d-\d{4}\.q2sav$/.test(dl.suggestedFilename()) && dlText.startsWith('q2gz1\n'), `Download writes the game as a file (${dl?.suggestedFilename()}, ${(dlText.length / 1024).toFixed(0)} KB)`);
+    // (the game's clock says whether the file came back: it ran on a second after the download, and the load sets it back)
+    const gameTime = () => page.evaluate(() => window.quake2.session.last.TIME_).catch(() => -1);
+    const tSaved = await gameTime();
+    await sleep(1000);
+    const tOn = await gameTime();
+    await page.setInputFiles('#save-file', { name: 'moved.q2sav', mimeType: 'text/plain', buffer: Buffer.from(dlText) });
+    let fileLoaded = '';
+    for (let i = 0; i < 240 && !/Game loaded/.test(fileLoaded); i++) { await sleep(250); fileLoaded = await status(); }
+    // (the session's row is the last tic's: the first tic after the load brings the file's clock)
+    let tBack = tOn;
+    for (let i = 0; i < 40 && tBack >= tOn; i++) { await sleep(100); tBack = await gameTime(); }
+    assert(/Game loaded/.test(fileLoaded) && tOn > tSaved + 0.5 && tBack < tOn && tBack <= tSaved + 0.5,
+      `the file loads back and the game is where the file had it (${JSON.stringify(fileLoaded)}: the clock at ${tSaved.toFixed(2)} s when saved, ${tOn.toFixed(2)} s before the load, ${tBack.toFixed(2)} s after)`);
+    await page.setInputFiles('#save-file', { name: 'junk.q2sav', mimeType: 'text/plain', buffer: Buffer.from('not a save') });
+    await sleep(500);
+    assert(/is not a saved game/.test(await status()), `a file that is no save is refused: ${JSON.stringify(await status())}`);
+    await sleep(1500);
+    assert(/q2_tic \d+ ms/.test(await stats()), `the game runs on after the file load: ${await stats()}`);
 
     // two players: the players select starts a new coop game; both clients come with every tic, the screen is
     // split in two views half as high, the game runs on; then one player again, the whole screen
