@@ -142,7 +142,9 @@ short stories of what changed and what it measured; keep that.
   parsed by `src/levels.js`, never in SQL.
 - The page's loop runs the tics the wall clock owes (`floor((now - lastTic) / 50)`, at most two) and paints every
   animation frame from the last two tics' frames (`src/lerp.js`): a loop that runs at least a tic a frame plays at
-  the display's rate (it did, at 2.9× on 60 Hz). The game's clock against the wall's is a browser-test check.
+  the display's rate (it did, at 2.9× on 60 Hz). The game's clock against the wall's is a browser-test check, which
+  must allow a slow page: CI's runner paints four frames a second after the quick load, so the game there runs at
+  two tics a frame and falls behind on purpose (Quake 2's `SV_Frame` clamp: slow motion, never a leap).
 - A tic is 0.05 s (20 Hz): 20 tics are a second. The ground flag (512) must hold every tic the player
   stands on a floor; pmove-style code that runs only `IF (onground = 1)` silently halves otherwise. On the ground the
   player's `vz` is 0 (pmove); any path that skips the move must still write the speed it computed.

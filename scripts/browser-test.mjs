@@ -102,13 +102,18 @@ try {
     assert(/Game loaded/.test(loaded), `F9 loads: ${JSON.stringify(loaded)}`);
     await sleep(1500);
     assert(/q2_tic \d+ ms/.test(await stats()), `the game runs on after the load: ${await stats()}`);
-    // the tics are paced by the wall clock (20 Hz) and the frames painted between them: the game's clock runs at the
-    // wall's, the paints outnumber the tics on a display faster than 20 Hz (and never fall short of them)
+    // the tics are paced by the wall clock (20 Hz) and the frames painted between them: the game's clock never runs
+    // ahead of the wall's, and at twenty frames a second or more runs at it; a slower page (CI's runner paints four
+    // a second after the load) runs at most two tics a frame and falls behind, slow motion as Quake 2's SV_Frame
+    // clamp gave it. Every frame that tics paints; a tic counted between the two reads may not have painted yet.
     const clock = () => page.evaluate(() => ({ game: window.quake2.session.last.TIME_, wall: performance.now(), tics: window.quake2.session.frameNo, paints: window.quake2.paints })).catch(() => null);
     const k0 = await clock(); await sleep(2000); const k1 = await clock();
-    const rate = (k1.game - k0.game) / ((k1.wall - k0.wall) / 1000);
-    assert(rate > 0.7 && rate < 1.3, `the game's clock runs at the wall's (${rate.toFixed(2)}× over ${((k1.wall - k0.wall) / 1000).toFixed(1)} s)`);
-    assert(k1.paints - k0.paints >= k1.tics - k0.tics, `the frames painted (${k1.paints - k0.paints}) are at least the tics (${k1.tics - k0.tics})`);
+    const secs = (k1.wall - k0.wall) / 1000, rate = (k1.game - k0.game) / secs, fps = (k1.paints - k0.paints) / secs;
+    const ticFrames = k1.tics - k0.tics, gameTics = Math.round((k1.game - k0.game) / 0.05);
+    if (fps >= 20) assert(rate > 0.7 && rate < 1.3, `the game's clock runs at the wall's (${rate.toFixed(2)}× over ${secs.toFixed(1)} s at ${fps.toFixed(0)} fps)`);
+    else assert(rate < 1.3 && gameTics >= ticFrames && gameTics <= 2 * ticFrames + 2,
+      `a page slower than the tic rate (${fps.toFixed(1)} fps) plays in slow motion, at most two tics a frame (${rate.toFixed(2)}×, ${gameTics} tics in ${ticFrames} frames)`);
+    assert(k1.paints - k0.paints >= ticFrames - 1, `the frames painted (${k1.paints - k0.paints}) are at least the frames that ticked (${ticFrames})`);
     const slot = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('firebird-quake2:save:')).length);
     assert(slot >= 1, `a save is in localStorage (${slot} slot(s))`);
 

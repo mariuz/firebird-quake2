@@ -119,7 +119,9 @@ the order they are to be taken.
   are the current tic's plus the mouse's turn not yet sent, so looking around is immediate. The
   SQL-projecting mode, whose faces are projected at the tic's eye, still paints once a tic. `test:lerp`
   checks the lerp headless; the browser test measures the game's clock against the wall's (1.00× at 60 fps,
-  where it was 2.9×) and the paints against the tics. Left: the model frames themselves are not lerped
+  where it was 2.9×; a page slower than ten frames a second falls behind at two tics a frame, slow motion as
+  `SV_Frame`'s clamp gave it, which CI's runner showed at four frames a second) and the paints against the
+  tics. Left: the model frames themselves are not lerped
   (`backlerp`), so a walk cycle still steps at 10 Hz.
 - **Nightmare skill**: Quake 2's skill 3, reachable only from the console (`skill 3`), the menus stopping at
   hard. Its effects: the monsters do not flinch (every pain function returned at skill 3), the attack
