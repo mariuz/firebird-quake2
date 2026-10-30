@@ -467,6 +467,30 @@ BEGIN
                     WHEN 20 THEN 'environment suit' ELSE 'power shield' END));
 END^
 
+-- Drop_Item: an item of `cls` (with `cnt` of its ammo) 24 ahead of and 16 below the origin along the view (as far
+-- as a trace lets it), tossed at 100 forward and 300 up, glowing, DROPPED_ITEM; its dropper cannot take it back
+-- for a second (drop_temp_touch). Returns the item's id.
+CREATE OR ALTER PROCEDURE drop_item (pe INTEGER, cls VARCHAR(40), cnt INTEGER) RETURNS (id INTEGER)
+AS
+DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
+DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION; DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
+DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION; DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
+DECLARE f DOUBLE PRECISION; DECLARE hx DOUBLE PRECISION; DECLARE hy DOUBLE PRECISION; DECLARE hz DOUBLE PRECISION; DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
+DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+BEGIN
+  SELECT e.x, e.y, e.z FROM ents e WHERE e.id = :pe INTO ox, oy, oz;
+  EXECUTE PROCEDURE view_vectors(pe) RETURNING_VALUES ex, ey, ez, fx_, fy, fz, rx, ry, rz, ux, uy, uz;
+  EXECUTE PROCEDURE trace_move(pe, -15, -15, -15, 15, 15, 15, ox, oy, oz, ox + fx_ * 24, oy + fy * 24, oz + fz * 24 - 16, 1)
+    RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+  EXECUTE PROCEDURE spawn_ent(cls, hx, hy, hz) RETURNING_VALUES id;
+  EXECUTE PROCEDURE set_model(id, item_model(cls));
+  UPDATE ents e SET e.solid = 1, e.movetype = 6, e.clipmask = 3, e.effects = 1, e.renderfx = 4, e.spawnflags = 65536, e.owner_id = :pe,
+         e.count_ = :cnt, e.minx = -15, e.miny = -15, e.minz = -15, e.maxx = 15, e.maxy = 15, e.maxz = 15,
+         e.vx = :fx_ * 100, e.vy = :fy * 100, e.vz = 300, e.think = 'drop_touchable', e.nextthink = now_() + 1 WHERE e.id = :id;
+  EXECUTE PROCEDURE link_ent(id);
+  SUSPEND;
+END^
+
 -- Cmd_Drop_f and the itemlist's drop functions. Ammo drops a pickup's worth or what is left (Drop_Ammo; not the
 -- last grenades while they are in hand); a weapon but not the one in hand (Drop_Weapon; the blaster has no drop);
 -- powerups as they are (Drop_General); power armour switches off when the last one goes (Drop_PowerArmor).
@@ -474,13 +498,7 @@ END^
 -- 100 forward and 300 up, glowing, DROPPED_ITEM; its dropper cannot take it back for a second (drop_temp_touch).
 CREATE OR ALTER PROCEDURE drop_cmd (pe INTEGER, typed VARCHAR(64))
 AS
-DECLARE idx SMALLINT; DECLARE n INTEGER; DECLARE cnt INTEGER; DECLARE w INTEGER; DECLARE cur INTEGER; DECLARE pa SMALLINT;
-DECLARE cls VARCHAR(40); DECLARE it INTEGER;
-DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
-DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION; DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
-DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION; DECLARE rz DOUBLE PRECISION; DECLARE ux DOUBLE PRECISION; DECLARE uy DOUBLE PRECISION; DECLARE uz DOUBLE PRECISION;
-DECLARE f DOUBLE PRECISION; DECLARE hx DOUBLE PRECISION; DECLARE hy DOUBLE PRECISION; DECLARE hz DOUBLE PRECISION; DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
-DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+DECLARE idx SMALLINT; DECLARE n INTEGER; DECLARE cnt INTEGER; DECLARE w INTEGER; DECLARE cur INTEGER; DECLARE pa SMALLINT; DECLARE it INTEGER;
 BEGIN
   idx = item_index(typed);
   IF (idx = 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'unknown item: ' || typed); EXIT; END
@@ -517,19 +535,9 @@ BEGIN
            p.inv_enviro = p.inv_enviro - IIF(:idx = 27, 1, 0) WHERE p.ent_id = :pe;
     EXECUTE PROCEDURE inv_validate(pe);
   END
-  -- Drop_Item
-  cls = item_classname(idx);
-  SELECT e.x, e.y, e.z FROM ents e WHERE e.id = :pe INTO ox, oy, oz;
-  EXECUTE PROCEDURE view_vectors(pe) RETURNING_VALUES ex, ey, ez, fx_, fy, fz, rx, ry, rz, ux, uy, uz;
-  EXECUTE PROCEDURE trace_move(pe, -15, -15, -15, 15, 15, 15, ox, oy, oz, ox + fx_ * 24, oy + fy * 24, oz + fz * 24 - 16, 1)
-    RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
-  EXECUTE PROCEDURE spawn_ent(cls, hx, hy, hz) RETURNING_VALUES it;
-  EXECUTE PROCEDURE set_model(it, item_model(cls));
-  UPDATE ents e SET e.solid = 1, e.movetype = 6, e.clipmask = 3, e.effects = 1, e.renderfx = 4, e.spawnflags = 65536, e.owner_id = :pe,
-         e.count_ = :cnt, e.minx = -15, e.miny = -15, e.minz = -15, e.maxx = 15, e.maxy = 15, e.maxz = 15,
-         e.vx = :fx_ * 100, e.vy = :fy * 100, e.vz = 300, e.think = 'drop_touchable', e.nextthink = now_() + 1 WHERE e.id = :it;
-  EXECUTE PROCEDURE link_ent(it);
+  EXECUTE PROCEDURE drop_item(pe, item_classname(idx), cnt) RETURNING_VALUES it;
 END^
+
 
 -- ClientThink + Pmove + ClientEndServerFrame for one tic
 -- The console's commands and cheats (g_cmds.c: Cmd_God_f, Cmd_Notarget_f, Cmd_Noclip_f, Cmd_Give_f,

@@ -287,6 +287,19 @@ check((await one('SELECT COUNT(*) n FROM ents WHERE mtype IS NOT NULL')).N === 0
 await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, deathmatch: false, players: 9 });
 check((await players()).length === 4 && session.coop, 'more than four is four');
 
+// ── DF_NO_FRIENDLY_FIRE: in coop every client is on the one team; with the flag a client's hit on another does nothing,
+// without it it hurts, and the world hurts either way (CheckTeamDamage) ──
+await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, cvars: { dmflags: 256 } });
+const ff = await players();
+await db.exec(`UPDATE ents SET health = 100 WHERE id = ${ff[1].ENT_ID}; UPDATE player SET armor = 0, armor_type = 0, power_armor = 0 WHERE id = 2`);
+await db.exec(`EXECUTE PROCEDURE t_damage(${ff[1].ENT_ID}, ${ff[0].ENT_ID}, ${ff[0].ENT_ID}, 30, 0, 0)`);
+check((await players())[1].HEALTH === 100, 'with DF_NO_FRIENDLY_FIRE a client\'s hit on the other does no damage');
+await db.exec(`EXECUTE PROCEDURE t_damage(${ff[1].ENT_ID}, 0, 0, 30, 0, 8)`);
+check((await players())[1].HEALTH === 70, 'the world\'s hurt still does');
+await db.exec('UPDATE game SET dmflags = 0 WHERE id = 1');
+await db.exec(`EXECUTE PROCEDURE t_damage(${ff[1].ENT_ID}, ${ff[0].ENT_ID}, ${ff[0].ENT_ID}, 30, 0, 0)`);
+check((await players())[1].HEALTH === 40, 'without the flag a client hurts the other');
+
 // ── single player is as it was ──
 await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: false });
 ps = await players();

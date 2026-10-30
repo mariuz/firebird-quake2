@@ -211,6 +211,32 @@ ps = await players();
 const far = dmSpots.map(([x, y, z]) => [Math.hypot(x - ps[0].X, y - ps[0].Y, z - ps[0].Z), x, y]).sort((a, b) => b[0] - a[0])[0];
 check(Math.abs(ps[1].X - far[1]) < 1 && Math.abs(ps[1].Y - far[2]) < 1, `with spawn farthest the respawn is at the spot farthest from the other client (${far[0].toFixed(0)} units)`);
 
+// ── DF_QUAD_DROP: a death tosses a quad with more than a second left beside the weapon, each 22.5 degrees to a side,
+// the quad to go when it would have run out; without the flag the quad dies with its owner ──
+await db.exec('UPDATE game SET dmflags = 16384 WHERE id = 1');
+await q("SELECT msg FROM player_command('give', 'shotgun', 2)");
+await q("SELECT msg FROM player_command('give', 'shells 10', 2)");
+const tq = (await game()).TIME_;
+await db.exec(`UPDATE player SET weapon = 2, quad_finished = ${tq + 30} WHERE id = 2`);
+await db.exec("DELETE FROM ents WHERE classname IN ('weapon_shotgun', 'item_quad') AND BIN_AND(spawnflags, 65536) <> 0");
+await db.exec(`EXECUTE PROCEDURE t_damage(${ps[1].ENT_ID}, 0, 0, 1000, 0, 8)`);
+const dq = await one("SELECT id, think, nextthink, vx, vy FROM ents WHERE classname = 'item_quad' AND BIN_AND(spawnflags, 65536) <> 0");
+const dw = await one("SELECT id, vx, vy FROM ents WHERE classname = 'weapon_shotgun' AND BIN_AND(spawnflags, 65536) <> 0");
+check(dq && dq.THINK === 'remove' && Math.abs(dq.NEXTTHINK - (tq + 30)) < 1e-6 && dw && (await players())[1].DEADFLAG === 1,
+  `with DF_QUAD_DROP a death tosses the quad with the weapon, to go when it would have run out (${dq ? (dq.NEXTTHINK - tq).toFixed(1) : '?'} s on)`);
+const apart = dq && dw ? Math.abs(((Math.atan2(dq.VY, dq.VX) - Math.atan2(dw.VY, dw.VX)) * 180 / Math.PI + 540) % 360 - 180) : 0;
+check(Math.abs(apart - 45) < 0.5, `the two tossed 22.5 degrees to either side of the view (${apart.toFixed(1)} apart)`);
+await tics(22);
+await session.tic(idle, cmd({ jump: 1 }));
+await db.exec('UPDATE game SET dmflags = 0 WHERE id = 1');
+await db.exec("DELETE FROM ents WHERE classname IN ('weapon_shotgun', 'item_quad') AND BIN_AND(spawnflags, 65536) <> 0");
+await db.exec(`UPDATE player SET quad_finished = ${(await game()).TIME_ + 30} WHERE id = 2`);
+await db.exec(`EXECUTE PROCEDURE t_damage(${ps[1].ENT_ID}, 0, 0, 1000, 0, 8)`);
+check(!(await one("SELECT id FROM ents WHERE classname = 'item_quad' AND BIN_AND(spawnflags, 65536) <> 0")), 'without the flag the quad dies with its owner');
+await tics(22);
+await session.tic(idle, cmd({ jump: 1 }));
+ps = await players();
+
 // ── the mega health waits while its owner is above the maximum, then comes back ──
 await db.exec('UPDATE game SET dmflags = 0 WHERE id = 1');
 const mega = await spawnItem('item_health_mega', ps[0].X, ps[0].Y, ps[0].Z);
