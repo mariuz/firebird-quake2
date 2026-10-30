@@ -26,8 +26,8 @@ BEGIN
   UPDATE ents e SET e.maxz = e.maxz + 32, e.aiflags = BIN_AND(e.aiflags, BIN_NOT(4 + 8)) WHERE e.id = :eid AND BIN_AND(e.aiflags, 4) <> 0;
 END^
 
--- soldier_dodge, infantry_dodge, gunner_dodge: a quarter of the time, duck under the shot (monster_duck_down:
--- the box 32 units lower until the duck frames end). The other monsters of the demo have no dodge.
+-- soldier_dodge, infantry_dodge, gunner_dodge, chick_dodge, medic_dodge: a quarter of the time, duck under the shot
+-- (monster_duck_down: the box 32 units lower until the duck frames end). The other monsters have no dodge.
 -- A soldier on medium crouches and fires instead (soldier_move_attack3) a third of those times, on hard two
 -- thirds; on easy it only ducks.
 CREATE OR ALTER PROCEDURE monster_dodge (eid INTEGER, attacker INTEGER, eta DOUBLE PRECISION)
@@ -35,7 +35,7 @@ AS
 DECLARE st VARCHAR(12); DECLARE mt VARCHAR(16); DECLARE aif INTEGER; DECLARE hp INTEGER; DECLARE sk SMALLINT; DECLARE r DOUBLE PRECISION;
 BEGIN
   SELECT e.st, e.mtype, e.aiflags, e.health FROM ents e WHERE e.id = :eid INTO st, mt, aif, hp;
-  IF (mt IS NULL OR mt NOT IN ('soldier_light', 'soldier', 'soldier_ss', 'infantry', 'gunner')) THEN EXIT;
+  IF (mt IS NULL OR mt NOT IN ('soldier_light', 'soldier', 'soldier_ss', 'infantry', 'gunner', 'chick', 'medic')) THEN EXIT;
   IF (hp <= 0 OR st NOT IN ('stand', 'walk', 'run', 'missile', 'melee') OR BIN_AND(aif, 4) <> 0) THEN EXIT;
   IF (rnd() > 0.25e0) THEN EXIT;
   IF (mt STARTING WITH 'soldier') THEN
@@ -405,12 +405,19 @@ DECLARE f DOUBLE PRECISION; DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECI
 DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION;
 DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER; DECLARE d DOUBLE PRECISION;
 DECLARE vis SMALLINT; DECLARE res SMALLINT = 0; DECLARE nas SMALLINT; DECLARE naf DOUBLE PRECISION; DECLARE t DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
-DECLARE fl INTEGER;
+DECLARE fl INTEGER; DECLARE mt VARCHAR(16); DECLARE aif INTEGER;
+DECLARE mz1 DOUBLE PRECISION; DECLARE mz2 DOUBLE PRECISION; DECLARE ez1 DOUBLE PRECISION; DECLARE esz DOUBLE PRECISION;
 BEGIN
-  SELECT e.enemy_id, IIF(t.melee_anim IS NULL, 0, 1), IIF(t.missile_anim IS NULL, 0, 1), e.attack_finished, t.missile_kind, t.attack_chance, t.melee_range, e.flags
-    FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO enemy, has_melee, has_missile, af, mk, ac, mrange, fl;
+  SELECT e.enemy_id, IIF(t.melee_anim IS NULL, 0, 1), IIF(t.missile_anim IS NULL, 0, 1), e.attack_finished, t.missile_kind, t.attack_chance, t.melee_range, e.flags, e.mtype, e.aiflags
+    FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO enemy, has_melee, has_missile, af, mk, ac, mrange, fl, mt, aif;
   IF (enemy IS NULL) THEN RETURN 0;
   t = now_();
+  -- medic_checkattack: a medic over a corpse (AI_MEDIC) attacks at once, with the cable
+  IF (BIN_AND(aif, 8192) <> 0) THEN
+  BEGIN
+    UPDATE ents e SET e.attack_state = 4 WHERE e.id = :eid;
+    RETURN 1;
+  END
   -- see if any entities are in the way of the shot
   SELECT e.x, e.y, e.z + e.viewheight FROM ents e WHERE e.id = :eid INTO x1, y1, z1;
   SELECT e.x, e.y, e.z + e.viewheight, e.z FROM ents e WHERE e.id = :enemy INTO x2, y2, z2, oz;
@@ -429,6 +436,14 @@ BEGIN
     r = ent_range(eid, enemy);
     d = vlen(x2 - x1, y2 - y1, 0);
     IF (has_melee = 1 AND d <= mrange) THEN BEGIN nas = 3; res = 1; END
+    ELSE IF (mt = 'mutant') THEN
+    BEGIN
+      -- mutant_check_jump: the enemy neither far below nor far above the mutant's box, at least 100 away in the
+      -- plane, and past that one time in ten: the leap (its "missile", the jump frames)
+      SELECT e.z + e.minz, e.z + e.maxz FROM ents e WHERE e.id = :eid INTO mz1, mz2;
+      SELECT e.z + e.minz, e.maxz - e.minz FROM ents e WHERE e.id = :enemy INTO ez1, esz;
+      IF (mz1 <= ez1 + 0.75e0 * esz AND mz2 >= ez1 + 0.25e0 * esz AND d >= 100 AND (d = 100 OR rnd() >= 0.9e0)) THEN BEGIN nas = 4; res = 1; END
+    END
     ELSE IF (has_missile = 1 AND t >= af AND r <> 3) THEN
     BEGIN
       IF (r = 0) THEN chance = IIF(has_melee = 1, 0, 0.4e0);
@@ -584,20 +599,149 @@ BEGIN
   EXECUTE PROCEDURE t_damage(enemy, eid, eid, IIF(af = 2, 5, 2), 0, 0);
 END^
 
--- the melee hit at the frame that strikes (fire_hit)
+-- the melee hit at the frame that strikes (fire_hit); the floater's is its zap (floater_zap): a splash of 32 sparks
+-- from its muzzle toward the enemy, 5 + rand() % 6 of energy damage with a pull of 10
 CREATE OR ALTER PROCEDURE monster_melee (eid INTEGER)
 AS
 DECLARE enemy INTEGER; DECLARE d DOUBLE PRECISION; DECLARE dmg INTEGER; DECLARE ms VARCHAR(64); DECLARE mrange DOUBLE PRECISION; DECLARE mt VARCHAR(16);
+DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+DECLARE dx DOUBLE PRECISION; DECLARE dy DOUBLE PRECISION; DECLARE dz DOUBLE PRECISION; DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION;
 BEGIN
   SELECT e.enemy_id, t.melee_dmg, t.melee_snd, t.melee_range, e.mtype FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid
     INTO enemy, dmg, ms, mrange, mt;
   IF (enemy IS NULL) THEN EXIT;
   SELECT vlen(a.x - b.x, a.y - b.y, a.z - b.z) FROM ents a CROSS JOIN ents b WHERE a.id = :eid AND b.id = :enemy INTO d;
   IF (d IS NULL OR d > mrange + 16) THEN EXIT;
+  IF (mt = 'floater') THEN
+  BEGIN
+    SELECT e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = :eid INTO x, y, z, yaw;
+    SELECT n.x - :x, n.y - :y, n.z - :z FROM ents n WHERE n.id = :enemy INTO dx, dy, dz;
+    IF (d > 0) THEN BEGIN dx = dx / d; dy = dy / d; dz = dz / d; END
+    fx_ = COS(yaw * 0.0174532925e0); fy = SIN(yaw * 0.0174532925e0);
+    -- the muzzle: 18.5 forward, 0.9 to the left, 10 up (G_ProjectSource of the offset)
+    EXECUTE PROCEDURE snd(eid, 1, 'floater/fltatck2.wav', 1, 1);
+    EXECUTE PROCEDURE fx(7, x + fx_ * 18.5e0 + fy * 0.9e0, y + fy * 18.5e0 - fx_ * 0.9e0, z + 10, dx, dy, dz, 32 * 16 + 1);
+    EXECUTE PROCEDURE t_damage(enemy, eid, eid, 5 + CAST(FLOOR(rnd() * 6) AS INTEGER), -10, 4);
+    EXIT;
+  END
   IF (ms IS NOT NULL) THEN EXECUTE PROCEDURE snd(eid, 1, ms, 1, 1);
   dmg = CAST(dmg * (0.7e0 + 0.6e0 * rnd()) AS INTEGER);
   EXECUTE PROCEDURE t_damage(enemy, eid, eid, dmg, IIF(mt = 'berserk', 400, 50), 0);
   EXECUTE PROCEDURE fx(3, (SELECT e.x FROM ents e WHERE e.id = :enemy), (SELECT e.y FROM ents e WHERE e.id = :enemy), (SELECT e.z + 10 FROM ents e WHERE e.id = :enemy), 0, 0, 0, dmg);
+END^
+
+-- mutant_jump (the jump frames as its "missile"): at the third frame the takeoff (mutant_jump_takeoff: the sight
+-- sound, 425 forward and 160 up off the ground, three seconds to land, the leap bit 4096 set so a body it lands on
+-- is hurt, see impact), at the sixth the landing check (mutant_check_landing: on the ground again, the thud and
+-- the frames go on; still in the air, the frame holds until it lands or the three seconds pass). Returns whether
+-- the frame holds.
+CREATE OR ALTER PROCEDURE mutant_leap (eid INTEGER, af INTEGER) RETURNS (hold SMALLINT)
+AS
+DECLARE fl INTEGER; DECLARE afin DOUBLE PRECISION; DECLARE t DOUBLE PRECISION;
+BEGIN
+  hold = 0;
+  t = now_();
+  IF (af = 2) THEN
+  BEGIN
+    EXECUTE PROCEDURE snd(eid, 2, 'mutant/mutsght1.wav', 1, 1);
+    UPDATE ents e SET e.z = e.z + 1, e.vx = COS(e.yaw * 0.0174532925e0) * 425, e.vy = SIN(e.yaw * 0.0174532925e0) * 425, e.vz = 160,
+           e.flags = BIN_AND(e.flags, BIN_NOT(512)), e.aiflags = BIN_OR(e.aiflags, 4096), e.attack_finished = :t + 3 WHERE e.id = :eid;
+    EXECUTE PROCEDURE link_ent(eid);
+  END
+  ELSE IF (af = 5) THEN
+  BEGIN
+    SELECT e.flags, e.attack_finished FROM ents e WHERE e.id = :eid INTO fl, afin;
+    IF (BIN_AND(fl, 512) <> 0) THEN
+    BEGIN
+      EXECUTE PROCEDURE snd(eid, 1, 'mutant/thud1.wav', 1, 1);
+      UPDATE ents e SET e.aiflags = BIN_AND(e.aiflags, BIN_NOT(4096)), e.attack_finished = 0 WHERE e.id = :eid;
+    END
+    ELSE IF (t > afin) THEN UPDATE ents e SET e.aiflags = BIN_AND(e.aiflags, BIN_NOT(4096)) WHERE e.id = :eid;
+    ELSE hold = 1;
+  END
+  SUSPEND;
+END^
+
+-- medic_FindDeadMonster: the dead monster within 1024 the medic can see, the one with the most health to give
+-- back first (a corpse that is lying still, no one's yet)
+CREATE OR ALTER FUNCTION medic_find_dead (eid INTEGER) RETURNS INTEGER
+AS
+DECLARE c INTEGER;
+BEGIN
+  FOR SELECT c.id FROM ents c JOIN ents m ON m.id = :eid
+       WHERE c.mtype IS NOT NULL AND c.st = 'dead' AND c.health <= 0 AND c.owner_id IS NULL AND c.id <> :eid
+         AND vlen(c.x - m.x, c.y - m.y, c.z - m.z) <= 1024
+       ORDER BY c.max_health DESC, c.id INTO c
+  DO
+    IF (visible(eid, c) = 1) THEN RETURN c;
+  RETURN NULL;
+END^
+
+-- medic_idle, medic_search, medic_run finding one: the corpse is the medic's enemy (AI_MEDIC, 8192) and its own
+-- (the corpse's owner), and the medic goes for it as FoundTarget sent it
+CREATE OR ALTER PROCEDURE medic_take (eid INTEGER, corpse INTEGER)
+AS
+BEGIN
+  EXECUTE PROCEDURE found_target(eid);
+  UPDATE ents e SET e.enemy_id = :corpse, e.aiflags = BIN_OR(e.aiflags, 8192), e.goal_id = NULL,
+         e.ls_x = (SELECT c.x FROM ents c WHERE c.id = :corpse), e.ls_y = (SELECT c.y FROM ents c WHERE c.id = :corpse), e.ls_z = (SELECT c.z FROM ents c WHERE c.id = :corpse)
+   WHERE e.id = :eid;
+  UPDATE ents c SET c.owner_id = :eid WHERE c.id = :corpse;
+END^
+
+-- ED_CallSpawn on a corpse (the medic's cable at its fiftieth frame): the monster as its spawn made it, health and
+-- box and all, counted again among the level's monsters, and after the medic's enemy as FoundTarget sent it
+CREATE OR ALTER PROCEDURE monster_revive (eid INTEGER)
+AS
+DECLARE mhp INTEGER; DECLARE mgh INTEGER; DECLARE mflags INTEGER; DECLARE c DOUBLE PRECISION; DECLARE f DOUBLE PRECISION; DECLARE sc INTEGER;
+BEGIN
+  SELECT t.health, t.gib_health, t.flags, t.minz, t.maxz FROM ents e JOIN monster_types t ON t.name = e.mtype WHERE e.id = :eid INTO mhp, mgh, mflags, c, f;
+  IF (mhp IS NULL) THEN EXIT;
+  UPDATE ents e SET e.health = :mhp, e.max_health = :mhp, e.gib_health = :mgh, e.deadflag = 0, e.solid = 3, e.takedamage = 2,
+         e.movetype = IIF(BIN_AND(:mflags, 3) <> 0, 5, 4), e.flags = BIN_OR(32, :mflags), e.minz = :c, e.maxz = :f, e.viewheight = :f - 8,
+         e.st = 'stand', e.anim = NULL, e.anim_frame = 0, e.skin = BIN_AND(e.skin, BIN_NOT(1)), e.owner_id = NULL, e.enemy_id = NULL, e.goal_id = NULL,
+         e.aiflags = 0, e.attack_state = 0, e.pain_finished = 0, e.spawnflags = 0, e.target = NULL, e.targetname = NULL, e.combattarget = NULL, e.deathtarget = NULL,
+         e.vx = 0, e.vy = 0, e.vz = 0, e.think = 'monster_think', e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
+  UPDATE game g SET g.total_monsters = g.total_monsters + 1 WHERE g.id = 1;
+  EXECUTE PROCEDURE link_ent(eid);
+  SELECT g.sight_client FROM game g WHERE g.id = 1 INTO sc;
+  IF (sc IS NOT NULL) THEN EXECUTE PROCEDURE found_target(eid);
+END^
+
+-- medic_cable_attack, a frame of the cable animation (attack2): the hook launched at the ninth frame and retracted
+-- at the twenty-fifth (their sounds); from the tenth to the nineteenth the cable from the medic's hand to the corpse
+-- when it is within 256, not more than 45 degrees up or down and nothing stands between (the beam drawn as the
+-- parasite's tongue is, kind 16); the hook hits at the eleventh (the sound on the corpse), heals at the twelfth,
+-- and at the eighteenth the corpse is a monster again (monster_revive)
+CREATE OR ALTER PROCEDURE medic_cable (eid INTEGER, af INTEGER)
+AS
+DECLARE enemy INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE sx DOUBLE PRECISION; DECLARE sy DOUBLE PRECISION; DECLARE sz DOUBLE PRECISION;
+DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION; DECLARE emn DOUBLE PRECISION; DECLARE emx DOUBLE PRECISION; DECLARE ehp INTEGER;
+DECLARE dist DOUBLE PRECISION; DECLARE f DOUBLE PRECISION; DECLARE hx DOUBLE PRECISION; DECLARE hy DOUBLE PRECISION; DECLARE hz DOUBLE PRECISION;
+DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION; DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+BEGIN
+  IF (af = 8) THEN BEGIN EXECUTE PROCEDURE snd(eid, 1, 'medic/medatck2.wav', 1, 1); EXIT; END      -- medic_hook_launch
+  IF (af = 24) THEN BEGIN EXECUTE PROCEDURE snd(eid, 1, 'medic/medatck5.wav', 1, 1); EXIT; END     -- medic_hook_retract
+  IF (af < 9 OR af > 18) THEN EXIT;
+  SELECT e.enemy_id, e.x, e.y, e.z, e.yaw FROM ents e WHERE e.id = :eid INTO enemy, x, y, z, yaw;
+  IF (enemy IS NULL) THEN EXIT;
+  SELECT n.x, n.y, n.z, n.minz, n.maxz, n.health FROM ents n WHERE n.id = :enemy INTO ex, ey, ez, emn, emx, ehp;
+  IF (ex IS NULL OR ehp > 0) THEN EXIT;
+  -- the hand: 32.7 forward, 19.7 to the right, 10.4 up (medic_cable_offsets' last)
+  fx_ = COS(yaw * 0.0174532925e0); fy = SIN(yaw * 0.0174532925e0);
+  sx = x + fx_ * 32.7e0 - fy * 19.7e0; sy = y + fy * 32.7e0 + fx_ * 19.7e0; sz = z + 10.4e0;
+  dist = vlen(sx - ex, sy - ey, sz - ez);
+  IF (dist > 256) THEN EXIT;
+  IF (ABS(ATAN2(sz - ez, vlen(sx - ex, sy - ey, 0))) * 57.29577951e0 > 45) THEN EXIT;
+  EXECUTE PROCEDURE trace_move(eid, 0, 0, 0, 0, 0, 0, sx, sy, sz, ex, ey, ez, 100663299)
+    RETURNING_VALUES f, hx, hy, hz, nx, ny, nz, sf, ct, als, sts, hit;
+  IF (f < 1 AND hit IS DISTINCT FROM enemy) THEN EXIT;
+  IF (af = 10) THEN EXECUTE PROCEDURE snd(enemy, 0, 'medic/medatck3.wav', 1, 1);
+  ELSE IF (af = 11) THEN EXECUTE PROCEDURE snd(eid, 1, 'medic/medatck4.wav', 1, 1);
+  ELSE IF (af = 17) THEN EXECUTE PROCEDURE monster_revive(enemy);
+  -- the beam from the mouth, 8 further forward, to the middle of the body on the floor
+  EXECUTE PROCEDURE fx(16, sx + fx_ * 8, sy + fy * 8, sz, ex, ey, ez + emn + (emx - emn) / 2, eid);
 END^
 
 -- pain (soldier_pain, infantry_pain, …: the pain skin, three seconds between flinches, the sound, then the
@@ -704,7 +848,7 @@ DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISI
 DECLARE d DOUBLE PRECISION; DECLARE gt VARCHAR(40); DECLARE gw DOUBLE PRECISION; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE cl INTEGER;
 DECLARE nt DOUBLE PRECISION; DECLARE iy DOUBLE PRECISION; DECLARE pe INTEGER; DECLARE vis SMALLINT;
 DECLARE aif INTEGER; DECLARE itime DOUBLE PRECISION; DECLARE sflags INTEGER; DECLARE ca SMALLINT; DECLARE lf SMALLINT;
-DECLARE alt_a VARCHAR(16); DECLARE alt_f VARCHAR(60); DECLARE alt_c DOUBLE PRECISION;
+DECLARE alt_a VARCHAR(16); DECLARE alt_f VARCHAR(60); DECLARE alt_c DOUBLE PRECISION; DECLARE hold SMALLINT;
 BEGIN
   -- (an UPDATE of the wide ents row costs as much as a trace step: the next think time rides
   -- along with whatever else the think writes, and a path that writes nothing thinks again next tic)
@@ -733,10 +877,18 @@ BEGIN
   SELECT a.first_frame, a.frame_count FROM anims a WHERE a.model_id = :mid AND a.anim = :anim INTO ff, fc;
   IF (ff IS NULL) THEN BEGIN ff = 0; fc = 12; END
 
-  -- the enemy died?
+  -- the enemy died? (a medic over a corpse has it as its enemy while it is dead, ai_checkattack's AI_MEDIC case:
+  -- raised, the medic goes back to the fight; gibbed meanwhile, it is an enemy gone)
   IF (enemy IS NOT NULL) THEN
   BEGIN
     SELECT e.health FROM ents e WHERE e.id = :enemy INTO ehp;
+    IF (BIN_AND(aif, 8192) <> 0 AND ehp IS NOT NULL AND ehp <= 0) THEN ehp = 1;
+    ELSE IF (BIN_AND(aif, 8192) <> 0) THEN
+    BEGIN
+      aif = BIN_AND(aif, BIN_NOT(8192));
+      UPDATE ents e SET e.aiflags = BIN_AND(e.aiflags, BIN_NOT(8192)) WHERE e.id = :eid;
+      IF (ehp > 0) THEN BEGIN EXECUTE PROCEDURE found_target(eid); UPDATE ents e SET e.nextthink = :nt WHERE e.id = :eid; EXIT; END
+    END
     IF (ehp IS NULL OR ehp <= 0) THEN
     BEGIN
       enemy = NULL;
@@ -765,6 +917,12 @@ BEGIN
     BEGIN
       EXECUTE PROCEDURE found_target(eid);
       EXIT;
+    END
+    -- medic_idle, medic_search: once a loop, a dead monster in sight to go and raise
+    IF (mt = 'medic' AND af = 0 AND BIN_AND(aif, 8192) = 0) THEN
+    BEGIN
+      goal = medic_find_dead(eid);
+      IF (goal IS NOT NULL) THEN BEGIN EXECUTE PROCEDURE medic_take(eid, goal); EXIT; END
     END
     IF (st = 'walk' AND tgt IS NOT NULL) THEN
     BEGIN
@@ -864,6 +1022,12 @@ BEGIN
       UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
       EXIT;
     END
+    -- medic_run: a dead monster in sight comes before the fight
+    IF (mt = 'medic' AND BIN_AND(aif, 8192) = 0) THEN
+    BEGIN
+      goal = medic_find_dead(eid);
+      IF (goal IS NOT NULL) THEN BEGIN EXECUTE PROCEDURE medic_take(eid, goal); EXIT; END
+    END
     SELECT vectoyaw(n.x - :x, n.y - :y) FROM ents n WHERE n.id = :enemy INTO iy;
     -- the attack states and turret-like monsters turn from the row; the chasers get the yaw as a parameter
     IF (atkst IN (3, 4) OR run_spd <= 0) THEN UPDATE ents e SET e.ideal_yaw = :iy WHERE e.id = :eid;
@@ -886,6 +1050,8 @@ BEGIN
         -- gunner_attack: out of melee range, half the time the grenades (attak1), else the chain gun (gunner_opengun)
         IF (mt = 'gunner' AND rnd() <= 0.5e0 AND (SELECT vlen(n.x - :x, n.y - :y, n.z - :z) FROM ents n WHERE n.id = :enemy) >= 80) THEN
           EXECUTE PROCEDURE set_anim(eid, 'attak1');
+        -- medic_attack: over a corpse the cable (attack2), else the blaster
+        ELSE IF (mt = 'medic' AND BIN_AND(aif, 8192) <> 0) THEN EXECUTE PROCEDURE set_anim(eid, 'attack2');
         -- Makron_CheckAttack: the BFG, the railgun or the hyperblaster, a third each
         ELSE IF (mt = 'makron') THEN
           EXECUTE PROCEDURE set_anim(eid, CASE CAST(FLOOR(rnd() * 3) AS INTEGER) WHEN 0 THEN 'attack3' WHEN 1 THEN 'attack4' ELSE 'attack5' END);
@@ -998,14 +1164,18 @@ BEGIN
       UPDATE ents e SET e.ideal_yaw = vectoyaw((SELECT x FROM ents n WHERE n.id = :enemy) - e.x, (SELECT y FROM ents n WHERE n.id = :enemy) - e.y) WHERE e.id = :eid;
       EXECUTE PROCEDURE change_yaw(eid);
     END
+    hold = 0;
     IF (st = 'missile' AND mt = 'parasite') THEN EXECUTE PROCEDURE parasite_drain(eid, af);
+    ELSE IF (st = 'missile' AND mt = 'mutant') THEN EXECUTE PROCEDURE mutant_leap(eid, af) RETURNING_VALUES hold;   -- the leap: its jump frames
+    ELSE IF (st = 'missile' AND mt = 'medic' AND anim = 'attack2') THEN EXECUTE PROCEDURE medic_cable(eid, af);
     ELSE IF (st = 'melee' AND af = melee_f) THEN EXECUTE PROCEDURE monster_melee(eid);
-    IF (st = 'missile' AND mt = 'gunner' AND anim = 'attak1') THEN
+    ELSE IF (st = 'missile' AND mt = 'gunner' AND anim = 'attak1') THEN
     BEGIN
       IF (af IN (4, 7, 10, 13)) THEN EXECUTE PROCEDURE gunner_grenade(eid);   -- gunner_frames_attack_grenade
     END
     ELSE IF (st = 'missile' AND POSITION(',' || af || ',', ',' || missile_f || ',') > 0) THEN EXECUTE PROCEDURE monster_missile(eid);
     IF (NOT EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND e.st = :st)) THEN EXIT;
+    IF (hold = 1) THEN BEGIN UPDATE ents e SET e.nextthink = :nt WHERE e.id = :eid; EXIT; END   -- (a frame that waits: the mutant in the air)
     af = af + 1;
     IF (af >= fc) THEN
     BEGIN

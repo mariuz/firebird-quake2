@@ -2245,8 +2245,8 @@ BEGIN
   END
   IF (BIN_AND(flags, 64) <> 0 AND client_of(attacker) IS NOT NULL) THEN EXIT;    -- FL_NOTARGET-style: monsters don't hurt each other here anyway
 
-  -- knockback
-  IF (BIN_AND(dflags, 8) = 0 AND knockback > 0 AND mt NOT IN (0, 7, 8, 10) AND inflictor IS NOT NULL AND inflictor > 0) THEN
+  -- knockback (a negative one pulls toward the inflictor: the floater's zap)
+  IF (BIN_AND(dflags, 8) = 0 AND knockback <> 0 AND mt NOT IN (0, 7, 8, 10) AND inflictor IS NOT NULL AND inflictor > 0) THEN
   BEGIN
     SELECT e1.x - (e2.x + (e2.minx + e2.maxx) / 2), e1.y - (e2.y + (e2.miny + e2.maxy) / 2), e1.z - (e2.z + (e2.minz + e2.maxz) / 2)
       FROM ents e1 CROSS JOIN ents e2 WHERE e1.id = :targ AND e2.id = :inflictor INTO dx, dy, dz;
@@ -2607,9 +2607,22 @@ AS
 DECLARE c1 VARCHAR(40); DECLARE c2 VARCHAR(40); DECLARE own INTEGER; DECLARE dmg INTEGER; DECLARE td2 SMALLINT;
 DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE hp2 INTEGER; DECLARE rad DOUBLE PRECISION; DECLARE rdmg INTEGER;
 DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION;
-DECLARE bdx DOUBLE PRECISION; DECLARE bdy DOUBLE PRECISION; DECLARE bdz DOUBLE PRECISION; DECLARE bdl DOUBLE PRECISION;
+DECLARE bdx DOUBLE PRECISION; DECLARE bdy DOUBLE PRECISION; DECLARE bdz DOUBLE PRECISION; DECLARE bdl DOUBLE PRECISION; DECLARE aif INTEGER;
 BEGIN
-  SELECT e.classname, e.owner_id, e.dmg, e.x, e.y, e.z, e.vx, e.vy, e.vz, e.dmg_radius, e.count_ FROM ents e WHERE e.id = :e1 INTO c1, own, dmg, x, y, z, vx, vy, vz, rad, rdmg;
+  SELECT e.classname, e.owner_id, e.dmg, e.x, e.y, e.z, e.vx, e.vy, e.vz, e.dmg_radius, e.count_, e.aiflags FROM ents e WHERE e.id = :e1 INTO c1, own, dmg, x, y, z, vx, vy, vz, rad, rdmg, aif;
+  IF (c1 = 'monster_mutant' AND BIN_AND(aif, 4096) <> 0) THEN
+  BEGIN
+    -- mutant_jump_touch: what a leaping mutant lands on at more than 400 takes 40 + 10 * random(), as much knockback;
+    -- the leap bit comes off at the first touch (self->touch = NULL)
+    spd = vlen(vx, vy, vz);
+    IF (e2 > 0 AND spd > 400 AND EXISTS (SELECT 1 FROM ents o WHERE o.id = :e2 AND o.takedamage > 0)) THEN
+    BEGIN
+      dmg = 40 + CAST(FLOOR(rnd() * 10) AS INTEGER);
+      EXECUTE PROCEDURE t_damage(e2, e1, e1, dmg, dmg, 0);
+    END
+    UPDATE ents e SET e.aiflags = BIN_AND(e.aiflags, BIN_NOT(4096)) WHERE e.id = :e1;
+    EXIT;
+  END
   IF (c1 = 'func_object') THEN
   BEGIN
     -- func_object_touch: only what it falls on top of, if it can be hurt

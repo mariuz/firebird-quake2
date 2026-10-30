@@ -236,7 +236,7 @@ monster thinks at 3 Hz and a patrol strides four times as far at 2.5 Hz, with
 monster to that `point_combat` first (`aiflags` 2, `AI_COMBAT_POINT`), and `point_combat_touch`
 moves it on, fires the point's pathtarget, or holds it there (`aiflags` 1, `AI_STAND_GROUND`). A
 player's bolt, rocket or BFG ball is traced along its flight (`check_dodge`) and the soldiers,
-infantry and gunners it would hit duck a quarter of the time (`monster_dodge`, `aiflags` 4); on medium
+infantry, gunners, iron maidens and medics it would hit duck a quarter of the time (`monster_dodge`, `aiflags` 4); on medium
 and hard a soldier often crouches and fires instead (state `attack3`, the `attak3` frames, timed by
 `pausetime` as `monsterinfo.pausetime` timed them, `aiflags` 8 holding the SS's burst). `check_attack`
 says whether the enemy is in sight (1 attack, 0 seen, 2 not) and notes the sighting (`ls_x/y/z`,
@@ -256,8 +256,21 @@ railgun, Jorg's and Makron's BFG; a second ranged attack (`alt_anim`, `alt_frame
 `alt_chance`: the supertank's rockets beside its machine gun, the hornet's, Jorg's BFG) is chosen by its
 chance when a missile is due and fires its own kind on its own frames, and Makron picks the BFG, the railgun
 or the hyperblaster a third each (`Makron_CheckAttack`). Jorg's death spawns Makron where it fell, unseen for
-four seconds (`makron_toss`, as `MakronToss`). What is not there yet is in ROADMAP.md: the medic's cable,
-the mutant's leap, the floater's zap, the chick's duck, the insane marines' crawling and crucified forms.
+four seconds (`makron_toss`, as `MakronToss`). The mutant's "missile" is its leap (`mutant_check_jump` in
+`check_attack`: past 100 units, one think in ten; `mutant_leap` on the jump frames: 425 forward and 160 up
+off the ground with its cry, `aiflags` 4096 while in the air, the landing check holding the frame until it
+is down or three seconds pass, the thud; `impact` hurts what a leaping mutant lands on at more than 400 by
+40 + 10 × random(), as `mutant_jump_touch` did). The floater's melee is its zap (`floater_zap` in
+`monster_melee`: a splash of 32 sparks from its muzzle toward the enemy, 5 + rand() % 6 of energy damage
+pulling by 10). The medic raises the dead: `medic_find_dead` (the dead monster within 1024 it can see with
+the most health, `medic_FindDeadMonster`) from its stand, walk and run thinks, `medic_take` makes the corpse
+its enemy and its own (`aiflags` 8192, `AI_MEDIC`; the think keeps a dead enemy for it), `check_attack`
+attacks at once, and `medic_cable` on the `attack2` frames launches the hook, draws the cable (kind 16, the
+parasite's beam) to the body while it is within 256, not more than 45° up or down and in a clear line, hits
+and heals with their sounds, and at the eighteenth frame `monster_revive` makes the corpse the monster its
+spawn made (health, box, solid, counted among the level's monsters again, after the player as `FoundTarget`
+sent it); raised, the medic goes back to the fight. What is not there yet is in ROADMAP.md: the insane
+marines' crawling and crucified forms.
 
 ## 5. Visibility and the frame (`sql/render.sql`)
 
@@ -404,10 +417,11 @@ RGBA through the palette on `present` (with the damage/powerup/water tint as a p
   BFG's blast on a thing it reached (`TE_BFG_EXPLOSION`: the `s_bfg2` sprite alone), 10 sparks (n packs
   count × 256 + colour: `TE_SPARKS`, `TE_LASER_SPARKS` at a BFG laser's end, the demo's screen and shield
   sparks), 12 a BFG laser (`TE_BFG_LASER`, 0.1 s), 13 a `target_laser`'s beam (n its colour bits), 14 a bubble
-  trail, 15 a muzzle flash's light (n its radius), 16 a parasite's tongue (n the parasite), 17 an item's
+  trail, 15 a muzzle flash's light (n its radius), 16 a parasite's tongue or a medic's cable (n the monster;
+  `TE_PARASITE_ATTACK` and `TE_MEDIC_CABLE_ATTACK` are the same segment beam), 17 an item's
   respawn particles, 18 the BFG's strike (`TE_BFG_BIGEXPLOSION`: particles alone; the ball itself becomes the
-  `s_bfg3` sprite for five thinks). Not sent by the demo's game: `TE_BOSSTPORT`, `TE_MEDIC_CABLE_ATTACK`, the
-  mission packs' kinds.
+  `s_bfg3` sprite for five thinks). The floater's zap is a splash of 32 sparks (7). Not sent by the demo's
+  game: `TE_BOSSTPORT`, the mission packs' kinds.
 - **2D** (`src/hud.js`): `single_statusbar` from `pics/` (health, ammo, armour flashing with power
   armour, the selected item; the pickup's icon and name, the powerup timer, the help icon), the
   crosshair, centre prints, the help computer and the inventory screen (`CL_DrawInventory`), with
@@ -678,7 +692,7 @@ the frame query and the raster. The SQL console runs any statement against the l
 |---|---|
 | `sql-check.mjs` | compiles the six SQL files against the engine (run first after any SQL edit) |
 | `sql-smoke.mjs [map]` | end-to-end in Node: load, tics, movement, weapons, doors, all referenced sounds exist |
-| `monsters-test.mjs [MONSTER=a,b]` | every monster: spawned, sees the player, attacks, dies, is counted; the full game's on their frame tables alone (the runs the table gives, every animation named in it, no mesh for the painter), their second ranged attack chosen and fired, Makron's three, Makron rising from Jorg; the insane marines never attacking; each hurt on hard (the cry and the flinch) and in nightmare (the cry alone) |
+| `monsters-test.mjs [MONSTER=a,b]` | every monster: spawned, sees the player, attacks, dies, is counted; the full game's on their frame tables alone (the runs the table gives, every animation named in it, no mesh for the painter), their second ranged attack chosen and fired, Makron's three, Makron rising from Jorg; the insane marines never attacking; the iron maiden and the medic ducking; the floater's zap; the mutant choosing its leap from 220 away, taking off, landing with its thud and hurting a body it lands on; a medic taking a shot soldier's corpse, cabling it and standing it up again; each hurt on hard (the cry and the flinch) and in nightmare (the cry alone) |
 | `walkthrough-test.mjs` | every trigger the player can walk into on the three maps fires, and its movers move |
 | `entities-test.mjs` | the full game's entities the demo lacks, added to demo1's lump: secret doors, the earthquake, the elevator, the viper and its bomb, the ships, the string display and the clock, the decorations, a turret, target_spawner |
 | `save-test.mjs` | save, play on, load: every entity, mover and light style back as it was; the game keeps running with fresh ids |
