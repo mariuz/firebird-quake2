@@ -13,7 +13,7 @@ by the same author (mariuz), which live next to this repository under `C:\fbq\`.
 https://mariuz.github.io/firebird-quake2/ by the Pages workflow on every push to `main`.
 
 Layout: `sql/` (schema, physics, game, weapons, monsters, render — loaded in that order),
-`src/` (pak/bsp/md2 parsers, loader, session, net, demo, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
+`src/` (pak/bsp/md2 parsers, loader, session, net, demo, record, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
 tools), `public/` (page, the manifest and icons, the caching service worker `sw.js`, the retired `coi-serviceworker.js`,
 the pak goes in `public/pak/`), `docs/`.
 
@@ -42,6 +42,7 @@ npm run test:net                      # a game shared over a link headless: the 
 npm run test:dm                       # a deathmatch headless: the spots, no monsters, items that come back, the frags, respawns, the exit, the limits, the dmflags
 npm run test:demo                     # the pak's demo headless: every block read exactly, the view and entities between frames, the events once, the session's demo frame, a frame painted
 npm run test:lerp                     # the frames between tics: the eye, the entities and the brush models moved by the fraction, snaps, the turn immediate, the poses blended (backlerp)
+npm run test:record                   # a game recorded as a demo and read back: the header, a frame a tenth of a second, the blocks under MAX_MSGLEN, the view, entities, sounds and effects as the rows had them
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
@@ -174,7 +175,12 @@ short stories of what changed and what it measured; keep that.
   to get `now_()` added to its nextthink, which was wrong for a spawned pusher.
 - A pusher's (movetype 7) thinks are scheduled on its own clock, `ltime`; everything else's on `now_()`.
 - The effect kinds (`fx(kind, …)`, listed in docs/ARCHITECTURE.md §6) are the port's own numbers, not `TE_`'s: a new
-  temporary entity gets the next kind in `src/effects.js`, a row in `src/demo.js`'s `TE_KIND` and a line in the list.
+  temporary entity gets the next kind in `src/effects.js`, a row in `src/demo.js`'s `TE_KIND`, one in `src/record.js`'s
+  `KIND_TE` (how a recording writes it) and a line in the list.
+- A recording (`record <name>` at the console, `src/record.js`) writes protocol 34 (the released Quake 2's) and
+  `CS_MAPCHECKSUM` as `Com_BlockChecksum` of the .bsp (an MD4), which the client checks against the map it loads:
+  a recorded game plays in Quake 2 itself only with the same pak. The page plays its own recordings from the Demo
+  select or `demomap`; a block must stay under `MAX_MSGLEN` (1400 bytes), so the entities that do not fit a frame wait.
   A kind's `n` packs what the message carried (7: count × 16 + colour; 10: count × 256 + colour). The client's own
   chances and sounds in `CL_ParseTEnt` (a gunshot's ricochet) are the game's here, drawn from `rnd()`.
 - A projectile's `waterlevel` is read as it flies (`toss_move`'s water check covers movetype 9, the missiles), so a

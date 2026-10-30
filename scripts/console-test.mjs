@@ -22,6 +22,7 @@ const host = {
   loadGame: async () => calls.push(['loadGame']),
   toggleInventory: () => calls.push(['inven']),
   isRunning: () => running,
+  playDemo: async (name) => calls.push(['playDemo', name]),
 };
 let running = true;
 const con = new Console(host);
@@ -72,6 +73,28 @@ const n = calls.length;
 await con.submit('noclip');
 check(calls.length === n, 'with no game running, a game command does nothing');
 running = true;
+// record and stop: CL_Record_f's and CL_Stop_f's words, the name cleaned, a demo recorded this session playable by demomap
+let recording = false;
+host.record = async (name) => { calls.push(['record', name]); recording = true; };
+host.stopRecord = async () => { calls.push(['stopRecord']); recording = false; };
+host.isRecording = () => recording;
+host.hasDemo = (name) => name === 'q2demo1' || name === 'mine';
+await con.submit('record');
+check(status.at(-1)?.[0] === 'record <demoname>' && status.at(-1)?.[1] === true && !recording, 'record alone asks for a name');
+await con.submit('stop');
+check(status.at(-1)?.[0] === 'Not recording a demo.' && last() !== 'stopRecord', 'stop with no recording says so');
+await con.submit('record My Run.dm2');
+check(last() === 'record myrun' && recording, 'record <name> starts a recording under a cleaned name (lower case, letters, digits, - and _)');
+await con.submit('record again');
+check(status.at(-1)?.[0] === 'Already recording.' && last() === 'record myrun', 'a second record is refused while one runs');
+await con.submit('stop');
+check(last() === 'stopRecord' && !recording, 'stop ends it');
+running = false;
+await con.submit('record x');
+check(status.at(-1)?.[0] === 'You must be in a level to record.' && last() === 'stopRecord', 'with no game running, record is refused');
+running = true;
+await con.submit('demomap mine');
+check(last() === 'playDemo mine', 'demomap plays a demo recorded this session, which the host knows by name');
 host.db.query = async () => { throw new Error('boom'); };
 await con.submit('kill');
 check(status.at(-1)?.[0] === 'kill: boom' && status.at(-1)?.[1] === true, 'an error from the game is shown with the command');

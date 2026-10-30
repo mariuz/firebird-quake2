@@ -6,12 +6,13 @@
 // Nothing here touches the DOM: the page wires the input element to historyStep(), complete() and
 // submit(), and gives a host with what the commands act on, so the tests can drive it with a fake one.
 
-export const COMMANDS = ['demomap', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'save', 'seed', 'skill', 'timelimit', 'use'];
+export const COMMANDS = ['demomap', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'save', 'seed', 'skill', 'stop', 'timelimit', 'use'];
 const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
- *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name) }
+ *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
+ *         hasDemo(name), record(name), stopRecord(), isRecording() }
  */
 export class Console {
   constructor(host) {
@@ -59,12 +60,27 @@ export class Console {
         return;
       }
       case 'demomap': {
-        // CL_PlayDemo_f: a demo of the pak (demos/<name>.dm2) played over its map
+        // CL_PlayDemo_f: a demo of the pak (demos/<name>.dm2), or one recorded this session, played over its map
         const name = arg.toLowerCase().replace(/\.dm2$/, '');
-        if (!name || !h.pak.has(`demos/${name}.dm2`)) { say(`no demo "${name}" in this pak`, true); return; }
+        const has = h.hasDemo ? h.hasDemo(name) : h.pak.has(`demos/${name}.dm2`);
+        if (!name || !has) { say(`no demo "${name}" in this pak`, true); return; }
         await h.playDemo?.(name);
         return;
       }
+      case 'record': {
+        // CL_Record_f: the game from here on written as a demo (src/record.js), until `stop` or the level's end
+        const name = arg.toLowerCase().replace(/\.dm2$/, '').replace(/[^a-z0-9_-]/g, '');
+        if (!name) { say('record <demoname>', true); return; }
+        if (h.isRecording?.()) { say('Already recording.', true); return; }
+        if (!h.isRunning()) { say('You must be in a level to record.', true); return; }
+        await h.record?.(name);
+        return;
+      }
+      case 'stop':
+        // CL_Stop_f: the demo written out (the page downloads it and keeps it in the Demo select)
+        if (!h.isRecording?.()) { say('Not recording a demo.', true); return; }
+        await h.stopRecord?.();
+        return;
       case 'inven': h.toggleInventory(); return;
       case 'fov': {
         // the client's fov, clamped as ClientUserinfoChanged clamped it (1-160); no argument shows it
