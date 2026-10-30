@@ -172,9 +172,11 @@ export class Hud {
   }
 }
 
+const gunAnims = (mdl) => mdl.anims ?? (mdl.anims = Object.fromEntries(mdl.animations().map((a) => [a.name, a])));
+
 /** The frame of the weapon in hand: the 'pow' run while a shot plays, else the idle loop. */
 export function viewFrame(mdl, hud, time) {
-  const anims = mdl.anims ?? (mdl.anims = Object.fromEntries(mdl.animations().map((a) => [a.name, a])));
+  const anims = gunAnims(mdl);
   const pow = anims.pow ?? anims.throw;
   const idle = anims.idle ?? anims.idle1 ?? anims[Object.keys(anims)[0]];
   if (hud.GRENADE_TIME > 0 && anims.throw) return anims.throw.first + Math.min(3, Math.floor((time - hud.GRENADE_TIME) * 10));
@@ -185,4 +187,19 @@ export function viewFrame(mdl, hud, time) {
   }
   if (!idle) return 0;
   return idle.first + (Math.floor(time * 10) % idle.count);
+}
+
+/**
+ * The weapon's frame with the one it stepped from and the blend between them (CL_AddViewWeapon's oldframe and
+ * backlerp): [frame, oldframe, backlerp], the blend 1 as a step comes and 0 as the next is due.
+ */
+export function viewFrameLerp(mdl, hud, time) {
+  const anims = gunAnims(mdl);
+  const pow = anims.pow ?? anims.throw;
+  const dur = hud.ATTACK_FINISHED - hud.ATTACK_START;
+  let step = 0.1, phase = (time * 10) % 1;
+  if (hud.GRENADE_TIME > 0 && anims.throw) phase = ((time - hud.GRENADE_TIME) * 10) % 1;
+  else if (pow && dur > 0 && time < hud.ATTACK_FINISHED && time >= hud.ATTACK_START) { step = dur / pow.count; phase = ((time - hud.ATTACK_START) / step) % 1; }
+  const f = viewFrame(mdl, hud, time), o = viewFrame(mdl, hud, time - step);
+  return o === f ? [f, f, 0] : [f, o, 1 - phase];
 }

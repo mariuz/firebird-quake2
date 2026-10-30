@@ -148,6 +148,12 @@ assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws ne
   for (let y = 0; y < 240; y++) for (let x = 0; x < 320; x++) if ((full[y * 320 + x] !== 40) === (mirrored[y * 320 + 319 - x] !== 40)) flipped++;
   assert(Math.abs(cm.n - cp.n) < cp.n * 0.05 && Math.abs(cp.cx + cm.cx - 319) < 2 && flipped > 320 * 240 - cp.n * 0.1,
     `mirrored, the model is its own reflection about the centre (${cm.n} of ${cp.n} pixels, centroids ${cp.cx.toFixed(1)} and ${cm.cx.toFixed(1)})`);
+  // the pose between two frames (backlerp): every vertex halfway between where the two frames put it
+  const place = (frame, opts) => { r.beginFrame({ x: -120, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, fov: 90 }); r.drawAlias(ex, frame, 3, [0, 0, 0], [0, 30, 0], 0, opts); return Array.from({ length: ex.numVerts * 3 }, (_, i) => r.av[Math.floor(i / 3) * 7 + (i % 3)]); };
+  const p6 = place(6, {}), p7 = place(7, {}), mid = place(7, { oldFrame: 6, backlerp: 0.5 }), p7b = place(7, { oldFrame: 6, backlerp: 0 });
+  let apart = 0, off = 0;
+  for (let i = 0; i < p6.length; i++) { if (Math.abs(p6[i] - p7[i]) > 1e-3) apart++; if (Math.abs(mid[i] - (p6[i] + p7[i]) / 2) > 1e-3) off++; }   // (av is single precision)
+  assert(apart > 0 && off === 0 && p7b.every((v, i) => v === p7[i]), `with backlerp 0.5 every vertex sits halfway between frames 6 and 7 (${apart} coordinates differ between them, ${off} off the middle); 0 is the frame itself`);
 }
 // the sky's turn (ref_gl's R_DrawSkyBox: time × skyrotate degrees about skyaxis)
 {

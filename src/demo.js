@@ -309,8 +309,10 @@ export class DemoPlayer {
     const origin = [0, 1, 2].map((k) => lerp(ps.origin[k], qs.origin[k], frac));
     const vofs = [0, 1, 2].map((k) => lerp(ps.viewoffset[k], qs.viewoffset[k], frac));
     const ang = [0, 1, 2].map((k) => lerpAngle(ps.viewangles[k], qs.viewangles[k], frac) + lerp(ps.kickAngles[k], qs.kickAngles[k], frac));
+    // (the gun's frame is the newer frame's, blended from the older's by what is left of the way: CL_AddViewWeapon's backlerp)
     const view = { x: origin[0], y: origin[1], z: origin[2], viewZ: origin[2] + vofs[2], pitch: ang[0], yaw: ang[1], roll: ang[2], fov: ps.fov || 90,
-      blend: ps.blend, rdflags: ps.rdflags, gunindex: ps.gunindex, gunframe: ps.gunframe, stats: ps.stats, time: t };
+      blend: ps.blend, rdflags: ps.rdflags, gunindex: ps.gunindex, gunframe: qs.gunframe, gunOldframe: ps.gunframe, gunBacklerp: qs.gunframe !== ps.gunframe ? 1 - frac : 0,
+      stats: ps.stats, time: t };
     // the entities: lerped between the frames they are in both of (CL_AddPacketEntities), the player's own left out
     const self = this.demo.playernum + 1;
     const ents = [], brushes = [], loops = [];
@@ -327,8 +329,10 @@ export class DemoPlayer {
       const mid = this.modelId(name);
       if (!mid) continue;
       const kind = name.endsWith('.sp2') ? 'S' : 'M';
-      // [id, model, frame, skin, x, y, z, pitch, yaw, roll, effects, alpha, kind, renderfx] as decodeFrame lays a row out
-      ents.push([num, mid, s.frame, s.skin, o[0], o[1], o[2], a[0], a[1], a[2], s.effects, s.renderfx & 32 ? 1 : 0, kind, s.renderfx]);
+      // [id, model, frame, skin, x, y, z, pitch, yaw, roll, effects, alpha, kind, renderfx, oldframe, backlerp] as decodeFrame
+      // and FrameLerp lay a row out: the frame the newer server frame's, blended from the older's by what is left of the way
+      const fr = n ? n.frame : s.frame;
+      ents.push([num, mid, fr, s.skin, o[0], o[1], o[2], a[0], a[1], a[2], s.effects, s.renderfx & 32 ? 1 : 0, kind, s.renderfx, s.frame, fr !== s.frame ? 1 - frac : 0]);
     }
     const lights = new Float32Array(64);
     for (let k = 0; k < 64; k++) { const p = this.lightsAt[k]; if (p) lights[k] = (p.charCodeAt(Math.floor(t * 10) % p.length) - 97) / 12.5; }

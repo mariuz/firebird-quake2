@@ -121,8 +121,7 @@ the order they are to be taken.
   checks the lerp headless; the browser test measures the game's clock against the wall's (1.00× at 60 fps,
   where it was 2.9×; a page slower than ten frames a second falls behind at two tics a frame, slow motion as
   `SV_Frame`'s clamp gave it, which CI's runner showed at four frames a second) and the paints against the
-  tics. Left: the model frames themselves are not lerped
-  (`backlerp`), so a walk cycle still steps at 10 Hz.
+  tics. The model frames' own lerp came after (see *The poses between frames* below).
 - **Nightmare skill**: done. Quake 2's skill 3, reachable only from the console (`skill 3`; `skill` alone
   shows it, the number is clamped to 0..3 as `SpawnEntities` clamped the cvar), the menus and the Skill select
   stopping at hard (the select shows "Nightmare" through a hidden option when the console set it). The cvar
@@ -178,6 +177,32 @@ the order they are to be taken.
   packs' effects. Found on the way: the mutant, stopped a stride short of the player's box by `SV_CloseEnough`
   on a diagonal, stood at 100 units with a swipe of 100 and never struck; its swipe reaches 112 until its leap
   is here (`test:monsters` has a `MONSTER_DEBUG` trace of a monster's attack window for the next such case).
+
+The second list, from what the entries above and below left: in the order they are to be taken.
+
+- **The poses between frames**: done. The animations step at 10 Hz, the server's rate, and the client blended
+  each step over the tenth of a second it took (`CL_AddPacketEntities`' `oldframe` and `backlerp`, ref_soft
+  moving every vertex from the old frame's place toward the new one's), so a walk cycle flowed where here it
+  stepped. `FrameLerp` now keeps each entity's frame and the one before it with the tic the change came in,
+  and gives the row the old frame and the blend (1 as the change comes, 0 a tenth of a second on: the change
+  tic 1 → 0.5, the next 0.5 → 0); `drawAlias` takes `oldFrame` and `backlerp` and lerps the vertices, the
+  lighting normals the new frame's; the view weapon blends the same way (`viewFrameLerp`: its idle and firing
+  runs stepped by time), and the demo's entities and gun come as `CL_AddPacketEntities` and `CL_AddViewWeapon`
+  had them, the newer frame's pose blended from the older's by what is left of the way. A newcomer, another
+  model and the SQL-projecting mode do not blend. `test:lerp`, `test:painter` (every vertex halfway at 0.5)
+  and `test:demo` check it.
+- **The attract loop**: the demo behind the main menu when nothing is played, as `CL_Disconnect` and the
+  attract loop had it; and recording, from the frame's rows written as the server's messages
+  (`SV_WriteFrameToClient`), so a recorded game plays in Quake 2 itself.
+- **The HUD drawn to a view's width**: the status bar is 320 wide and overflows a narrower view at its
+  sides with three or four players at 320×240.
+- **The guest's prediction**: a guest sees its own move a round trip late, as a client with `cl_predict 0`
+  did; Quake 2 ran pmove ahead on the client, which here is a JS pmove beside the SQL's, kept in step by
+  `test:replay`.
+- **The full game's remaining monster moves as logic**: the mutant's leap, the floater's zap, the chick's
+  duck, the medic's cable (`TE_MEDIC_CABLE_ATTACK`), on the frame tables as the thirteen rows are.
+- **Cinematics**: `.cin` between units are skipped; the format is a palette and RLE frames with PCM audio.
+- **Deathmatch leftovers**: the quad drop at death, friendly fire's dmflag.
 
 ## Playing the demo
 
