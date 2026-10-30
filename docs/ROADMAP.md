@@ -51,9 +51,9 @@ the order they are to be taken.
   `DF_ALLOW_EXIT`; `CheckDMRules` ends the level at the frag or time limit, at the intermission, bound
   where the map's exit leads or the same map with `DF_SAME_LEVEL`; the next level starts the frags over.
   `dmflags`, `fraglimit` and `timelimit` are console commands, kept in the settings and in the game
-  row. `test:dm` checks all of it headless; the browser test starts a deathmatch from the select. Left:
-  the dmflags with no bearing here (teams by model or skin, friendly fire), the quad drop, and the
-  player's name and skin (see *Player setup*).
+  row. `test:dm` checks all of it headless; the browser test starts a deathmatch from the select. The quad
+  drop and friendly fire came after (the second list's last entry). Left: the dmflags with no bearing here
+  (teams by model or skin), and the player's skin (see *Player setup*).
 - **Demo playback**: done (`src/demo.js`, the Demo select, `demomap` at the console). The pak's
   `demos/q2demo1.dm2` is read as `CL_ParseServerMessage` read the server's messages (`svc_serverdata`,
   `svc_configstring`, `svc_spawnbaseline`, `svc_frame` with its `svc_playerinfo` and `svc_packetentities`,
@@ -279,7 +279,15 @@ The second list, from what the entries above and below left: in the order they a
   sound exactly, the end marker) and the player's clock; the browser test plays a cinematic it makes through
   the page, sees the frames come with the game stopped, the end on its own and the game going on, and a
   key ending a second one.
-- **Deathmatch leftovers**: the quad drop at death, friendly fire's dmflag.
+- **Deathmatch leftovers**: done. With `DF_QUAD_DROP` (16384) a deathmatch death tosses a quad that had more
+  than a second left along with the weapon in hand, the two 22.5° to either side of the view, the quad to go
+  when it would have run out (`toss_client_weapon`, as `TossClientWeapon`; `drop_item` is `Drop_Item` on its
+  own now, `drop_cmd` and the toss both using it). With `DF_NO_FRIENDLY_FIRE` (256) in coop, where every
+  client is on the one team, a client's hit on another does no damage, the knockback staying
+  (`CheckTeamDamage` in `t_damage`; a deathmatch has no teams here, so the flag means nothing there, as it
+  meant nothing without `DF_MODELTEAMS` or `DF_SKINTEAMS`). `test:dm` sees the quad tossed with the weapon,
+  apart, to go at the quad's time, and not without the flag; `test:coop` a client's shot doing nothing to the
+  other with the flag, hurting without it, and the world's hurting either way.
 
 ## Playing the demo
 

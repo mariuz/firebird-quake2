@@ -20,6 +20,7 @@ CREATE OR ALTER PROCEDURE trigger_fire (eid INTEGER, activator INTEGER) AS BEGIN
 CREATE OR ALTER PROCEDURE counter_use (eid INTEGER, activator INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE changelevel (eid INTEGER, activator INTEGER = NULL) AS BEGIN END^
 CREATE OR ALTER PROCEDURE drop_cmd (pe INTEGER, typed VARCHAR(64)) AS BEGIN END^
+CREATE OR ALTER PROCEDURE drop_item (pe INTEGER, cls VARCHAR(40), cnt INTEGER) RETURNS (id INTEGER) AS BEGIN SUSPEND; END^
 CREATE OR ALTER PROCEDURE use_item (pe INTEGER, idx SMALLINT, typed VARCHAR(40)) AS BEGIN END^
 CREATE OR ALTER PROCEDURE button_fire (eid INTEGER, activator INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE train_next (eid INTEGER) AS BEGIN END^
@@ -2128,19 +2129,37 @@ BEGIN
   IF (dm = 1) THEN UPDATE player p SET p.score = p.score - 1 WHERE p.ent_id = :targ;
 END^
 
--- TossClientWeapon: a deathmatch death drops the weapon in hand (not the blaster, not one without ammo)
+-- TossClientWeapon: a deathmatch death drops the weapon in hand (not the blaster, not one without ammo) and, with
+-- DF_QUAD_DROP (16384), a quad with more than a second left, which lasts as long as the quad would have; the two
+-- are tossed 22.5 degrees to either side of the view
 CREATE OR ALTER PROCEDURE toss_client_weapon (pe INTEGER)
 AS
-DECLARE w INTEGER; DECLARE ak SMALLINT; DECLARE idx SMALLINT;
+DECLARE w INTEGER; DECLARE ak SMALLINT; DECLARE idx SMALLINT; DECLARE qf DOUBLE PRECISION; DECLARE dmf INTEGER; DECLARE quad SMALLINT; DECLARE spread DOUBLE PRECISION;
+DECLARE t DOUBLE PRECISION; DECLARE d INTEGER;
 BEGIN
-  SELECT p.weapon FROM player p WHERE p.ent_id = :pe INTO w;
-  IF (w IS NULL OR w <= 1) THEN EXIT;
-  ak = weapon_ammo(w);
-  IF (ak > 0 AND ammo_count(pe, ak) <= 0) THEN EXIT;
+  t = now_();
+  SELECT p.weapon, p.quad_finished, g.dmflags FROM player p CROSS JOIN game g WHERE p.ent_id = :pe AND g.id = 1 INTO w, qf, dmf;
+  IF (w IS NULL) THEN EXIT;
   idx = CASE w WHEN 2 THEN 8 WHEN 4 THEN 9 WHEN 8 THEN 10 WHEN 16 THEN 11 WHEN 32 THEN 12 WHEN 64 THEN 13 WHEN 128 THEN 14 WHEN 256 THEN 15 WHEN 512 THEN 16 WHEN 1024 THEN 17 ELSE 0 END;
-  IF (idx = 0) THEN EXIT;
-  UPDATE player p SET p.weapon = 0 WHERE p.ent_id = :pe;   -- (the dead hold nothing: Drop_Weapon would refuse the weapon in hand)
-  EXECUTE PROCEDURE drop_cmd(pe, item_name(idx));
+  ak = weapon_ammo(w);
+  IF (w <= 1 OR (ak > 0 AND ammo_count(pe, ak) <= 0)) THEN idx = 0;
+  quad = IIF(BIN_AND(dmf, 16384) <> 0 AND qf > t + 1, 1, 0);
+  spread = IIF(idx > 0 AND quad = 1, 22.5e0, 0);
+  IF (idx > 0) THEN
+  BEGIN
+    UPDATE player p SET p.weapon = 0 WHERE p.ent_id = :pe;   -- (the dead hold nothing: Drop_Weapon would refuse the weapon in hand)
+    UPDATE ents e SET e.yaw = e.yaw - :spread WHERE e.id = :pe;
+    EXECUTE PROCEDURE drop_cmd(pe, item_name(idx));
+    UPDATE ents e SET e.yaw = e.yaw + :spread WHERE e.id = :pe;
+  END
+  IF (quad = 1) THEN
+  BEGIN
+    UPDATE ents e SET e.yaw = e.yaw + :spread WHERE e.id = :pe;
+    EXECUTE PROCEDURE drop_item(pe, 'item_quad', 0) RETURNING_VALUES d;
+    UPDATE ents e SET e.yaw = e.yaw - :spread WHERE e.id = :pe;
+    -- (the dropped quad goes when the quad would have run out: G_FreeEdict at quad_framenum)
+    UPDATE ents e SET e.think = 'remove', e.nextthink = :qf, e.owner_id = NULL WHERE e.id = :d;
+  END
 END^
 
 -- Killed(): the target's health fell to zero (the inflictor, the damage and its flags for the obituary)
@@ -2244,6 +2263,10 @@ BEGIN
     IF (qf > now_()) THEN BEGIN damage = damage * 4; knockback = knockback * 4; END
   END
   IF (BIN_AND(flags, 64) <> 0 AND client_of(attacker) IS NOT NULL) THEN EXIT;    -- FL_NOTARGET-style: monsters don't hurt each other here anyway
+  -- CheckTeamDamage: in coop every client is on the one team (OnSameTeam), and with DF_NO_FRIENDLY_FIRE (256) a
+  -- client's hit on another does no damage (the knockback stays, as it did); a deathmatch has no teams here
+  IF (cls = 'player' AND targ <> attacker AND client_of(attacker) IS NOT NULL
+      AND EXISTS (SELECT 1 FROM game g WHERE g.id = 1 AND g.coop = 1 AND BIN_AND(g.dmflags, 256) <> 0)) THEN damage = 0;
 
   -- knockback (a negative one pulls toward the inflictor: the floater's zap)
   IF (BIN_AND(dflags, 8) = 0 AND knockback <> 0 AND mt NOT IN (0, 7, 8, 10) AND inflictor IS NOT NULL AND inflictor > 0) THEN
