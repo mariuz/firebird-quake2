@@ -1,12 +1,14 @@
 // net.js – two pages share one game over a WebRTC data channel: the host's page runs the game in its
 // Firebird as it does alone, the guest sends its usercmd each tic and gets its frame back.
 //
-// What sv_main.c and cl_main.c were to each other, without prediction: the host is the server (its
-// Session runs q2_tic with every client's command, as a local coop game already does with the gamepad's)
-// and the guest is a client that paints what it is sent (the rows frame_all(…, client) returns for it,
-// decoded as the page decodes its own), hears the sounds of the tic at its own ear and shows its own
-// player row on the status bar. The guest's page loads the pak for the textures, models and pictures and
-// the map's geometry for the painter (loadMapModels), and runs no game logic.
+// What sv_main.c and cl_main.c were to each other: the host is the server (its Session runs q2_tic with
+// every client's command, as a local coop game already does with the gamepad's) and the guest is a client
+// that paints what it is sent (the rows frame_all(…, client) returns for it, decoded as the page decodes its
+// own), hears the sounds of the tic at its own ear and shows its own player row on the status bar. The
+// guest's page loads the pak for the textures, models and pictures and the map's geometry for the painter
+// (loadMapModels), and runs no game logic but its own move: each command carries a sequence number, each
+// frame the newest the tic took (`ack`), and the guest runs the commands past it through src/pmove.js from
+// the frame's row (CL_PredictMovement), so its own move shows at once and not a round trip late.
 //
 // The wire is JSON over a data channel, in chunks a channel is sure to take (16 KB); a frame of demo1 is
 // 10–30 KB, one or two chunks, twenty times a second. Signalling is by hand: Pages is static, so the offer
@@ -87,6 +89,7 @@ export class HostLink {
     this.link = link;
     this.pending = [];      // the guest's commands since the last tic
     this.last = null;       // the last command the tic ran
+    this.ack = -1;          // the sequence number of the newest command merged into a tic (the guest predicts past it)
     this.wantInv = false;   // the guest has its inventory screen up
     this.info = null;       // the guest's userinfo: { name, hand }, as it last sent it (ClientUserinfoChanged)
     this.onInfo = null;
@@ -95,7 +98,7 @@ export class HostLink {
     this.droppedFrames = 0;
     link.onMessage = (m) => {
       if (!m) return;
-      if (m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; }
+      if (m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; if (Number.isInteger(m.seq)) this.pendingSeq = m.seq; }
       else if (m.t === 'info') { this.info = { name: typeof m.name === 'string' ? m.name.slice(0, 15) : '', hand: [0, 1, 2].includes(m.hand) ? m.hand : 0 }; this.onInfo?.(this.info); }
     };
     link.onClose = () => this.onClose?.();
@@ -116,6 +119,7 @@ export class HostLink {
       if (p[8]) c[8] = +p[8];
     }
     this.pending.length = 0;
+    if (this.pendingSeq !== undefined) { this.ack = this.pendingSeq; this.pendingSeq = undefined; }
     this.last = c;
     return c;
   }
@@ -125,12 +129,13 @@ export class HostLink {
   sendPic(file) { this.link.send({ t: 'pic', file }); }
   /**
    * The guest's frame: its player row, its frame's rows (packed), the tic's sounds and effects (they come with
-   * the host's own frame query, the first of the tic), the tic's length and, when asked, its inventory rows.
+   * the host's own frame query, the first of the tic), the tic's length, the newest command the tic took (`ack`:
+   * the guest predicts from this frame with the commands after it) and, when asked, its inventory rows.
    * Dropped, not queued, when the channel is behind.
    */
   sendFrame(row, frame, { sounds = [], fx = [], dt = 0.05, inv = null } = {}) {
     if (this.link.buffered > BACKLOG) { this.droppedFrames++; return false; }
-    this.link.send({ t: 'f', row, f: packFrame(frame), sounds, fx, dt, ...(inv ? { inv } : {}) });
+    this.link.send({ t: 'f', row, f: packFrame(frame), sounds, fx, dt, ack: this.ack, ...(inv ? { inv } : {}) });
     this.sentFrames++;
     return true;
   }
@@ -145,6 +150,7 @@ export class GuestLink {
     this.row = null;        // the guest's player row of the last frame
     this.frame = null;      // ... and its frame, unpacked
     this.dt = 0.05;
+    this.ack = -1;          // the newest command (by sequence number) the last frame's tic took
     this.inv = [];          // the inventory rows the host last sent
     this.fresh = false;     // a frame arrived since take()
     this.frames = 0;
@@ -160,7 +166,7 @@ export class GuestLink {
     switch (m.t) {
       case 'map': this.map = m; this.frame = null; this.fresh = false; this.onMap?.(m); break;
       case 'f':
-        this.row = m.row; this.frame = unpackFrame(m.f, m.sounds ?? [], m.fx ?? []); this.dt = m.dt ?? 0.05;
+        this.row = m.row; this.frame = unpackFrame(m.f, m.sounds ?? [], m.fx ?? []); this.dt = m.dt ?? 0.05; this.ack = Number.isInteger(m.ack) ? m.ack : -1;
         if (m.inv) this.inv = m.inv;
         this.fresh = true; this.frames++;
         break;
@@ -168,15 +174,15 @@ export class GuestLink {
       default: break;
     }
   }
-  /** This tic's usercmd (Input.read's array); `inv` asks for the inventory rows with the frames. */
-  sendCommand(cmd, { inv = false } = {}) { this.link.send({ t: 'cmd', c: cmd, inv: !!inv }); }
+  /** This tic's usercmd (Input.read's array); `inv` asks for the inventory rows with the frames; `seq` numbers it for the ack. */
+  sendCommand(cmd, { inv = false, seq } = {}) { this.link.send({ t: 'cmd', c: cmd, inv: !!inv, ...(Number.isInteger(seq) ? { seq } : {}) }); }
   /** The guest's userinfo (the name and the hand of its player setup), at the connect and whenever it changes. */
   sendInfo({ name = '', hand = 0 } = {}) { this.link.send({ t: 'info', name: String(name).slice(0, 15), hand }); }
   /** The newest frame since the last take, with its row, or null. */
   take() {
     if (!this.fresh) return null;
     this.fresh = false;
-    return { row: this.row, frame: this.frame, dt: this.dt, inv: this.inv };
+    return { row: this.row, frame: this.frame, dt: this.dt, inv: this.inv, ack: this.ack };
   }
   close() { this.link.close(); }
 }

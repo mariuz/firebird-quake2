@@ -1366,7 +1366,11 @@ RETURNS (
   help_msg2 VARCHAR(400), help_changed INTEGER, skill SMALLINT, intermission SMALLINT,
   roll DOUBLE PRECISION, bobtime DOUBLE PRECISION, xyspeed DOUBLE PRECISION, ducked SMALLINT,
   inv_sel SMALLINT, pickup_item SMALLINT, timer_icon SMALLINT, timer INTEGER, client SMALLINT, score INTEGER, deathmatch SMALLINT,
-  hand SMALLINT, netname VARCHAR(16))
+  hand SMALLINT, netname VARCHAR(16),
+  -- the move's state, for a client that predicts its own (src/pmove.js): the velocity, the ground flag, the step
+  -- smoothing, the jump key's release, noclip, the bob's pitch (PITCH carries it and the punch)
+  vx DOUBLE PRECISION, vy DOUBLE PRECISION, vz DOUBLE PRECISION, onground SMALLINT, stepz DOUBLE PRECISION, jump_released SMALLINT, noclip SMALLINT,
+  bob_pitch DOUBLE PRECISION)
 AS
 DECLARE i INTEGER = 0; DECLARE itime DOUBLE PRECISION; DECLARE pe INTEGER;
 DECLARE ufwd DOUBLE PRECISION; DECLARE uside DOUBLE PRECISION; DECLARE uyaw DOUBLE PRECISION; DECLARE upitch DOUBLE PRECISION;
@@ -1425,14 +1429,16 @@ BEGIN
               WHEN p.enviro_finished > g.time_ THEN p.enviro_finished WHEN p.breather_finished > g.time_ THEN p.breather_finished ELSE g.time_ END - g.time_ + 1e-9) AS INTEGER),
          p.id, p.score, g.deathmatch,
          -- the client's hand (the page draws the gun by it) and name (the score board)
-         p.hand, COALESCE(NULLIF(p.netname, ''), 'player ' || p.id)
+         p.hand, COALESCE(NULLIF(p.netname, ''), 'player ' || p.id),
+         e.vx, e.vy, e.vz, IIF(BIN_AND(e.flags, 512) <> 0, 1, 0), p.stepz, p.jump_released, IIF(e.movetype = 2, 1, 0), p.bob_pitch
     FROM game g CROSS JOIN player p JOIN ents e ON e.id = p.ent_id
    WHERE g.id = 1
    ORDER BY p.id
     INTO tic, time_, health, max_health, armor, armor_type, power_armor, bullets, shells, rockets, grenades, cells, slugs, weapons, keys, weapon, attack_start, attack_finished, grenade_time,
          px, py, pz, yaw, pitch, view_z, punch, msg, cprint, dmg_take, dmg_save, dmg_time, bonus_time, dead, exit_kind, next_map,
          killed, total_monsters, found_secrets, total_secrets, found_goals, total_goals, waterlevel, watertype, map_name, level_msg, quad, invincible, breather, enviro, leaf, cluster, help_msg,
-         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked, inv_sel, pickup_item, timer_icon, timer, client, score, deathmatch, hand, netname
+         help_msg2, help_changed, skill, intermission, roll, bobtime, xyspeed, ducked, inv_sel, pickup_item, timer_icon, timer, client, score, deathmatch, hand, netname,
+         vx, vy, vz, onground, stepz, jump_released, noclip, bob_pitch
   DO
   BEGIN
     UPDATE player p SET p.dmg_take = 0, p.dmg_save = 0 WHERE p.id = :client AND p.dmg_time < :time_ - 0.05e0;

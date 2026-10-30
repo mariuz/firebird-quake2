@@ -44,26 +44,31 @@ export class FrameLerp {
 
   /**
    * The frame at `frac` (0 the previous tic, 1 the current): { row, faces, ents, brushAngles }. `angles` are the
-   * view's, added to the current row's yaw and pitch (the turn the input holds); `exact` paints the current tic as
-   * it is (the SQL-projecting mode: its faces are projected at the tic's eye and cannot move). An entity whose
+   * view's, added to the current row's yaw and pitch (the turn the input holds); a `view` given instead ({ x, y,
+   * z, viewZ, yaw, pitch, roll }: a guest's own move predicted ahead of the host's frames) is the eye and the
+   * angles as they are, the frame's entities still moved by the fraction; `exact` paints the current tic as it
+   * is (the SQL-projecting mode: its faces are projected at the tic's eye and cannot move). An entity whose
    * frame changed within the last tenth of a second carries the frame it left at [14] and the blend toward the
    * new one at [15] (backlerp: 1 as the change comes, 0 a tenth of a second on).
    */
-  at(frac, { yaw = 0, pitch = 0 } = {}, exact = false) {
+  at(frac, { yaw = 0, pitch = 0, view = null } = {}, exact = false) {
     const c = this.cur;
     if (!c) return null;
     const p = this.prev;
     const f = p && !exact ? Math.max(0, Math.min(1, frac)) : 1;
     const row = { ...c.row };
-    if (f < 1) {
+    if (view) {
+      row.PX = view.x; row.PY = view.y; row.PZ = view.z; row.VIEW_Z = view.viewZ; row.YAW = view.yaw; row.PITCH = view.pitch;
+      if (view.roll != null) row.ROLL = view.roll;
+    } else if (f < 1) {
       const pr = p.row;
       if (Math.hypot(c.row.PX - pr.PX, c.row.PY - pr.PY, c.row.PZ - pr.PZ) < SNAP) {
         row.PX = lerp(pr.PX, c.row.PX, f); row.PY = lerp(pr.PY, c.row.PY, f); row.PZ = lerp(pr.PZ, c.row.PZ, f);
         row.VIEW_Z = lerp(pr.VIEW_Z, c.row.VIEW_Z, f);
       }
     }
-    if (yaw) { row.YAW = (c.row.YAW + yaw) % 360; if (row.YAW < 0) row.YAW += 360; }
-    if (pitch) row.PITCH = Math.max(-89, Math.min(89, c.row.PITCH + pitch));
+    if (yaw && !view) { row.YAW = (c.row.YAW + yaw) % 360; if (row.YAW < 0) row.YAW += 360; }
+    if (pitch && !view) row.PITCH = Math.max(-89, Math.min(89, c.row.PITCH + pitch));
     let ents = c.f.ents, faces = c.f.faces, brushAngles = c.f.brushAngles;
     if (f < 1) {
       ents = c.f.ents.map((e) => {

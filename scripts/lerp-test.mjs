@@ -37,6 +37,10 @@ check(e7[4] === 500 && s.ents.length === 3, 'entity 7, just come, is where it is
 check(s.ents !== L.frame.ents && L.frame.ents[0][4] === 110, 'the current frame\'s rows are left as they were');
 check(s.faces[1][2] === 12 && s.faces[2][2] === 12 && s.faces[0][2] === 0 && s.faces !== L.frame.faces, `the brush model's face rows carry its origin halfway (${s.faces[1][2]}), the world's stay`);
 check(near(s.brushAngles.get(9)[1], 0), `its angles go the short way round (10 → 350: ${s.brushAngles.get(9)[1]})`);
+// a view given (a guest's own move predicted ahead): the eye and the angles as given, the entities still moved by the fraction
+const pv = L.at(0.5, { view: { x: 100, y: 200, z: 300, viewZ: 322, yaw: 45, pitch: -10, roll: 2 }, yaw: 90 });
+check(pv.row.PX === 100 && pv.row.PY === 200 && pv.row.PZ === 300 && pv.row.VIEW_Z === 322 && pv.row.YAW === 45 && pv.row.PITCH === -10 && pv.row.ROLL === 2 && near(pv.ents.find((e) => e[0] === 5)[4], 105),
+  'a predicted view replaces the eye and the angles (the turn not added again), the entities halfway as before');
 s = L.at(0.25);
 check(near(s.row.PX, 2.5) && near(s.ents.find((e) => e[0] === 5)[8], 175), 'a quarter: a quarter of the way');
 check(L.at(-1).row.PX === 0 && L.at(2).row.PX === 10, 'the fraction is clamped to the two tics');

@@ -388,11 +388,24 @@ try {
       const p2 = () => page.evaluate(() => { const c = window.quake2.session.clients[1]; return [c.PX, c.PY]; }).catch(() => [0, 0]);
       const [x0, y0] = await p2();
       await gp.locator('#screen').click();   // (the page scrolled to the texts: the canvas, wherever it is)
-      await gp.keyboard.down('w'); await sleep(1200); await gp.keyboard.up('w');
+      await gp.keyboard.down('w');
+      // the guest predicts its own move (src/pmove.js): while walking, its predicted origin runs ahead of the row the
+      // host last sent, by at most a few tics' worth
+      let ahead = 0, samples = 0, farthest = 0;
+      for (let i = 0; i < 12; i++) {
+        await sleep(100);
+        const s = await gp.evaluate(() => { const p = window.quake2?.prediction, r = window.quake2?.net?.guest?.row; return p && r && p.x != null ? { d: Math.hypot(p.x - r.PX, p.y - r.PY), pending: p.pending, seq: p.seq } : null; }).catch(() => null);
+        if (!s) continue;
+        samples++;
+        if (s.d > 0.5) ahead++;
+        farthest = Math.max(farthest, s.d);
+      }
+      await gp.keyboard.up('w');
       await sleep(300);
       const [x1, y1] = await p2();
       const moved = Math.hypot(x1 - x0, y1 - y0);
       assert(moved > 50, `the guest's W walks its player at the host (${moved.toFixed(0)} units)`);
+      assert(samples > 5 && ahead > 0 && farthest < 120, `the guest's own move is predicted ahead of the host's frames (${ahead} of ${samples} samples ahead, at most ${farthest.toFixed(1)} units)`);
       // the guest leaves: the host plays on, the second player standing; the guest's page starts a game of its own
       await gp.evaluate(() => document.exitPointerLock?.());   // (the view holds the pointer since the click: a button needs it back)
       await sleep(300);

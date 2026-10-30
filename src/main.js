@@ -31,6 +31,7 @@ import { Input, GAME_KEYS, DEFAULT_BINDS, bindKey } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
 import { DemoRecorder } from './record.js';
+import { ClipMap, pmove, stateFromRow } from './pmove.js';
 import { loadSettings, saveSettings as saveSettingsTo, viewSize, OPTIONS_RESET, VIDEO_RESET } from './settings.js';
 
 const $ = (id) => document.getElementById(id);
@@ -420,7 +421,7 @@ async function mapLoaded(setup) {
   $('mapname').textContent = map.name;
   $('map').value = map.name;
   // the guest's page sets itself up from the same (SV_SpawnServer's configstrings, sent at the connect)
-  if (netHost()) net.host.sendMap({ name: map.name, sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack,
+  if (netHost()) net.host.sendMap({ name: map.name, sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack, gravity: setup.gravity,
     speakers: setup.speakers, view: { w: viewWidth(), h: viewHeight(), fov: settings.fov }, nmodels: res.byName.size });
 }
 async function startMap(name, newGame, spawnpoint = null, autosave = true) {
@@ -460,6 +461,9 @@ const lerps = perPlayer(() => new FrameLerp());
 let lastPaint = 0;
 let paints = 0;          // frames painted (the tics are session.frameNo)
 let guestGotAt = 0, guestDt = 0.05, guestSentAt = 0;   // a guest: when the host's last frame came and how long it stands for
+// a guest's prediction (src/pmove.js, CL_PredictMovement): the map's clip data, the commands sent and not yet taken by a
+// host tic (each numbered), the state run from the last frame's row through them, and the error the last frame corrected
+let guestPred = null;   // { cm, seq, cmds: [{ seq, cmd, dt }], st, world, gravity, modelOfFace, error: { dx, dy, dz, at } | null }
 
 async function frame() {
   // a demo with the menu over it (the attract loop): the demo plays on behind, the menu drawn over each frame,
@@ -583,7 +587,8 @@ function paintFrames(now) {
   for (let v = 0; v < views; v++) {
     const L = lerps[v];
     if (!L.frame) continue;
-    const turn = v === 0 && !netGuest() ? { yaw: input.mouseYaw, pitch: input.mousePitch } : {};
+    const predicted = v === 0 && netGuest() ? guestView(now) : null;
+    const turn = predicted ? { view: predicted } : v === 0 && !netGuest() ? { yaw: input.mouseYaw, pitch: input.mousePitch } : {};
     const s = L.at(frac, turn, exact);
     brushFrames = L.frame.brushFrames; brushAngles = s.brushAngles;
     drawFrame(v, s.row, s.faces, s.ents, L.frame.styles, time, dt);
@@ -604,7 +609,8 @@ function guestFrame(now) {
   guestSentAt = now;
   const [cmd] = readInput(frameTics);
   if (!net?.guest?.open) return;
-  net.guest.sendCommand(cmd, { inv: showInv[0] });
+  const seq = guestPred ? ++guestPred.seq : undefined;
+  net.guest.sendCommand(cmd, { inv: showInv[0], seq });
   const got = net.guest.take();
   if (!map) return;
   if (got) {
@@ -620,8 +626,63 @@ function guestFrame(now) {
     lerps[0].push(last, f);
     guestGotAt = now; guestDt = got.dt || 0.05;
     perf.tic = 0; perf.faces = 0; perf.rows = f.faces.length;
+    guestAck(got, now);
   }
+  if (seq !== undefined) guestPredict(cmd, frameTics, seq);
   if (lerps[0].frame) paintFrames(now);
+}
+/** Input.read's usercmd array as pmove's command. */
+const cmdOf = (c) => ({ fwd: c[1], side: c[2], yawd: c[3], pitchd: c[4], jump: c[6], run: c[7] });
+/**
+ * CL_PredictMovement: a host frame came with the newest command its tic took. The commands up to it are done
+ * with; the state is the frame's row run through the ones after it (the host's brush models where the frame
+ * has them: the faces' entities and their origins, the angles the frame carries; the monsters are not clipped
+ * against, as the frame carries no box for them). Where the new state lands away from where the prediction
+ * had it, the difference is the prediction error, faded out over the next tenth of a second
+ * (CL_CheckPredictionError, V_CalcRefdef's prediction_error) so the correction glides instead of snapping.
+ * A dead or frozen player is painted where the host has it.
+ */
+function guestAck(got, now) {
+  const p = guestPred;
+  if (!p) return;
+  const row = got.row;
+  if (row.DEAD || row.INTERMISSION || row.VX == null) { p.st = null; p.cmds = []; p.error = null; return; }
+  const before = p.st ? { x: p.st.x, y: p.st.y, z: p.st.z } : null;
+  p.cmds = p.cmds.filter((c) => c.seq > got.ack);
+  const solids = [], seen = new Set();
+  for (const r of got.frame.faces) {
+    if (r.length !== 5 || !r[1] || seen.has(r[1])) continue;
+    seen.add(r[1]);
+    const mi = p.modelOfFace[r[0]];
+    if (mi > 0) solids.push({ model: mi, origin: [r[2], r[3], r[4]], angles: got.frame.brushAngles.get(r[1]) ?? [0, 0, 0] });
+  }
+  p.world = { solids, boxes: [], gravity: p.gravity };
+  const st = stateFromRow(row);
+  for (const c of p.cmds) pmove(p.cm, st, c.cmd, c.dt, p.world);
+  p.st = p.cmds.length ? st : null;
+  if (before && p.st) {
+    const dx = before.x - st.x, dy = before.y - st.y, dz = before.z - st.z;
+    p.error = Math.hypot(dx, dy, dz) < 640 && (dx || dy || dz) ? { dx, dy, dz, at: now } : null;   // (farther is a teleport: no glide)
+  } else p.error = null;
+}
+/** The command just sent, run ahead on the predicted state (its own turn and its share of a tic). */
+function guestPredict(cmd, tics, seq) {
+  const p = guestPred;
+  if (!p) return;
+  const c = { seq, cmd: cmdOf(cmd), dt: tics * 0.05 };
+  p.cmds.push(c);
+  if (p.st) pmove(p.cm, p.st, c.cmd, c.dt, p.world ?? { gravity: p.gravity });
+  else if (last && !last.DEAD && !last.INTERMISSION && last.VX != null) { p.st = stateFromRow(last); pmove(p.cm, p.st, c.cmd, c.dt, p.world ?? { gravity: p.gravity }); }
+}
+/** The guest's view now: the predicted state's, with what is left of the last correction's error added back. */
+function guestView(now) {
+  const p = guestPred;
+  if (!p?.st?.view) return null;
+  const v = p.st.view;
+  if (!p.error) return v;
+  const k = Math.max(0, 1 - (now - p.error.at) / 100);
+  if (k <= 0) { p.error = null; return v; }
+  return { ...v, x: v.x + p.error.dx * k, y: v.y + p.error.dy * k, z: v.z + p.error.dz * k, viewZ: v.viewZ + p.error.dz * k };
 }
 
 const sprite = (name) => res.models.get(res.byName.get(name))?.spr;
@@ -1034,6 +1095,10 @@ async function guestMap(m) {
   setStatus(`Loading ${m.name} for the host's game…`);
   const { bsp } = loadMapModels(pak, res, m.name, { faceVerts: false });
   map = { name: m.name, bsp };
+  // the prediction's clip data for this map, and which brush model each face belongs to (the frame names the faces)
+  const modelOfFace = new Int32Array(bsp.faces.length).fill(-1);
+  bsp.models.forEach((bm, mi) => { for (let f = bm.firstFace; f < bm.firstFace + bm.numFaces; f++) modelOfFace[f] = mi; });
+  guestPred = { cm: new ClipMap(bsp), seq: guestPred?.seq ?? 0, cmds: [], st: null, world: null, gravity: Number(m.gravity) || 800, modelOfFace, error: null };
   await applyView();
   renderer.setResources(res);
   renderer.particles = [];
@@ -1054,6 +1119,7 @@ function leaveNet() {
   const was = net;
   net = null;
   netStage = null;
+  guestPred = null;
   netEl.panel.hidden = true;
   if (!was) return;
   was.host?.close();
@@ -1148,6 +1214,7 @@ async function boot() {
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, get paints() { return paints; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...recordings.keys()]),
+      get prediction() { const p = guestPred; return p ? { seq: p.seq, pending: p.cmds.length, x: p.st?.x ?? null, y: p.st?.y ?? null, z: p.st?.z ?? null, error: p.error ? Math.hypot(p.error.dx, p.error.dy, p.error.dz) : 0 } : null; },
       sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));

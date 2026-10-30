@@ -62,7 +62,9 @@ the status bar and the score board on F1 (`dmflags`, `fraglimit` and `timelimit`
 Or two pages, over the network: one hosts (Host makes an offer, a short text to send to the other player),
 the other joins (Join takes it and makes an answer to send back), and the host's game runs with the guest's
 player in it, each page painting its own view, the guest's from the frames the host sends it over a WebRTC
-data channel. There is no signalling server on a static site, so the two texts go by hand.
+data channel, its own move predicted ahead of them as the Quake 2 client predicted (the player's move and
+the traces have a JS twin, `src/pmove.js`, held to the SQL's numbers). There is no signalling server on a
+static site, so the two texts go by hand.
 
 The page opens as Quake 2 did, on the attract loop: the recording the pak ships plays with the main menu
 over it (Escape puts the menu away, a key brings it back), and a new game starts from the menu, the Map
