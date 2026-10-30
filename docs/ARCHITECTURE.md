@@ -525,8 +525,14 @@ display frame `Session.demoFrame` moves the player's entity and row to the recor
 frustum and PVS take) and each brush model to where the demo has it (written only when it moved), and asks
 `frame_all` as for the page's own game: the walls are the database's, everything else the recording's, and
 no tic runs. `demoRow` makes the player state the page's `Q2_TIC` row (the stats as the status bar reads
-them, the gun model, frame and angles the server sent, the blend), so `drawFrame` paints it unchanged. A key,
-a click, the pad or the demo's end stops it and a new game starts, as the attract loop gave way to the menu.
+them, the gun model, frame and angles the server sent, the blend), so `drawFrame` paints it unchanged. The
+page opens on the attract loop as Quake 2 did (`attract`: the pak's first demo with the main menu over it;
+a pak without demos starts a game), and comes back to it after a game's end or the menu's quit. A key, a
+click or the pad while a demo plays brings the main menu up (`Key_Event` with `cl.attractloop`), the demo
+playing on behind it (the loop runs the demo's frame and draws the menu over it); the save menu is not to
+be had; the demo's end plays the pak's next (`nextDemo`, the loop's `nextserver`), the menu staying if it
+was up; a new game from the menu, the Map select, the console or a load, or the Demo select put back to
+none, ends the demo.
 
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,

@@ -76,7 +76,27 @@ try {
     if (/q2_tic \d+ ms/.test(s) && !/^0\.0 fps/.test(s)) { ready = true; break; }
     await sleep(1000);
   }
-  assert(ready, `the game is running (${((Date.now() - t0) / 1000).toFixed(0)} s to the first frames): ${await stats()}`);
+  assert(ready, `the page is up (${((Date.now() - t0) / 1000).toFixed(0)} s to the first frames): ${await stats()}`);
+  // the attract loop: the page opens on the pak's demo with the main menu over it, as Quake 2 did; Escape puts the menu
+  // away and the demo plays on, a key brings it back; the save menu is not to be had; the Map select starts the game
+  const attractState = () => page.evaluate(() => ({ demo: window.quake2?.demo, running: window.quake2?.running, menu: window.quake2?.menu?.current?.id ?? null,
+    map: document.getElementById('mapname')?.textContent, select: document.getElementById('map')?.value })).catch(() => ({}));
+  let at = await attractState();
+  assert(at.demo?.name === 'q2demo1' && at.running === true && at.menu === 'main' && /\(demo q2demo1\)/.test(at.map ?? '') && at.select === 'demo1',
+    `the page opens on the attract loop: the demo with the main menu over it (${JSON.stringify({ demo: at.demo?.name, menu: at.menu, map: at.map, select: at.select })})`);
+  const af0 = at.demo.frame; await sleep(800); at = await attractState();
+  assert(at.demo?.frame > af0 && at.menu === 'main', `the demo plays on behind the menu (frame ${af0} → ${at.demo?.frame})`);
+  await page.keyboard.press('Escape'); await sleep(300);
+  at = await attractState();
+  assert(at.menu === null && at.demo, 'Escape puts the menu away, the demo stays');
+  await page.keyboard.press('Space'); await sleep(300);
+  await page.keyboard.press('F2'); await sleep(300);
+  at = await attractState();
+  assert(at.menu === 'main' && at.demo, `a key brings the main menu back, and F2 opens no save menu over a demo (${at.menu})`);
+  await page.selectOption('#map', 'demo1');
+  let playing = false;
+  for (let i = 0; i < 240 && !playing; i++) { await sleep(250); const a = await attractState(); const s = await stats(); playing = a.demo === null && a.running === true && a.menu === null && /q2_tic \d+ ms/.test(s) && !/^0\.0 fps/.test(s); }
+  assert(playing, `the Map select starts the game, the demo and the menu gone (${JSON.stringify(await attractState())})`);
   const want = coi ? 'firebird-embedded.wasm' : 'firebird-embedded-st.wasm';
   assert(engines.size === 1 && engines.has(want), `it runs ${coi ? 'the threaded build' : 'the build without threads'} (${[...engines].join(', ') || 'none'})`);
   assert((await page.evaluate(() => document.getElementById('engine')?.textContent ?? '')).includes(coi ? ', threads' : 'Firebird'),
@@ -263,9 +283,9 @@ try {
     assert(md.setting === 1 && md.select === '1' && md.shown === 'Medium', `skill 1 puts medium back (${JSON.stringify({ setting: md.setting, shown: md.shown })})`);
 
     // the pak's demo from the select: its map loads, the recording plays (the frame count climbs, the stats line says
-    // so, no tic runs), a key stops it and a new game starts
+    // so, no tic runs), a key brings the main menu up over it and it plays on, the select put back to none starts a new game
     const demoState = () => page.evaluate(() => ({ demo: window.quake2?.demo, running: window.quake2?.running, map: document.getElementById('mapname')?.textContent,
-      options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({}));
+      menu: window.quake2?.menu?.current?.id ?? null, options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({}));
     const ds0 = await demoState();
     assert(ds0.options?.includes('q2demo1'), `the Demo select lists the pak's demos (${JSON.stringify(ds0.options)})`);
     await page.selectOption('#demo', 'q2demo1');
@@ -276,11 +296,14 @@ try {
     assert(/demo q2demo1: frame \d+ of 632/.test(await stats()) && /q2_tic 0 ms/.test(await stats()), `the stats line says so, and no tic runs: ${await stats()}`);
     const dp1 = ds.demo.frame; await sleep(1000); const dp2 = (await demoState()).demo?.frame ?? -1;
     assert(dp2 > dp1 && dp2 - dp1 <= 12, `the recording runs at its own pace (${dp2 - dp1} frames in a second)`);
-    await page.keyboard.press('Space');
+    await page.keyboard.press('Space'); await sleep(400);
+    const overMenu = await demoState();
+    assert(overMenu.menu === 'main' && overMenu.demo?.name === 'q2demo1' && overMenu.demo.frame > dp2, `a key brings the main menu up and the demo plays on behind it (frame ${overMenu.demo?.frame})`);
+    await page.keyboard.press('Escape'); await sleep(200);
+    await page.selectOption('#demo', '');
     let stopped = {};
     for (let i = 0; i < 240 && !(stopped.demo === null && stopped.running === true && /^demo1$/.test(stopped.map ?? '')); i++) { await sleep(250); stopped = await demoState(); }
-    assert(stopped.demo === null && stopped.running === true && stopped.map === 'demo1', `a key stops it and a new game starts on the first map (${JSON.stringify({ demo: stopped.demo, map: stopped.map })})`);
-    assert((await page.evaluate(() => document.getElementById('demo').value)) === '', 'the select is back to none');
+    assert(stopped.demo === null && stopped.running === true && stopped.map === 'demo1' && stopped.menu === null, `the select put back to none starts a new game on the first map (${JSON.stringify({ demo: stopped.demo, map: stopped.map })})`);
 
     // without a network: the page reloads from the service worker's caches (the page, the build's files, the pak)
     // and the game runs as before; then the network is back
@@ -375,8 +398,13 @@ try {
     const t1 = Date.now();
     let tready = false;
     while (Date.now() - t1 < 300_000) { const s = await tstats(); if (/q2_tic \d+ ms/.test(s) && !/^0\.0 fps/.test(s)) { tready = true; break; } await sleep(1000); }
-    assert(tready, 'with a touch screen the game loads too');
+    assert(tready, 'with a touch screen the page loads too');
     if (tready) {
+      // (the page opens on the attract loop: the game from the Map select, as above)
+      await tp.selectOption('#map', 'demo1');
+      let tplaying = false;
+      for (let i = 0; i < 240 && !tplaying; i++) { await sleep(250); tplaying = await tp.evaluate(() => !window.quake2?.demo && !!window.quake2?.running && !window.quake2?.menu?.active).catch(() => false); }
+      assert(tplaying, 'and the Map select starts the game');
       const shown = await tp.evaluate(() => { const t = document.getElementById('touch'); return !!t && !t.hidden && getComputedStyle(t).display !== 'none'; });
       assert(shown, 'the on-screen buttons show on a touch screen');
       const box = await tp.locator('#screen').boundingBox();
