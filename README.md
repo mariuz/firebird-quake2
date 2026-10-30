@@ -73,7 +73,9 @@ q2demo1` at the console) plays a recording too: the view and the entities are th
 the server's messages as the client read them, and the walls are the database's, asked for that view each
 frame; at its end the pak's next plays. `record <name>` at the console writes the game from then on as a
 demo of its own, the frames' rows as the server's messages; `stop` (or the level's end) downloads it as
-`<name>.dm2`, which the Demo select plays here and Quake 2 plays itself, with the same pak.
+`<name>.dm2`, which the Demo select plays here and Quake 2 plays itself, with the same pak. A level exit
+that names a cinematic plays it from the pak's `video/` (the demo pak has none; the full game's intro and
+unit transitions play as `cl_cin.c` played them).
 
 Escape brings up Quake 2's menus over the game: a new game, the save slots, the credits, the options with
 `customize controls` (the keys menu: Enter then a key rebinds an action, Backspace clears it; the binds are

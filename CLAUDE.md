@@ -13,7 +13,7 @@ by the same author (mariuz), which live next to this repository under `C:\fbq\`.
 https://mariuz.github.io/firebird-quake2/ by the Pages workflow on every push to `main`.
 
 Layout: `sql/` (schema, physics, game, weapons, monsters, render — loaded in that order),
-`src/` (pak/bsp/md2 parsers, loader, session, net, pmove, demo, record, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
+`src/` (pak/bsp/md2 parsers, loader, session, net, pmove, demo, record, cinematic, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
 tools), `public/` (page, the manifest and icons, the caching service worker `sw.js`, the retired `coi-serviceworker.js`,
 the pak goes in `public/pak/`), `docs/`.
 
@@ -45,6 +45,7 @@ npm run test:lerp                     # the frames between tics: the eye, the en
 npm run test:record                   # a game recorded as a demo and read back: the header, a frame a tenth of a second, the blocks under MAX_MSGLEN, the view, entities, sounds and effects as the rows had them
 npm run test:hud                      # the status bar laid out to a view's width: the classic positions at 320 and wider, rows from the bottom in a narrower view, nothing outside or over another
 npm run test:predict                  # the player's move in JS (a guest's prediction) against the SQL's, tic by tic: the same numbers every tic, the traces, the water, no drift
+npm run test:cinematic                # a .cin made and read back: the Huffman trees as cl_cin.c built them, the decoder and the encoder, a whole file frame by frame, the player's clock
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)

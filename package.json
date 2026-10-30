@@ -42,6 +42,7 @@
     "test:record": "node scripts/record-test.mjs",
     "test:hud": "node scripts/hud-test.mjs",
     "test:predict": "node scripts/predict-test.mjs",
+    "test:cinematic": "node scripts/cinematic-test.mjs",
     "perf": "node scripts/perf-guard.mjs"
   },
   "license": "MIT",

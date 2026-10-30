@@ -259,7 +259,26 @@ The second list, from what the entries above and below left: in the order they a
   floater's zap sparks and sound, the mutant choose the leap from 220 away, take off, land with its thud and
   hurt a body it lands on, and a medic take a shot soldier's corpse, cable it with the three sounds and stand
   it up again with its health and box, the level's monsters one more and the kill as it was.
-- **Cinematics**: `.cin` between units are skipped; the format is a palette and RLE frames with PCM audio.
+- **Cinematics**: done (`src/cinematic.js`). A `.cin` named by a level exit (`ntro.cin+base1`) was skipped;
+  now the page plays it from `video/` when the pak has it (the demo pak has none; the full game's intro
+  and unit transitions do). The format as `cl_cin.c` read it: the header (the picture's size, the sound's
+  rate, width and channels), 256 rows of 256 byte counts from which `Huff1TableInit` built a Huffman tree
+  per previous byte (`huffTables`: the two smallest counts joined, the lowest index on a tie; a row with one
+  count or none has the leaf 255 for its root, as the C left `numhnodes - 1`), then a frame at a time
+  (`CinReader.next`, `SCR_ReadNextFrame`): a command (0 a frame, 1 a new palette first, 2 the end), the
+  compressed picture (its count, then the bits low first down the tree of the byte before,
+  `huffDecompress`) and the frame's fourteenth of a second of raw sound. `huffCompress` is the encoder,
+  the inverse, and `makeCin` writes a whole file from frames: the demo pak has no cinematic, so the tests
+  make one. The page (`playCinematic`, `SCR_PlayCinematic`) draws the frames at fourteen a second in their
+  own palette with the game stopped, queues the sound as raw samples (`Q2Audio.playRaw`, `S_RawSamples`),
+  reads a frame it was too slow for for its sound alone, ends at the file's end or a key, a click or the
+  pad (`SCR_FinishCinematic`) and goes on to the map after the `+`; a host sends the file's name and the
+  guest plays its own copy until the next map comes. `test:cinematic` checks the trees against hand-built
+  cases, the decoder on a hand-packed bit stream, the encoder against the decoder for every byte after every
+  byte and for noise, a whole file read back frame by frame (the header, the palettes, the pictures and the
+  sound exactly, the end marker) and the player's clock; the browser test plays a cinematic it makes through
+  the page, sees the frames come with the game stopped, the end on its own and the game going on, and a
+  key ending a second one.
 - **Deathmatch leftovers**: the quad drop at death, friendly fire's dmflag.
 
 ## Playing the demo
@@ -560,7 +579,7 @@ picker). Missing for the rest of the game:
   giving it back, so a looping train that came round to it again followed the pathtarget. Both as in
   g_func.c now; the ships are unseen until their trigger uses them.
 - **Cutscenes**: the intro and the unit transitions are cinematics (`.cin`); a level exit naming one
-  skips it and goes on to the map after its `+` (`src/levels.js`).
+  plays it from the pak's `video/` (see *Next*) and goes on to the map after its `+` (`src/levels.js`).
 - **Coop**: done for two local clients (there is no networking), as p_client.c and g_items.c had it. The page's
   part: the Players select or the game menu's players spin starts a coop game, the screen split in two views
   (each half as high, the SQL's view with it), the keyboard, mouse and touches the first player's command and

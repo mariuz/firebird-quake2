@@ -81,6 +81,40 @@ export class Q2Audio {
   /** S_StartLocalSound: a sound at full volume from nowhere in the world (the menus' clicks). */
   playLocal(name) { this.playEvents([[0, 0, null, 0, name, 1, 0, null, null, null]], this.listener); }
 
+  /**
+   * S_RawSamples: a cinematic's sound, raw PCM (`width` 1 unsigned bytes or 2 signed little-endian shorts,
+   * `channels` interleaved) at `rate`, queued end to end from a little after now so the chunks play without a gap.
+   */
+  playRaw(samples, rate, width = 1, channels = 1) {
+    if (!this.ctx || !samples?.length) return;
+    const frames = Math.floor(samples.length / (width * channels));
+    if (frames <= 0) return;
+    const buf = this.ctx.createBuffer(channels, frames, rate);
+    const dv = width === 2 ? new DataView(samples.buffer, samples.byteOffset, samples.byteLength) : null;
+    for (let c = 0; c < channels; c++) {
+      const out = buf.getChannelData(c);
+      for (let i = 0; i < frames; i++) {
+        const k = (i * channels + c) * width;
+        out[i] = width === 2 ? dv.getInt16(k, true) / 32768 : (samples[k] - 128) / 128;
+      }
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(this.master);
+    const now = this.ctx.currentTime;
+    if (!this.rawTime || this.rawTime < now) this.rawTime = now + 0.05;
+    src.start(this.rawTime);
+    this.rawTime += buf.duration;
+    (this.rawSources ??= []).push(src);
+    src.onended = () => { const i = this.rawSources.indexOf(src); if (i >= 0) this.rawSources.splice(i, 1); };
+  }
+  /** The raw queue cut (SCR_FinishCinematic). */
+  stopRaw() {
+    for (const s of this.rawSources ?? []) { try { s.stop(); } catch { /* ended */ } }
+    this.rawSources = [];
+    this.rawTime = 0;
+  }
+
   async playEvents(rows, listener) {
     this.listener = listener;
     if (!this.ctx) return;

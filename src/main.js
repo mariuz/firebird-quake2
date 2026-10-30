@@ -32,6 +32,7 @@ import { CREDITS } from './credits.js';
 import { Console } from './console.js';
 import { DemoRecorder } from './record.js';
 import { ClipMap, pmove, stateFromRow } from './pmove.js';
+import { CinReader, CinPlayer, CIN_FPS } from './cinematic.js';
 import { loadSettings, saveSettings as saveSettingsTo, viewSize, OPTIONS_RESET, VIDEO_RESET } from './settings.js';
 
 const $ = (id) => document.getElementById(id);
@@ -57,6 +58,7 @@ const netGuest = () => net?.role === 'guest' && !!net.guest;
 // src/demo.js: a demo of the pak playing (the attract mode): the view and the entities are the recording's, the
 // faces the SQL's for that view; a key or a click stops it and a new game starts
 let demo = null;         // { name, player: DemoPlayer, time, at, frames, cprint, msg }
+let cinematic = null;    // src/cinematic.js: { file, player: CinPlayer, frame, finish } while one plays (SCR_PlayCinematic)
 // src/record.js: the game being written as a demo (`record <name>` at the console, `stop` or the level's end ends
 // it), and the demos recorded this session by name, which the Demo select and `demomap` play like the pak's
 let recorder = null;     // { name, rec: DemoRecorder }
@@ -860,7 +862,12 @@ async function changeLevel(target) {
     await showPicture(`pics/${c.map}`);
     return c.then ? changeLevel(c.then) : endGame();
   }
-  if (c.kind !== 'map') return c.then ? changeLevel(c.then) : endGame();   // cinematics and demos are not played
+  if (c.kind === 'cinematic' && pak.has(`video/${c.map}`)) {
+    if (netHost()) net.host.sendCin(`video/${c.map}`);
+    await playCinematic(`video/${c.map}`);
+    return c.then ? changeLevel(c.then) : endGame();
+  }
+  if (c.kind !== 'map') return c.then ? changeLevel(c.then) : endGame();   // a cinematic the pak lacks, a demo: not played
   if (!pak.has(`maps/${c.map}.bsp`)) {
     setStatus(`${c.map} is not in this pak`);
     await sleep(2500);
@@ -880,6 +887,46 @@ async function showPicture(file) {
   renderer.drawPicFull(p);
   renderer.present(null, p.palette);
   await new Promise((resolve) => setTimeout(() => { anyKey = resolve; }, 1000));
+}
+
+/**
+ * SCR_PlayCinematic: the file's frames at fourteen a second in their own palette, its sound as raw samples, until
+ * the end or a key, a click or the pad (SCR_FinishCinematic); no game runs meanwhile (the cinematic server state).
+ * A frame the page was too slow for is read for its sound and not drawn. The host's guest plays its own copy
+ * (sendCin) and stops when the next map comes.
+ */
+async function playCinematic(file) {
+  return playCinematicFrom(pak.get(file), file);
+}
+async function playCinematicFrom(bytes, file) {
+  running = false;
+  setStatus('');
+  let reader;
+  try { reader = new CinReader(bytes); } catch (err) { console.warn(`[firebird-quake2] ${file}: ${err.message}`); return; }
+  const player = new CinPlayer(reader);
+  const t0 = performance.now();
+  let lastFrame = -1;
+  await new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (done) return; done = true; anyKey = null; cinematic = null; audio.stopRaw(); resolve(); };
+    cinematic = { file, player, frame: -1, finish };
+    anyKey = finish;
+    const step = () => {
+      if (done) return;
+      const i = player.frameIndex((performance.now() - t0) / 1000);
+      let f = null;
+      for (let k = lastFrame + 1; k <= i; k++) {
+        const g = player.frameAt(k);
+        if (!g) break;
+        audio.playRaw(g.samples, reader.rate, reader.sampleWidth, reader.channels);
+        f = g; lastFrame = k;
+      }
+      if (player.finished && i > lastFrame) { finish(); return; }
+      if (f) { renderer.drawPicFull({ w: reader.width, h: reader.height, data: f.image }); renderer.present(null, f.palette); cinematic.frame = lastFrame; }
+      requestAnimationFrame(step);
+    };
+    step();
+  });
 }
 
 /** The game is over (the demo's last exit, a guest's host gone): the attract loop, as Quake 2 went back to it. */
@@ -1078,6 +1125,7 @@ async function netGo() {
       applyUserinfo();   // (the userinfo goes with the connect, as the client's did)
       net.guest.onMap = (m) => guestMap(m).catch((err) => { console.error(err); setStatus(err.message, true); });
       net.guest.onPic = (file) => { if (pak.has(file)) { running = false; const p = loadPcx(pak.get(file)); renderer.drawPicFull(p); renderer.present(null, p.palette); } };
+      net.guest.onCin = (file) => { if (pak.has(file) && !cinematic) playCinematic(file).catch((err) => console.error(err)); };
       net.guest.onClose = () => { if (netGuest()) { net = null; running = false; netState('the host left'); setStatus('The host left. Press a key or click the view for a game of your own.'); anyKey = () => { setStatus(''); endGame(); }; } };
       netEl.panel.hidden = true;
       canvas.scrollIntoView?.({ block: 'start' });
@@ -1089,6 +1137,7 @@ async function netGo() {
 /** The guest's page takes the host's map: its geometry for the painter, the sky, the music, the view. */
 async function guestMap(m) {
   if (!netGuest()) return;
+  if (cinematic) cinematic.finish();   // (the host's next map ends the guest's cinematic, however far it got)
   beginMap();
   if (!pak.has(`maps/${m.name}.bsp`)) { setStatus(`${m.name} is not in this pak`, true); return; }
   if (m.nmodels !== res.byName.size) console.warn(`[firebird-quake2] the host's pak has ${m.nmodels} models, this one ${res.byName.size}: the models may not match`);
@@ -1214,6 +1263,9 @@ async function boot() {
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, get paints() { return paints; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...recordings.keys()]),
+      get cinematic() { return cinematic ? { file: cinematic.file, frame: cinematic.frame, fps: CIN_FPS } : null; },
+      // (the browser test's: a cinematic from bytes it made, the game going on after as it was)
+      cinematicFrom: async (bytes, name = 'test') => { const was = running; await playCinematicFrom(Uint8Array.from(bytes), name); running = was; lastTic = performance.now(); },
       get prediction() { const p = guestPred; return p ? { seq: p.seq, pending: p.cmds.length, x: p.st?.x ?? null, y: p.st?.y ?? null, z: p.st?.z ?? null, error: p.error ? Math.hypot(p.error.dx, p.error.dy, p.error.dz) : 0 } : null; },
       sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
