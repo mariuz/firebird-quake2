@@ -36,48 +36,68 @@ export class Hud {
     }
   }
 
+  /**
+   * The status bar's parts for a row, as single_statusbar lists them: [name, draw(x, y), width]. The health, the
+   * current weapon's ammo and the armour are a number of three digits with an icon after it (74 wide); the selected
+   * item an icon; the timer a number of two with its icon; the pickup an icon and its name; the help icon alone.
+   */
+  parts(r, hud, time) {
+    const frame = Math.floor(time * 10);
+    const num = (x, y, n, width, alt) => this.drawNum(r, x, y, n, width, alt);
+    const icon = (name, x, y) => r.drawPic(this.pic(name), x, y);
+    const out = [];
+    const hp = hud.HEALTH;
+    out.push(['health', (x, y) => { num(x, y, hp, 3, hp <= 25 || (hp > 0 && time - hud.DMG_TIME < 0.4 && frame % 2 === 0)); icon('i_health', x + 50, y); }, 74]);
+    const wp = WEAPONS[hud.WEAPON];
+    if (wp && wp.ammo) { const cnt = hud[wp.ammo.toUpperCase()]; out.push(['ammo', (x, y) => { num(x, y, cnt, 3, cnt <= 5); icon(AMMO_ICONS[wp.ammo], x + 50, y); }, 74]); }
+    // armour: power armour that is on, with its cells, flashing with the other armour's count when there is some
+    const armor = hud.ARMOR > 0 && hud.ARMOR_TYPE > 0;
+    if (hud.POWER_ARMOR > 0 && (!armor || (frame & 8))) out.push(['armor', (x, y) => { num(x, y, hud.CELLS, 3, false); icon('i_powershield', x + 50, y); }, 74]);
+    else if (armor) out.push(['armor', (x, y) => { num(x, y, hud.ARMOR, 3, false); icon(ARMOR_ICONS[hud.ARMOR_TYPE], x + 50, y); }, 74]);
+    if (hud.INV_SEL > 0 && ITEMS[hud.INV_SEL]) out.push(['item', (x, y) => icon(ITEMS[hud.INV_SEL][1], x, y), 24]);
+    const got = ITEMS[hud.PICKUP_ITEM];
+    if (got) out.push(['pickup', (x, y) => { icon(got[1], x, y); r.drawString(this.conchars, got[0], x + 26, y + 8); }, 26 + got[0].length * 8]);
+    if (hud.TIMER_ICON > 0) out.push(['timer', (x, y) => { num(x, y, hud.TIMER, 2, false); icon(TIMER_ICONS[hud.TIMER_ICON], x + 34, y); }, 58]);
+    // STAT_HELPICON: news on the help computer, else the weapon in hand when the view's fov hides the gun
+    if (hud.HELP_ICON) out.push(['help', (x, y) => icon('i_help', x, y), 24]);
+    else if (wp && hud.FOV > 91) out.push(['help', (x, y) => icon(wp.icon, x, y), 24]);
+    return out;
+  }
+
+  /**
+   * The rows of a status bar `w` wide: at 320 and wider the one layout single_statusbar had (the health, ammo and
+   * armour at 0, 100 and 200 along the bottom with the item at 296; the pickup, the help icon at 148 and the timer
+   * at 262 on the row above), centred. Narrower (a split screen's quarter: 160 wide at 320×240) the parts flow
+   * from the left into rows from the bottom up, each into the lowest row with room for it (6 between), the pickup
+   * line and the help icon after the rest, so nothing goes off the sides. Returns [[name, x, y]] of the parts to draw.
+   */
+  layout(parts, w, h) {
+    const yb = h - 24, y2 = h - 50;
+    const at = {};
+    if (w >= 320) {
+      const x0 = (w - 320) >> 1;
+      const fixed = { health: [x0, yb], ammo: [x0 + 100, yb], armor: [x0 + 200, yb], item: [x0 + 296, yb], pickup: [x0, y2], timer: [x0 + 262, y2], help: [x0 + 148, y2] };
+      return parts.map(([name]) => [name, ...fixed[name]]);
+    }
+    // (first fit: a part goes into the lowest row with room for it, so the help icon sits by the timer and a
+    // pickup's long name takes a row of its own; a row is 24 high with 2 between)
+    const rows = [];
+    const order = [...parts.filter(([n]) => n !== 'pickup' && n !== 'help'), ...parts.filter(([n]) => n === 'pickup' || n === 'help')];
+    for (const [name, , width] of order) {
+      let i = rows.findIndex((row) => row.x + width <= w);
+      if (i < 0) { i = rows.length; rows.push({ x: 2 }); }
+      at[name] = [rows[i].x, i];
+      rows[i].x += width + 6;
+    }
+    return parts.map(([name]) => { const [x, i] = at[name]; return [name, x, yb - 26 * i]; });
+  }
+
   /** hud: the Q2_TIC row. time: game time. */
   draw(r, hud, time) {
     const w = r.w, h = r.h;
-    const x0 = (w - 320) >> 1;
-    const yb = h - 24, y2 = h - 50;
-    const frame = Math.floor(time * 10);
-    // health
-    const hp = hud.HEALTH;
-    this.drawNum(r, x0, yb, hp, 3, hp <= 25 || (hp > 0 && time - hud.DMG_TIME < 0.4 && Math.floor(time * 10) % 2 === 0));
-    r.drawPic(this.pic('i_health'), x0 + 50, yb);
-    // ammo
-    const wp = WEAPONS[hud.WEAPON];
-    if (wp && wp.ammo) {
-      const cnt = hud[wp.ammo.toUpperCase()];
-      this.drawNum(r, x0 + 100, yb, cnt, 3, cnt <= 5);
-      r.drawPic(this.pic(AMMO_ICONS[wp.ammo]), x0 + 150, yb);
-    }
-    // armour: power armour that is on, with its cells, flashing with the other armour's count when there is some
-    const armor = hud.ARMOR > 0 && hud.ARMOR_TYPE > 0;
-    if (hud.POWER_ARMOR > 0 && (!armor || (frame & 8))) {
-      this.drawNum(r, x0 + 200, yb, hud.CELLS, 3, false);
-      r.drawPic(this.pic('i_powershield'), x0 + 250, yb);
-    } else if (armor) {
-      this.drawNum(r, x0 + 200, yb, hud.ARMOR, 3, false);
-      r.drawPic(this.pic(ARMOR_ICONS[hud.ARMOR_TYPE]), x0 + 250, yb);
-    }
-    // the selected item
-    if (hud.INV_SEL > 0 && ITEMS[hud.INV_SEL]) r.drawPic(this.pic(ITEMS[hud.INV_SEL][1]), x0 + 296, yb);
-    // the item just picked up: its icon and name
-    const got = ITEMS[hud.PICKUP_ITEM];
-    if (got) {
-      r.drawPic(this.pic(got[1]), x0, y2);
-      r.drawString(this.conchars, got[0], x0 + 26, h - 42);
-    }
-    // the powerup timer: seconds left and the powerup's icon
-    if (hud.TIMER_ICON > 0) {
-      this.drawNum(r, x0 + 262, y2, hud.TIMER, 2, false);
-      r.drawPic(this.pic(TIMER_ICONS[hud.TIMER_ICON]), x0 + 296, y2);
-    }
-    // STAT_HELPICON: news on the help computer, else the weapon in hand when the view's fov hides the gun
-    if (hud.HELP_ICON) r.drawPic(this.pic('i_help'), x0 + 148, y2);
-    else if (wp && hud.FOV > 91) r.drawPic(this.pic(wp.icon), x0 + 148, y2);
+    const parts = this.parts(r, hud, time);
+    const draw = Object.fromEntries(parts.map(([name, fn]) => [name, fn]));
+    for (const [name, x, y] of this.layout(parts, w, h)) draw[name](x, y);
     // dm_statusbar: the frags at the top right (xr -50 yt 2 num 3 14)
     if (hud.DEATHMATCH) this.drawNum(r, w - 50, 2, hud.SCORE ?? 0, 3, false);
     // SCR_DrawCrosshair: ch1-ch3 by the crosshair setting, centred
@@ -163,13 +183,34 @@ export class Hud {
     }
   }
 
+  /**
+   * SCR_DrawCenterString: each line centred. A line longer than the view is wide (a quarter of a split screen; the
+   * game's messages fit 320) wraps at its spaces, so none runs off the sides.
+   */
   drawCenter(r, msg, y) {
-    const lines = String(msg).split(/\\n|\n/);
-    for (const line of lines) {
-      r.drawString(this.conchars, line, (r.w - line.length * 8) >> 1, y);
-      y += 8;
+    const cols = Math.max(1, r.w >> 3);
+    for (const line of String(msg).split(/\\n|\n/)) {
+      for (const part of wrap(line, cols)) {
+        r.drawString(this.conchars, part, (r.w - part.length * 8) >> 1, y);
+        y += 8;
+      }
     }
   }
+}
+
+/** A line in pieces of at most `cols` characters, broken at spaces where there are any (a word longer is cut). */
+export function wrap(line, cols) {
+  if (line.length <= cols) return [line];
+  const out = [];
+  let rest = line;
+  while (rest.length > cols) {
+    let cut = rest.lastIndexOf(' ', cols);
+    if (cut <= 0) cut = cols;
+    out.push(rest.slice(0, cut).trimEnd());
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest) out.push(rest);
+  return out;
 }
 
 const gunAnims = (mdl) => mdl.anims ?? (mdl.anims = Object.fromEntries(mdl.animations().map((a) => [a.name, a])));

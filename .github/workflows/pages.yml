@@ -88,6 +88,11 @@ jobs:
       - name: The console
         run: npm run test:console
 
+      # The status bar laid out to a view's width: the classic positions at 320 and wider, rows from the bottom
+      # in a narrower view (a split screen's quarter), nothing outside the view or over another part
+      - name: The status bar
+        run: npm run test:hud
+
       # The settings: defaults, the storage round trip, bad stored values back to their defaults
       - name: The settings
         run: npm run test:settings

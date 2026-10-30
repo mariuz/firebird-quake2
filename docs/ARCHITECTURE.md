@@ -32,7 +32,7 @@ src/effects.js  explosions, beams, flashes, lights (no DOM)
    SELECT * FROM q2_tic(...)      ─────► 20 Hz game logic, returns the player's view of itself
    SELECT * FROM frame_all(...)   ─────► everything to draw, hear and animate this frame
 src/renderer.js  8-bit software painter (ref_soft re-done in JS)
-src/hud.js       status bar, view weapon frames
+src/hud.js       status bar (laid out to the view's width), view weapon frames
 src/audio.js     Web Audio spatialisation, looped speakers, music
 ```
 
@@ -455,8 +455,10 @@ command, a gamepad each the others' in the order the browser lists them (`Input.
 client); the frame is asked for once per client (`frame({ client })`), the sounds and effects with the first
 (the first player is the listener), and the painter draws each view into a screen split along the middle for
 two, or in quarters for three or four (`Renderer.setSize(w, h, views)`, `present(…, view)`; the SQL's
-`viewcfg` is the one view's size, the fov being horizontal; 640×480 gives four views of 320×240, and the
-status bar overflows a narrower one at its sides). The menus and the pause take the whole screen again. The
+`viewcfg` is the one view's size, the fov being horizontal; 640×480 gives four views of 320×240, and in a
+narrower one the status bar's parts flow into rows from the bottom up, `Hud.layout`, so none leaves the view,
+and a centre print's long line wraps at its spaces;
+the help computer, the inventory and the score board keep their 320 and are clipped). The menus and the pause take the whole screen again. The
 help computer and the inventory screen are per view: F1 and Tab are the first player's, a pad's Back and Y
 its player's (`Input.padScreens`, `padScreens`), its d-pad the inventory's keys (`padImpulse`: invnext,
 invprev, invuse), its Start the menu; the particles are run once a frame and drawn in every view.
@@ -669,6 +671,7 @@ the frame query and the raster. The SQL console runs any statement against the l
 | `entities-test.mjs` | the full game's entities the demo lacks, added to demo1's lump: secret doors, the earthquake, the elevator, the viper and its bomb, the ships, the string display and the clock, the decorations, a turret, target_spawner |
 | `save-test.mjs` | save, play on, load: every entity, mover and light style back as it was; the game keeps running with fresh ids |
 | `input-test.mjs` | the page's input read as Quake's usercmd (`src/input.js`): keys, Shift and the Run setting, the impulses once per press, the mouse, drags and taps on the view's halves, the on-screen buttons; and the gamepad's reading (`src/gamepad.js`): dead zones, the run at the stick's edge, a press counted once, the weapon impulses, the menu driven by d-pad, stick, A and B |
+| `hud-test.mjs` | the status bar (`src/hud.js`) laid out to a view's width against a renderer that records what is drawn: at 320 and wider `single_statusbar`'s one layout, centred (the health, ammo, armour and item icons at 50, 150, 250 and 296 along the bottom; the pickup, the help icon at 148 and the timer at 262 above); at 240, 160 and 80 the parts in rows from the bottom up, as many a row as fit, the pickup line and the help icon after the rest, every picture and character inside the view and none over another; the crosshair centred, the frags at the top right, the health red when low or just hit; a centre print's lines centred at 320 and wrapped at their spaces at 160 |
 | `console-test.mjs` | the console line headless (`src/console.js`): `map`, `fov`, `seed`, `skill` (shown, set for the next game, clamped to 0..3), `save`, `load`, `inven` reach the page's host, the rest reach `player_command`, the history steps and forgets as `Key_Console`'s did, Tab completes |
 | `session-test.mjs` | the game as the page plays it, without the page (`src/session.js`): a map started, tics, the frame decoded (the sounds each once, the speakers every tenth frame, both renderer modes the same world faces), a slot saved, listed and loaded back exactly, levels left and come back to as left, a save carrying them, a unit's end and a new game forgetting them, the death screen's load request taken once, no storage no saves |
 | `golden-test.mjs` | the painter's look: the twelve docs screenshots (three maps, four shots each) rendered again by `screenshot.mjs` and compared to `docs/` pixel for pixel, with the count and the box of what differs; the painter is deterministic, so a difference is a change, regenerated with the shots when it is meant |
