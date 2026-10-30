@@ -12,6 +12,7 @@ import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
 import { Link, Loopback, HostLink, GuestLink, packSignal, unpackSignal, CHUNK, BACKLOG } from '../src/net.js';
+import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));
@@ -121,6 +122,44 @@ check(host.wantInv && Array.isArray(got.inv) && got.inv.length > 0 && got.inv.ev
 guest.sendCommand(idle);
 await hostTic();
 check(!host.wantInv, '... and stop when it is put away');
+
+// ── the guest's prediction (src/pmove.js): each command numbered, the frame acks the newest its tic took, and the
+// frame's row run through the commands after it lands where the host's next frame lands ──
+guest.sendCommand(idle, { seq: 100 }); guest.sendCommand(idle, { seq: 101 });
+r = await hostTic();
+got = guest.take();
+check(host.ack === 101 && got.ack === 101, `the frame acks the newest command the tic took (${got.ack})`);
+guest.sendCommand(idle);
+await hostTic();
+check(guest.take().ack === 101, 'a command without a number leaves the ack as it was');
+const cm = new ClipMap(gbsp);
+const modelOfFace = new Int32Array(gbsp.faces.length).fill(-1);
+gbsp.models.forEach((bm, mi) => { for (let f = bm.firstFace; f < bm.firstFace + bm.numFaces; f++) modelOfFace[f] = mi; });
+// the world the guest's page clips against: the frame's brush models (its faces name them, with their origins and angles)
+const solidsOf = (frame) => {
+  const out = [], seen = new Set();
+  for (const row of frame.faces) { if (row.length !== 5 || !row[1] || seen.has(row[1])) continue; seen.add(row[1]); const mi = modelOfFace[row[0]]; if (mi > 0) out.push({ model: mi, origin: [row[2], row[3], row[4]], angles: frame.brushAngles.get(row[1]) ?? [0, 0, 0] }); }
+  return out;
+};
+// (the other player's box, which the page does not know: here from the host's tables, so the match can be exact)
+const boxes = async () => (await db.query("SELECT e.x + e.minx, e.y + e.miny, e.z + e.minz, e.x + e.maxx, e.y + e.maxy, e.z + e.maxz FROM ents e WHERE e.solid IN (2, 3) AND e.id <> (SELECT p.ent_id FROM player p WHERE p.id = 2)", [], { rowMode: 'array' })).rows
+  .map(([x1, y1, z1, x2, y2, z2]) => ({ mins: [x1, y1, z1], maxs: [x2, y2, z2], contents: 33554432 }));
+const cmdOf = (c) => ({ fwd: c[1], side: c[2], yawd: c[3], pitchd: c[4], jump: c[6], run: c[7] });
+let predErr = 0, acks = 0, walked = 0;
+for (let i = 0; i < 40; i++) {
+  const c = [1, 1, 0, i < 15 ? 3 : i < 30 ? -4 : 0, 0, 0, i === 5 || i === 25 ? 1 : 0, 1, 0];
+  const st = pmove(cm, stateFromRow(got.row), cmdOf(c), 0.05, { solids: solidsOf(got.frame), boxes: await boxes(), gravity: 800 });
+  guest.sendCommand(c, { seq: 200 + i });
+  await hostTic();
+  const was = got.row;
+  got = guest.take();
+  if (got.ack === 200 + i) acks++;
+  walked += Math.hypot(got.row.PX - was.PX, got.row.PY - was.PY);
+  predErr = Math.max(predErr, Math.hypot(st.x - got.row.PX, st.y - got.row.PY, st.z - got.row.PZ), Math.abs(st.view.viewZ - got.row.VIEW_Z), Math.abs(st.view.yaw - got.row.YAW));
+}
+check(acks === 40 && walked > 200, `forty commands, each acked by the frame of its tic, walk the guest ${walked.toFixed(0)} units with turns and two jumps`);
+check(predErr < 1e-6, `the guest's own move run ahead from each frame's row lands where the host's next frame lands (the largest difference ${predErr.toExponential(1)})`);
+check(typeof got.row.VX === 'number' && typeof got.row.ONGROUND === 'number', 'the row the frame carries has the move\'s state the prediction starts from');
 
 // a message longer than a channel message goes in chunks and arrives whole
 const [c, d] = Loopback.pair();

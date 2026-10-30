@@ -13,7 +13,7 @@ by the same author (mariuz), which live next to this repository under `C:\fbq\`.
 https://mariuz.github.io/firebird-quake2/ by the Pages workflow on every push to `main`.
 
 Layout: `sql/` (schema, physics, game, weapons, monsters, render — loaded in that order),
-`src/` (pak/bsp/md2 parsers, loader, session, net, demo, record, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
+`src/` (pak/bsp/md2 parsers, loader, session, net, pmove, demo, record, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
 tools), `public/` (page, the manifest and icons, the caching service worker `sw.js`, the retired `coi-serviceworker.js`,
 the pak goes in `public/pak/`), `docs/`.
 
@@ -44,6 +44,7 @@ npm run test:demo                     # the pak's demo headless: every block rea
 npm run test:lerp                     # the frames between tics: the eye, the entities and the brush models moved by the fraction, snaps, the turn immediate, the poses blended (backlerp)
 npm run test:record                   # a game recorded as a demo and read back: the header, a frame a tenth of a second, the blocks under MAX_MSGLEN, the view, entities, sounds and effects as the rows had them
 npm run test:hud                      # the status bar laid out to a view's width: the classic positions at 320 and wider, rows from the bottom in a narrower view, nothing outside or over another
+npm run test:predict                  # the player's move in JS (a guest's prediction) against the SQL's, tic by tic: the same numbers every tic, the traces, the water, no drift
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
@@ -178,6 +179,12 @@ short stories of what changed and what it measured; keep that.
 - The effect kinds (`fx(kind, …)`, listed in docs/ARCHITECTURE.md §6) are the port's own numbers, not `TE_`'s: a new
   temporary entity gets the next kind in `src/effects.js`, a row in `src/demo.js`'s `TE_KIND`, one in `src/record.js`'s
   `KIND_TE` (how a recording writes it) and a line in the list.
+- `player_think`'s movement (the duck, the jump, friction, the acceleration, gravity, noclip, `walk_move`, `fly_move`,
+  the ground check, the step smoothing, the bob) and the traces (`rhc`, `clip_leaf`, `trace_hull`, `trace_box`,
+  `trace_move`, `check_water`) have a JS twin in `src/pmove.js`, the guest's prediction, which `test:predict` holds
+  to the SQL's numbers tic by tic: a change to the player's move or the traces in SQL is made there too, in the
+  same commit. The tic row carries what the prediction starts from (`VX`…`VZ`, `ONGROUND`, `STEPZ`, `JUMP_RELEASED`,
+  `NOCLIP`, `BOB_PITCH`); a new piece of state the move reads goes there as well.
 - A recording (`record <name>` at the console, `src/record.js`) writes protocol 34 (the released Quake 2's) and
   `CS_MAPCHECKSUM` as `Com_BlockChecksum` of the .bsp (an MD4), which the client checks against the map it loads:
   a recorded game plays in Quake 2 itself only with the same pak. The page plays its own recordings from the Demo

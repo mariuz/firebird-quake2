@@ -26,10 +26,8 @@ the order they are to be taken.
   takes it; a STUN server is asked for at most three seconds, a connection on one machine or one network
   needs none. The guest leaving leaves the host's game with its second client standing (the gamepad
   moves it again); the host leaving ends the guest's game. `test:net` runs the host and guest sides over
-  a loopback in one process; the browser test joins a second page to the first over real WebRTC. Left:
-  prediction (a guest sees its own move a round trip late, as a client with `cl_predict 0` did; Quake 2
-  ran pmove ahead on the client, which here would be a JS pmove beside the SQL's, kept in step by
-  `test:replay`), a TURN relay for the networks a STUN cannot cross, a signalling service of the
+  a loopback in one process; the browser test joins a second page to the first over real WebRTC. The guest
+  predicts its own move (the second list's entry below). Left: a TURN relay for the networks a STUN cannot cross, a signalling service of the
   player's own in place of the texts, a third page (the SQL takes a client number already; the host's
   loop sends one guest), and spectating.
 - **Local deathmatch**: done for two players at one page (the Players select's "Two (deathmatch)", the
@@ -220,9 +218,29 @@ The second list, from what the entries above and below left: in the order they a
   another. A centre print's line longer than the view wraps at its spaces (`Hud.drawCenter`;
   the game's fit 320). The help computer, the inventory and the score board are 256- and 320-wide pictures
   and layouts and still take the whole 320: a narrower view clips them.
-- **The guest's prediction**: a guest sees its own move a round trip late, as a client with `cl_predict 0`
-  did; Quake 2 ran pmove ahead on the client, which here is a JS pmove beside the SQL's, kept in step by
-  `test:replay`.
+- **The guest's prediction**: done. A guest saw its own move a round trip late, as a client with
+  `cl_predict 0` did; Quake 2 ran pmove ahead on the client. `src/pmove.js` is that pmove: the traces of
+  `sql/physics.sql` (`ClipMap`: the BSP's planes, nodes, leaves, brushes and sides with the loader's brush
+  bounds; `rhc`, `clip_leaf`, `trace_hull`, `trace_box`, `trace_move` as `traceHull`, `traceBox`, `trace`,
+  the brush models in their own space, rotated ones through `angleMatrix`) and `player_think`'s movement
+  (the angles, the water level, the duck, the jump, friction, the acceleration on the ground, in the air and
+  in water, gravity, noclip, `walk_move` with `fly_move` and `push_entity`, the ground under the box, the
+  step smoothing and the bob) as `pmove`. The tic row carries what it starts from (`VX`…`VZ`, `ONGROUND`,
+  `STEPZ`, `JUMP_RELEASED`, `NOCLIP`, `BOB_PITCH`). On the wire each command carries a sequence number and
+  each frame the newest its tic took (`ack`); the guest's page (`guestAck`, `guestPredict`, `guestView` in
+  `src/main.js`, `CL_PredictMovement`) runs the frame's row through the commands past the ack, each
+  command it sends through the state at once, and paints the predicted eye and angles (`FrameLerp.at`'s
+  `view`), the frame's entities still lerped. Where a frame's correction lands the state away from where the
+  prediction had it, the difference fades over the next tenth of a second (`CL_CheckPredictionError`,
+  `prediction_error`); a teleport (more than 640 units) snaps. The brush models come from the frame (its
+  faces name them with their origins, the angles ride along); the monsters are not clipped against (the
+  frame carries no box for them: a guest walking into one is put back by the next frame, smoothly), and a
+  dead or frozen player is painted where the host has it. `test:predict` runs the JS beside the SQL over
+  two hundred tics of walking, turning, jumping, crouching, strafing, stairs and a wall on demo1, each tic
+  from the SQL's row, and gets the same numbers every tic (the largest difference 0), the traces agreeing
+  with `trace_move` and the water with `point_contents`, and no drift run free; `test:net` acks the commands
+  and predicts the guest's forty tics exactly; the browser test sees the guest's predicted origin run ahead
+  of the host's frames while it walks.
 - **The full game's remaining monster moves as logic**: the mutant's leap, the floater's zap, the chick's
   duck, the medic's cable (`TE_MEDIC_CABLE_ATTACK`), on the frame tables as the thirteen rows are.
 - **Cinematics**: `.cin` between units are skipped; the format is a palette and RLE frames with PCM audio.

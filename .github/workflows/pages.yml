@@ -122,6 +122,11 @@ jobs:
       - name: A game over the network
         run: npm run test:net
 
+      # The player's move in JS (src/pmove.js, a guest's prediction) against the SQL's, tic by tic over a run on
+      # demo1: the same numbers every tic, the traces, the water, no drift run free
+      - name: The guest's prediction
+        run: npm run test:predict
+
       # A deathmatch headless: the spots, no monsters, the deathmatch items and their respawns, weapons that stay,
       # the frags, the respawn afresh, the exit that kills, the frag and time limits, the dmflags, a save and a level change
       - name: Deathmatch

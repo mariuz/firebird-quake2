@@ -105,14 +105,14 @@ export class Session {
     if (!newGame && this.unitLevels.has(name)) await importLevel(this.db, this.unitLevels.get(name));
     await this.applyUserinfo();
     this.map = { name, bsp };
-    const g = (await this.db.query('SELECT sky, cd_track FROM game')).rows[0];
+    const g = (await this.db.query('SELECT sky, cd_track, gravity FROM game')).rows[0];
     await this.loadStyleBase();
     const speakers = (await this.db.query("SELECT id, x, y, z, noise1, sounds FROM ents WHERE classname = 'target_speaker' AND BIN_AND(spawnflags, 3) <> 0 AND noise1 IS NOT NULL", [], ARR)).rows;
     await this.resetEvents();
     // CL_SetSky: worldspawn's skyrotate and skyaxis (CS_SKYROTATE, CS_SKYAXIS)
     const ws = bsp.entities.find((e) => e.classname === 'worldspawn') ?? {};
     const skyAxis = ws.skyaxis ? ws.skyaxis.trim().split(/\s+/).map(Number).map((v) => (Number.isFinite(v) ? v : 0)) : [0, 0, 0];
-    return { bsp, sky: g.SKY, cdTrack: Number(g.CD_TRACK ?? 0), skyRotate: Number(ws.skyrotate) || 0, skyAxis, speakers };
+    return { bsp, sky: g.SKY, cdTrack: Number(g.CD_TRACK ?? 0), skyRotate: Number(ws.skyrotate) || 0, skyAxis, speakers, gravity: Number(g.GRAVITY ?? 800) };
   }
 
   /**
