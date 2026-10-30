@@ -19,6 +19,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { parseDemo } from '../src/demo.js';
+import { makeCin } from '../src/cinematic.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const coi = process.argv.includes('--coi');
@@ -306,6 +307,27 @@ try {
     let rd = {};
     for (let i = 0; i < 240 && !(rd.demo?.name === 'run' && rd.demo.frame > 3); i++) { await sleep(250); rd = await page.evaluate(() => ({ demo: window.quake2?.demo, map: document.getElementById('mapname')?.textContent })).catch(() => ({})); }
     assert(rd.demo?.name === 'run' && rd.demo.frame > 3 && rd.demo.frames === parsed?.frames.length && /demo1 \(demo run\)/.test(rd.map ?? ''), `the select plays the recording over its map: frame ${rd.demo?.frame} of ${rd.demo?.frames}, ${rd.map}`);
+
+    // a cinematic (src/cinematic.js): the demo pak has none, so one made here (twenty frames of 64×48 with a palette and
+    // sound) plays through the page's SCR_PlayCinematic: the frames come at fourteen a second with the game stopped, it
+    // ends on its own and the game goes on; a second one ends at a key
+    const cinFrames = Array.from({ length: 20 }, (_, k) => ({ image: Uint8Array.from({ length: 64 * 48 }, (_, i) => ((i % 64) + k * 5) & 255), palette: k === 0 ? Uint8Array.from({ length: 768 }, (_, i) => (i * 3) & 255) : null, samples: Uint8Array.from({ length: 1600 }, (_, i) => 128 + Math.round(60 * Math.sin(i / 5))) }));
+    const cinBytes = Array.from(makeCin({ width: 64, height: 48, frames: cinFrames }));
+    await page.evaluate((b) => { window.quake2.cinematicFrom(b, 'test.cin'); }, cinBytes);
+    let cs = null;
+    for (let i = 0; i < 40 && !(cs && cs.frame >= 3); i++) { await sleep(100); cs = await page.evaluate(() => window.quake2.cinematic).catch(() => null); }
+    const cRunning = await page.evaluate(() => window.quake2.running);
+    assert(cs && cs.file === 'test.cin' && cs.frame >= 3 && cs.fps === 14 && cRunning === false, `a cinematic plays with the game stopped: frame ${cs?.frame} of twenty at ${cs?.fps} a second`);
+    let cEnd = cs;
+    for (let i = 0; i < 60 && cEnd; i++) { await sleep(100); cEnd = await page.evaluate(() => window.quake2.cinematic).catch(() => null); }
+    const cBack = await page.evaluate(() => window.quake2.running);
+    assert(cEnd === null && cBack === true, 'it ends on its own after its twenty frames and the game goes on');
+    await page.evaluate((b) => { window.quake2.cinematicFrom(b, 'test2.cin'); }, cinBytes);
+    await sleep(300);
+    await page.keyboard.press('Space');
+    await sleep(200);
+    const cKey = await page.evaluate(() => ({ cin: window.quake2.cinematic, running: window.quake2.running }));
+    assert(cKey.cin === null && cKey.running === true, 'a key ends a cinematic early, as SCR_FinishCinematic did');
 
     // the pak's demo from the select: its map loads, the recording plays (the frame count climbs, the stats line says
     // so, no tic runs), a key brings the main menu up over it and it plays on, the select put back to none starts a new game

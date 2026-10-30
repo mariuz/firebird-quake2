@@ -147,6 +147,11 @@ jobs:
       - name: Demo recording
         run: npm run test:record
 
+      # A cinematic (src/cinematic.js) made and read back: the Huffman trees as Huff1TableInit built them, the
+      # decoder and the encoder, a whole .cin frame by frame to its end marker, the player's clock
+      - name: Cinematics
+        run: npm run test:cinematic
+
       # The figures held: the load of demo1, an idle and a walking tic, the frame query and the raster, each in
       # units of a calibration run on this runner (the engine's PK fetches, a JS loop) against docs/perf-baseline.json;
       # a figure past twice its baseline fails (the runner's noise is well under that; a slip like 17 ms a tic is not)

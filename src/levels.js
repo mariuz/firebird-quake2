@@ -4,7 +4,7 @@
 //   "demo2$base1"        the map demo2, arriving at the info_player_start named base1
 //   "*base1"             the end of a unit: the game stops at the intermission first, then base1
 //   "victory.pcx"        a picture, until a key
-//   "ntro.cin+base1"     a cinematic, then base1 (cinematics are not played here: straight to base1)
+//   "ntro.cin+base1"     a cinematic (played from video/ when the pak has it, src/cinematic.js), then base1
 //
 // The game (SQL) decides on the intermission from the '*' alone, as BeginIntermission did; the page
 // does the rest of the server's work with what this returns.

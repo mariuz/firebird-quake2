@@ -127,6 +127,8 @@ export class HostLink {
   sendMap(setup) { this.link.send({ t: 'map', ...setup }); }
   /** A picture screen at a level's end (the guest shows it until the next map). */
   sendPic(file) { this.link.send({ t: 'pic', file }); }
+  /** A cinematic at a level's end (the guest plays its own copy until the next map). */
+  sendCin(file) { this.link.send({ t: 'cin', file }); }
   /**
    * The guest's frame: its player row, its frame's rows (packed), the tic's sounds and effects (they come with
    * the host's own frame query, the first of the tic), the tic's length, the newest command the tic took (`ack`:
@@ -156,6 +158,7 @@ export class GuestLink {
     this.frames = 0;
     this.onMap = null;
     this.onPic = null;
+    this.onCin = null;
     this.onClose = null;
     link.onMessage = (m) => this.receive(m);
     link.onClose = () => this.onClose?.();
@@ -171,6 +174,7 @@ export class GuestLink {
         this.fresh = true; this.frames++;
         break;
       case 'pic': this.onPic?.(m.file); break;
+      case 'cin': this.onCin?.(m.file); break;
       default: break;
     }
   }
