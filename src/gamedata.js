@@ -123,7 +123,7 @@ export const MONSTERS = [
     run_speed: 10, walk_speed: 6, yaw_speed: 20,
     anims: [['attak1', 32], ['attak2', 16], ['death1', 12], ['death2', 23], ['duck', 7], ['pain1', 5], ['pain2', 5], ['pain3', 21], ['stand1', 30], ['stand2', 30], ['walk', 10], ['run', 10]],
     stand_anim: 'stand1', walk_anim: 'walk', run_anim: 'run', pain_anims: 'pain1,pain2,pain3', death_anims: 'death1,death2',
-    melee_anim: 'attak2', melee_frame: 7, melee_range: 80, melee_dmg: 10,      // ChickSlash: 10 + rand()%6
+    melee_anim: 'attak2', melee_frame: 7, melee_range: 80, melee_dmg: 10,      // ChickSlash: 10 + rand()%6; chick_dodge: a duck a quarter of the time
     missile_anim: 'attak1', missile_frames: '13', missile_kind: 'rocket', attack_chance: 0.3, pain_chance: 1,   // ChickRocket: 50 damage at 500
     sight_snd: 'chick/chksght1.wav', idle_snd: 'chick/chkidle1.wav', search_snd: 'chick/chksrch1.wav', pain_snd: 'chick/chkpain1.wav',
     death_snd: 'chick/chkdeth1.wav', attack_snd: 'chick/chkatck2.wav', melee_snd: 'chick/chkatck4.wav',
@@ -145,7 +145,8 @@ export const MONSTERS = [
     run_speed: 18, walk_speed: 6, yaw_speed: 20,
     anims: [['walk', 12], ['attack', 14], ['attack2', 27], ['duck', 16], ['death', 30], ['pain1', 8], ['pain2', 15], ['run', 6], ['stand', 90]],
     stand_anim: 'stand', walk_anim: 'walk', run_anim: 'run', pain_anims: 'pain1,pain2', death_anims: 'death',
-    // medic_fire_blaster: 2-damage bolts at 1000 from the attack frames (the cable that raises the dead is not here yet)
+    // medic_fire_blaster: 2-damage bolts at 1000 from the attack frames; over a dead monster the cable (attack2) that raises
+    // it (medic_cable in monsters.sql), and a duck under a shot a quarter of the time (medic_dodge)
     missile_anim: 'attack', missile_frames: '3,4,5,6,7,8,9,10', missile_kind: 'bolt2', attack_chance: 0.3, pain_chance: 1,
     sight_snd: 'medic/medsght1.wav', idle_snd: 'medic/idle.wav', search_snd: 'medic/medsrch1.wav', pain_snd: 'medic/medpain1.wav',
     death_snd: 'medic/meddeth1.wav', attack_snd: 'medic/medatck1.wav',
@@ -156,10 +157,11 @@ export const MONSTERS = [
     run_speed: 40, walk_speed: 3, yaw_speed: 20,
     anims: [['attack', 15], ['death1', 9], ['death2', 10], ['pain1', 5], ['pain2', 6], ['pain3', 11], ['run', 6], ['stand', 51], ['walk', 13], ['jump', 8]],
     stand_anim: 'stand', walk_anim: 'walk', run_anim: 'run', pain_anims: 'pain1,pain2,pain3', death_anims: 'death1,death2',
-    // mutant_hit_left: 10 + rand()%6. The leap is not here yet, so the swipe reaches a stride past where SV_CloseEnough
-    // stops a 64-wide monster at the player's box on a diagonal (68 + 40): with Quake's 80 it stood there and never struck
+    // mutant_hit_left: 10 + rand()%6; the swipe reaches a stride past where SV_CloseEnough stops a 64-wide monster at the
+    // player's box on a diagonal (68 + 40): with Quake's 80 it stood there and never struck. Its "missile" is the leap
+    // (mutant_check_jump, mutant_jump: the jump frames, 425 forward and 160 up, 40 + 10 * random() to what it lands on)
     melee_anim: 'attack', melee_frame: 3, melee_range: 112, melee_dmg: 10,
-    attack_chance: 0, pain_chance: 1,
+    missile_anim: 'jump', attack_chance: 0, pain_chance: 1,
     sight_snd: 'mutant/mutsght1.wav', idle_snd: 'mutant/mutidle1.wav', search_snd: 'mutant/mutsrch1.wav', pain_snd: 'mutant/mutpain1.wav',
     death_snd: 'mutant/mutdeth1.wav', melee_snd: 'mutant/mutatck2.wav',
   },
@@ -179,10 +181,11 @@ export const MONSTERS = [
     run_speed: 13, walk_speed: 5, yaw_speed: 30,
     anims: [['actvat', 31], ['attak1', 14], ['attak2', 25], ['attak3', 34], ['death', 13], ['pain1', 7], ['pain2', 8], ['stand1', 52], ['stand2', 52]],
     stand_anim: 'stand1', walk_anim: 'stand2', run_anim: 'stand2', pain_anims: 'pain1,pain2', death_anims: 'death',
-    melee_anim: 'attak2', melee_frame: 7, melee_range: 80, melee_dmg: 5,        // floater_zap: 5 + rand()%6
+    // floater_zap: 5 + rand()%6 of energy damage with a pull of 10, a splash of 32 sparks from its muzzle (monster_melee)
+    melee_anim: 'attak2', melee_frame: 7, melee_range: 80, melee_dmg: 5,
     missile_anim: 'attak1', missile_frames: '3,4,5,6,7,8,9', missile_kind: 'bolt1', attack_chance: 0.3, pain_chance: 1,   // floater_fire_blaster: 1 damage at 1000
     sight_snd: 'floater/fltsght1.wav', idle_snd: 'floater/fltidle1.wav', search_snd: 'floater/fltsrch1.wav', pain_snd: 'floater/fltpain1.wav',
-    death_snd: 'floater/fltdeth1.wav', attack_snd: 'floater/fltatck3.wav', melee_snd: 'floater/fltatck1.wav',
+    death_snd: 'floater/fltdeth1.wav', attack_snd: 'floater/fltatck3.wav', melee_snd: 'floater/fltatck2.wav',
   },
   {
     name: 'flipper', model: 'models/monsters/flipper/tris.md2', skin: 0, health: 50, gib_health: -30, mass: 100, flags: 2,

@@ -106,8 +106,8 @@ the order they are to be taken.
   guns, the railgun, the BFG) and a second ranged attack per monster (`alt_*`) in `monsters.sql`, Makron's
   three, Makron out of Jorg's body. `test:monsters` runs every one of them as it runs the demo's; the smoke
   test's sound check lets a full-game monster's directory be missing. Seeing them waits for a registered
-  pak. Left, under *The full game*: the medic's cable, the mutant's leap, the floater's zap, the chick's
-  duck, the insane marines' forms, the commander body.
+  pak. The medic's cable, the mutant's leap, the floater's zap and the chick's duck came after (the second
+  list's entry below). Left, under *The full game*: the insane marines' forms, the commander body.
 - **Frames between tics**: done (`src/lerp.js`). The loop used to run a tic every animation frame
   (at least one, two at most), so on a 60 Hz display the game ran at three times its speed and painted
   each tic once; now the tics are the wall clock's (20 Hz) and every animation frame paints the last tic's
@@ -173,8 +173,8 @@ the order they are to be taken.
   ricochets, a BFG shot's lasers, sparks, strike and sprite. Not in the demo's game: `TE_BOSSTPORT` (the
   final boss's entrance), `TE_MEDIC_CABLE_ATTACK` (with the medic's cable, see *The full game*), the mission
   packs' effects. Found on the way: the mutant, stopped a stride short of the player's box by `SV_CloseEnough`
-  on a diagonal, stood at 100 units with a swipe of 100 and never struck; its swipe reaches 112 until its leap
-  is here (`test:monsters` has a `MONSTER_DEBUG` trace of a monster's attack window for the next such case).
+  on a diagonal, stood at 100 units with a swipe of 100 and never struck; its swipe reaches 112, and its leap
+  is here now (`test:monsters` has a `MONSTER_DEBUG` trace of a monster's attack window for the next such case).
 
 The second list, from what the entries above and below left: in the order they are to be taken.
 
@@ -241,8 +241,24 @@ The second list, from what the entries above and below left: in the order they a
   with `trace_move` and the water with `point_contents`, and no drift run free; `test:net` acks the commands
   and predicts the guest's forty tics exactly; the browser test sees the guest's predicted origin run ahead
   of the host's frames while it walks.
-- **The full game's remaining monster moves as logic**: the mutant's leap, the floater's zap, the chick's
-  duck, the medic's cable (`TE_MEDIC_CABLE_ATTACK`), on the frame tables as the thirteen rows are.
+- **The full game's remaining monster moves as logic**: done. The chick and the medic duck under a shot a
+  quarter of the time as the soldiers do (`chick_dodge`, `medic_dodge`: two names in `monster_dodge`). The
+  floater's melee is its zap (`floater_zap` in `monster_melee`): a splash of 32 sparks from its muzzle
+  toward the enemy, 5 + rand() % 6 of energy damage with a pull of 10 (a negative knockback, which
+  `t_damage` now takes). The mutant leaps (`mutant_check_jump` in `check_attack`: the enemy neither far
+  above nor far below its box, past 100 units, one think in ten; its "missile" is the jump frames, and
+  `mutant_leap` takes off at the third, 425 forward and 160 up, off the ground with its cry and the leap bit
+  `aiflags` 4096, holds the sixth until it lands, with a thud, or three seconds pass; `impact` hurts what a
+  leaping mutant lands on at more than 400 by 40 + 10 × random(), as `mutant_jump_touch` did). The medic
+  raises the dead (`medic_find_dead`, `medic_take`, `medic_cable`, `monster_revive`: the dead monster in
+  sight within 1024 with the most health becomes its enemy and its own, `aiflags` 8192 as `AI_MEDIC`; it
+  attacks at once with the cable frames, the beam drawn as the parasite's tongue is while the body is within
+  256, not more than 45° up or down and in a clear line, the hook's launch, hit, heal and retract heard, and
+  at the eighteenth frame the corpse is the monster its spawn made, counted again, after the player; raised
+  or gibbed, the medic goes back to the fight). `test:monsters` sees the chick and the medic duck, the
+  floater's zap sparks and sound, the mutant choose the leap from 220 away, take off, land with its thud and
+  hurt a body it lands on, and a medic take a shot soldier's corpse, cable it with the three sounds and stand
+  it up again with its health and box, the level's monsters one more and the kill as it was.
 - **Cinematics**: `.cin` between units are skipped; the format is a palette and RLE frames with PCM audio.
 - **Deathmatch leftovers**: the quad drop at death, friendly fire's dmflag.
 
@@ -510,10 +526,10 @@ picker). Missing for the rest of the game:
   technician (floater), barracuda shark (flipper), the supertank, the hornet (boss2), Makron with Jorg
   (boss3) and the insane marines is in (see *Next*): each a row in `monster_types` (`src/gamedata.js`) with
   its frame table, its attacks kinds of `monster_missile`. Their frame runs come from memory of the m_*.h
-  headers; a registered pak's MD2 supplies the real ones, and is where their timing is to be checked. Not
-  yet: the medic's cable (`medic_cable_attack`, raising a dead monster), the mutant's leap
-  (`mutant_jump`), the floater's zap beam, the chick's duck, the insane marines' crawling and crucified
-  spawnflags, the commander body (`monster_commander_body`, which only sits up when used).
+  headers; a registered pak's MD2 supplies the real ones, and is where their timing is to be checked. The
+  medic's cable, the mutant's leap, the floater's zap and the chick's duck are in (see *Next*). Not yet:
+  the insane marines' crawling and crucified spawnflags, the commander body (`monster_commander_body`,
+  which only sits up when used).
 - **Map entities**: done for `func_door_secret` (back, a second, aside, its wait, and home; shot open
   unless named, or with ALWAYS_SHOOT; silent, as its own moves never played the sounds it loaded),
   `target_earthquake` (a grounded player thrown up and about every 0.1 s, the rumble every half second,

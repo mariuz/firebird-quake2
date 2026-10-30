@@ -81,8 +81,8 @@ for (const m of MONSTERS) {
   }
   assert(e.ENEMY_ID === pe, `${m.name} saw the player (state ${e.ST} after sighting)`);
   assert((await sounds(m.sight_snd)) > 0, `${m.name} called out (${m.sight_snd})`);
-  // a shot along the line to it: soldiers, infantry and gunners duck a quarter of the time, the rest never
-  const dodger = ['soldier_light', 'soldier', 'soldier_ss', 'infantry', 'gunner'].includes(m.name);
+  // a shot along the line to it: soldiers, infantry, gunners, the iron maiden and the medic duck a quarter of the time, the rest never
+  const dodger = ['soldier_light', 'soldier', 'soldier_ss', 'infantry', 'gunner', 'chick', 'medic'].includes(m.name);
   const box0 = await q1(`SELECT minz, maxz FROM ents WHERE id = ${id}`);
   let ducked = null;
   for (let i = 0; i < (dodger ? 60 : 40) && !ducked; i++) {
@@ -210,6 +210,54 @@ for (const m of MONSTERS) {
     assert(bolts > 0, `its hyperblaster fires hyperblaster bolts (${bolts} in flight at once)`);
     await db.exec(`DELETE FROM ents WHERE classname IN ('bolt', 'bfg_ball')`);
   }
+  if (m.name === 'floater') {
+    // floater_zap: the melee is a splash of 32 sparks from its muzzle toward the player (fx 7, count 32, colour 1), heard
+    let zaps = 0;
+    for (let i = 0; i < 80 && !zaps; i++) { await tic(); zaps = (await q1(`SELECT COUNT(*) n FROM fx_events WHERE kind = 7 AND n = ${32 * 16 + 1}`)).N; }
+    assert(zaps > 0 && (await sounds('floater/fltatck2.wav')), `the floater's zap sparks from its muzzle (${zaps} splashes) and is heard`);
+  }
+  if (m.name === 'mutant') {
+    // mutant_check_jump, mutant_jump: beyond 100 units it leaps one time in ten (its jump frames): off the ground at
+    // 425 forward and 160 up with its cry, then lands with a thud; a body it lands on at speed takes 40 to 49
+    await teleport(128, -320, 32, 135);
+    await db.exec(`UPDATE ents SET x = spawn_x, y = spawn_y, z = spawn_z, vx = 0, vy = 0, vz = 0, st = 'run', attack_state = 0, aiflags = 0 WHERE id = ${id}; EXECUTE PROCEDURE link_ent(${id})`);
+    let leapt = null;
+    for (let i = 0; i < 600 && !leapt; i++) {
+      // (kept 220 away: the leap is chosen one think in ten past 100 units, then the next think turns to it and starts the frames)
+      await db.exec(`UPDATE ents SET x = spawn_x, y = spawn_y, z = spawn_z, vx = 0, vy = 0, vz = 0, flags = BIN_OR(flags, 512), enemy_id = ${pe}, anim_frame = 0 WHERE id = ${id} AND st = 'run'`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_think(${id}); END`);
+      const a = await q1(`SELECT st, anim FROM ents WHERE id = ${id}`);
+      if (a.ST === 'missile' && a.ANIM === 'jump') leapt = a;
+      else if (a.ST !== 'run') await db.exec(`UPDATE ents SET st = 'run', attack_state = 0, aiflags = 0, maxz = ${box0.MAXZ} WHERE id = ${id}`);
+    }
+    assert(leapt, 'from 220 away the mutant chooses the leap (missile state, the jump frames)');
+    heard.clear();
+    let air = null, landed = null;
+    for (let i = 0; i < 80 && !landed; i++) {
+      await tic();
+      const a = await q1(`SELECT st, anim, anim_frame, vx, vy, vz, flags, aiflags FROM ents WHERE id = ${id}`);
+      if (!air && (a.AIFLAGS & 4096)) air = a;
+      if (air && !(a.AIFLAGS & 4096) && (a.FLAGS & 512)) landed = a;
+      if (a.ST !== 'missile') break;
+    }
+    for (let i = 0; i < 4; i++) await tic();   // (the thud comes with the landing check's next frame)
+    assert(air && Math.abs(Math.hypot(air.VX, air.VY) - 425) < 30 && air.VZ > 0 && air.VZ <= 160 && !(air.FLAGS & 512) && (await sounds('mutant/mutsght1.wav')),
+      `it takes off at 425 forward and 160 up with its cry (${air ? `${Math.hypot(air.VX, air.VY).toFixed(0)}, ${air.VZ.toFixed(0)} up` : 'never'})`);
+    assert(landed && (await sounds('mutant/thud1.wav')), `and lands with a thud (${landed?.ST}/${landed?.ANIM})`);
+    // the touch: a leaping mutant flying into the player, from where it spawned (open ground) with the player put 80 units
+    // along its way back to the yard (the spot behind the player is monster clip)
+    const sp = await q1(`SELECT spawn_x x, spawn_y y, spawn_z z FROM ents WHERE id = ${id}`);
+    const ux = (128 - sp.X) / Math.hypot(128 - sp.X, -320 - sp.Y), uy = (-320 - sp.Y) / Math.hypot(128 - sp.X, -320 - sp.Y);
+    await teleport(sp.X + ux * 80, sp.Y + uy * 80, sp.Z, 135);   // (on the diagonal, the boxes of 32 and 16 need 48 an axis: 80 leaves a tic's move)
+    const hp0 = (await q1(`SELECT health h FROM ents WHERE id = ${pe}`)).H;
+    await db.exec(`UPDATE ents SET x = ${sp.X}, y = ${sp.Y}, z = ${sp.Z + 2}, yaw = ${Math.atan2(uy, ux) * 180 / Math.PI}, vx = ${ux * 425}, vy = ${uy * 425}, vz = 100, flags = BIN_AND(flags, BIN_NOT(512)), aiflags = 4096, st = 'missile', anim_frame = 3 WHERE id = ${id}; EXECUTE PROCEDURE link_ent(${id})`);
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_anim(${id}, 'jump'); END`);
+    await tic();
+    const took = hp0 - (await q1(`SELECT health h FROM ents WHERE id = ${pe}`)).H;
+    assert(took >= 40 && took <= 49 && !((await q1(`SELECT aiflags a FROM ents WHERE id = ${id}`)).A & 4096), `a body it lands on takes 40 to 49 (${took}), the leap over`);
+    await teleport(128, -320, 32, 135);
+    await db.exec(`UPDATE ents SET x = spawn_x, y = spawn_y, z = spawn_z, vx = 0, vy = 0, vz = 0, st = 'run', aiflags = 0 WHERE id = ${id}; EXECUTE PROCEDURE link_ent(${id})`);
+  }
   if (m.name === 'parasite') {
     // parasite_drain_attack: the launch, the tongue's impact and the drain, each heard; the tongue drawn (fx 16)
     for (let i = 0; i < 40 && !(await sounds('parasite/paratck3.wav')); i++) await tic();
@@ -288,6 +336,48 @@ for (const m of MONSTERS) {
   // (and whatever it left in flight: a boss's last BFG ball would hurt the player during the next monster's turn)
   await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL OR classname IN ('gib', 'debris', 'rocket', 'bfg_ball', 'grenade', 'bolt')");
   await db.exec('UPDATE game SET killed = 0');
+}
+
+// the medic's cable: a dead monster in sight is raised (medic_FindDeadMonster, medic_cable_attack, ED_CallSpawn)
+{
+  console.log('── the medic\'s cable');
+  await teleport(128, -320, 32, 135);
+  await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16), health = 100 WHERE id = ${pe}`);
+  // a soldier killed where it stands: its death plays out to a corpse
+  const sid = (await q1("SELECT * FROM spawn_monster('soldier', 160)")).ID;
+  const sx = await q1(`SELECT x, y, z, yaw FROM ents WHERE id = ${sid}`);
+  await db.exec(`UPDATE ents SET health = 1 WHERE id = ${sid}`);
+  await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE t_damage(${sid}, ${pe}, ${pe}, 10, 0, 0); END`);
+  let corpse = null;
+  let c = null;
+  for (let i = 0; i < 120 && !corpse; i++) { await tic(); c = await q1(`SELECT st, health, anim, anim_frame FROM ents WHERE id = ${sid}`); if (c?.ST === 'dead') corpse = c; }   // (death1 is 36 frames at 10 Hz)
+  assert(corpse && corpse.HEALTH <= 0, `a soldier shot dead lies as a corpse (${JSON.stringify(corpse ?? c)})`);
+  // a medic 120 units beyond it, facing it: the corpse is what it goes for
+  const mid = (await q1(`SELECT * FROM spawn_monster_at('medic', ${sx.X + 120 * Math.cos(135 * Math.PI / 180)}, ${sx.Y + 120 * Math.sin(135 * Math.PI / 180)}, ${sx.Z + 8}, ${sx.YAW})`)).ID;
+  assert(mid, 'a medic spawns beyond it');
+  const killed0 = (await q1('SELECT killed k, total_monsters t FROM game'));
+  heard.clear();
+  let took = null;
+  for (let i = 0; i < 100 && !took; i++) { await tic(); const a = await q1(`SELECT enemy_id e, aiflags a, st FROM ents WHERE id = ${mid}`); if ((a.A & 8192) && a.E === sid) took = a; }
+  assert(took && (await q1(`SELECT owner_id o FROM ents WHERE id = ${sid}`)).O === mid, `the medic takes the corpse for its enemy (AI_MEDIC) and its own (${took?.ST})`);
+  let cabled = 0, revived = null;
+  for (let i = 0; i < 400 && !revived; i++) {
+    await tic();
+    cabled = (await q1(`SELECT COUNT(*) n FROM fx_events WHERE kind = 16 AND n = ${mid}`)).N;
+    const c = await q1(`SELECT st, health, solid, deadflag, maxz FROM ents WHERE id = ${sid}`);
+    if (c && c.HEALTH > 0) revived = c;
+  }
+  assert(cabled > 0 && (await sounds('medic/medatck2.wav')) && (await sounds('medic/medatck3.wav')) && (await sounds('medic/medatck4.wav')),
+    `the cable reaches from the medic's hand to the body (${cabled} frames of it), launched, hooked and healing, each heard`);
+  assert(revived && revived.HEALTH === 30 && revived.SOLID === 3 && revived.DEADFLAG === 0 && revived.MAXZ === 32 && revived.ST !== 'dead',
+    `the soldier stands again with its health and its box (${revived?.HEALTH}, ${revived?.ST})`);
+  const after = await q1('SELECT killed k, total_monsters t FROM game');
+  assert(after.T === killed0.T + 1 && after.K === killed0.K, `it counts among the level's monsters again (${killed0.T} → ${after.T}), the kill as it was`);
+  let back = null;
+  for (let i = 0; i < 40 && !back; i++) { await tic(); const a = await q1(`SELECT aiflags a, enemy_id e FROM ents WHERE id = ${mid}`); if (!(a.A & 8192)) back = a; }
+  assert(back && back.E !== sid, `and the medic, its work done, is back on the player (enemy ${back?.E === pe ? 'the player' : back?.E})`);
+  await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL OR classname IN ('gib', 'bolt')");
+  await db.exec(`UPDATE game SET killed = 0; UPDATE ents SET flags = BIN_OR(flags, 16) WHERE id = ${pe}`);
 }
 
 // the player's trail and a monster's pursuit when it loses sight (p_trail.c, ai_run)
