@@ -20,7 +20,7 @@ import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
 import { Effects } from './effects.js';
-import { Hud, viewFrame } from './hud.js';
+import { Hud, viewFrameLerp } from './hud.js';
 import { Menu, saveComment } from './menu.js';
 import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
 import { SAVE_VERSION } from './savegame.js';
@@ -681,7 +681,7 @@ function demoRow(st) {
     CLIENT: 1, TIME_: d.time, PX: v.x, PY: v.y, PZ: v.z, VIEW_Z: v.viewZ, YAW: v.yaw, PITCH: v.pitch, ROLL: v.roll,
     HEALTH: s[1], ARMOR: ARMOR_ICONS.includes(armorIcon) ? s[5] : 0, ARMOR_TYPE: Math.max(0, ARMOR_ICONS.indexOf(armorIcon)),
     POWER_ARMOR: armorIcon === 'i_powershield' ? 1 : 0, CELLS: armorIcon === 'i_powershield' ? s[5] : 0,
-    WEAPON: weapon, GUN_MODEL: gunName, GUNFRAME: v.gunframe, GUN_ANGLES: st.ps.gunAngles, BLEND: v.blend,
+    WEAPON: weapon, GUN_MODEL: gunName, GUNFRAME: v.gunframe, GUN_OLDFRAME: v.gunOldframe, GUN_BACKLERP: v.gunBacklerp, GUN_ANGLES: st.ps.gunAngles, BLEND: v.blend,
     INV_SEL: itemByIcon(image(s[6])), PICKUP_ITEM: itemByIcon(image(s[7])),
     TIMER_ICON: Math.max(0, TIMER_ICONS.indexOf(image(s[9]))), TIMER: s[10], HELP_CHANGED: s[11] ? 1 : 0,
     DMG_TIME: s[15] & 1 ? d.time : -10, BONUS_TIME: -10, DMG_TAKE: 0, DMG_SAVE: 0,
@@ -758,8 +758,9 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       // R_LightPoint at the origin, with the dynamic lights (a projectile's own light makes it bright); items glow
       const light = lightPoint(bsp, x, y, z);
       const spin = effects & 1 ? (time * 100) % 360 : 0;   // EF_ROTATE items spin
+      // (a row that carries the frame it left and the blend toward this one, from the lerp or the demo: the pose between)
       r.drawAlias(m.mdl, frame, skin, [x, y, z], [pitch, yaw + spin, roll], light,
-        { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0 });
+        { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0, oldFrame: e[14], backlerp: e[15] ?? 0 });
       if (effects & 8) r.particles.push({ x, y, z, vx: 0, vy: 0, vz: 0, color: 0xe0 + (Math.random() * 4 | 0), die: time + 0.05, type: 'still' });   // the blaster bolt's glow
       if (effects & 16) r.spawnParticles('gunshot', x, y, z, 2, [0, 0, 0], 0xe0 + 8);   // rocket smoke
     } else if (kind === 'S') {
@@ -794,8 +795,10 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       // the gun: RF_MINLIGHT, lit from the eye (CL_AddViewWeapon)
       const light = lightPoint(bsp, last.PX, last.PY, last.VIEW_Z);
       r.zb.fill(0, 0, r.w * r.h);
-      r.drawAlias(vm.mdl, last.GUNFRAME ?? viewFrame(vm.mdl, last, time), 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light,
-        { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z), mirror: last.HAND === 1 });
+      // its frame with the one it stepped from and the blend (CL_AddViewWeapon's backlerp): the demo's as the server sent them
+      const [gframe, gold, gbl] = last.GUNFRAME != null ? [last.GUNFRAME, last.GUN_OLDFRAME ?? last.GUNFRAME, last.GUN_BACKLERP ?? 0] : viewFrameLerp(vm.mdl, last, time);
+      r.drawAlias(vm.mdl, gframe, 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light,
+        { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z), mirror: last.HAND === 1, oldFrame: gold, backlerp: gbl });
     }
   }
   // ... warped (D_WarpScreen) onto the screen; the status bar is drawn over that

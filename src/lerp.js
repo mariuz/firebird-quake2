@@ -7,19 +7,32 @@
 // fraction: the eye between the two origins, the alias models and sprites between their two poses (one just come
 // or moved more than 512 units snaps), the brush models' face rows with their origins and angles between the two
 // (the doors, platforms and fans move smoothly), the row's angles the current tic's plus whatever the caller adds
-// (the mouse's turn not yet sent, so looking around never waits for a tic). Nothing here touches the DOM.
+// (the mouse's turn not yet sent, so looking around never waits for a tic), and each alias model's pose between
+// the frame it left and the one it is in (CL_AddPacketEntities' oldframe and backlerp: the animations step at
+// 10 Hz, the server's rate, and the client blended each step over the tenth of a second it took). Nothing here
+// touches the DOM.
 
 const lerp = (a, b, f) => a + (b - a) * f;
 const lerpAngle = (a, b, f) => { let d = b - a; if (d > 180) d -= 360; if (d < -180) d += 360; return a + d * f; };
 const SNAP = 512;   // an entity that moved farther in one tic teleported: no lerp (CL_AddPacketEntities' 512)
+const TIC = 0.05, BLEND = 0.1;   // a tic; a frame's blend, the server frame the client lerped over
 
 export class FrameLerp {
-  constructor() { this.prev = null; this.cur = null; }
+  constructor() {
+    this.prev = null; this.cur = null;
+    this.anim = new Map();   // each entity's frame, the one before it and the tic the change came with, for the blend
+  }
 
   /** A tic's frame comes in: `row` its Q2_TIC row, `f` decodeFrame's result (the fast mode's face rows). */
   push(row, f) {
     const ents = new Map();
-    for (const e of f.ents) ents.set(e[0], e);
+    for (const e of f.ents) {
+      ents.set(e[0], e);
+      const a = this.anim.get(e[0]);
+      if (!a || a.model !== e[1]) this.anim.set(e[0], { model: e[1], frame: e[2], old: e[2], t0: -1 });   // (a newcomer, or another model: no blend)
+      else if (a.frame !== e[2]) { a.old = a.frame; a.frame = e[2]; a.t0 = row.TIME_; }
+    }
+    for (const id of this.anim.keys()) if (!ents.has(id)) this.anim.delete(id);
     const brushes = new Map();   // the brush models' origins, by entity, from the first face row of each
     for (const r of f.faces) if (r.length === 5 && r[1] && !brushes.has(r[1])) brushes.set(r[1], [r[2], r[3], r[4]]);
     this.prev = this.cur;
@@ -32,7 +45,9 @@ export class FrameLerp {
   /**
    * The frame at `frac` (0 the previous tic, 1 the current): { row, faces, ents, brushAngles }. `angles` are the
    * view's, added to the current row's yaw and pitch (the turn the input holds); `exact` paints the current tic as
-   * it is (the SQL-projecting mode: its faces are projected at the tic's eye and cannot move).
+   * it is (the SQL-projecting mode: its faces are projected at the tic's eye and cannot move). An entity whose
+   * frame changed within the last tenth of a second carries the frame it left at [14] and the blend toward the
+   * new one at [15] (backlerp: 1 as the change comes, 0 a tenth of a second on).
    */
   at(frac, { yaw = 0, pitch = 0 } = {}, exact = false) {
     const c = this.cur;
@@ -77,6 +92,23 @@ export class FrameLerp {
           brushAngles.set(ent, q ? [lerpAngle(q[0], a[0], f), lerpAngle(q[1], a[1], f), lerpAngle(q[2], a[2], f)] : a);
         }
       }
+    }
+    if (!exact) {
+      // the poses: a frame that changed in the tic ending at t0 blends from the old one over a tenth of a second
+      // from that tic's start (the change tic 1 → 0.5, the next 0.5 → 0), as the client's backlerp did over a server frame
+      const time = c.row.TIME_ - (1 - f) * TIC;
+      let out = null;
+      for (let i = 0; i < ents.length; i++) {
+        const e = ents[i], a = this.anim.get(e[0]);
+        if (!a || a.t0 < 0 || a.old === a.frame) continue;
+        const bl = 1 - Math.max(0, Math.min(1, (time - a.t0 + TIC) / BLEND));
+        if (bl <= 0) continue;
+        if (!out) out = ents.slice();
+        const r = e.slice();
+        r[14] = a.old; r[15] = bl;
+        out[i] = r;
+      }
+      if (out) ents = out;
     }
     return { row, faces, ents, brushAngles, frac: f };
   }

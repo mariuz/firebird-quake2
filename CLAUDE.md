@@ -41,7 +41,7 @@ npm run test:coop                     # a coop game headless: two clients, their
 npm run test:net                      # a game shared over a link headless: the guest's commands merged, its frames sent, the map and a level change, chunks, the signalling texts
 npm run test:dm                       # a deathmatch headless: the spots, no monsters, items that come back, the frags, respawns, the exit, the limits, the dmflags
 npm run test:demo                     # the pak's demo headless: every block read exactly, the view and entities between frames, the events once, the session's demo frame, a frame painted
-npm run test:lerp                     # the frames between tics: the eye, the entities and the brush models moved by the fraction, snaps, the turn immediate
+npm run test:lerp                     # the frames between tics: the eye, the entities and the brush models moved by the fraction, snaps, the turn immediate, the poses blended (backlerp)
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)

@@ -614,6 +614,13 @@ export class Renderer {
     const verts = frame.verts;
     const scx = frame.scale[0], scy = frame.scale[1], scz = frame.scale[2];
     const trx = frame.translate[0], try_ = frame.translate[1], trz = frame.translate[2];
+    // the pose between two frames (CL_AddPacketEntities' oldframe and backlerp: ref_soft moved each vertex from the old
+    // frame's place toward the new one's by the front lerp, the lighting normal the new frame's)
+    const bl = opts.backlerp > 0 && opts.oldFrame != null ? Math.min(1, opts.backlerp) : 0;
+    const oldf = bl > 0 ? mdl.frames[Math.min(Math.max(opts.oldFrame | 0, 0), mdl.frames.length - 1)] : null;
+    const ov = oldf && oldf !== frame ? oldf.verts : null, fl = 1 - bl;
+    const oscx = ov ? oldf.scale[0] * bl : 0, oscy = ov ? oldf.scale[1] * bl : 0, oscz = ov ? oldf.scale[2] * bl : 0;
+    const otrx = ov ? oldf.translate[0] * bl : 0, otry = ov ? oldf.translate[1] * bl : 0, otrz = ov ? oldf.translate[2] * bl : 0;
     const n = mdl.numVerts;
     this.aliasRoom(n);
     const av = this.av;
@@ -639,9 +646,14 @@ export class Renderer {
     const mir = opts.mirror ? -1 : 1, scm = sc * mir;   // (mirrored: the screen x about the view's centre, the winding reversed)
     let anyNear = false;
     for (let i = 0; i < n; i++) {
-      const mx = verts[i * 4] * scx + trx;
-      const my = verts[i * 4 + 1] * scy + try_;
-      const mz = verts[i * 4 + 2] * scz + trz;
+      let mx = verts[i * 4] * scx + trx;
+      let my = verts[i * 4 + 1] * scy + try_;
+      let mz = verts[i * 4 + 2] * scz + trz;
+      if (ov) {
+        mx = mx * fl + ov[i * 4] * oscx + otrx;
+        my = my * fl + ov[i * 4 + 1] * oscy + otry;
+        mz = mz * fl + ov[i * 4 + 2] * oscz + otrz;
+      }
       const wx = ox + F0 * mx - R0 * my + U0 * mz;
       const wy = oy + F1 * mx - R1 * my + U1 * mz;
       const wz = oz + F2 * mx - R2 * my + U2 * mz;

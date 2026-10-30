@@ -19,7 +19,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) < eps;
 
 // ── synthetic frames ──
 const row = (x, y, z, yaw, pitch, t) => ({ PX: x, PY: y, PZ: z, VIEW_Z: z + 22, YAW: yaw, PITCH: pitch, ROLL: 0, TIME_: t, HEALTH: 100 });
-const ent = (id, mid, x, y, z, yaw) => [id, mid, 3, 0, x, y, z, 0, yaw, 0, 0, 0, 'M', 0];
+const ent = (id, mid, x, y, z, yaw, frame = 3) => [id, mid, frame, 0, x, y, z, 0, yaw, 0, 0, 0, 'M', 0];
 const frame = (ents, faces, brushAngles = new Map()) => ({ ents, faces, styles: new Float32Array(64), brushFrames: new Map(), brushAngles, sounds: [], fx: [], loops: [] });
 const L = new FrameLerp();
 check(L.frame === null && L.at(0.5) === null, 'before any frame there is nothing to paint');
@@ -52,6 +52,23 @@ check(s.ents[0][4] === 110 && s.row.PX === 10 && s.faces === L.frame.faces, 'an 
 L.push(row(2000, 20, 30, 10, 5, 1.15), frame([], [[1, 0, 0, 0, 0]]));
 check(L.at(0.5).row.PX === 2000, 'the eye 2000 units on snaps too');
 check(pm.row.PX === 5, '(a frame given before stays as given)');
+
+// ── the poses: a frame change blends from the old frame over a tenth of a second (backlerp) ──
+const B = new FrameLerp();
+B.push(row(0, 0, 0, 0, 0, 1), frame([ent(5, 1, 0, 0, 0, 0, 3), ent(6, 1, 0, 0, 0, 0, 7)], [[1, 0, 0, 0, 0]]));
+check(B.at(0.5).ents.every((e) => e.length === 14), 'a first frame blends from nothing');
+B.push(row(0, 0, 0, 0, 0, 1.05), frame([ent(5, 1, 0, 0, 0, 0, 4), ent(6, 1, 0, 0, 0, 0, 7)], [[1, 0, 0, 0, 0]]));
+let b = B.at(0.5);
+let b5 = b.ents.find((e) => e[0] === 5), b6 = b.ents.find((e) => e[0] === 6);
+check(b5[2] === 4 && b5[14] === 3 && near(b5[15], 0.75) && b6.length === 14, `a frame that stepped 3 → 4 carries the old frame and, halfway through the tic, a blend of 0.75 toward the new (${b5[14]}, ${b5[15]}); one that stayed carries nothing`);
+check(near(B.at(0).ents.find((e) => e[0] === 5)[15], 1) && near(B.at(1).ents.find((e) => e[0] === 5)[15], 0.5), 'the blend runs from 1 at the tic\'s start to 0.5 at its end');
+check(B.frame.ents[0].length === 14, 'the frame\'s own rows are left as they were');
+B.push(row(0, 0, 0, 0, 0, 1.1), frame([ent(5, 1, 0, 0, 0, 0, 4), ent(6, 1, 0, 0, 0, 0, 7)], [[1, 0, 0, 0, 0]]));
+check(near(B.at(0.5).ents.find((e) => e[0] === 5)[15], 0.25) && B.at(1).ents.find((e) => e[0] === 5).length === 14, 'over the next tic it runs on to 0, and is then gone');
+B.push(row(0, 0, 0, 0, 0, 1.15), frame([ent(5, 2, 0, 0, 0, 0, 9)], [[1, 0, 0, 0, 0]]));
+check(B.at(0.5).ents[0].length === 14, 'another model: no blend');
+B.push(row(0, 0, 0, 0, 0, 1.2), frame([ent(5, 2, 0, 0, 0, 0, 10)], [[1, 0, 0, 0, 0]]));
+check(B.at(0.5).ents[0][14] === 9 && B.at(0.5, {}, true).ents[0].length === 14, 'its next step blends; the exact mode (the SQL-projecting renderer) does not');
 
 // ── a real game: two tics walking, the frame between ──
 const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));

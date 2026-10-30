@@ -85,8 +85,16 @@ check(player.at(fa.time + 0.07).events.sounds.length === 0, 'and not again');
 const both = [...fa.ents.keys()].find((n) => n !== self && fb.ents.has(n) && demo.models[fa.ents.get(n).modelindex] && demo.models[fa.ents.get(n).modelindex][0] !== '*');
 const row = st.ents.find((e) => e[0] === both);
 const sa = fa.ents.get(both), sb = fb.ents.get(both);
-check(row && row.length === 14 && row[1] === modelIds.get(demo.models[sa.modelindex]) && near(row[4], (sa.origin[0] + sb.origin[0]) / 2) && near(row[5], (sa.origin[1] + sb.origin[1]) / 2)
-  && row[2] === sa.frame && row[12] === 'M', `entity ${both} is a row [id, model, frame, skin, x, y, z, …] with the page's model id, halfway between its two origins`);
+check(row && row.length === 16 && row[1] === modelIds.get(demo.models[sa.modelindex]) && near(row[4], (sa.origin[0] + sb.origin[0]) / 2) && near(row[5], (sa.origin[1] + sb.origin[1]) / 2)
+  && row[2] === sb.frame && row[14] === sa.frame && near(row[15], sa.frame === sb.frame ? 0 : 0.5) && row[12] === 'M',
+  `entity ${both} is a row [id, model, frame, skin, x, y, z, …, oldframe, backlerp] with the page's model id, halfway between its two origins, the newer frame's pose blended by half from the older's (${sa.frame} → ${sb.frame})`);
+const stepped = demo.frames.findIndex((f, i) => i && [...f.ents].some(([n, s]) => n !== self && demo.frames[i - 1].ents.get(n)?.frame !== undefined && demo.frames[i - 1].ents.get(n).frame !== s.frame && demo.models[s.modelindex]?.[0] !== '*'));
+if (stepped > 0) {
+  const q = player.at(demo.frames[stepped - 1].time + 0.025);
+  const e = q.ents.find((r) => r[15] > 0);
+  check(e && near(e[15], 0.75) && e[14] !== e[2], `a quarter of the way to a frame where a model steps, its blend is 0.75 from frame ${e?.[14]} to ${e?.[2]}`);
+}
+check(near(st.view.gunBacklerp, fa.ps.gunframe === fb.ps.gunframe ? 0 : 0.5) && st.view.gunframe === fb.ps.gunframe && st.view.gunOldframe === fa.ps.gunframe, 'the gun\'s frame comes the same way, with the older frame and the blend');
 check(!st.ents.some((e) => e[0] === self), 'the recording player\'s own entity is left out (the view is its)');
 check(st.brushes.length > 0 && st.brushes.every((b) => b.name[0] === '*' && b.origin.length === 3 && b.angles.length === 3 && brushNames.has(b.name)), `the brush models come apart, by name (${st.brushes.map((b) => b.name).join(', ')})`);
 check(st.lights.length === 64 && st.lights[0] > 0.9 && st.lights[0] < 1, 'the light styles are the demo\'s configstrings at the time (style 0 at "m")');

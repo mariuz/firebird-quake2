@@ -24,8 +24,9 @@ keyboard/mouse → SELECT * FROM q2_tic(...)        game logic: 20 Hz, PSQL
 ```
 
 The tics are the wall clock's, 20 a second; the page paints at the display's rate, each frame the last
-tic's moved toward the current one by the fraction of the tic gone by, as Quake 2's client drew the
-server's frames (`src/lerp.js`).
+tic's moved toward the current one by the fraction of the tic gone by, and each model's pose blended from
+the frame it left over the tenth of a second the step took, as Quake 2's client drew the server's frames
+(`src/lerp.js`).
 
 ## Running it
 
