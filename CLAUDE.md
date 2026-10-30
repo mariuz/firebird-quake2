@@ -43,6 +43,7 @@ npm run test:dm                       # a deathmatch headless: the spots, no mon
 npm run test:demo                     # the pak's demo headless: every block read exactly, the view and entities between frames, the events once, the session's demo frame, a frame painted
 npm run test:lerp                     # the frames between tics: the eye, the entities and the brush models moved by the fraction, snaps, the turn immediate, the poses blended (backlerp)
 npm run test:record                   # a game recorded as a demo and read back: the header, a frame a tenth of a second, the blocks under MAX_MSGLEN, the view, entities, sounds and effects as the rows had them
+npm run test:hud                      # the status bar laid out to a view's width: the classic positions at 320 and wider, rows from the bottom in a narrower view, nothing outside or over another
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)

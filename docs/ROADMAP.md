@@ -208,8 +208,18 @@ The second list, from what the entries above and below left: in the order they a
   downloads as `<name>.dm2` (protocol 34: it plays in Quake 2 itself with the same pak) and stays in the Demo
   select for this session. `test:record` records a game headless and reads it back; the browser test records
   and stops at the console, parses the download and plays the recording from the select.
-- **The HUD drawn to a view's width**: the status bar is 320 wide and overflows a narrower view at its
-  sides with three or four players at 320×240.
+- **The HUD drawn to a view's width**: done. The status bar was 320 wide and overflowed a narrower view at
+  its sides with three or four players at 320×240 (a quarter is 160 wide). `Hud.parts` lists the bar's parts
+  as `single_statusbar` had them (the health, ammo and armour each a number with its icon, the selected item's
+  icon, the pickup line, the timer, the help icon) and `Hud.layout` places them: at 320 and wider the one
+  layout as before, centred; narrower, each part into the lowest row with room for it from the bottom up (a
+  first fit, 6 between, rows 26 apart), the pickup line and the help icon after the rest, so nothing leaves the
+  view (a 160×120 quarter with everything on takes three rows). The frags stay at the top right, the crosshair
+  at the centre. `test:hud` lays the bar out at 640, 320, 240, 160 and 80 wide against a renderer that records
+  every picture and character, and checks the classic positions, the rows, and that nothing is outside or over
+  another. A centre print's line longer than the view wraps at its spaces (`Hud.drawCenter`;
+  the game's fit 320). The help computer, the inventory and the score board are 256- and 320-wide pictures
+  and layouts and still take the whole 320: a narrower view clips them.
 - **The guest's prediction**: a guest sees its own move a round trip late, as a client with `cl_predict 0`
   did; Quake 2 ran pmove ahead on the client, which here is a JS pmove beside the SQL's, kept in step by
   `test:replay`.

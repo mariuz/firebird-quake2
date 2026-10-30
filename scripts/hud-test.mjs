@@ -1,0 +1,109 @@
+// hud-test.mjs – the status bar (src/hud.js) laid out to a view's width, against a renderer that records what is
+// drawn: at 320 and wider single_statusbar's one layout, centred (the health at 0, the ammo at 100, the armour at
+// 200, the item at 296 along the bottom; the pickup, the help icon at 148 and the timer at 262 above); narrower (a
+// split screen's quarter) the parts flow into rows from the bottom up, as many a row as fit, the pickup line and
+// the help icon above, every picture and character inside the view and none over another; the frags at the top
+// right and the crosshair centred either way.
+//   node scripts/hud-test.mjs
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Pak } from '../src/pak.js';
+import { Hud, wrap } from '../src/hud.js';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const pak = new Pak(fs.readFileSync(process.env.PAK ?? path.join(root, 'public/pak/pak0.pak')).buffer);
+let failed = 0;
+const assert = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if (!ok) failed++; };
+const hud = new Hud(pak);
+
+/** A renderer `w`×`h` that records every picture and character as a rectangle. */
+function recorder(w, h) {
+  const drawn = [];
+  return {
+    w, h, drawn,
+    drawPic: (p, x, y) => { if (p) drawn.push({ kind: 'pic', pic: p, x, y, w: p.w, h: p.h }); },
+    drawChar: (c, n, x, y) => { if (n !== 32) drawn.push({ kind: 'char', n, x, y, w: 8, h: 8 }); },
+    drawString(c, s, x, y, alt) { for (let i = 0; i < s.length; i++) this.drawChar(c, (s.charCodeAt(i) & 127) + (alt ? 128 : 0), x + i * 8, y); },
+  };
+}
+const picAt = (r, name) => r.drawn.find((d) => d.kind === 'pic' && d.pic === hud.pic(name));
+const inside = (r) => r.drawn.every((d) => d.x >= 0 && d.y >= 0 && d.x + d.w <= r.w && d.y + d.h <= r.h);
+// (the crosshair is left out: SCR_DrawCrosshair drew it over everything at the centre, which a 120-high view's rows reach)
+const overlaps = (r) => { const d = r.drawn.filter((x) => x.pic !== hud.pic('ch1')); let n = 0; for (let i = 0; i < d.length; i++) for (let j = i + 1; j < d.length; j++) if (d[i].x < d[j].x + d[j].w && d[j].x < d[i].x + d[i].w && d[i].y < d[j].y + d[j].h && d[j].y < d[i].y + d[i].h) n++; return n; };
+
+// a row with everything on: 100 health, the rocket launcher with 7 rockets, 50 combat armour, the launcher selected,
+// shells just picked up, a quad with 12 seconds, the help icon, a crosshair, a deathmatch score
+const row = { HEALTH: 100, DMG_TIME: -10, WEAPON: 128, ROCKETS: 7, ARMOR: 50, ARMOR_TYPE: 2, POWER_ARMOR: 0, CELLS: 0, INV_SEL: 14, PICKUP_ITEM: 18,
+  TIMER_ICON: 1, TIMER: 12, HELP_ICON: 1, FOV: 90, DEATHMATCH: 1, SCORE: 3, CROSSHAIR: 1, DEAD: 0 };
+
+// ── 320 wide: the layout as it was ──
+let r = recorder(320, 240);
+hud.draw(r, row, 1);
+const at320 = { health: picAt(r, 'i_health'), ammo: picAt(r, 'a_rockets'), armor: picAt(r, 'i_combatarmor'), item: picAt(r, 'w_rlauncher'), pickup: picAt(r, 'a_shells'), timer: picAt(r, 'p_quad'), help: picAt(r, 'i_help') };
+assert(at320.health?.x === 50 && at320.health.y === 216 && at320.ammo?.x === 150 && at320.armor?.x === 250 && at320.item?.x === 296 && at320.item.y === 216,
+  'at 320 the health, ammo, armour and item icons sit at 50, 150, 250 and 296 along the bottom');
+assert(at320.pickup?.x === 0 && at320.pickup.y === 190 && at320.timer?.x === 296 && at320.timer.y === 190 && at320.help?.x === 148 && at320.help.y === 190,
+  'the pickup, the timer and the help icon on the row above, at 0, 296 and 148');
+const digits = r.drawn.filter((d) => d.kind === 'pic' && hud.nums.includes(d.pic));
+assert(digits.some((d) => d.x === 2 + 16 * 0 && d.y === 216) && r.drawn.some((d) => d.kind === 'char' && d.x === 26 && d.y === 198), 'the health\'s first digit at 2, the pickup\'s name at 26 on the row above');
+assert(inside(r) && overlaps(r) === 0, `everything inside the view, nothing over anything (${r.drawn.length} pictures and characters)`);
+const ch = picAt(r, 'ch1'), frags = r.drawn.filter((d) => d.kind === 'pic' && d.y === 2);
+assert(ch?.x === 156 && ch.y === 116 && frags.length === 1 && frags[0].x === 2 + 320 - 50 + 32, 'the crosshair centred, the frags at the top right');
+// wider: centred
+r = recorder(640, 480);
+hud.draw(r, row, 1);
+assert(picAt(r, 'i_health').x === 160 + 50 && picAt(r, 'w_rlauncher').x === 160 + 296 && picAt(r, 'i_health').y === 456 && inside(r) && overlaps(r) === 0, 'at 640 the same layout, centred');
+
+// ── 160 wide (a quarter of 320×240): rows from the bottom, nothing off the sides ──
+r = recorder(160, 120);
+hud.draw(r, row, 1);
+const at160 = { health: picAt(r, 'i_health'), ammo: picAt(r, 'a_rockets'), armor: picAt(r, 'i_combatarmor'), item: picAt(r, 'w_rlauncher'), pickup: picAt(r, 'a_shells'), timer: picAt(r, 'p_quad'), help: picAt(r, 'i_help') };
+assert(inside(r) && overlaps(r) === 0, `at 160 everything is inside the view and nothing over anything (${r.drawn.length} pictures and characters)`);
+assert(at160.health?.x === 52 && at160.health.y === 96 && at160.ammo?.x === 2 + 80 + 50 && at160.ammo.y === 96, 'the health and the ammo share the bottom row, the ammo 80 on');
+assert(at160.armor?.x === 52 && at160.armor.y === 70 && at160.item?.x === 2 + 80 && at160.item.y === 70 && at160.help?.x === 2 + 80 + 24 + 6 && at160.help.y === 70, 'the armour, the item and the help icon the row above');
+assert(at160.timer?.x === 2 + 34 && at160.timer.y === 44 && at160.pickup?.x === 2 + 58 + 6 && at160.pickup.y === 44 && r.drawn.some((d) => d.kind === 'char' && d.x === 66 + 26 && d.y === 52),
+  'the timer and the pickup line, with its name, the row above that: three rows of a 120-high view');
+assert(picAt(r, 'ch1')?.x === 76 && picAt(r, 'ch1').y === 56 && r.drawn.filter((d) => d.y === 2).every((d) => d.x >= 110 && d.x + d.w <= 160), 'the crosshair centred, the frags at the top right inside the view');
+// a long pickup name and no room beside it: the help icon goes above
+r = recorder(160, 120);
+hud.draw(r, { ...row, PICKUP_ITEM: 14 }, 1);   // "Rocket Launcher": 26 + 120 = 146 of 160
+const long = r.drawn.filter((d) => d.kind === 'char');
+assert(inside(r) && overlaps(r) === 0 && long.length === 14 && long.every((d) => d.y === long[0].y) && r.drawn.filter((d) => d.y === long[0].y - 8).every((d) => d.kind === 'char' || d.x + d.w <= 26),
+  'a long pickup name takes a row of its own with its icon, nothing off the sides');
+// fewer parts: fewer rows
+r = recorder(160, 120);
+hud.draw(r, { HEALTH: 60, DMG_TIME: -10, WEAPON: 1, ARMOR: 0, POWER_ARMOR: 0, INV_SEL: 0, PICKUP_ITEM: 0, TIMER_ICON: 0, HELP_ICON: 0, FOV: 90, DEATHMATCH: 0, CROSSHAIR: 0, DEAD: 0 }, 1);
+assert(r.drawn.every((d) => d.y === 96) && picAt(r, 'i_health').x === 52 && !picAt(r, 'ch1'), 'the blaster with no armour: the health alone on the bottom row, no crosshair at setting 0');
+// 240 wide: three to a row
+r = recorder(240, 180);
+hud.draw(r, row, 1);
+assert(inside(r) && overlaps(r) === 0 && picAt(r, 'i_health').y === 156 && picAt(r, 'a_rockets').y === 156 && picAt(r, 'i_combatarmor').y === 156 && picAt(r, 'w_rlauncher').y === 130, 'at 240 the health, ammo and armour share the bottom row, the item above');
+// 80 wide: one number a row, the item icon and the help icon sharing one, still inside a view tall enough
+r = recorder(80, 200);
+hud.draw(r, row, 1);
+assert(inside(r) && overlaps(r) === 0 && picAt(r, 'i_health').y === 176 && picAt(r, 'a_rockets').y === 150 && picAt(r, 'i_help').y === picAt(r, 'w_rlauncher').y, 'at 80 one number a row, the two lone icons sharing one, everything still inside');
+// the damage flash: the health red for 0.4 s on even tenths; low health red
+r = recorder(320, 240);
+hud.draw(r, { ...row, DMG_TIME: 1 }, 1.0);
+assert(r.drawn.some((d) => d.kind === 'pic' && hud.anums.includes(d.pic) && d.y === 216), 'the health flashes red just after damage');
+r = recorder(320, 240);
+hud.draw(r, { ...row, HEALTH: 20 }, 5);
+assert(r.drawn.filter((d) => d.kind === 'pic' && hud.anums.includes(d.pic) && d.y === 216).length === 2, 'and is red at 25 or under');
+
+// the centre print: each line centred, wrapped at its spaces when the view is narrower than it (the game's fit 320)
+r = recorder(320, 240);
+hud.drawCenter(r, 'establish communications\nlink to command ship.', 72);
+let lines = [...new Set(r.drawn.map((d) => d.y))];
+assert(lines.length === 2 && r.drawn.filter((d) => d.y === 72)[0].x === (320 - 24 * 8) >> 1 && inside(r), 'at 320 a two-line centerprint is two lines, each centred');
+r = recorder(160, 120);
+hud.drawCenter(r, 'establish communications\nlink to command ship.', 36);
+lines = [...new Set(r.drawn.map((d) => d.y))].sort((a, b) => a - b);
+const firstLine = r.drawn.filter((d) => d.y === 36);
+assert(lines.length === 4 && lines.join(',') === '36,44,52,60' && inside(r) && firstLine[0].x === (160 - 9 * 8) >> 1 && firstLine.length === 9,
+  `at 160 the lines wrap at their spaces into four, each centred and inside ("establish" first, ${firstLine.length} characters)`);
+assert(wrap('a word longer than the view xxxxxxxxxxxxxxxxxxxxxxxxxx', 20).every((l) => l.length <= 20) && wrap('short', 20).length === 1 && wrap('', 20).length === 1,
+  'a word longer than the view is cut, a short line stays as it is');
+
+if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
+console.log('all good');
