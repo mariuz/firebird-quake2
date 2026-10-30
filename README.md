@@ -63,10 +63,12 @@ the other joins (Join takes it and makes an answer to send back), and the host's
 player in it, each page painting its own view, the guest's from the frames the host sends it over a WebRTC
 data channel. There is no signalling server on a static site, so the two texts go by hand.
 
-The Demo select (or `demomap q2demo1` at the console) plays the recording the pak ships, as the attract
-loop played it: the view and the entities are the recording's, read from the server's messages as the
-client read them, and the walls are the database's, asked for that view each frame; any key or click stops
-it and a new game starts.
+The page opens as Quake 2 did, on the attract loop: the recording the pak ships plays with the main menu
+over it (Escape puts the menu away, a key brings it back), and a new game starts from the menu, the Map
+select or the console; a game's end and the menu's quit go back to it. The Demo select (or `demomap
+q2demo1` at the console) plays a recording too: the view and the entities are the recording's, read from
+the server's messages as the client read them, and the walls are the database's, asked for that view each
+frame; at its end the pak's next plays.
 
 Escape brings up Quake 2's menus over the game: a new game, the save slots, the credits, the options with
 `customize controls` (the keys menu: Enter then a key rebinds an action, Backspace clears it; the binds are

@@ -107,8 +107,10 @@ function scoreRows() {
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (anyKey && !e.repeat) { e.preventDefault(); const go = anyKey; anyKey = null; go(); return; }
-  if (demo) { if (!e.repeat) { e.preventDefault(); stopDemo(); } return; }   // CL_Disconnect on a key in the attract loop
   if (menu.active) { e.preventDefault(); menu.key(e.code, e.key); return; }   // (the key's character too: the player setup's name field types)
+  // a demo playing (the attract loop): a key brings the main menu up over it, and it plays on behind (Key_Event
+  // with cl.attractloop: M_Menu_Main_f); a game starts from the menu or the page's controls
+  if (demo) { if (!e.repeat) { e.preventDefault(); openMenu(() => menu.main()); } return; }
   // default.cfg: F2 the save menu, F3 the load menu, F10 quit; Escape puts the help computer or the
   // inventory away (cmd putaway), else brings up the main menu
   if (e.code === 'F3') { e.preventDefault(); openMenu(() => menu.loadMenu()); return; }
@@ -144,12 +146,12 @@ function escape() {
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement) return;
   if (quietUnlock) { quietUnlock = false; return; }
-  if (demo) { stopDemo(); return; }   // (Escape under the lock: a key, and the demo stops)
+  if (demo) { if (!menu.active) openMenu(() => menu.main()); return; }   // (Escape under the lock: a key, and the menu comes up over the demo)
   if (running && !menu.active && !anyKey && cmdline.hidden) escape();
 });
 const menu = new Menu({
   get hud() { return hud; },
-  playing: () => running && !!map,
+  playing: () => running && !!map && !demo,   // (a demo playing is nobody's game to save)
   newGame: (skill) => {
     settings.skill = skill; $('skill').value = String(skill); saveSettings();
     startMap(session.firstMap(), true).catch((err) => setStatus(err.message, true));
@@ -193,13 +195,12 @@ function applyUserinfo() {
   if (netGuest()) { if (net.guest?.open) net.guest.sendInfo(info); return; }
   session?.setUserinfo(1, info).catch((err) => console.warn('userinfo:', err.message));
 }
-/** Quit: the game stops; a key or a click starts a new one. */
+/** Quit: the game ends and the attract loop comes back (Quake 2 quit the program; a page has nowhere to go). */
 function quitGame() {
   running = false;
   audio.setSpeakers([]);
   audio.stopLoops();
-  setStatus('Quit. Press a key or click the view for a new game.');
-  anyKey = () => { setStatus(''); endGame(); };
+  attract().catch((err) => setStatus(err.message, true));
 }
 
 // ── the console: Quake's commands on a line (backquote opens it, Enter runs, Escape closes) ─────────
@@ -307,9 +308,9 @@ async function loadSaved(save) {
   } catch (err) { console.error(err); setStatus(`Load failed: ${err.message}`, true); }
 }
 input.attach(canvas, window, { locked: () => document.pointerLockElement === canvas, settings: () => settings });
-canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } else if (demo) stopDemo(); });
+canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } else if (demo && !menu.active) openMenu(() => menu.main()); });
 canvas.addEventListener('click', () => {
-  if (running && !menu.active && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});
+  if (running && !menu.active && !demo && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});
 });
 // on-screen buttons for touch screens (the halves of the view move and look): fire and jump while held, the next
 // weapon, the menu. Shown where the browser reports touch points or a coarse pointer.
@@ -449,6 +450,19 @@ let paints = 0;          // frames painted (the tics are session.frameNo)
 let guestGotAt = 0, guestDt = 0.05, guestSentAt = 0;   // a guest: when the host's last frame came and how long it stands for
 
 async function frame() {
+  // a demo with the menu over it (the attract loop): the demo plays on behind, the menu drawn over each frame,
+  // the pad driving the menu (SCR_UpdateScreen drew the demo's frame, then M_Draw)
+  if (demo && running && menu.active && !document.hidden && renderer) {
+    try {
+      const pad = input.pollPad();
+      if (pad) { const mk = padMenuKeys(pad, input.pad.stick); input.pad.stick = mk.stick; for (const key of mk.keys) menu.key(key); }
+      if (renderer.views !== 1) renderer.setSize(viewWidth(), viewHeight(), 1);
+      await demoFrame(performance.now());
+      if (demo && menu.active) { menu.draw(renderer, performance.now()); renderer.present(); }
+    } catch (err) { console.error(err); setStatus(`Error: ${err.message}`, true); running = false; }
+    nextFrame();
+    return;
+  }
   if (!running || paused || document.hidden || menu.active) {
     lastTic = performance.now();
     audio.silenceLoops();
@@ -601,8 +615,14 @@ const sprite = (name) => res.models.get(res.byName.get(name))?.spr;
 const model = (name) => res.models.get(res.byName.get(name))?.mdl;
 
 // ── a demo played (src/demo.js): CL_PlayDemo_f's attract loop over the demo's map, loaded as a game's ─────────
-/** Play `demos/<name>.dm2`: its map loaded as for a new game, the game's own models hidden, then the recording's frames. */
-async function playDemo(name) {
+/** The pak's demos (demos/*.dm2) by name: the demo pak's q2demo1, the full game's three. */
+const pakDemos = () => pak.list('demos/', '.dm2').map((n) => n.slice(6, -4));
+/**
+ * Play `demos/<name>.dm2`: its map loaded as for a new game, the game's own models hidden, then the recording's
+ * frames. `withMenu` brings the main menu up over it (the attract loop at the start, and the menu kept across the
+ * loop's next demo). A key, a click or the pad brings the menu up; the demo's end plays the pak's next.
+ */
+async function playDemo(name, { withMenu = false } = {}) {
   const file = `demos/${name}.dm2`;
   if (!pak.has(file)) { setStatus(`no demo "${name}" in this pak`, true); setTimeout(() => setStatus(''), 2500); return; }
   const parsed = parseDemo(pak.get(file));
@@ -617,15 +637,33 @@ async function playDemo(name) {
   const player = new DemoPlayer(parsed, { modelId: (n) => res.byName.get(n) });
   demo = { name, player, time: 0, at: performance.now(), frames: parsed.frames.length, cprint: null, msg: null };
   $('mapname').textContent = `${mapName} (demo ${name})`;
+  if ([...$('demo').options].some((o) => o.value === name)) $('demo').value = name;
   setStatus('');
   running = true;
+  if (withMenu) openMenu(() => menu.main());
 }
-/** The demo stops (a key, a click, the pad, or its end): a new game, as the attract loop gave way to the menu. */
+/**
+ * The attract loop (CL_Disconnect's "d1": the demos one after another with the main menu over them, where Quake 2
+ * started and went back to after a game): the pak's first demo with the main menu; a pak without demos starts a game.
+ */
+async function attract() {
+  const demos = pakDemos();
+  if (!demos.length) return startMap(session.firstMap(), true);
+  await playDemo(demos[0], { withMenu: true });
+}
+/** A demo's end: the pak's next (the loop's "nextserver": d1, d2, d3, round again), the menu staying up if it was. */
+function nextDemo() {
+  const d = demo, demos = pakDemos();
+  if (!d || !demos.length) return;
+  const next = demos[(demos.indexOf(d.name) + 1) % demos.length];
+  playDemo(next, { withMenu: menu.active }).catch((err) => setStatus(err.message, true));
+}
+/** The Demo select put back to none: the demo gives way to a new game. */
 function stopDemo() {
   if (!demo) return;
   demo = null;
   $('demo').value = '';
-  endGame().catch((err) => setStatus(err.message, true));
+  startMap(session.firstMap(), true).catch((err) => setStatus(err.message, true));
 }
 /**
  * One display frame of the demo: the clock moves by the real time (at most a fifth of a second: a hidden tab
@@ -638,9 +676,9 @@ async function demoFrame(now) {
   d.at = now;
   d.time += dt;
   const st = d.player.at(d.time);
-  if (d.player.finished && st.frac >= 1) { stopDemo(); return; }
+  if (d.player.finished && st.frac >= 1) { nextDemo(); return; }
   const pad = input.pollPad();
-  if (pad && pad.pressed.size) { stopDemo(); return; }
+  if (pad && pad.pressed.size && !menu.active) { openMenu(() => menu.main()); return; }
   let t = performance.now();
   const f = await session.demoFrame(st.view, st.brushes);
   if (demo !== d) return;   // (stopped while the query ran: this frame is nobody's)
@@ -725,9 +763,9 @@ async function showPicture(file) {
   await new Promise((resolve) => setTimeout(() => { anyKey = resolve; }, 1000));
 }
 
-/** The game is over (the demo's last exit): a new game from the first map. */
+/** The game is over (the demo's last exit, a guest's host gone): the attract loop, as Quake 2 went back to it. */
 async function endGame() {
-  await startMap(session.firstMap(), true);
+  await attract();
 }
 
 /**
@@ -1031,13 +1069,15 @@ async function usePak(buffer, label) {
   hud = new Hud(pak);
   audio.setPak(pak);
   $('map').innerHTML = maps.map((m) => `<option>${m}</option>`).join('');
-  // the pak's demos (demos/*.dm2): the demo pak's q2demo1, the full game's three
-  const demos = pak.list('demos/', '.dm2').map((n) => n.slice(6, -4));
+  const demos = pakDemos();
   $('demo').innerHTML = ['<option value="">—</option>', ...demos.map((m) => `<option>${m}</option>`)].join('');
   $('demo').parentElement.hidden = !demos.length;
   $('pakname').textContent = label;
+  // the attract loop: the pak's demo with the main menu over it, as Quake 2 opened (a new game from the menu, the
+  // Map select or the console starts playing); the Map select shows the game's first map meanwhile
   const first = maps.includes(settings.map) ? settings.map : maps.includes('demo1') ? 'demo1' : maps.includes('base1') ? 'base1' : maps[0];
-  await startMap(first, true);
+  if (!demos.length) await startMap(first, true);
+  else { await attract(); $('map').value = first; }
 }
 
 async function boot() {

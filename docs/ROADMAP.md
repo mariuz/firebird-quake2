@@ -67,8 +67,8 @@ the order they are to be taken.
   has them), so the walls are the database's and the rest the recording's: no tic runs. A key or a click
   stops it and a new game starts, as the attract loop gave way to the menu. `test:demo` checks the parsing,
   the player, the session's frame and a painted frame headless; the browser test plays it from the select.
-  Left: the attract loop itself (the demo behind the main menu when nothing is played; the page starts a
-  game at once), and recording, which follows from the same format: the frame's rows written as the
+  The attract loop itself came after (see *The attract loop* in the second list). Left: recording, which
+  follows from the same format: the frame's rows written as the
   messages (`SV_WriteFrameToClient`), so a recorded game plays in Quake 2 itself.
 - **The credits screen and the key bindings menu**: done. The game menu's `credits` scrolls menu.c's
   `idcredits` text (`src/credits.js`; the pak has no `credits` file) up the screen as
@@ -191,9 +191,16 @@ The second list, from what the entries above and below left: in the order they a
   had them, the newer frame's pose blended from the older's by what is left of the way. A newcomer, another
   model and the SQL-projecting mode do not blend. `test:lerp`, `test:painter` (every vertex halfway at 0.5)
   and `test:demo` check it.
-- **The attract loop**: the demo behind the main menu when nothing is played, as `CL_Disconnect` and the
-  attract loop had it; and recording, from the frame's rows written as the server's messages
-  (`SV_WriteFrameToClient`), so a recorded game plays in Quake 2 itself.
+- **The attract loop**: done. The page opens as Quake 2 did, on the pak's first demo with the main menu
+  over it (`attract` in `src/main.js`; a pak without demos starts a game), and comes back to it after a
+  game's end or the menu's quit (which used to leave a message asking for a key). A key, a click or the pad
+  while a demo plays brings the main menu up and the demo plays on behind it, as `Key_Event` did with
+  `cl.attractloop` (the loop runs the demo's frame and draws the menu over it; the save menu stays shut);
+  Escape puts the menu away. A demo's end plays the pak's next, round again (the loop's `nextserver`), the
+  menu staying if it was up; a new game from the menu, the Map select, the console or a load ends the demo,
+  and so does the Demo select put back to none. The browser test opens on it, puts the menu away and brings it
+  back, sees no save menu, and starts the game from the Map select. Left: recording, from the frame's rows
+  written as the server's messages (`SV_WriteFrameToClient`), so a recorded game plays in Quake 2 itself.
 - **The HUD drawn to a view's width**: the status bar is 320 wide and overflows a narrower view at its
   sides with three or four players at 320×240.
 - **The guest's prediction**: a guest sees its own move a round trip late, as a client with `cl_predict 0`
