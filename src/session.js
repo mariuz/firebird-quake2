@@ -37,7 +37,7 @@ export function decodeFrame(rows, styleBase) {
       case 5: fx.push([r[1], r[2], r[6], r[7], r[8], r[9], r[10], r[11], r[3]]); break;
       case 6: brushFrames.set(r[1], [r[2], r[3] ?? 0]); if (r[6] || r[7] || r[8]) brushAngles.set(r[1], [r[6], r[7], r[8]]); break;
       case 7: speakers = r[15] ? r[15].split(',').map(Number) : []; break;
-      case 9: loops.push([r[14], r[8], r[9], r[10]]); break;
+      case 9: loops.push([r[14], r[8], r[9], r[10], r[1]]); break;   // (the carrier's id last: a recording names it)
       default: break;
     }
   }

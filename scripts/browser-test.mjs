@@ -1,5 +1,6 @@
 // browser-test.mjs – the page itself, in a real (headless) Chromium: the worker, the engine
-// build it picks, the pak download, the game loop, the keys, a quick save and load.
+// build it picks, the pak download, the game loop, the keys, a quick save and load, a game recorded
+// at the console and played back from the Demo select.
 //
 //   node scripts/browser-test.mjs [--coi] [--keep]
 //
@@ -17,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { parseDemo } from '../src/demo.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const coi = process.argv.includes('--coi');
@@ -281,6 +283,29 @@ try {
     await typeCommand('skill 1');
     const md = await skillState();
     assert(md.setting === 1 && md.select === '1' && md.shown === 'Medium', `skill 1 puts medium back (${JSON.stringify({ setting: md.setting, shown: md.shown })})`);
+
+    // a recording: `record run` at the console writes the game from then on as a demo (src/record.js: the stats line
+    // counts its frames), `stop` downloads it as run.dm2 (parsed here as the page parses the pak's: every block read
+    // exactly, a frame a tenth of a second, the map and the blaster named) and puts it in the Demo select, which plays it
+    const recState = () => page.evaluate(() => ({ rec: window.quake2?.recorder, list: window.quake2?.recordings(), status: document.getElementById('status')?.textContent,
+      options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({}));
+    await typeCommand('record run');
+    await sleep(1500);
+    const mid = await recState();
+    assert(mid.rec?.name === 'run' && mid.rec.frames > 3 && /recording run: \d+ frames/.test(await stats()), `record run records the game: ${mid.rec?.frames} frames so far, the stats line says so`);
+    const [dl2] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('stop')]);
+    const dm2 = dl2 ? fs.readFileSync(await dl2.path()) : null;
+    let parsed = null;
+    try { parsed = dm2 ? parseDemo(new Uint8Array(dm2)) : null; } catch (e) { errors.push(`the recording does not parse: ${e.message}`); }
+    assert(dl2 && dl2.suggestedFilename() === 'run.dm2' && parsed && parsed.protocol === 34 && parsed.frames.length >= mid.rec.frames && parsed.map === 'maps/demo1.bsp' && parsed.models.includes('models/weapons/v_blast/tris.md2'),
+      `stop downloads run.dm2, which reads back whole: ${parsed?.frames.length} frames on ${parsed?.map}, ${parsed?.blocks} blocks (${dm2 ? (dm2.length / 1024).toFixed(0) : '?'} KB)`);
+    const after = await recState();
+    assert(after.rec === null && after.list?.includes('run') && after.options?.includes('run') && /^Recorded run\.dm2: \d+ frames/.test(after.status ?? ''),
+      `the recording ends, is kept by name and listed in the Demo select (${after.status})`);
+    await page.selectOption('#demo', 'run');
+    let rd = {};
+    for (let i = 0; i < 240 && !(rd.demo?.name === 'run' && rd.demo.frame > 3); i++) { await sleep(250); rd = await page.evaluate(() => ({ demo: window.quake2?.demo, map: document.getElementById('mapname')?.textContent })).catch(() => ({})); }
+    assert(rd.demo?.name === 'run' && rd.demo.frame > 3 && rd.demo.frames === parsed?.frames.length && /demo1 \(demo run\)/.test(rd.map ?? ''), `the select plays the recording over its map: frame ${rd.demo?.frame} of ${rd.demo?.frames}, ${rd.map}`);
 
     // the pak's demo from the select: its map loads, the recording plays (the frame count climbs, the stats line says
     // so, no tic runs), a key brings the main menu up over it and it plays on, the select put back to none starts a new game

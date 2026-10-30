@@ -30,6 +30,7 @@ import { padMenuKeys, padScreens, BUTTON } from './gamepad.js';
 import { Input, GAME_KEYS, DEFAULT_BINDS, bindKey } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
+import { DemoRecorder } from './record.js';
 import { loadSettings, saveSettings as saveSettingsTo, viewSize, OPTIONS_RESET, VIDEO_RESET } from './settings.js';
 
 const $ = (id) => document.getElementById(id);
@@ -55,6 +56,11 @@ const netGuest = () => net?.role === 'guest' && !!net.guest;
 // src/demo.js: a demo of the pak playing (the attract mode): the view and the entities are the recording's, the
 // faces the SQL's for that view; a key or a click stops it and a new game starts
 let demo = null;         // { name, player: DemoPlayer, time, at, frames, cprint, msg }
+// src/record.js: the game being written as a demo (`record <name>` at the console, `stop` or the level's end ends
+// it), and the demos recorded this session by name, which the Demo select and `demomap` play like the pak's
+let recorder = null;     // { name, rec: DemoRecorder }
+const recordings = new Map();
+let mapSetup = null;     // what session.startMap returned for the map in (the sky, the CD track: a recording's configstrings)
 /** The view's fov: the host's for a guest (the frustum is the host's), the setting otherwise. */
 const viewFov = () => (netGuest() && net.guest.map ? net.guest.map.view.fov : settings.fov);
 // src/effects.js: the explosions, beams, tongues and muzzle flashes between frames, and the frame's dynamic lights
@@ -218,6 +224,10 @@ const con = new Console({
   // the skill (latched: the next map's): the select shows it, nightmare through its hidden option
   setSkill: (n) => { $('skill').value = String(n); },
   playDemo: (name) => playDemo(name),
+  hasDemo: (name) => recordings.has(name) || pak.has(`demos/${name}.dm2`),
+  record: (name) => startRecording(name),
+  stopRecord: () => stopRecording(),
+  isRecording: () => !!recorder,
 });
 function openConsole() {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
@@ -385,6 +395,7 @@ const localViews = () => (session?.twoPlayers && !netHost() ? session.nclients :
 function beginMap() {
   running = false;
   demo = null;
+  if (recorder) stopRecording();   // (a recording ends with its level, as the client's did at the disconnect)
   for (const L of lerps) { L.prev = null; L.cur = null; }   // (the frames of the map being left)
   lastPaint = 0;
   menu.off();
@@ -395,6 +406,7 @@ function beginMap() {
 /** A map is in (session.startMap's setup): the renderer and the sound set up from it. */
 async function mapLoaded(setup) {
   map = session.map;
+  mapSetup = setup;
   await applyView();          // one view or two, as the game (a new one, or a save) has players
   renderer.setResources(res);
   renderer.particles = [];
@@ -526,6 +538,7 @@ async function frame() {
       if (h.open) h.sendFrame({ ...session.clients[1], SCORES: scoreRows() }, gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
     }
     if (!running) { nextFrame(); return; }
+    if (recorder) await recordFrame(last, f);
     const { faces, ents, sounds, fx, loops } = f;
     if (f.speakers) audio.setSpeakersOn(f.speakers);
     perf.faces = performance.now() - t;
@@ -615,17 +628,62 @@ const sprite = (name) => res.models.get(res.byName.get(name))?.spr;
 const model = (name) => res.models.get(res.byName.get(name))?.mdl;
 
 // ── a demo played (src/demo.js): CL_PlayDemo_f's attract loop over the demo's map, loaded as a game's ─────────
+// ── recording (src/record.js): the game's frames written as the server's messages, a .dm2 Quake 2 plays ─────
+/**
+ * CL_Record_f: from here on, each tic's row and frame go to a recorder set up for this map (its checksum, sky and
+ * CD track as the server's configstrings, the brush models by name, the recording client's entity).
+ */
+async function startRecording(name) {
+  if (recorder || !running || !map || demo || netGuest()) return;
+  const playerEnt = (await db.query('SELECT ent_id FROM player WHERE id = 1')).rows[0]?.ENT_ID ?? 0;
+  const brushNames = new Map((await db.query("SELECT e.id, m.name FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B' AND m.name STARTING WITH '*'", [], { rowMode: 'array' })).rows);
+  const rec = new DemoRecorder({ map: map.name, res, bsp: map.bsp, mapBytes: pak.get(`maps/${map.name}.bsp`), setup: mapSetup ?? {}, playerEnt, brushNames,
+    levelname: await session.levelName(), fov: viewFov(), netname: settings.name || 'player' });
+  recorder = { name, rec };
+  setStatus(`Recording to ${name}.dm2`);
+  setTimeout(() => { if (statusEl.textContent.startsWith('Recording to')) setStatus(''); }, 2500);
+}
+/** One tic to the recorder: the brush models' places go with it (a frame's faces carry them only in the fast mode). */
+async function recordFrame(row, f) {
+  const r = recorder;
+  try {
+    if (!r.rec.due(row)) { r.rec.frame(row, f); return; }
+    const brushes = (await db.query('SELECT e.id, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.frame, e.effects FROM ents e WHERE e.mkind = \'B\'', [], { rowMode: 'array' })).rows;
+    if (recorder === r) r.rec.frame(row, f, { brushes });
+  } catch (err) { console.error(err); setStatus(`Recording failed: ${err.message}`, true); recorder = null; }
+}
+/** CL_Stop_f: the file downloads as <name>.dm2 and stays in the Demo select for this session. */
+function stopRecording() {
+  const r = recorder;
+  if (!r) return;
+  recorder = null;
+  const bytes = r.rec.finish();
+  recordings.set(r.name, bytes);
+  if (![...$('demo').options].some((o) => o.value === r.name)) { $('demo').append(new Option(`${r.name} (recorded)`, r.name)); $('demo').parentElement.hidden = false; }
+  try {
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: `${r.name}.dm2` });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (err) { console.error(err); }
+  const left = r.rec.dropped ? `, ${r.rec.dropped} entities left out of a full block` : '';
+  setStatus(`Recorded ${r.name}.dm2: ${r.rec.frames} frames (${(bytes.length / 1024).toFixed(0)} KB)${left}`);
+  setTimeout(() => { if (statusEl.textContent.startsWith('Recorded ')) setStatus(''); }, 3000);
+}
+
 /** The pak's demos (demos/*.dm2) by name: the demo pak's q2demo1, the full game's three. */
 const pakDemos = () => pak.list('demos/', '.dm2').map((n) => n.slice(6, -4));
+/** A demo's bytes: one recorded this session by that name, else the pak's. */
+const demoBytes = (name) => recordings.get(name) ?? (pak.has(`demos/${name}.dm2`) ? pak.get(`demos/${name}.dm2`) : null);
 /**
  * Play `demos/<name>.dm2`: its map loaded as for a new game, the game's own models hidden, then the recording's
  * frames. `withMenu` brings the main menu up over it (the attract loop at the start, and the menu kept across the
  * loop's next demo). A key, a click or the pad brings the menu up; the demo's end plays the pak's next.
  */
 async function playDemo(name, { withMenu = false } = {}) {
-  const file = `demos/${name}.dm2`;
-  if (!pak.has(file)) { setStatus(`no demo "${name}" in this pak`, true); setTimeout(() => setStatus(''), 2500); return; }
-  const parsed = parseDemo(pak.get(file));
+  const bytes = demoBytes(name);
+  if (!bytes) { setStatus(`no demo "${name}" in this pak`, true); setTimeout(() => setStatus(''), 2500); return; }
+  const parsed = parseDemo(bytes);
   const mapName = parsed.map.replace(/^maps\//, '').replace(/\.bsp$/, '');
   if (!parsed.frames.length || !pak.has(`maps/${mapName}.bsp`)) { setStatus(`the demo's map ${mapName} is not in this pak`, true); return; }
   if (net) leaveNet();   // a demo plays on a page alone
@@ -879,7 +937,8 @@ function updateStats() {
   if (now - fpsT > 500) { fps = (fpsN * 1000) / (now - fpsT); fpsT = now; fpsN = 0; }
   const link = netGuest() ? ` · joined: ${net.guest.frames} frames from the host` : netHost() ? ` · hosting: ${net.host.sentFrames} frames sent${net.host.droppedFrames ? `, ${net.host.droppedFrames} dropped` : ''}`
     : demo ? ` · demo ${demo.name}: frame ${demo.player.played + 1} of ${demo.frames}` : '';
-  statsEl.textContent = `${fps.toFixed(1)} fps · q2_tic ${perf.tic.toFixed(0)} ms · frame queries ${perf.faces.toFixed(0)} ms (${perf.rows} rows) · raster ${perf.draw.toFixed(0)} ms · ${renderer.particles.length} particles${link}`;
+  const rec = recorder ? ` · recording ${recorder.name}: ${recorder.rec.frames} frames (${(recorder.rec.size / 1024).toFixed(0)} KB)` : '';
+  statsEl.textContent = `${fps.toFixed(1)} fps · q2_tic ${perf.tic.toFixed(0)} ms · frame queries ${perf.faces.toFixed(0)} ms (${perf.rows} rows) · raster ${perf.draw.toFixed(0)} ms · ${renderer.particles.length} particles${link}${rec}`;
 }
 
 // ── a game over the network (src/net.js): this page hosts one, or joins one ───────────────────────
@@ -1087,6 +1146,8 @@ async function boot() {
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, settings, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, get paints() { return paints; },
+      get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
+      recordings: (name) => (name ? recordings.get(name) ?? null : [...recordings.keys()]),
       sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));

@@ -199,8 +199,15 @@ The second list, from what the entries above and below left: in the order they a
   Escape puts the menu away. A demo's end plays the pak's next, round again (the loop's `nextserver`), the
   menu staying if it was up; a new game from the menu, the Map select, the console or a load ends the demo,
   and so does the Demo select put back to none. The browser test opens on it, puts the menu away and brings it
-  back, sees no save menu, and starts the game from the Map select. Left: recording, from the frame's rows
-  written as the server's messages (`SV_WriteFrameToClient`), so a recorded game plays in Quake 2 itself.
+  back, sees no save menu, and starts the game from the Map select. Recording too (`src/record.js`; `record
+  <name>` and `stop` at the console, as `CL_Record_f` and `CL_Stop_f`): the tics' rows and frames written as the
+  server's messages (`SV_WriteFrameToClient`, `SV_EmitPacketEntities`, `MSG_WriteDeltaEntity`), a frame a tenth
+  of a second with the tic between folded into it, the header `CL_Record_f` wrote (the server data, the
+  configstrings with the map's `Com_BlockChecksum`, "precache"), a baseline the first time an entity shows and
+  a configstring the first time a model, sound or image is used, every block under `MAX_MSGLEN`. The file
+  downloads as `<name>.dm2` (protocol 34: it plays in Quake 2 itself with the same pak) and stays in the Demo
+  select for this session. `test:record` records a game headless and reads it back; the browser test records
+  and stops at the console, parses the download and plays the recording from the select.
 - **The HUD drawn to a view's width**: the status bar is 320 wide and overflows a narrower view at its
   sides with three or four players at 320×240.
 - **The guest's prediction**: a guest sees its own move a round trip late, as a client with `cl_predict 0`
@@ -267,7 +274,7 @@ The second list, from what the entries above and below left: in the order they a
   lines typed, Tab completes a command's name. `drop <item>` is `Cmd_Drop_f`: ammo a pickup's worth, a weapon
   not in hand, a powerup, power armour (off with the last), thrown ahead and not back to its dropper for a
   second; a dropped weapon carries no ammo.
-- **Demo playback**: done (see *Next*); recording is not.
+- **Demo playback**: done (see *Next*), and recording (the attract loop's entry there).
 
 ## Fidelity gaps in what exists
 
