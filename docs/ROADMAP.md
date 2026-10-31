@@ -668,9 +668,14 @@ The eighth list: what a game shared over the network and the console still lack,
   it as `DeathmatchScoreboardMessage` laid it out (`Ping:  n`, at most 999), and a joined page's stats line
   shows its own. `test:net` runs a ping and pongs against a clock, `test:hud` the line drawn, the browser test
   sees the host's measure, the guest's row and its stats line.
-- **The host's save and load with guests connected**: a save in a shared game loads with its player rows but
-  the guests' clients are not put back under their guests, nor sent the map again. A load keeps the guests'
-  clients (`applyUserinfo` over them) and sends each its map message, as a level change does.
+- **The host's save and load with guests connected**: done. A save loaded while hosting had the save's
+  clients, so a guest whose client the save lacked (one played alone) got no frames. The host's load keeps the
+  guests' clients whatever the save had (`Session.ensureClients`, with the guests' clients: a save of a game
+  played alone makes the game coop again, its row saying so, and a client the save lacks is put in afresh at
+  the level's spot by `addClient`, its name, hand and watching back with `applyUserinfo`; a coop save keeps
+  them as saved), and `mapLoaded` sends each guest the map as it is, as at a level change. `test:net` loads a
+  save played alone and a coop save over a loopback, the browser test has the host press F6 and F9 with the
+  guest connected and sees its frames come on.
 - **`netgraph`**: nothing shows a guest's dropped or late frames but the stats line's count. `netgraph 1`
   draws the frames' arrival and the drops in the view's corner as `SCR_DrawNet` and `netgraph` did.
 - **The menus from the console**: `menu_main`, `menu_game`, `menu_loadgame`, `menu_savegame`, `menu_options`,

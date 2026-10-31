@@ -161,6 +161,25 @@ export class Session {
     return true;
   }
 
+  /**
+   * The host's load with guests connected: the clients the guests drive are kept whatever the save had. A save of a
+   * game played alone makes the game coop again (its row says so, as the cvar would), and a client the save lacks is
+   * put in afresh at the level's spot (addClient); the names, hands and watching come back with applyUserinfo. The
+   * clients added, in order.
+   */
+  async ensureClients(clients) {
+    const added = [];
+    const wanted = [...new Set(clients)].filter((c) => Number.isInteger(c) && c >= 2 && c <= 4).sort((a, b) => a - b);
+    if (!this.map || !wanted.length) return added;
+    if (!this.twoPlayers) {
+      await this.db.query('UPDATE game SET coop = 1 WHERE id = 1');
+      this.coop = true;
+      this.players = 2;
+    }
+    for (const c of wanted) if (await this.addClient(c)) added.push(c);
+    return added;
+  }
+
   /** The light styles' resting values: the frame lists only the ones that animate or that the map has switched. */
   async loadStyleBase() {
     this.styleBase.fill(0);

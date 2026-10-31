@@ -523,7 +523,9 @@ a `HostLink` of its own (`net.guests` in `src/main.js`, each with its client num
 guest holds: a guest that left leaves its client standing for the next); the first guest's connect starts a
 new game, a later one joins the game running (`Session.addClient`: ClientConnect and ClientBegin, the row
 with fresh pers and the entity at the level's coop spot, or a deathmatch spot, by `client_begin`; the game has that many clients
-from then on, the next level too), and is sent the map as it is. Host, while hosting, makes an offer for the
+from then on, the next level too), and is sent the map as it is; a save the host loads keeps the guests'
+clients whatever it had (`Session.ensureClients`: the game coop again for a save played alone, a client the
+save lacks put in by `addClient`), each guest sent the map as it is. Host, while hosting, makes an offer for the
 next player (one offer out at a time); `kick <n>` at the host's console drops a guest (a `kick` message
 first, so its page says why). After the tic the host asks the frame once for itself and once per
 guest in the fast mode and sends each its frame (`sendFrame`: the faces as `[face, entity, origin]`,

@@ -65,7 +65,8 @@ player), the other joins (Join takes it and makes an answer to send back), and t
 guest's player in it (coop, or a deathmatch when the host's Players select says so: the frags on every page's
 status bar and score board), each page painting its own view, the guest's from the frames the host sends it over a
 WebRTC data channel, its own move predicted ahead of them as the Quake 2 client predicted (the player's move and
-the traces have a JS twin, `src/pmove.js`, held to the SQL's numbers). Host again while hosting makes an offer
+the traces have a JS twin, `src/pmove.js`, held to the SQL's numbers); the host's saves and loads keep the
+guests' clients. Host again while hosting makes an offer
 for the next player, who joins the game as it runs, a channel each; a joined page that ticks "spectate" only
 watches, with no body in the game (its attack key chases a player, as 3.20's chase cam did, jump lets go,
 `chase <n>` at its console picks one); `say <text>` at any page's console (`T` opens it with `say ` typed) puts the

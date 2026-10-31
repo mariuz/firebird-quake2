@@ -715,6 +715,20 @@ try {
       }
       assert(Number.isInteger(pinged.host) && pinged.host >= 0 && pinged.host < 1000 && Number.isInteger(pinged.row) && /ping \d+ ms/.test(pinged.stats),
         `the host measures the guest's round trip (${pinged.host} ms), the guest's score board row carries it (${pinged.row} ms) and its stats line says so`);
+      // the host's save and load with the guest connected: F6 saves the shared game, F9 loads it; the guest's client is
+      // kept and the map sent again, so its frames keep coming (as at a level change)
+      await page.evaluate(() => document.activeElement?.blur?.()).catch(() => undefined);
+      await page.keyboard.press('F6');
+      let hsaved = '';
+      for (let i = 0; i < 20 && !/Game saved/.test(hsaved); i++) { await sleep(250); hsaved = await status(); }
+      const gf0 = await gp.evaluate(() => window.quake2.net?.guest?.frames ?? 0).catch(() => 0);
+      await page.keyboard.press('F9');
+      let hloaded = '';
+      for (let i = 0; i < 240 && !/Game loaded/.test(hloaded); i++) { await sleep(250); hloaded = await status(); }
+      let hl = {}, gl = {};
+      for (let i = 0; i < 120 && !(hl.clients === 2 && gl.frames > gf0 + 20); i++) { await sleep(250); hl = await hstate(); gl = await gstate(); }
+      assert(/Game saved/.test(hsaved) && /Game loaded/.test(hloaded) && hl.role === 'host' && hl.guests?.length === 1 && hl.clients === 2 && gl.role === 'guest' && gl.map === 'demo1' && gl.frames > gf0 + 20,
+        `the host's F6 and F9 save and load the shared game with the guest's client kept and its frames coming on (${JSON.stringify({ hsaved, hloaded, hl, gl })})`);
       // the guest's say goes to the host, which prints it for the guest's client on every message line
       await typeOn(gp, 'say hi from the guest');
       let gsaid = null;
