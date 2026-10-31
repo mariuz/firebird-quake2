@@ -10,7 +10,7 @@ export const KEY = 'firebird-quake2:settings';
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1,
   crosshair: 1, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false,
-  mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '',
+  mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '',
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
   coop: false, deathmatch: false,
@@ -62,6 +62,9 @@ const CHECK = {
   scrShowpause: bool, scrShowturtle: bool, clMaxfps: (v) => (v === 0 ? 0 : num(5, 1000)(v)),
   // hostname (the host's name, serverinfo's and a guest's stats line's; at most 32 printable characters, empty "noname" as Quake had it)
   hostname: (v) => (typeof v === 'string' && /^[\x20-\x7e]{0,32}$/.test(v) ? v : undefined),
+  // password (the network game's: a guest's userinfo, the host's requirement) and spectator_password (a watcher's): at most 32 characters, no spaces
+  password: (v) => (typeof v === 'string' && /^[\x21-\x7e]{0,32}$/.test(v) ? v : undefined),
+  spectatorPassword: (v) => (typeof v === 'string' && /^[\x21-\x7e]{0,32}$/.test(v) ? v : undefined),
   coop: bool,            // a new game with two players: the view split, the gamepad the second's
   deathmatch: bool,      // ... against each other (deathmatch wins over coop)
   dmflags: int(0, 65535), fraglimit: int(0, 999), timelimit: int(0, 999),   // the deathmatch cvars

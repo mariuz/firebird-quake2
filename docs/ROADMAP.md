@@ -987,9 +987,16 @@ own words with the demo pak. In the order they are to be taken.
   it at the console. `test:menu` opens it from the multiplayer menu, turns rows and reads the bits and the status
   bar; `test:console` the word; the browser test opens it, turns weapons stay and reads the settings and the game
   row, on both builds.
-- **`password` and `spectator_password`**: the network game's passwords (`SV_DirectConnect`: a guest whose userinfo
-  `password` does not match is refused, "Password required or incorrect."; a watcher's `spectator_password`),
-  `needpass` in the serverinfo, the guest's word set at its console and sent with its info.
+- **`password` and `spectator_password`**: done. A guest's info carries its `password` (the cvar at its console, with
+  the userinfo), and the host judges it as `SV_DirectConnect` and `ClientConnect` did (`connectRefusal` in
+  `src/net.js`): a player's against the host's `password`, a watcher's against its `spectator_password`, empty or
+  "none" asking nothing; a guest refused is kicked with the reason before it is in ("Password required or
+  incorrect", "Spectator password required or incorrect"), its page saying so and standing for a key, the host
+  keeping its other guests. The serverinfo's `needpass` counts the two (1 and 2), as `SV_StatusString` set it.
+  Neither archived, as Quake's were not. `test:net` carries the password with the info and judges the cases;
+  `test:console` the two cvars, a space refused, `cvarlist` with them; the browser test reads `needpass` as they are
+  set and cleared, and has a third page refused with the reason by a host with a password, the first guest kept,
+  then let in once it is cleared, on both builds.
 - **`sw_drawflat`, `sw_waterwarp` and `sw_clearcolor`**: ref_soft's: every face flat in a colour of its own, no
   texture (`sw_drawflat`), the underwater warp off (`sw_waterwarp 0`), and the colour behind what nothing paints
   (`sw_clearcolor`, 2); painter switches like `r_fullbright`, none archived.
