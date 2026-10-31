@@ -737,6 +737,9 @@ with it, the kept sets dropped with the switch; a guest paints the host's frames
 frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame),
 `m_yaw` (the turn a mouse count, 0.022 as Quake had it, `Input.mouse`'s), `cl_gun` (0: no view weapon, as `CL_AddViewWeapon`
 had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
+`vid_gamma` (the video menu's brightness as a cvar, the control's tenths from 1 to 1.8, a number between snapped and
+clamped to them, archived: the painter's light scale and the control follow through `setSetting`) and `vid_fullscreen` (the page's live fullscreen state shown, `isFullscreen`; 0 or 1 asks the page
+for it or leaves it, as the video menu's box does),
 `serverinfo` (`SV_Serverinfo_f`: the game's cvars, `mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`,
 `cheats` and `skill`, as `Info_Print` listed them, the host's `serverInfo`; a joined page runs no server of its own),
 `userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:
