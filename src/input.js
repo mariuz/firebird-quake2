@@ -15,7 +15,7 @@ export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'Ar
   'BracketLeft', 'BracketRight', 'Enter',
   'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
   'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'KeyL', 'KeyH', 'KeyT', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash',
-  'AltLeft', 'AltRight', 'Insert', 'End']);
+  'AltLeft', 'AltRight', 'Insert', 'End', 'Backspace']);
 
 // default.cfg: 1-5 blaster to chaingun, 6 grenade launcher … 0 BFG10K, G "use grenades"
 // (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher; 12 and 22 the
@@ -34,7 +34,8 @@ export const ACTIONS = [
   { id: 'forward', name: 'walk forward', cmd: '+forward' }, { id: 'back', name: 'backpedal', cmd: '+back' }, { id: 'left', name: 'turn left', cmd: '+left' }, { id: 'right', name: 'turn right', cmd: '+right' },
   { id: 'run', name: 'run', cmd: '+speed' }, { id: 'moveleft', name: 'step left', cmd: '+moveleft' }, { id: 'moveright', name: 'step right', cmd: '+moveright' },
   { id: 'lookup', name: 'look up', cmd: '+lookup' }, { id: 'lookdown', name: 'look down', cmd: '+lookdown' }, { id: 'moveup', name: 'up / jump', cmd: '+moveup' }, { id: 'movedown', name: 'down / crouch', cmd: '+movedown' },
-  { id: 'inven', name: 'inventory', cmd: 'inven' }, { id: 'invuse', name: 'use item', impulse: 13, cmd: 'invuse' }, { id: 'invprev', name: 'prev item', impulse: 15, cmd: 'invprev' }, { id: 'invnext', name: 'next item', impulse: 14, cmd: 'invnext' },
+  { id: 'inven', name: 'inventory', cmd: 'inven' }, { id: 'invuse', name: 'use item', impulse: 13, cmd: 'invuse' }, { id: 'invdrop', name: 'drop item', impulse: 23, cmd: 'invdrop' },
+  { id: 'invprev', name: 'prev item', impulse: 15, cmd: 'invprev' }, { id: 'invnext', name: 'next item', impulse: 14, cmd: 'invnext' },
   { id: 'help', name: 'help computer', cmd: 'help' },
   // default.cfg's "use silencer" (s) and "use power shield" (p), whose keys the page has (back, pause): bound to l and h
   { id: 'silencer', name: 'silencer', impulse: 18, cmd: 'use silencer' }, { id: 'shield', name: 'power shield', impulse: 21, cmd: 'use power shield' },
@@ -55,7 +56,7 @@ export const actionOfCommand = (cmd) => { const c = String(cmd ?? '').trim().toL
 export const DEFAULT_BINDS = Object.freeze({
   attack: ['Control', 'Mouse1'], weapnext: ['Slash', 'MWheelDown'], weapprev: ['MWheelUp'], forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
   run: ['Shift'], moveleft: ['KeyA', 'Comma'], moveright: ['KeyD', 'Period'], lookup: ['PageUp'], lookdown: ['PageDown'], moveup: ['Space'], movedown: ['KeyC'],
-  inven: ['Tab'], invuse: ['Enter'], invprev: ['BracketLeft'], invnext: ['BracketRight'], help: ['F1'], silencer: ['KeyL'], shield: ['KeyH'], messagemode: ['KeyT'],
+  inven: ['Tab'], invuse: ['Enter'], invdrop: ['Backspace'], invprev: ['BracketLeft'], invnext: ['BracketRight'], help: ['F1'], silencer: ['KeyL'], shield: ['KeyH'], messagemode: ['KeyT'],
   strafe: ['Alt'], klook: ['Insert'],
 });
 /** A fresh copy of the default binds (each action's keys its own array). */

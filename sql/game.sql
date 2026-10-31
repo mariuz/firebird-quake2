@@ -1836,8 +1836,8 @@ BEGIN
     -- a box of grenades is the hand grenade weapon too; the first one raises it (Pickup_Ammo, single player)
     IF (ak = 3 AND BIN_AND(have, 32) = 0) THEN UPDATE player p SET p.weapons = BIN_OR(p.weapons, 32) WHERE p.ent_id = :other;
     IF (ak = 3 AND oldcount = 0) THEN
-      UPDATE player p SET p.weapon = 32, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
-             p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.ent_id = :other AND p.weapon <> 32;
+      UPDATE player p SET p.lastweapon = p.weapon, p.weapon = 32, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
+             p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.ent_id = :other AND p.weapon <> 32;   -- (ChangeWeapon: lastweapon)
     snd_ = 'misc/am_pkup.wav';
   END
   -- weapons (Pickup_Weapon)
@@ -1860,7 +1860,8 @@ BEGIN
     n = CASE ak WHEN 1 THEN 10 WHEN 2 THEN 50 WHEN 3 THEN 5 WHEN 4 THEN 5 WHEN 5 THEN 50 WHEN 6 THEN 10 ELSE 0 END;
     IF (BIN_AND(COALESCE(isf, 0), 65536) = 0) THEN n = add_ammo(other, ak, n);
     IF (BIN_AND(have, w) = 0) THEN
-      UPDATE player p SET p.weapons = BIN_OR(p.weapons, :w), p.weapon = IIF(:dm = 1 AND p.weapon NOT IN (0, 1), p.weapon, :w), p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
+      UPDATE player p SET p.weapons = BIN_OR(p.weapons, :w), p.lastweapon = IIF(:dm = 1 AND p.weapon NOT IN (0, 1), p.lastweapon, p.weapon),   -- (ChangeWeapon: lastweapon)
+             p.weapon = IIF(:dm = 1 AND p.weapon NOT IN (0, 1), p.weapon, :w), p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0,
              p.attack_finished = MAXVALUE(p.attack_finished, :t + 0.3e0) WHERE p.ent_id = :other;
     snd_ = 'misc/w_pkup.wav';
   END
@@ -2885,7 +2886,7 @@ AS
 BEGIN
   UPDATE player p SET p.armor = 0, p.armor_type = 0, p.power_armor = 0, p.bullets = 0, p.shells = 0, p.rockets = 0, p.grenades = 0, p.cells = 0, p.slugs = 0,
          p.max_bullets = 200, p.max_shells = 100, p.max_rockets = 50, p.max_grenades = 50, p.max_cells = 200, p.max_slugs = 50,
-         p.weapons = 1, p.weapon = 1, p.keys = 0, p.power_cubes = 0, p.cube_mask = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
+         p.weapons = 1, p.weapon = 1, p.lastweapon = 0, p.keys = 0, p.power_cubes = 0, p.cube_mask = 0, p.quad_finished = 0, p.invincible_finished = 0, p.breather_finished = 0, p.enviro_finished = 0,
          p.silencer_shots = 0, p.kills = 0, p.inv_quad = 0, p.inv_invuln = 0, p.inv_silencer = 0, p.inv_breather = 0, p.inv_enviro = 0,
          p.inv_screen = 0, p.inv_shield = 0, p.inv_sel = 7, p.pers_health = 100, p.pers_max_health = 100, p.pers_flags = 0
    WHERE p.id = :pid;
