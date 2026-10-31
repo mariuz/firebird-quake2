@@ -913,6 +913,24 @@ export class Renderer {
     }
   }
 
+  /** A picture drawn `dw`×`dh` at x, y (nearest texel; the transparent index left out), for a panel in a narrow view. */
+  drawPicScaled(pic, x, y, dw, dh) {
+    if (!pic || dw <= 0 || dh <= 0) return;
+    if (dw === pic.w && dh === pic.h) return this.drawPic(pic, x, y);
+    const { fb, w, h } = this;
+    for (let j = 0; j < dh; j++) {
+      const py = y + j;
+      if (py < 0 || py >= h) continue;
+      const sy = Math.floor((j * pic.h) / dh) * pic.w;
+      for (let i = 0; i < dw; i++) {
+        const px = x + i;
+        if (px < 0 || px >= w) continue;
+        const c = pic.data[sy + Math.floor((i * pic.w) / dw)];
+        if (c !== 255) fb[py * w + px] = c;
+      }
+    }
+  }
+
   drawChar(conchars, c, x, y) {
     if (c === 32 || c === 160 || !conchars) return;
     const { fb, w, h } = this;

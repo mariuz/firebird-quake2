@@ -55,7 +55,8 @@ Two to four can play: the Players select (or the game menu's players spin) start
 split in two views or in quarters, the keyboard and mouse the first player's and a gamepad each the others',
 as `p_client.c` had coop (the demo pak has no player model, so the other players are unseen until a
 registered pak supplies it; 640×480 gives four views of 320×240, and in a narrower view the status bar's
-parts stack in rows from the bottom so none leaves it).
+parts stack in rows from the bottom so none leaves it, and the help computer, the inventory and the score
+board lay their text out to the view's width over their panel scaled to it).
 Or against each other: the select's deathmatch choices play the maps as deathmatch had them, their
 deathmatch-only weapons and spots in and the monsters out, items that come back after they are taken, frags on
 the status bar and the score board on F1 (`dmflags`, `fraglimit` and `timelimit` at the console).
