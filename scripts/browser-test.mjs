@@ -367,9 +367,22 @@ try {
     for (let i = 0; i < 20 && cvName !== 'Ace'; i++) { await sleep(250); cvName = await page.evaluate(() => window.quake2.session.last.NETNAME).catch(() => ''); }
     await typeCommand('cvarlist');
     const cv = await page.evaluate(() => ({ sens: window.quake2.settings.sensitivity, stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).sensitivity, name: window.quake2.settings.name, list: document.getElementById('status')?.textContent })).catch(() => ({}));
-    await typeCommand('sensitivity 7'); await typeCommand('name ""');
     assert(cv.sens === 5 && cv.stored === 5 && cv.name === 'Ace' && cvName === 'Ace' && /sensitivity "5"/.test(cv.list ?? '') && /name "Ace"/.test(cv.list ?? ''),
       `sensitivity and name at the console reach the settings and the game's row, cvarlist shows them (${JSON.stringify(cv)})`);
+    // writeconfig downloads config.cfg with the keys and the cvars; the settings put back, the file run through the Config
+    // control (exec's picker) brings them again
+    const [cfgDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('writeconfig')]);
+    const cfgText = cfgDl ? fs.readFileSync(await cfgDl.path(), 'utf8') : '';
+    await typeCommand('sensitivity 7'); await typeCommand('name ""');
+    const cfgBefore = await page.evaluate(() => ({ sens: window.quake2.settings.sensitivity, name: window.quake2.settings.name })).catch(() => ({}));
+    await page.setInputFiles('#cfg-file', { name: 'config.cfg', mimeType: 'text/plain', buffer: Buffer.from(cfgText) });
+    let ran = '';
+    for (let i = 0; i < 40 && !/config\.cfg: \d+ lines run/.test(ran); i++) { await sleep(250); ran = await status(); }
+    const cfgAfter = await page.evaluate(() => ({ sens: window.quake2.settings.sensitivity, name: window.quake2.settings.name, attack: window.quake2.settings.binds.attack.join() })).catch(() => ({}));
+    await typeCommand('sensitivity 7'); await typeCommand('name ""');
+    assert(cfgDl && cfgDl.suggestedFilename() === 'config.cfg' && /^unbindall$/m.test(cfgText) && /^bind MOUSE1 "\+attack"$/m.test(cfgText) && /^set sensitivity "5"$/m.test(cfgText) && /^set name "Ace"$/m.test(cfgText)
+      && cfgBefore.sens === 7 && cfgBefore.name === '' && /config\.cfg: \d+ lines run/.test(ran) && cfgAfter.sens === 5 && cfgAfter.name === 'Ace' && cfgAfter.attack === 'Control,Mouse1',
+      `writeconfig writes config.cfg (${cfgText.split('\n').length} lines) and the Config control runs it back: ${ran} (${JSON.stringify(cfgAfter)})`);
     // bind and unbind at the console: Quake's words over the keys menu's binds, kept in the settings and read by the input
     await typeCommand('bind j +attack');
     const bj = await page.evaluate(() => ({ attack: window.quake2.settings.binds.attack.join(), stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).binds.attack.join(), input: window.quake2.input.bound('KeyJ'), status: document.getElementById('status')?.textContent })).catch(() => ({}));

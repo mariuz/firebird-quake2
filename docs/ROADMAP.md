@@ -554,9 +554,17 @@ wants: in the order they are to be taken.
   `src/console.js`); `name ""` clears the name; `cvarlist` lists them with `fov` and `skill` on the one line.
   `test:console` runs each: shown, set, clamped, refused, the list; the browser test sets the sensitivity and
   the name at the console and finds them in the settings, the storage, the game's row and the list.
-- **`writeconfig` and `exec`**: the settings and the binds as a Quake cfg file downloaded (`bind k +attack`,
-  `set name "Ace"`…) and a cfg file executed line by line from a file picked (the saves' file input's kin), so
-  a configuration moves between browsers as a save does.
+- **`writeconfig` and `exec`**: done. The settings lived in one browser's storage. `writeconfig` at the console
+  (or the Config control's Download) writes the binds and the cvars as Quake's `config.cfg`
+  (`Key_WriteBindings` and `Cvar_WriteVariables`: `unbindall`, a `bind <key> "<command>"` line a key in the
+  actions' order, a `set <cvar> "<value>"` line a cvar, `fov` and `skill` among them; `writeConfig` in
+  `src/console.js`) and downloads it; `exec` opens the Config control's file picker (a page cannot read a file
+  by name), and the file picked runs line by line through the console (`Console.execText`: the comments and the
+  blank lines skipped, `set` and the quotes config.cfg puts round a command or a value taken), so a
+  configuration moves between browsers as a save does. `test:console` holds the lines written, the download,
+  the picker, a config run back with its comments, quotes and a bad line, and `set`'s refusals; the browser
+  test downloads config.cfg at the console, puts the settings back and runs the file through the control,
+  which brings them again.
 - **Saves across schema changes**: a save lacking a column the schema gained takes its default, a column the
   schema lost is dropped with a note, and `SAVE_VERSION`'s comment says what changed (the *Save and load*
   entry's leftover).
