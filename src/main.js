@@ -302,6 +302,10 @@ const con = new Console({
   isRecording: () => !!recorder,
   setSpectator: (on) => setSpectator(on),
   listPlayers: () => listPlayers(),                      // (players: the game's clients and what drives each; 'guest' on a joined page, null without a game)
+  connect: (text) => connectTo(text),                    // (connect <code or offer>: Join with it, as the box and Answer would)
+  disconnect: () => disconnect(),                        // (disconnect: Leave; true when this page was in a shared game)
+  reconnect: () => (lastConnect ? connectTo(lastConnect) : false),   // (reconnect: Join again with what this page last joined with)
+  lastConnect: () => lastConnect,
   kick: (n) => kickGuest(n),                             // (kick <n>: the guest driving client n dropped; its name, or 'none', 'not-hosting')
 });
 function openConsole(prefill = '') {
@@ -1274,6 +1278,8 @@ function updateStats() {
 // shows a four-letter code, the guest types the code, and the answer goes back the same way.
 const netEl = { panel: $('net'), help: $('net-help'), text: $('net-text'), go: $('net-go'), state: $('net-state') };
 let netStage = null;   // 'offer' (hosting: the guest's answer goes in the box), 'code' (hosting through the relay), 'join' (the host's offer or code does)
+let hostCode = null;   // the code this page published its offers under at the relay: kept for the session, so Host again keeps it and a guest's reconnect finds it
+let lastConnect = '';  // what this page last joined with (a code or an offer text): reconnect at the console joins it again
 const signalRelay = () => (settings.rtcSignal ? new SignalClient(settings.rtcSignal) : null);
 function netState(msg, error = false) {
   netEl.state.textContent = msg;
@@ -1308,9 +1314,10 @@ async function hostGame() {
     if (relay) {
       // through the relay: the offer under a code the host tells the other player; the answer comes back by itself
       netState('publishing the offer at the relay…');
-      const code = await relay.publish(offer);
+      const code = await relay.publish(offer, hostCode);   // (under the code this page had, so a guest's reconnect finds it)
       if (net?.offer?.peer !== peer) { relay.drop(code); return; }
       net.offer.code = code;
+      hostCode = code;
       netStage = 'code';
       netPanel(`Tell the ${net.guests.length ? 'next' : 'other'} player the code ${code} (they type it after Join); the game starts when their answer comes.`, code, null);
       netState(`code ${code}: waiting for the answer${net.guests.length ? ` (${guestsState()})` : ''}`);
@@ -1413,6 +1420,7 @@ async function netGo() {
       const relay = signalRelay();
       const code = isRoomCode(text) ? text.trim().toUpperCase() : null;
       if (code && !relay) { netState('a code needs the relay: rtc_signal <url> at the console', true); return; }
+      if (text.trim()) lastConnect = code ?? text.trim();
       let offerText = text;
       if (code) { netState(`fetching the offer for ${code}…`); offerText = await relay.offer(code); }
       if (netStage !== 'join') return;
@@ -1498,7 +1506,23 @@ function leaveNet() {
 }
 $('net-host').addEventListener('click', () => hostGame());
 $('net-join').addEventListener('click', () => joinGame());
-$('net-leave').addEventListener('click', () => { const guest = netGuest(); leaveNet(); if (guest) endGame(); });
+$('net-leave').addEventListener('click', () => disconnect());
+/** CL_Disconnect_f, the Leave button: the connection dropped, whichever side this page was; a guest starts a game of its own. True when there was one. */
+function disconnect() {
+  const was = !!net;
+  const guest = netGuest();
+  leaveNet();
+  if (guest) endGame();
+  return was;
+}
+/** CL_Connect_f: Join with the text given (a code at the relay, or an offer text), as the box and Answer would take it. */
+async function connectTo(text) {
+  if (!res) return false;
+  joinGame();
+  netEl.text.value = String(text ?? '').trim();
+  await netGo();
+  return true;
+}
 netEl.go.addEventListener('click', () => netGo());
 $('net-copy').addEventListener('click', () => { netEl.text.select(); navigator.clipboard?.writeText(netEl.text.value).catch(() => {}); });
 $('net-spectate').addEventListener('change', () => applyUserinfo());   // (a joined page: the host puts its client in as a watcher, or a player again)

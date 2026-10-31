@@ -547,7 +547,11 @@ machine or one network needs none) and shows the description as a text, or, with
 `scripts/signal.mjs`, a small HTTP server of the player's own holding an offer and its answer under a
 four-letter room code for ten minutes), publishes it there and shows the code, waiting for the answer by
 itself (`SignalClient`: publish, offer, answer, waitAnswer polling every second, drop); the guest types the
-code after Join and its answer goes back the same way. By text (`packSignal`: the description gzipped and
+code after Join and its answer goes back the same way. The host keeps its code for the session (`hostCode`:
+Host again publishes under it, `POST /rooms/<code>`), so a guest's `reconnect` at the console finds the
+new offer under the code it joined with; `connect <code or offer>` is Join with the text, `disconnect` the
+Leave button (`CL_Connect_f`, `CL_Reconnect_f`, `CL_Disconnect_f`; `connectTo`, `disconnect` and
+`lastConnect` in `src/main.js`). By text (`packSignal`: the description gzipped and
 base64'd, some six hundred characters) the guest answers it the same way and the host accepts the answer;
 either way `ready` resolves with the Link when the channel opens. The guest predicts its own move, as `CL_PredictMovement` did with the client's pmove:
 `src/pmove.js` is the JS twin of `player_think`'s movement and of the traces in `sql/physics.sql` (`ClipMap`

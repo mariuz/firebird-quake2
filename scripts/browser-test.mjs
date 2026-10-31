@@ -663,7 +663,8 @@ try {
           await p.evaluate(() => document.exitPointerLock?.()); await sleep(400);
           if (await p.evaluate(() => window.quake2?.menu?.active).catch(() => false)) { await p.keyboard.press('Escape'); await sleep(200); }
         }
-        await p.mouse.click(480, 360); await sleep(200); await p.keyboard.press('Backquote'); await sleep(200); await p.keyboard.type(line); await p.keyboard.press('Enter'); await sleep(300);
+        await p.locator('#screen').click(); await sleep(200);   // (the view, wherever the page is scrolled to: a click elsewhere could land on a control)
+        await p.keyboard.press('Backquote'); await sleep(200); await p.keyboard.type(line); await p.keyboard.press('Enter'); await sleep(300);
       };
       assert(relayUp, `the signalling relay runs on port ${RELAY_PORT}`);
       for (const p of [page, gp]) await p.evaluate((url) => { window.quake2.settings.rtcSignal = url; }, `http://localhost:${RELAY_PORT}`);
@@ -867,18 +868,37 @@ try {
           `the third page says it was kicked and stands for a key, and every client's message line says who (${JSON.stringify({ tk, kickMsg })})`);
       }
       await tctx.close();
-      // the guest leaves: the host plays on, its other players standing; the guest's page starts a game of its own
-      await gp.evaluate(() => document.exitPointerLock?.());   // (the view holds the pointer since the click: a button needs it back)
-      await sleep(300);
-      await gp.click('#net-leave');
+      // the guest leaves (disconnect at its console, the Leave button's word): the host plays on, its other players standing;
+      // the guest's page starts a game of its own
+      await typeOn(gp, 'disconnect');
       let left = await hstate();
       for (let i = 0; i < 40 && left.role !== undefined; i++) { await sleep(250); left = await hstate(); }
-      assert(left.role === undefined && left.clients === (tready ? 3 : 2), `the guest leaves and the host's game goes on with its other players (${JSON.stringify(left)})`);
+      assert(left.role === undefined && left.clients === (tready ? 3 : 2), `disconnect at the guest's console leaves, and the host's game goes on with its other players (${JSON.stringify(left)})`);
       const h1 = await frames(page); await sleep(700); const h2 = await frames(page);
       assert(h2 > h1, `the host's frames keep coming (${h2 - h1} in 0.7 s)`);
       let own = false;
       for (let i = 0; i < 80 && !own; i++) { const g1 = await frames(gp); await sleep(500); own = (await frames(gp)) > g1; }
       assert(own, 'and the guest\'s page plays a game of its own again');
+      // reconnect: the host Hosts again through the relay (its offer under the code it had, so the guest finds it), and
+      // reconnect at the guest's console joins the game again with the code it joined with the first time (the guest's
+      // page is on the attract loop, where a key brings the menu: a game of its own first, for its console)
+      await gp.selectOption('#map', 'demo1');
+      for (let i = 0; i < 240 && !(await gp.evaluate(() => window.quake2?.running && !window.quake2?.demo).catch(() => false)); i++) await sleep(250);
+      await typeOn(page, `rtc_signal http://localhost:${RELAY_PORT}`); await typeOn(gp, `rtc_signal http://localhost:${RELAY_PORT}`);
+      await page.evaluate(() => document.exitPointerLock?.()); await sleep(300);
+      if (await page.evaluate(() => window.quake2?.menu?.active).catch(() => false)) { await page.keyboard.press('Escape'); await sleep(200); }
+      await page.click('#net-host');
+      let again = '';
+      for (let i = 0; i < 80 && !/^[A-Z2-9]{4}$/.test(again); i++) { await sleep(250); again = await text(page); }
+      const lastJoined = await gp.evaluate(() => window.quake2?.net ? 'in a game' : null).catch(() => null);
+      await typeOn(gp, 'reconnect');
+      let hr = {}, gr = {};
+      for (let i = 0; i < 240 && !(hr.guests?.length === 1 && gr.role === 'guest' && gr.frames > 20); i++) { await sleep(250); hr = await hstate(); gr = await gstate(); }
+      assert(again === offer && lastJoined === null && hr.role === 'host' && hr.guests?.length === 1 && gr.role === 'guest' && gr.frames > 20 && gr.map === 'demo1',
+        `Host again publishes under the code the host had (${again}), and reconnect at the guest's console joins the game again (${JSON.stringify({ hr, gr })})`);
+      await typeOn(gp, 'disconnect');
+      for (let i = 0; i < 40 && (await hstate()).role !== undefined; i++) await sleep(250);
+      for (const p of [page, gp]) await p.evaluate(() => { window.quake2.settings.rtcSignal = ''; }).catch(() => undefined);   // (the guest is back on the attract loop: no console there)
       await page.selectOption('#players', '1');
       await sleep(500);
     }

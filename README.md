@@ -38,7 +38,7 @@ npm run test:base2     # the same on the Installation (demo2)
 npm run test:base3     # and on demo3
 npm run test:monsters  # every monster, the demo's and the full game's: spawned, it sees the player, attacks, and dies
 npm run test:save      # save, play on, load: the game comes back exactly and keeps running
-# in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, skill 0-3, save, load, record …, stop, demos, deldemo …, timedemo …, screenshot, say …, bind k +attack, bind t "say hello", unbind k, unbindall, bindlist, the cvars name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume, cvarlist, writeconfig, exec, exec autoexec, unautoexec, timescale 0.5, players, kick 2); T chats (say); F1 the help computer
+# in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, skill 0-3, save, load, record …, stop, demos, deldemo …, timedemo …, screenshot, say …, bind k +attack, bind t "say hello", unbind k, unbindall, bindlist, the cvars name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume, cvarlist, writeconfig, exec, exec autoexec, unautoexec, timescale 0.5, players, kick 2, connect K9H2, disconnect, reconnect); T chats (say); F1 the help computer
 npm run serve          # http://localhost:8080/ (as Pages serves it); add -- --coi for the threaded engine
 npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs demo1 --at=x,y,z,yaw)
 npm run bench          # where a tic and a frame spend their time
@@ -74,7 +74,8 @@ each, `kick <n>` drops a guest; the host's menu and `P` do not stop a shared gam
 paused single player alone. There is no signalling server on a static site, so the texts go by hand,
 or through a relay of your own: `npm run signal` runs one (`scripts/signal.mjs`, a small HTTP server with
 four-letter room codes), `rtc_signal http://host:8787` at the console of both pages points them at it, and
-Host then shows a code for the other player to type after Join (the page on Pages is https, which reaches
+Host then shows a code for the other player to type after Join, or to give `connect <code>` at the console
+(`disconnect` leaves, `reconnect` joins the last host again: Host again keeps the host's code) (the page on Pages is https, which reaches
 an http relay only at `localhost`: anywhere else the relay goes behind https, a reverse proxy's). Two players whose networks a STUN server
 cannot cross (symmetric NATs) give both pages a TURN relay with `rtc_ice turn:host:3478 user pass` at the
 console, kept in the settings.

@@ -333,6 +333,15 @@ check(madeWith?.iceServers.length === 1 && madeWith.iceServers[0].urls.startsWit
   check(refusals[0] === 'no game under that code' && refusals[1] === 'that game was answered already' && /refused \(400/.test(refusals[2]), `a wrong code, a second answer and an empty offer are refused (${refusals.join(' | ')})`);
   await sc.drop(code);
   check(!relay.rooms.has(code) && (await sc.offer(code).catch((e) => e.message)) === 'no game under that code', 'dropped, the room is gone');
+  // the host's own code: the offer published under the code it had (Host again keeps the code, so a guest's reconnect finds
+  // it), the room made anew, an answer there before forgotten; a code that is not one is refused
+  const mine = await sc.publish(text, code.toLowerCase());
+  await sc.answer(code, 'q2net1:first');
+  const again = await sc.publish('q2net1:offer2', code);
+  check(mine === code && again === code && relay.rooms.get(code)?.offer === 'q2net1:offer2' && relay.rooms.get(code)?.answer === null && (await sc.offer(code)) === 'q2net1:offer2',
+    `the host publishes under its own code (${code}), in any case, and again under it with the room made anew`);
+  check(/refused \(400: not a code\)/.test(await sc.publish(text, 'AB01').catch((e) => e.message)), 'a code that is not one of the relay\'s is refused');
+  await sc.drop(code);
   const old = await sc.publish(text);
   clock += 6000;
   check((await sc.offer(old).catch((e) => e.message)) === 'no game under that code', 'a room past its time is swept');

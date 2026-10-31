@@ -6,6 +6,7 @@
 //   npm run signal                     (PORT=8787; then `rtc_signal http://<this machine>:8787` at the console of every page)
 //
 //   POST   /rooms              the offer as the body → { code }
+//   POST   /rooms/<code>       the offer under a code of the host's own (its last one: a guest's reconnect finds it) → { code }
 //   GET    /rooms/<code>       → { offer, answer }
 //   POST   /rooms/<code>/answer   the answer as the body → { ok } (409 once answered)
 //   GET    /rooms/<code>/answer   → { answer } (null until it comes)
@@ -46,6 +47,14 @@ export function createSignalServer({ ttlMs = TTL, now = Date.now } = {}) {
         const c = newCode();
         rooms.set(c, { offer, answer: null, at: now() });
         return reply(200, { code: c });
+      }
+      if (req.method === 'POST' && code && !part) {
+        // the host's own code (the one it had): the room made anew under it, an answer there before forgotten
+        if (code.length !== CODE_LENGTH || [...code].some((ch) => !ALPHABET.includes(ch))) return reply(400, { error: 'not a code' });
+        const offer = await body();
+        if (!offer) return reply(400, { error: 'no offer' });
+        rooms.set(code, { offer, answer: null, at: now() });
+        return reply(200, { code });
       }
       const room = code ? rooms.get(code) : null;
       if (!room) return reply(404, { error: 'no such room' });
