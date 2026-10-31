@@ -352,15 +352,16 @@ BEGIN
   END
   -- the impulses are the weapons in item order (1 blaster … 6 hand grenades … 11 BFG10K); the page maps
   -- default.cfg's keys onto them: 1-5, 6 grenade launcher … 0 BFG10K, G "use grenades"
-  IF (imp = 12) THEN
+  IF (imp = 12 OR imp = 22) THEN
   BEGIN
-    -- Cmd_WeapNext: the next weapon held, in item order, that Use_Weapon accepts (one with the ammo for a
-    -- shot; hand grenades are their own ammo). (Quake 2 also printed the refusals it passed over.)
+    -- Cmd_WeapNext (12) and Cmd_WeapPrev (22): the next or the previous weapon held, in item order, that
+    -- Use_Weapon accepts (one with the ammo for a shot; hand grenades are their own ammo). (Quake 2 also
+    -- printed the refusals it passed over.)
     i = 0;
     cur = w;
     WHILE (i < 11) DO
     BEGIN
-      w = IIF(w >= 1024 OR w < 1, 1, w * 2);
+      w = IIF(:imp = 12, IIF(w >= 1024 OR w < 1, 1, w * 2), IIF(w <= 1 OR w > 1024, 1024, w / 2));
       IF (w = cur) THEN EXIT;
       IF (BIN_AND(have, w) <> 0) THEN
       BEGIN
@@ -696,7 +697,7 @@ BEGIN
   yaw = anglemod(yaw + yaw_d);
   pitch = MAXVALUE(-89, MINVALUE(89, ppitch + pitch_d));
   IF (imp BETWEEN 13 AND 21) THEN EXECUTE PROCEDURE inv_impulse(pe, imp);
-  ELSE IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(pe, imp);
+  ELSE IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(pe, imp);   -- (the weapons 1-11, weapnext 12, weapprev 22, 99 everything)
 
   -- P_WorldEffects: water, slime, lava, drowning
   -- (PM_CatagorizePosition's water level, worked out again wherever the player now is: moved by pmove, a

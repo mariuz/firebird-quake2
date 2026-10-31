@@ -17,7 +17,8 @@ export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'Ar
   'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'KeyL', 'KeyH', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
 
 // default.cfg: 1-5 blaster to chaingun, 6 grenade launcher … 0 BFG10K, G "use grenades"
-// (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher);
+// (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher; 12 and 22 the
+// next and the previous weapon, the bindable weapnext and weapprev below);
 // the item keys: q quad damage, i invulnerability, b rebreather, e environment suit (s, the silencer, and p,
 // the power shield, are the page's back and pause: those two are bindable actions below, l and h by default).
 // The rest of the keys are the bindable actions below.
@@ -27,7 +28,7 @@ export const KEY_IMPULSE = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5:
 // The bindable actions, as menu.c's bindnames listed them (the ones with a meaning here: no mouse look, keyboard
 // look, sidestep or centre view), with the impulse the one-shot ones send; the keys menu edits settings.binds.
 export const ACTIONS = [
-  { id: 'attack', name: 'attack' }, { id: 'weapnext', name: 'next weapon', impulse: 12 },
+  { id: 'attack', name: 'attack' }, { id: 'weapnext', name: 'next weapon', impulse: 12 }, { id: 'weapprev', name: 'previous weapon', impulse: 22 },
   { id: 'forward', name: 'walk forward' }, { id: 'back', name: 'backpedal' }, { id: 'left', name: 'turn left' }, { id: 'right', name: 'turn right' },
   { id: 'run', name: 'run' }, { id: 'moveleft', name: 'step left' }, { id: 'moveright', name: 'step right' },
   { id: 'lookup', name: 'look up' }, { id: 'lookdown', name: 'look down' }, { id: 'moveup', name: 'up / jump' }, { id: 'movedown', name: 'down / crouch' },
@@ -36,9 +37,10 @@ export const ACTIONS = [
   // default.cfg's "use silencer" (s) and "use power shield" (p), whose keys the page has (back, pause): bound to l and h
   { id: 'silencer', name: 'silencer', impulse: 18 }, { id: 'shield', name: 'power shield', impulse: 21 },
 ];
-// default.cfg's keys for them (and this port's WASD, F and the page keys), at most two a command as the keys menu shows
+// default.cfg's keys for them (and this port's WASD and the page keys), at most two a command as the keys menu shows; the
+// mouse buttons and the wheel are keys too (MOUSE1-3, MWHEELUP, MWHEELDOWN: Mouse1-3, MWheelUp, MWheelDown here)
 export const DEFAULT_BINDS = Object.freeze({
-  attack: ['Control', 'KeyF'], weapnext: ['Slash'], forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
+  attack: ['Control', 'Mouse1'], weapnext: ['Slash', 'MWheelDown'], weapprev: ['MWheelUp'], forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
   run: ['Shift'], moveleft: ['KeyA', 'Comma'], moveright: ['KeyD', 'Period'], lookup: ['PageUp'], lookdown: ['PageDown'], moveup: ['Space'], movedown: ['KeyC'],
   inven: ['Tab'], invuse: ['Enter'], invprev: ['BracketLeft'], invnext: ['BracketRight'], help: ['F1'], silencer: ['KeyL'], shield: ['KeyH'],
 });
@@ -46,7 +48,10 @@ export const DEFAULT_BINDS = Object.freeze({
 export const defaultBinds = () => Object.fromEntries(Object.entries(DEFAULT_BINDS).map(([k, v]) => [k, [...v]]));
 /** A key's code as the binds hold it: the two controls, shifts and alts are one key each, as Quake's K_CTRL was. */
 export const normalizeKey = (code) => (/^(Control|Shift|Alt)(Left|Right)$/.test(code) ? code.replace(/(Left|Right)$/, '') : code);
+/** The mouse buttons as keys (K_MOUSE1 the left, K_MOUSE2 the right, K_MOUSE3 the middle), by MouseEvent.button. */
+export const MOUSE_KEYS = { 0: 'Mouse1', 2: 'Mouse2', 1: 'Mouse3' };
 const KEY_NAMES = { ArrowUp: 'UPARROW', ArrowDown: 'DOWNARROW', ArrowLeft: 'LEFTARROW', ArrowRight: 'RIGHTARROW', Control: 'CTRL', Shift: 'SHIFT', Alt: 'ALT',
+  Mouse1: 'MOUSE1', Mouse2: 'MOUSE2', Mouse3: 'MOUSE3', MWheelUp: 'MWHEELUP', MWheelDown: 'MWHEELDOWN',
   Space: 'SPACE', Tab: 'TAB', Enter: 'ENTER', NumpadEnter: 'KP_ENTER', Backspace: 'BACKSPACE', Escape: 'ESCAPE', PageUp: 'PGUP', PageDown: 'PGDN', Home: 'HOME', End: 'END',
   Insert: 'INS', Delete: 'DEL', CapsLock: 'CAPSLOCK', Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']',
   Backslash: '\\', Minus: '-', Equal: '=', Backquote: '`', NumpadAdd: 'KP_PLUS', NumpadSubtract: 'KP_MINUS', NumpadMultiply: 'KP_MULT', NumpadDivide: 'KP_SLASH', NumpadDecimal: 'KP_DEL' };
@@ -89,7 +94,7 @@ export class Input {
     this.keys = new Set();
     this.binds = binds;          // action → the keys bound to it (the page's settings.binds, edited in place by the keys menu)
     this.mouseYaw = 0; this.mousePitch = 0;
-    this.fireClick = false;      // the mouse button, or 'tap' for a touch's single shot
+    this.fireClick = false;      // 'tap' for a touch's single shot (the mouse buttons are keys, through the binds)
     this.impulse = 0;
     this.touch = { move: null, look: null };
     this.pad = { held: new Set(), stick: { x: 0, y: 0 }, last: null };
@@ -155,17 +160,25 @@ export class Input {
     return pad;
   }
 
+  /** The wheel as a key pressed and let go at once (Quake released K_MWHEELUP/DOWN in the same event): a one-shot action's impulse, a held one nothing. */
+  wheel(deltaY) {
+    const code = deltaY > 0 ? 'MWheelDown' : 'MWheelUp';
+    this.key(code);
+    this.release(code);
+  }
+
   /**
    * Wire the browser events whose meaning is the game's alone. `locked()` says whether the mouse is
-   * captured by the view, `settings()` gives the live settings.
+   * captured by the view, `settings()` gives the live settings. The mouse buttons are keys under the lock
+   * (Mouse1-3, through the binds like any key), the wheel MWheelUp and MWheelDown.
    */
   attach(canvas, win, { locked, settings }) {
     win.addEventListener('keyup', (e) => this.release(e.code));
     win.addEventListener('blur', () => this.clear());
-    canvas.addEventListener('mousedown', (e) => { if (locked() && e.button === 0) this.fireClick = true; });
-    win.addEventListener('mouseup', () => { this.fireClick = false; });
+    canvas.addEventListener('mousedown', (e) => { if (locked() && MOUSE_KEYS[e.button]) this.key(MOUSE_KEYS[e.button]); });
+    win.addEventListener('mouseup', (e) => { if (MOUSE_KEYS[e.button]) this.release(MOUSE_KEYS[e.button]); });
     win.addEventListener('mousemove', (e) => { if (locked()) this.mouse(e.movementX, e.movementY, settings()); });
-    win.addEventListener('wheel', () => { if (locked()) this.impulse = 12; });
+    win.addEventListener('wheel', (e) => { if (locked()) this.wheel(e.deltaY); });
     canvas.addEventListener('touchstart', (e) => {
       const r = canvas.getBoundingClientRect();
       for (const t of e.changedTouches) this.touchStart(t.identifier, t.clientX, t.clientY, t.clientX - r.left < r.width / 2);
@@ -209,7 +222,7 @@ export class Input {
     const pitch = lookKeys * 5 * tics + this.mousePitch + padLook;
     this.mouseYaw = 0; this.mousePitch = 0;
     const fire = b('attack') || k('TouchFire') || this.fireClick || pad?.fire ? 1 : 0;
-    if (this.fireClick === 'tap') this.fireClick = false;
+    if (this.fireClick === 'tap') this.fireClick = false;   // (a tap fires once)
     // Quake's upmove: jump up, crouch (C) down, both nothing
     const jump = (b('moveup') || k('TapJump') || pad?.jump ? 1 : 0) - (b('movedown') || pad?.crouch ? 1 : 0);
     this.keys.delete('TapJump');

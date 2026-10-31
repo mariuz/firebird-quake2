@@ -527,9 +527,15 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert(u.WEAPON === 1 && u.MSG === 'Out of item: Shotgun', `a weapon not held is out of item (${u.MSG})`);
   u = await use(12);
   assert(u.WEAPON === 8, 'the next weapon passes over the super shotgun without shells to the machinegun');
+  u = await use(22);
+  assert(u.WEAPON === 1, 'the previous weapon (impulse 22, Cmd_WeapPrev) passes back over it to the blaster');
+  u = await use(22);
+  assert(u.WEAPON === 8, '... and from the blaster round to the last held, the machinegun');
   await db.exec('UPDATE player SET weapons = 1 WHERE id = 1');
   u = await use(12);
   assert(u.WEAPON === 1, '... and with nothing else held stays on the blaster');
+  u = await use(22);
+  assert(u.WEAPON === 1, 'the previous weapon too');
   await db.exec(`UPDATE player SET weapons = ${keep.WEAPONS}, weapon = ${keep.WEAPON}, shells = ${keep.SHELLS}, bullets = ${keep.BULLETS}, cells = ${keep.CELLS}, msg = NULL WHERE id = 1`);
 }
 

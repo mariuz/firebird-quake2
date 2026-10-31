@@ -77,7 +77,7 @@ the order they are to be taken.
   action, a third makes both go first), Backspace unbinds, and the binds live in `settings.binds`
   (`src/settings.js` checks them on the way in) which `src/input.js` reads each tic; the options' reset
   defaults puts them back as `exec default.cfg` did. The weapon and item keys (1–0, G, Q, I, B, E) stay
-  fixed, as Quake's menu did not list them; the mouse button and the wheel are not bindable.
+  fixed, as Quake's menu did not list them; the mouse buttons and the wheel became bindable with the fifth list.
 - **Fidelity against the real software renderer**: `test:golden` compares the painter against itself.
   Screenshots from ref_soft at the same viewpoints (the real engine on a Windows machine, `screenshot`
   at 320×240 with the same fov, the same frame of the same map), kept beside the docs' shots and
@@ -472,10 +472,20 @@ The fifth list, from what the entries above and below still leave: in the order 
   theirs; the status bar says where the texts go; a page with no network keeps them greyed. `test:menu` sees
   each item call the page's and the menu go, and a host without them greyed; the browser test hosts from the
   menu over the attract loop and joins from the guest's menu.
-- **The mouse buttons and the wheel bindable**: the keys menu binds keys alone; the mouse button fires and the
-  wheel changes weapon, fixed. `MOUSE1`–`MOUSE3`, `MWHEELUP` and `MWHEELDOWN` as keys of `settings.binds`
-  (Enter then a button binds, as `KeyBindingFunc` took `K_MOUSE1`), the defaults MOUSE1 attack and the wheel
-  weapnext, `src/input.js` routing the buttons through the binds.
+- **The mouse buttons and the wheel bindable**: done. The keys menu bound keys alone; the left button fired and
+  the wheel changed weapon, fixed. The buttons and the wheel are keys now (`Mouse1`–`Mouse3`, `MWheelUp`,
+  `MWheelDown`, named `MOUSE1`… and `MWHEELUP`/`MWHEELDOWN` as `Key_KeynumToString` named them): under the
+  lock `src/input.js` presses and releases them through the binds like any key, a wheel notch pressed and let
+  go at once (so a held action bound to it does nothing, as Quake's `K_MWHEELUP` was released in the same
+  event), and in the keys menu Enter then a button or a notch binds ("press a key or button", as
+  `KeyBindingFunc` took `K_MOUSE1`). The defaults are default.cfg's: MOUSE1 attack (with CTRL; `F` is no
+  longer one), MWHEELDOWN weapnext (with `/`) and MWHEELUP `weapprev`, a new action with its impulse 22
+  (`Cmd_WeapPrev`: the previous weapon held with the ammo for a shot, `player_impulse` walking the other way).
+  `test:input` sees the buttons fire and stop, the wheel's two impulses, a notch let go at once, a button
+  bound to jump, the wired browser events under the lock and outside it; `test:menu` a button and a notch
+  bind in the menu and draw as named; `test:settings` keeps them; the smoke test the previous weapon back
+  over one without ammo and round the end; the browser test the left button firing under the lock and the
+  right button binding attack in the keys menu, reset defaults putting MOUSE1 back.
 - **`bind`, `unbind`, `unbindall` and `bindlist` at the console**: Quake's words over the same binds
   (`bind k +attack`, the key names `Key_StringToKeynum` took), a command the page has no action for refused.
 - **The notify lines and the console's scrollback**: what the game prints (pickups, obituaries, the help's news)

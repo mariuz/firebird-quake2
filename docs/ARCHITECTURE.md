@@ -636,8 +636,8 @@ mapping, polled each frame) moves with the left stick, looks with the right at t
 turning speed scaled by the mouse sensitivity, fires with RT, jumps with A, crouches with B, changes
 weapon with the bumpers, opens the menu with Start and drives it with the d-pad, A and B; `default.cfg`'s weapon keys (1–5 blaster to chaingun, 6 grenade launcher, 7 rocket
 launcher, 8 hyperblaster, 9 railgun, 0 BFG10K, `G` hand grenades) sent as impulses that are the weapons
-in item order (1 blaster … 6 hand grenades … 11 BFG10K), `/` or the wheel for the next weapon with ammo
-(12), `P` pauses; everything (99) is the console's `give all`. On touch screens the halves of the
+in item order (1 blaster … 6 hand grenades … 11 BFG10K), `/` or the wheel down for the next weapon with ammo
+(12) and the wheel up for the previous (22, `weapprev`), `P` pauses; everything (99) is the console's `give all`. On touch screens the halves of the
 screen move and look.
 
 Leaving a level: `changelevel` keeps the `target_changelevel`'s map string as written in `game.next_map`.
@@ -671,14 +671,16 @@ both agree. The game menu's `credits` scrolls
 menu.c's `idcredits` (`src/credits.js`) up the screen as `M_Credits_MenuDraw` did: a line every ten
 pixels rising a pixel every 40 ms, the `+` lines in the highlighted font, round again once the last is off
 the top, Escape to leave. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
-high for each of the twenty bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
-mouse look, keyboard look, sidestep and centre view, and the silencer and the power shield, default.cfg's
+high for each of the twenty-one bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
+mouse look, keyboard look, sidestep and centre view, plus the previous weapon, `weapprev`, and the silencer and the power shield, default.cfg's
 `s` and `p`, which are the page's back and pause: `l` and `h` here) with its keys named as `Key_KeynumToString` named them
-(`keyName`: letters and digits as themselves, `UPARROW`, `CTRL`, `PGDN`…, "or" between two, `???` for
-none); Enter waits for a key (the cursor an `=`, the status bar asking) and the next key pressed binds it
+(`keyName`: letters and digits as themselves, `UPARROW`, `CTRL`, `PGDN`, `MOUSE1`, `MWHEELUP`…, "or" between two, `???` for
+none); Enter waits for a key (the cursor an `=`, the status bar asking) and the next key, mouse button or wheel notch pressed binds it
 (`bindKey`: the key leaves whatever it was bound to, an action keeps two and a third makes both go first,
 as `KeyBindingFunc` unbound them), Escape and the backquote cancel, Backspace and Delete unbind. The binds
-are `settings.binds` (action → key codes, the two shifts, controls and alts one key each), checked on the
+are `settings.binds` (action → key codes, the two shifts, controls and alts one key each, the mouse buttons
+`Mouse1`–`Mouse3` and the wheel `MWheelUp`/`MWheelDown` keys too, pressed under the lock and the wheel let go
+at once), checked on the
 way in from storage like every setting, and the `Input` reads the same object each tic (`read` asks
 whether any key bound to an action is down; a one-shot action's impulse comes from `key`); the options'
 reset defaults puts them back as `exec default.cfg` did. The weapon and item keys stay fixed, as Quake's

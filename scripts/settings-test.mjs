@@ -43,7 +43,9 @@ const binds = loadSettings(store(JSON.stringify({ binds: { attack: ['KeyK'], for
 check(binds.attack.join() === 'KeyK' && binds.forward.join() === 'KeyW' && binds.back.join() === 'KeyS,ArrowDown' && binds.left.length === 0 && binds.right.join() === 'Shift' && !('bogus' in binds)
   && binds.moveup.join() === 'Space',
   'the binds come back checked: a key bound twice keeps its first action, a third key is dropped, a bad list keeps the default, a bad code is skipped, a side-key is the key, an unknown action is dropped, a missing one is its default');
-check(loadSettings(store(JSON.stringify({ binds: 'none' }))).binds.attack.join() === 'Control,KeyF' && loadSettings(store()).binds !== DEFAULTS.binds, 'binds that are not an object are the defaults, and the defaults a fresh copy');
+check(loadSettings(store(JSON.stringify({ binds: 'none' }))).binds.attack.join() === 'Control,Mouse1' && loadSettings(store()).binds !== DEFAULTS.binds, 'binds that are not an object are the defaults, and the defaults a fresh copy');
+check(loadSettings(store(JSON.stringify({ binds: { moveup: ['Mouse2', 'Mouse3'], weapprev: ['MWheelDown'] } }))).binds.moveup.join() === 'Mouse2,Mouse3' && DEFAULTS.binds.weapprev.join() === 'MWheelUp',
+  'the mouse buttons and the wheel are keys the binds keep (the wheel up the previous weapon by default)');
 const fresh = loadSettings(store());
 fresh.binds.attack.push('KeyZ');
 check(DEFAULTS.binds.attack.length === 2, 'editing a loaded bind leaves the defaults alone');

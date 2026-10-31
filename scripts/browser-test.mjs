@@ -186,9 +186,27 @@ try {
     assert(sh1 > sh0 && sh0 >= 0, `K now fires the blaster (${sh0} → ${sh1} shots)`);
     await press('Escape', 'Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');   // (the main menu's cursor stayed on options)
     const reset = await page.evaluate(() => window.quake2.settings.binds.attack.join()).catch(() => '');
-    assert(reset === 'Control,KeyF', `reset defaults puts the keys back (${reset})`);
+    assert(reset === 'Control,Mouse1', `reset defaults puts the keys back (${reset})`);
     await press('Escape', 'Escape');
     assert((await menuId()) === null, 'and the menus close');
+    // the mouse: the left button fires under the lock (MOUSE1, attack's second default key), the wheel changes weapon,
+    // and in the keys menu a button binds (Enter on attack, then the right button)
+    await page.mouse.click(480, 360); await sleep(300);   // (the lock)
+    const sm0 = await shots();
+    await page.mouse.down(); await sleep(700); await page.mouse.up(); await sleep(300);
+    const sm1 = await shots();
+    assert(sm1 > sm0, `the left mouse button fires the blaster under the lock (${sm0} → ${sm1} shots)`);
+    await page.evaluate(() => document.exitPointerLock?.()); await sleep(400);
+    if ((await menuId()) !== 'main') await press('Escape');   // (the pointer let go brings the main menu up by itself)
+    await press('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');   // (the main menu's cursor stayed on options)
+    assert((await menuId()) === 'keys', `the keys menu again (${await menuId()})`);
+    await press('Enter');
+    await page.mouse.click(480, 360, { button: 'right' }); await sleep(200);
+    const mouseBound = await page.evaluate(() => ({ attack: window.quake2.settings.binds.attack.join(), grab: !!window.quake2.menu.current?.grab, menu: window.quake2.menu.current?.id })).catch(() => ({}));
+    assert(mouseBound.attack === 'Mouse2' && !mouseBound.grab && mouseBound.menu === 'keys', `Enter then the right button binds attack to MOUSE2 (${JSON.stringify(mouseBound)})`);
+    await press('Escape', 'ArrowDown', 'Enter');   // (back in options, the cursor on customize controls: reset defaults is next)
+    await press('Escape', 'Escape');
+    assert((await page.evaluate(() => window.quake2.settings.binds.attack.join()).catch(() => '')) === 'Control,Mouse1' && (await menuId()) === null, 'reset defaults puts MOUSE1 back on attack, and the menus close');
 
     // the tics are paced by the wall clock (20 Hz) and the frames painted between them: the game's clock never runs
     // ahead of the wall's, and at twenty frames a second or more runs at it, within what a runner's jitter loses (a
