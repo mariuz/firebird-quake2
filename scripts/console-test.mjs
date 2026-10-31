@@ -2,7 +2,7 @@
 // the rest reach player_command, the history steps and forgets as Key_Console's did, Tab completes.
 //   node scripts/console-test.mjs
 
-import { Console, COMMANDS } from '../src/console.js';
+import { Console, COMMANDS, writeConfig } from '../src/console.js';
 import { Notify } from '../src/notify.js';
 import { ACTIONS, defaultBinds } from '../src/input.js';
 
@@ -215,6 +215,33 @@ await con.submit('cd_volume 2'); check(s.music === 100 && status.at(-1)?.[0] ===
 await con.submit('cvarlist');
 check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
 Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 });
+
+// writeconfig and exec: the binds and the cvars as config.cfg (Key_WriteBindings, Cvar_WriteVariables), run back line by line
+{
+  const cfg = writeConfig({ ...s, name: 'Ace Rimmer', sensitivity: 5, invertMouse: true, binds: { ...defaultBinds(), attack: ['KeyK', 'Mouse2'], moveup: [] } });
+  const lines = cfg.split('\n');
+  check(lines[0].startsWith('//') && lines[1] === 'unbindall' && lines[2] === 'bind k "+attack"' && lines[3] === 'bind MOUSE2 "+attack"' && lines.includes('bind MWHEELDOWN "weapnext"') && !lines.some((l) => l.includes('"+moveup"'))
+    && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && cfg.endsWith('\n'),
+    'writeConfig writes unbindall, a bind line a key in the actions\' order and a set line a cvar, as config.cfg had them');
+  let downloaded = null;
+  host.download = (name, text) => { downloaded = { name, text }; };
+  await con.submit('writeconfig');
+  check(downloaded?.name === 'config.cfg' && downloaded.text === writeConfig(host.settings) && status.at(-1)?.[0] === 'config.cfg written', 'writeconfig downloads config.cfg');
+  let picked = 0;
+  host.execConfig = () => { picked++; };
+  await con.submit('exec');
+  check(picked === 1, 'exec opens the Config picker');
+  s.sensitivity = 7; s.name = ''; s.invertMouse = false; host.settings.binds = defaultBinds();
+  const n = await con.execText(cfg + '\n// a comment\n\nset fov 100 // trailing\nbind nosuch +attack\n');
+  check(n === lines.length && s.name === 'Ace Rimmer' && s.sensitivity === 5 && s.invertMouse === true && host.settings.fov === 100 && host.settings.binds.attack.join() === 'KeyK,Mouse2' && host.settings.binds.moveup.length === 0,
+    `exec runs a config's lines (${n}): the comments and blanks skipped, the quotes off, a bad key refused and the rest run`);
+  await con.submit('set');
+  check(status.at(-1)?.[0] === 'usage: set <variable> <value>' && status.at(-1)?.[1] === true, 'set alone shows its usage');
+  await con.submit('set bogus 1');
+  check(status.at(-1)?.[0] === '"bogus" is not a cvar this page keeps' && status.at(-1)?.[1] === true, 'set on a cvar the page has not is refused');
+  host.settings.fov = 160; host.settings.binds = defaultBinds();
+  Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 });
+}
 
 // bind and its kin: Key_Bind_f, Key_Unbind_f, Key_Unbindall_f and Key_Bindlist_f over the keys menu's binds
 const binds = host.settings.binds;

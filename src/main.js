@@ -273,6 +273,8 @@ const con = new Console({
   screenshot: () => screenshot(),
   say: (text) => sayText(text),
   setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
+  download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
+  execConfig: () => $('cfg-file').click(),              // (exec: the Config control's picker; its file runs through execText)
   hasDemo: (name) => recordings.has(name) || kept.has(name) || pak.has(`demos/${name}.dm2`),
   listDemos: () => ({ pak: pakDemos(), kept: [...new Set([...kept, ...recordings.keys()])].sort() }),
   dropDemo: (name) => dropRecording(name),
@@ -1595,6 +1597,18 @@ $('pakfile').addEventListener('change', async (e) => {
 $('pak-forget').addEventListener('click', () => forgetPak().catch((err) => setStatus(err.message, true)));
 $('map').addEventListener('change', (e) => { settings.map = e.target.value; saveSettings(); startMap(e.target.value, true).catch((err) => setStatus(err.message, true)); });
 $('save-download').addEventListener('click', () => downloadSave());
+// the Config control: writeconfig's config.cfg downloaded, and a cfg file run line by line through the console (exec)
+$('cfg-download').addEventListener('click', () => con.submit('writeconfig'));
+$('cfg-file').addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  e.target.value = '';   // (the same file again is a change again)
+  if (!f) return;
+  try {
+    const n = await con.execText(await f.text());
+    setStatus(`${f.name}: ${n} line${n === 1 ? '' : 's'} run`);
+    setTimeout(() => { if (statusEl.textContent.startsWith(`${f.name}:`)) setStatus(''); }, 2500);
+  } catch (err) { console.error(err); setStatus(`${f.name}: ${err.message}`, true); }
+});
 $('save-file').addEventListener('change', async (e) => {
   const f = e.target.files?.[0];
   e.target.value = '';   // (the same file again is a change again)
