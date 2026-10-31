@@ -743,6 +743,9 @@ for it or leaves it, as the video menu's box does), `help` (`Cmd_Help_f`: the he
 F1 brings it, `toggleHelp`), `sv_gravity` (the game row's gravity for the game running, `gravity` and `setGravity`; a new map
 takes its worldspawn's again, and a joined page runs no server) and `hostname` (the host's name, archived as Quake's was,
 "noname" when empty: the serverinfo's, and the map message carries it so a joined page's stats line names the host),
+`deathmatch`, `coop` and `maxclients` (the Players select's words, latched as Quake latched them: the next game's mode and
+clients go to the settings and the select through `setGameMode`, "will be changed for next game." said, the game running
+going on; the page's coop is more than one client at it, deathmatch them against each other, `maxclients 1` single player),
 `serverinfo` (`SV_Serverinfo_f`: the game's cvars, `mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`,
 `cheats` and `skill`, as `Info_Print` listed them, the host's `serverInfo`; a joined page runs no server of its own),
 `userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:

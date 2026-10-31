@@ -479,6 +479,18 @@ try {
     const helpDown = await page.evaluate(() => window.quake2.screens.help).catch(() => null);
     await typeCommand('hostname ""');
     assert(/hostname "Hal"/.test(svHost) && grav === 300 && helpUp === true && helpDown === false, `hostname Hal shows in the serverinfo, sv_gravity 300 reaches the game row (${grav}), help brings the help computer (${helpUp}) and putaway takes it away (${helpDown})`);
+    // deathmatch, coop and maxclients latch the next game's mode (the settings and the Players select follow, the game running goes on)
+    const gameMode = () => page.evaluate(() => ({ coop: window.quake2.settings.coop, dm: window.quake2.settings.deathmatch, players: window.quake2.settings.players, select: document.getElementById('players')?.value, running: window.quake2.session.clients?.length })).catch(() => ({}));
+    await typeCommand('deathmatch 1');
+    const dmLatched = await gameMode();
+    await typeCommand('maxclients 3');
+    const dm3 = await gameMode();
+    await typeCommand('coop 1');
+    const coop3 = await gameMode();
+    await typeCommand('maxclients 1');
+    const single = await gameMode();
+    assert(dmLatched.dm === true && dmLatched.coop === true && /^dm[34]?$/.test(dmLatched.select ?? '') && dmLatched.running === 1 && dm3.select === 'dm3' && dm3.players === 3 && coop3.select === '3' && coop3.dm === false && single.select === '1' && single.coop === false && single.running === 1,
+      `deathmatch 1, maxclients 3, coop 1 and maxclients 1 latch the next game's mode on the Players select without starting one (${JSON.stringify({ dmLatched, dm3, coop3, single })})`);
     // writeconfig downloads config.cfg with the keys and the cvars; the settings put back, the file run through the Config
     // control (exec's picker) brings them again
     const [cfgDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('writeconfig')]);

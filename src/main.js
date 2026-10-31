@@ -307,6 +307,8 @@ const con = new Console({
   // sv_gravity: the game row's gravity (the level's, the worldspawn's again at the next map); a joined page runs no server
   gravity: async () => (netGuest() || !db || !map ? null : (await db.query('SELECT gravity FROM game')).rows[0]?.GRAVITY ?? null),
   setGravity: async (n) => { if (netGuest() || !db || !map) return; await db.exec(`UPDATE game SET gravity = ${Number(n)} WHERE id = 1`); },
+  // deathmatch, coop and maxclients: the next game's mode and clients, latched (the settings and the Players select, no game started)
+  setGameMode: ({ coop, deathmatch, players }) => { settings.coop = !!coop; settings.deathmatch = !!deathmatch; settings.players = Math.max(2, Math.min(4, Number(players) || 2)); saveSettings(); $('players').value = playersValue(); },
   status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}` })) } : null),
   isRunning: () => running,
   // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
