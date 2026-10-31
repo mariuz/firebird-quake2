@@ -667,7 +667,12 @@ word through the page's `setSetting` so its controls, the menus and the userinfo
 runs line by line through `Console.execText`), and `bind`, `unbind`, `unbindall` and
 `bindlist` over the keys menu's binds (`bind k +attack`: the key by the name the menu shows, `keyCode` being
 `Key_StringToKeynum`, the action by bindnames' command, `actionOfCommand`; `bind k` shows `"k" = "+attack"`
-as `Key_Bind_f` did), `timedemo` (above) and `screenshot` (the view downloaded as `quakeNN.png`, as
+as `Key_Bind_f` did) and over the keys bound to command lines (`bind k god`, `bind t "say hello"`: any other
+line goes into `settings.lines` by `bindLine`, the key leaving its action, and runs through `Console.submit`
+when the key, a mouse button or a wheel notch goes down, `runBoundLine` in `src/main.js`, as `Key_Event` put a
+key's binding into the command buffer; the `+` actions stay the held ones; `unbind`, `unbindall`, `bindlist`,
+`writeconfig` and the keys menu's reset cover the lines, and a key the menu binds to an action loses its
+line), `timedemo` (above) and `screenshot` (the view downloaded as `quakeNN.png`, as
 `SCR_ScreenShot_f` wrote `quakeNN.pcx`), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the
 guest's client); the rest go to `player_command(cmd, arg)` (on a joined page to the host as a `con` message,

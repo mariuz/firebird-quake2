@@ -410,6 +410,22 @@ try {
     const back = await page.evaluate(() => window.quake2.settings.binds.attack.join()).catch(() => '');
     assert(bj.attack === 'KeyJ' && bj.stored === 'KeyJ' && bj.input === 'attack' && bj.status === '"j" = "+attack"' && uj.attack === '' && uj.input === null && back === 'Control,Mouse1',
       `bind j +attack binds J to attack in the settings and the input, unbind j takes it off, bind ctrl and mouse1 put the defaults back (${JSON.stringify({ bj, uj, back })})`);
+    // a key bound to a command line runs it as it goes down: bind k god, then K under the lock switches godmode on (and off again)
+    await typeCommand('bind k god');
+    const bk = await page.evaluate(() => ({ line: window.quake2.settings.lines.KeyK, stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).lines.KeyK, status: document.getElementById('status')?.textContent })).catch(() => ({}));
+    const godFlag = () => page.evaluate(() => window.quake2.sql('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1').then((r) => r[0].FLAGS & 16)).catch(() => -1);
+    await page.mouse.click(480, 360); await sleep(300);   // (the lock back after the console)
+    const g0 = await godFlag();
+    await page.keyboard.press('k');
+    let g1 = g0;
+    for (let i = 0; i < 20 && g1 === g0; i++) { await sleep(200); g1 = await godFlag(); }
+    await page.keyboard.press('k');
+    let g2 = g1;
+    for (let i = 0; i < 20 && g2 === g1; i++) { await sleep(200); g2 = await godFlag(); }
+    await typeCommand('unbind k');
+    const uk = await page.evaluate(() => window.quake2.settings.lines.KeyK ?? null).catch(() => 'x');
+    assert(bk.line === 'god' && bk.stored === 'god' && bk.status === '"k" = "god"' && g0 === 0 && g1 === 16 && g2 === 0 && uk === null,
+      `bind k god binds K to the line, kept in the settings; K switches godmode on and K again off; unbind k takes it off (${JSON.stringify({ bk, g0, g1, g2, uk })})`);
 
     // a recording: `record run` at the console writes the game from then on as a demo (src/record.js: the stats line
     // counts its frames), `stop` downloads it as run.dm2 (parsed here as the page parses the pak's: every block read

@@ -3,13 +3,13 @@
 // can be (an old or hand-edited value falls back to its default instead of reaching the game).
 // Pure but for the storage passed in, so the tests drive it with a plain object.
 
-import { ACTIONS, DEFAULT_BINDS, defaultBinds, normalizeKey } from './input.js';
+import { ACTIONS, DEFAULT_BINDS, defaultBinds, normalizeKey, checkLine } from './input.js';
 
 export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, crosshair: 1, coop: false, deathmatch: false,
-  dmflags: 0, fraglimit: 0, timelimit: 0, players: 2, binds: DEFAULT_BINDS, name: '', hand: 0, rtcIce: '', rtcSignal: '' });
+  dmflags: 0, fraglimit: 0, timelimit: 0, players: 2, binds: DEFAULT_BINDS, lines: Object.freeze({}), name: '', hand: 0, rtcIce: '', rtcSignal: '' });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1 });
@@ -41,6 +41,7 @@ const CHECK = {
   dmflags: int(0, 65535), fraglimit: int(0, 999), timelimit: int(0, 999),   // the deathmatch cvars
   players: int(2, 4),    // how many at this page in coop or deathmatch (the view split in two or four)
   binds: checkBinds,     // the key bindings: action → at most two key codes
+  lines: checkLines,     // the keys bound to command lines (bind k god): key code → the line
   // the player setup (M_Menu_PlayerConfig_f): the name (the netname cvar: at most 15 printable characters; empty, the game
   // says "player 1") and the hand (0 right, 1 left, 2 centre)
   name: (v) => (typeof v === 'string' && /^[\x20-\x7e]{0,15}$/.test(v) ? v : undefined),
@@ -74,17 +75,33 @@ function checkBinds(v) {
   return out;
 }
 
-/** The settings as stored, each checked; anything missing, unknown or out of its range is its default. */
+/** The stored command-line binds: a key code each (as checkBinds takes them) and a line checkLine allows, as a fresh object. */
+function checkLines(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out = {};
+  for (const [c, line] of Object.entries(v)) {
+    if (typeof c !== 'string' || !/^[A-Za-z0-9]{1,24}$/.test(c)) continue;
+    const code = normalizeKey(c), s = typeof line === 'string' ? checkLine(line) : null;
+    if (s && !(code in out)) out[code] = s;
+  }
+  return out;
+}
+
+/**
+ * The settings as stored, each checked; anything missing, unknown or out of its range is its default. A key an
+ * action holds runs no line (a key has one command: the action's binds are read first).
+ */
 export function loadSettings(storage) {
   let stored = {};
   try { stored = JSON.parse(storage?.getItem(KEY) || '{}') ?? {}; } catch { stored = {}; }
-  const out = { ...DEFAULTS, binds: defaultBinds() };
+  const out = { ...DEFAULTS, binds: defaultBinds(), lines: {} };
   if (stored && typeof stored === 'object') {
     for (const [k, check] of Object.entries(CHECK)) {
       const v = check(stored[k]);
       if (v !== undefined) out[k] = v;
     }
   }
+  for (const a of ACTIONS) for (const c of out.binds[a.id] ?? []) delete out.lines[c];
   return out;
 }
 

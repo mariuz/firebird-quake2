@@ -602,9 +602,17 @@ Quake: in the order they are to be taken.
   `timelimit` the host's. `test:net` hosts a deathmatch and sees the guest's row say so with the board's rows,
   its forwarded `kill` cost it a frag; the browser test flips the host's select to deathmatch with a guest
   connected and back.
-- **Keys bound to command lines**: `bind` takes the actions alone; Quake's binds were command lines (`bind t
-  "say hello"`, `bind k god`). A key bound to a line runs it at the console when it goes down, the `+` actions
-  staying the held ones, `writeconfig` and `exec` carrying such binds.
+- **Keys bound to command lines**: done. `bind` took the actions alone; Quake's binds were command lines
+  (`bind t "say hello"`, `bind k god`). A line that is no action's command goes into `settings.lines` (key code
+  → the line, kept with the settings and checked back: printable, at most 128 characters; `bindLine` in
+  `src/input.js`, the key leaving its action), and runs through the console when the key, a mouse button or a
+  wheel notch goes down (`runBoundLine` in `src/main.js`, echoed into the scrollback), as `Key_Event` put a
+  key's binding into the command buffer; the `+` actions stay the held ones. `bind <key>` shows the line,
+  `unbind` and `unbindall` take it off, `bindlist` lists the lines after the actions, `writeconfig` writes
+  them after the actions' lines and `exec` runs them back, the keys menu's reset defaults drops them (default.cfg
+  began with `unbindall`) and a key the menu binds to an action loses its line. `test:console`, `test:input`
+  and `test:settings` cover the words, the helpers and the round trip; the browser test binds K to `god` at
+  the console and presses it.
 - **Recording on a joined page**: `record` is refused on a guest. The frames the host sends are what a
   recording writes: a guest records its own view as the host's client did.
 - **An autoexec.cfg kept in the browser**: a config file picked runs once. Kept in IndexedDB as the pak is
