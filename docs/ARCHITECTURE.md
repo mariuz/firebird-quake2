@@ -738,7 +738,9 @@ conversion was off by an ulp for one value in six, and doubles went over as
 `CAST(? AS DOUBLE PRECISION) * POWER(2e0, ?)` from an integer mantissa and an exponent.)
 
 The loop: each animation frame computes the tics the wall clock owes (20 Hz; at most two, a stall being
-slow motion rather than a leap), runs `q2_tic` for them, then one `frame_all` per view, splits its rows by
+slow motion rather than a leap; `timescale` at the console scales the clock, as the cvar scaled
+`Qcommon_Frame`'s milliseconds: a tic every `TIC_MS / timescale`, the fraction between tics and a demo's
+clock with it, a guest's clock being the host's), runs `q2_tic` for them, then one `frame_all` per view, splits its rows by
 kind, plays sounds and effects, and paints; a frame that owes no tic paints again. Every paint goes through
 `src/lerp.js` (`FrameLerp`, one per view, holding the last two tics' frames): the frame shown is the last
 tic's moved toward the current one by the fraction of the tic gone by, as the Quake 2 client drew the

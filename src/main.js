@@ -42,6 +42,7 @@ const canvas = $('screen');
 const statusEl = $('status');
 const statsEl = $('stats');
 const TIC_MS = 50;
+let timescale = 1;   // the timescale cvar: the game's clock against the wall's (Qcommon_Frame scaled the frame's milliseconds); the host's rules a guest
 
 let db, pak, res, renderer, hud;
 // src/session.js: the game without the page (maps, tics, the frame, the unit's levels, the slots);
@@ -274,6 +275,8 @@ const con = new Console({
   say: (text) => sayText(text),
   setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
   download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
+  // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)
+  setTimescale: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; timescale = n; lastTic = performance.now(); } return timescale; },
   execConfig: () => $('cfg-file').click(),              // (exec: the Config control's picker; its file runs through execText)
   hasDemo: (name) => recordings.has(name) || kept.has(name) || pak.has(`demos/${name}.dm2`),
   listDemos: () => ({ pak: pakDemos(), kept: [...new Set([...kept, ...recordings.keys()])].sort() }),
@@ -610,8 +613,9 @@ async function frame() {
     const now = performance.now();
     // the tics owed by the wall clock (20 Hz), at most two a frame: a stall is slow motion, never a leap; a frame
     // that owes none paints the last tic's frame again, moved toward the current one (src/lerp.js)
-    let owed = Math.floor((now - lastTic) / TIC_MS);
-    if (owed > 2) { owed = 2; lastTic = now - 2 * TIC_MS; }
+    // (timescale: a tic every TIC_MS / timescale of the wall's; 0.5 is slow motion, 2 twice the pace)
+    let owed = Math.floor((now - lastTic) * timescale / TIC_MS);
+    if (owed > 2) { owed = 2; lastTic = now - 2 * TIC_MS / timescale; }
 
     if (netGuest()) { guestFrame(now); nextFrame(); return; }
     if (demo) { await demoFrame(now); nextFrame(); return; }
@@ -621,7 +625,7 @@ async function frame() {
       return;
     }
     const tics = owed;
-    lastTic += tics * TIC_MS;
+    lastTic += tics * TIC_MS / timescale;
 
     let t = performance.now();
     last = await session.tic(...readInput(tics));   // (every client's command: the pads', or the guests')
@@ -697,7 +701,7 @@ function paintFrames(now) {
   const dt = lastPaint ? Math.min(0.1, Math.max(0, (now - lastPaint) / 1000)) : 0.05;
   lastPaint = now;
   const exact = settings.renderer === 'sql';
-  const frac = netGuest() ? (now - guestGotAt) / (guestDt * 1000) : (now - lastTic) / TIC_MS;
+  const frac = netGuest() ? (now - guestGotAt) / (guestDt * 1000) : (now - lastTic) * timescale / TIC_MS;
   const f0 = Math.max(0, Math.min(1, frac));
   const cur = lerps[0].cur.row;
   const time = cur.TIME_ - (exact ? 0 : (1 - f0) * 0.05);   // the clock between the two tics
@@ -959,7 +963,7 @@ function stopDemo() {
 async function demoFrame(now) {
   const d = demo;
   // a timedemo steps a frame of the recording a painted frame, whatever the wall clock says (CL_Timedemo_f's cl.time)
-  const dt = d.timedemo ? (d.timedemo.frames ? DEMO_FRAME : 0) : Math.min(0.2, Math.max(0, now - d.at) / 1000);
+  const dt = d.timedemo ? (d.timedemo.frames ? DEMO_FRAME : 0) : Math.min(0.2, Math.max(0, now - d.at) / 1000) * timescale;   // (timescale: the demo's clock too)
   d.at = now;
   d.time += dt;
   if (d.timedemo) d.timedemo.frames++;
@@ -1505,7 +1509,7 @@ async function boot() {
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; },
-      get lastTimedemo() { return lastTimedemo; },
+      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
       demoStore, fileStore, get pickedPak() { return pickedPak; },

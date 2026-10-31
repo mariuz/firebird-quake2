@@ -216,6 +216,28 @@ await con.submit('cvarlist');
 check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
 Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 });
 
+// timescale: the game's clock against the wall's, shown, set within 0.1..10, refused at 0 or for a word, a guest told
+{
+  let scale = 1, guest = false;
+  host.setTimescale = (n) => { if (n !== null) { if (guest) return null; scale = n; } return scale; };
+  await con.submit('timescale');
+  check(status.at(-1)?.[0] === '"timescale" is "1"', 'timescale alone shows 1');
+  await con.submit('timescale 0.5');
+  check(scale === 0.5 && status.at(-1)?.[0] === '"timescale" is "0.5"', 'timescale 0.5 is slow motion');
+  await con.submit('timescale 50');
+  check(scale === 10, 'clamped to 10');
+  await con.submit('timescale 0');
+  check(scale === 10 && status.at(-1)?.[0] === 'timescale takes a number above 0 (0.1 to 10)' && status.at(-1)?.[1] === true, '0 is refused (the game would stop)');
+  await con.submit('timescale x');
+  check(scale === 10 && status.at(-1)?.[1] === true, 'a word is refused');
+  guest = true;
+  await con.submit('timescale 2');
+  check(scale === 10 && status.at(-1)?.[0] === "timescale: a joined game runs at the host's pace" && status.at(-1)?.[1] === true, 'a guest is told the pace is the host\'s');
+  guest = false;
+  await con.submit('timescale 1');
+  check(scale === 1, 'timescale 1 puts it back');
+}
+
 // writeconfig and exec: the binds and the cvars as config.cfg (Key_WriteBindings, Cvar_WriteVariables), run back line by line
 {
   const cfg = writeConfig({ ...s, name: 'Ace Rimmer', sensitivity: 5, invertMouse: true, binds: { ...defaultBinds(), attack: ['KeyK', 'Mouse2'], moveup: [] } });

@@ -574,8 +574,14 @@ wants: in the order they are to be taken.
   bump (a column's meaning changed, not its presence). `test:save` loads a version-1 save with a column the
   schema has lost and one it gained and sees the first dropped and named, the second defaulted and the rest
   as saved, a newer version and rubbish refused; the browser test's file load is as it was.
-- **`timescale`**: `timescale <n>` at the console runs the game's clock at `n` times the wall's (`0.5` slow
-  motion, `2` twice, as `Qcommon_Frame` scaled the frame's milliseconds), the demos too; `1` puts it back.
+- **`timescale`**: done. `timescale <n>` at the console runs the game's clock at `n` times the wall's (`0.5`
+  slow motion, `2` twice the pace, as `Qcommon_Frame` scaled the frame's milliseconds by the cvar): the loop
+  owes a tic every `TIC_MS / timescale` of the wall's, still at most two a frame (a slow page cannot reach
+  twice the pace), the frames between tics move by the scaled fraction, and a demo's clock runs by it too
+  (a timedemo not: a frame a frame). `timescale` alone shows it, `1` puts it back, 0.1 to 10 for the
+  session (Quake did not archive it either), 0 and words refused; a guest's clock is the host's, and a guest
+  is told so. `test:console` runs the cases; the browser test measures the game's clock against the wall's
+  at 2 (faster than the wall where the page keeps up), at 0.5 (half) and back at 1.
 
 ## Playing the demo
 
