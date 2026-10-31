@@ -38,7 +38,7 @@ npm run test:effects                  # the temporary entities: explosions, beam
 npm run test:audio                    # the sound mix headless: spatialisation, channels, the loops summed per sound, speakers, music
 npm run test:golden                   # the docs screenshots rendered again and compared pixel for pixel (a painter change: regenerate them)
 npm run test:coop                     # a coop game headless: two clients, their rows and views, the sight client, respawns, items that stay
-npm run test:net                      # a game shared over a link headless: the guest's commands merged, its frames sent, the map and a level change, chunks, the signalling texts
+npm run test:net                      # a game shared over a link headless: the guest's commands merged, its frames sent, the map and a level change, chunks, the signalling texts, a second guest into the game running
 npm run test:dm                       # a deathmatch headless: the spots, no monsters, items that come back, the frags, respawns, the exit, the limits, the dmflags
 npm run test:demo                     # the pak's demo headless: every block read exactly, the view and entities between frames, the events once, the session's demo frame, a frame painted
 npm run test:lerp                     # the frames between tics: the eye, the entities and the brush models moved by the fraction, snaps, the turn immediate, the poses blended (backlerp)

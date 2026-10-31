@@ -27,9 +27,9 @@ the order they are to be taken.
   needs none. The guest leaving leaves the host's game with its second client standing (the gamepad
   moves it again); the host leaving ends the guest's game. `test:net` runs the host and guest sides over
   a loopback in one process; the browser test joins a second page to the first over real WebRTC. The guest
-  predicts its own move (the second list's entry below). Left: a TURN relay for the networks a STUN cannot cross, a signalling service of the
-  player's own in place of the texts, a third page (the SQL takes a client number already; the host's
-  loop sends one guest), and spectating.
+  predicts its own move (the second list's entry below), and a third and a fourth page join the game as it runs (the third
+  list's first entry). Left: a TURN relay for the networks a STUN cannot cross, a signalling service of the
+  player's own in place of the texts, and spectating.
 - **Local deathmatch**: done for two players at one page (the Players select's "Two (deathmatch)", the
   game menu's players spin) or over the network (the host's mode is the game's), as g_spawn.c, g_items.c
   and p_client.c had it. The spawn keeps out `NOT_DEATHMATCH` entities instead of the skill's, so the
@@ -288,6 +288,45 @@ The second list, from what the entries above and below left: in the order they a
   meant nothing without `DF_MODELTEAMS` or `DF_SKINTEAMS`). `test:dm` sees the quad tossed with the weapon,
   apart, to go at the quad's time, and not without the flag; `test:coop` a client's shot doing nothing to the
   other with the flag, hurting without it, and the world's hurting either way.
+
+The third list, from what is left in the entries above and below: in the order they are to be taken.
+
+- **Three or four pages over the network**: done. The host's loop sent one guest; the SQL took up to four
+  clients. Now `net.guests` is a list, each guest with its own channel, `Peer` and `HostLink` and a client
+  number of its own (the lowest of 2 to 4 no guest holds; a guest that leaves leaves its client standing for
+  the next, as a client whose packets stopped stood). Host, while hosting, makes an offer for the next player
+  (one offer out at a time; Leave closes every channel). The first guest's connect starts a new coop game as
+  before; a later one joins the game as it runs, `Session.addClient` being ClientConnect and ClientBegin for
+  it (the row with fresh pers, the entity at the level's coop spot by `client_begin`, the game that many
+  clients from then on and at the next level), and is sent the map as it is. Each tic the host writes every
+  client's command (a guest's merged, a client without one standing) and sends each guest its own frame; the
+  map, a picture and a cinematic go to all; the stats line counts the guests. Found on the way: three or four
+  players at one page sent only the first two pads' commands to the tic (`readInput` read them all;
+  `session.tic` was given two): the third and fourth stood still, and move now. `test:net` adds a second
+  guest to the game running (its row and entity, fresh pers, a spot of its own, no second entity when added
+  again, the map as it is, a tic with both, each guest its own row and frame, the third client walked by its
+  guest while the other stands, a level change keeping three, the second guest leaving and the game going on
+  with its client standing); the browser test joins a third page to the running game with a second offer, sees
+  the third client put in and painted, the first guest's frames going on, the stats line counting both, and the
+  pages leaving one by one.
+- **The guest clipped against the monsters**: the frame carries no box for them, so a guest walking into one is
+  put back by the next frame. The frame's entity rows could carry the solid ones' boxes (`mins`, `maxs` of
+  `solid` 2 and 3, as the player's box test takes them), and `pmove` clip against them as against the other
+  player, so a guest stops at a monster where the host stops it.
+- **A recording played from a file, and recordings kept**: the Demo select plays the pak's demos and this
+  session's recordings; a `.dm2` of the player's own (one made here and downloaded, or Quake 2's) cannot be
+  opened, and a recording is gone with the page. A file input beside the select, and the recordings kept in
+  IndexedDB as the saves are, with a way to drop them.
+- **The help computer, the inventory and the score board to a narrow view**: the status bar lays itself out
+  to the view (the second list's entry); these are 256- and 320-wide pictures and layouts and still clip in a
+  quarter view. The inventory and the score board are text and could lay out to the width as the bar does;
+  the help computer's picture scaled.
+- **The insane marines and the commander's body as logic**: `misc_insane`'s forms (stand, crawl, cross,
+  the fleeing), `misc_deadsoldier`'s poses and `monster_commander_body` are the full game's; the frame tables
+  are known, so they can run on model rows without a mesh as the monsters do (see *The full game*).
+- **A brush model's loop at its origin**: a looped sound on a brush model (a lift's hum) plays at the model's
+  origin, which is far from its box; the loop's position should be the box's centre, as `set_model` finds the
+  leaf from it.
 
 ## Playing the demo
 
