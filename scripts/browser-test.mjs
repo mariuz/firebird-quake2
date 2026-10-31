@@ -609,7 +609,7 @@ try {
     const pakState = () => page.evaluate(async () => ({ name: document.getElementById('pakname')?.textContent, picked: window.quake2?.pickedPak, forget: !document.getElementById('pak-forget')?.hidden,
       kept: await window.quake2.fileStore.list(), pak: (await window.quake2.fileStore.get('pak'))?.name ?? null, demo: window.quake2?.demo?.name ?? null, running: window.quake2?.running })).catch((e) => ({ error: e.message }));
     let ps = {};
-    for (let i = 0; i < 480 && !(ps.name === 'picked.pak' && ps.pak === 'picked.pak' && ps.demo); i++) { await sleep(250); ps = await pakState(); }
+    for (let i = 0; i < 480 && !(ps.name === 'picked.pak' && ps.pak === 'picked.pak' && ps.demo && ps.picked === 'picked.pak' && ps.forget); i++) { await sleep(250); ps = await pakState(); }   // (the store's put, the page's marker and its button come a moment after the load on a slow runner)
     assert(ps.name === 'picked.pak' && ps.picked === 'picked.pak' && ps.forget && ps.pak === 'picked.pak' && ps.demo === 'q2demo1',
       `a picked pak loads (the attract loop again), is kept under its name and the button to forget it shows (${JSON.stringify(ps)})`);
     await page.selectOption('#map', 'demo1');
