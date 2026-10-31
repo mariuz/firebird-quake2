@@ -359,6 +359,16 @@ const con = new Console({
   // from its own table); a guest's prediction has the host's from the map message, so one changed here reaches it at the next map
   gameCvar: async (col) => (netGuest() || !db || !map || !/^[a-z_]+$/.test(col) ? null : (await db.query(`SELECT ${col} AS v FROM game`)).rows[0]?.V ?? null),
   setGameCvar: async (col, n) => { if (netGuest() || !db || !map || !/^[a-z_]+$/.test(col)) return; await db.exec(`UPDATE game SET ${col} = ${Number(n)} WHERE id = 1`); },
+  setGameString: async (col, text) => { if (netGuest() || !db || !map || !/^[a-z_]+$/.test(col)) return; await db.query(`UPDATE game SET ${col} = ? WHERE id = 1`, [String(text ?? '')]); },   // (sv_maplist: a text on the game row)
+  // sky (SCR_Sky_f): the sky box of the map running changed and spun, this page's alone; null without a map, false for a sky the pak lacks (the one up stays)
+  setSky: (name, rotate = 0, axis = [0, 0, 1]) => {
+    if (!renderer || !map) return null;
+    const had = { sky: renderer.sky, name: renderer.skyName };
+    renderer.setSky(name);
+    if (!renderer.sky) { renderer.sky = had.sky; renderer.skyName = had.name; return false; }
+    renderer.skyRotate = Number(rotate) || 0; renderer.skyAxis = axis.map((v) => Number(v) || 0);
+    return true;
+  },
   // deathmatch, coop and maxclients: the next game's mode and clients, latched (the settings and the Players select, no game started)
   setGameMode: ({ coop, deathmatch, players }) => { settings.coop = !!coop; settings.deathmatch = !!deathmatch; settings.players = Math.max(2, Math.min(4, Number(players) || 2)); saveSettings(); $('players').value = playersValue(); },
   status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}` })) } : null),

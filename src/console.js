@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundinfo', 'soundlist', 'spectator', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maxvelocity', 'sv_rollangle', 'sv_rollspeed', 'timedemo', 'timelimit', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'sky', 'soundinfo', 'soundlist', 'spectator', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_rollangle', 'sv_rollspeed', 'timedemo', 'timelimit', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -123,6 +123,7 @@ const HISTORY = 32;
  *         viewPos() → the first view's { x, y, z, yaw } (viewpos), timeRefresh(flip) → { seconds, fps } after a full turn in 128 frames, null without a game of this page's own (timerefresh), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
  *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
  *         toggleHelp() (help: the help computer, F1's), gravity() → the game's gravity, null on a joined page or without a map, setGravity(n) (sv_gravity),
+ *         setGameString(col, text) (sv_maplist), setSky(name, rotate, axis) → true, false for a sky the pak lacks, null without a map (sky),
  *         gameCvar(col) → the game row's column, null on a joined page or without a map, setGameCvar(col, n) (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed, sv_maxvelocity, sv_airaccelerate, g_select_empty: GAME_CVARS),
  *         setGameMode({ coop, deathmatch, players }) (deathmatch, coop, maxclients: the next game's, latched; the Players select follows),
  *         execConfig() (exec: the page's file picker, whose file runs through execText),
@@ -519,6 +520,29 @@ export class Console {
         if (!h.isRunning()) return;
         h.toggleHelp?.();
         return;
+      case 'sv_maplist': {
+        // the sv_maplist cvar on the game row: the deathmatch rotation EndDMLevel follows (map names parted by spaces or commas; "" none)
+        const v = await h.gameCvar?.('sv_maplist');
+        if (v == null) { say('sv_maplist: a joined page runs no server of its own, and a map must be running', true); return; }
+        if (!arg) { say(`"sv_maplist" is "${v}"`); return; }
+        const text = arg.replace(/^"(.*)"$/, '$1').trim();
+        if (!/^[a-z0-9_ ,]{0,400}$/i.test(text)) { say('sv_maplist takes map names parted by spaces or commas', true); return; }
+        await h.setGameString?.('sv_maplist', text);
+        say(`"sv_maplist" is "${text}"`);
+        return;
+      }
+      case 'sky': {
+        // SCR_Sky_f: sky <basename> [rotate] [axis x y z]: the sky box of the map running changed and spun (this page's alone)
+        if (!arg) { say('Usage: sky <basename> <rotate> <axis x y z>', true); return; }
+        const w = arg.split(/\s+/);
+        const rotate = w.length > 1 ? Number(w[1]) || 0 : 0;
+        const axis = w.length === 5 ? w.slice(2, 5).map((x) => Number(x) || 0) : [0, 0, 1];
+        const ok = h.setSky?.(w[0].toLowerCase(), rotate, axis);
+        if (ok == null) { say('sky: a map must be running', true); return; }
+        if (!ok) { say(`sky: no env/${w[0].toLowerCase()}*.pcx in the pak`, true); return; }
+        say(`sky ${w[0].toLowerCase()}${rotate ? `, ${rotate} degrees a second about ${axis.join(' ')}` : ''}`);
+        return;
+      }
       case 'sv_gravity': {
         // the sv_gravity cvar: the level's gravity for the game running (a joined page runs no server; a new map takes the worldspawn's again)
         const g = await h.gravity?.();

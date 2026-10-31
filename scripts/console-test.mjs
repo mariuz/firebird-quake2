@@ -382,7 +382,25 @@ await con.submit('sv_gravity'); check(status.at(-1)?.[0] === 'sv_gravity: a join
   check(gameRow.sv_airaccelerate === 10 && gameRow.g_select_empty === 1 && gameRow.sv_maxvelocity === 500 && status.at(-1)?.[0] === 'g_select_empty takes a number from 0 to 1, 0 as Quake had it' && status.at(-1)?.[1] === true, 'sv_airaccelerate, g_select_empty and sv_maxvelocity set on the game row, g_select_empty 2 refused');
   host.gameCvar = async () => null;
   await con.submit('bob_up'); check(status.at(-1)?.[0] === 'bob_up: a joined page runs no server of its own, and a map must be running' && status.at(-1)?.[1] === true, 'on a joined page, or without a map, refused');
-  check(con.complete('bob') === 'bob_pitch ' && con.complete('run_') === 'run_pitch ' && con.complete('sv_r') === 'sv_rollangle ' && con.complete('sv_a') === 'sv_airaccelerate ' && con.complete('sv_m') === 'sv_maxvelocity ' && con.complete('g_') === 'g_select_empty ' && con.complete('weapn') === 'weapnext ' && con.complete('weapp') === 'weapprev ', 'Tab completes them, weapnext and weapprev too');
+  // sv_maplist (a text on the game row) and sky (SCR_Sky_f: the sky box, the rotation and the axis through the page)
+  gameRow.sv_maplist = '';
+  host.gameCvar = async (col) => gameRow[col] ?? null;
+  let strSet = null;
+  host.setGameString = async (col, text) => { strSet = [col, text]; gameRow[col] = text; };
+  await con.submit('sv_maplist'); check(status.at(-1)?.[0] === '"sv_maplist" is ""', 'sv_maplist shows the empty list');
+  await con.submit('sv_maplist demo1, demo2 demo3'); check(strSet?.join('|') === 'sv_maplist|demo1, demo2 demo3' && status.at(-1)?.[0] === '"sv_maplist" is "demo1, demo2 demo3"', 'sv_maplist sets the list on the game row as typed');
+  await con.submit('sv_maplist ""'); check(gameRow.sv_maplist === '', 'sv_maplist "" clears it');
+  await con.submit('sv_maplist a/b'); check(gameRow.sv_maplist === '' && status.at(-1)?.[1] === true, 'a list with other characters is refused');
+  let skySet = null;
+  host.setSky = (name, rotate, axis) => { skySet = [name, rotate, axis]; return name !== 'nosuch'; };
+  await con.submit('sky'); check(status.at(-1)?.[0] === 'Usage: sky <basename> <rotate> <axis x y z>' && status.at(-1)?.[1] === true, 'sky alone says its usage');
+  await con.submit('sky Unit1_'); check(skySet?.[0] === 'unit1_' && skySet[1] === 0 && skySet[2].join() === '0,0,1' && status.at(-1)?.[0] === 'sky unit1_', 'sky <name> sets the sky box, no turn, the axis up');
+  await con.submit('sky unit1_ 10 0 1 0'); check(skySet[1] === 10 && skySet[2].join() === '0,1,0' && status.at(-1)?.[0] === 'sky unit1_, 10 degrees a second about 0 1 0', 'sky <name> <rotate> <axis x y z> spins it about the axis');
+  await con.submit('sky nosuch'); check(status.at(-1)?.[0] === 'sky: no env/nosuch*.pcx in the pak' && status.at(-1)?.[1] === true, 'a sky the pak lacks is refused');
+  host.setSky = () => null;
+  await con.submit('sky unit1_'); check(status.at(-1)?.[0] === 'sky: a map must be running' && status.at(-1)?.[1] === true, 'and without a map');
+  check(con.complete('sky') === 'sky ' && con.complete('sv_map') === 'sv_maplist ', 'Tab completes sky and sv_maplist');
+  check(con.complete('bob') === 'bob_pitch ' && con.complete('run_') === 'run_pitch ' && con.complete('sv_r') === 'sv_rollangle ' && con.complete('sv_a') === 'sv_airaccelerate ' && con.complete('sv_max') === 'sv_maxvelocity ' && con.complete('g_') === 'g_select_empty ' && con.complete('weapn') === 'weapnext ' && con.complete('weapp') === 'weapprev ', 'Tab completes them, weapnext and weapprev too');
 }
 // deathmatch, coop and maxclients: the Players select's words, latched for the next game
 {

@@ -175,6 +175,20 @@ await db.exec('UPDATE game SET intermission_time = NULL, next_map = NULL, fragli
 await tics(3);
 g = await game(); m = await msgs();
 check(g.INTERMISSION_TIME !== null && m[0] === 'Timelimit hit.' && g.NEXT_MAP === 'demo1', `the time limit ends it; with the same level flag it is the same map again (${g.NEXT_MAP})`);
+// sv_maplist (EndDMLevel): the next map of the list at the level's end, round again from the end, the exit's map for one not in it
+await db.exec("UPDATE game SET intermission_time = NULL, next_map = NULL, dmflags = 0, sv_maplist = 'demo1, demo3 demo2' WHERE id = 1");
+await db.exec('EXECUTE PROCEDURE end_dm_level'); g = await game();
+check(g.NEXT_MAP === 'demo3' && g.INTERMISSION_TIME !== null, `sv_maplist sends demo1 on to the next of the list at the intermission (${g.NEXT_MAP})`);
+await db.exec("UPDATE game SET intermission_time = NULL, next_map = NULL, map_name = 'demo2' WHERE id = 1");
+await db.exec('EXECUTE PROCEDURE end_dm_level'); g = await game();
+check(g.NEXT_MAP === 'demo1', `at the end of the list, round again from the first (${g.NEXT_MAP})`);
+await db.exec("UPDATE game SET intermission_time = NULL, next_map = NULL, sv_maplist = 'DEMO3' WHERE id = 1");
+await db.exec('EXECUTE PROCEDURE end_dm_level'); g = await game();
+check(g.NEXT_MAP === exit.MAP, `a map not in the list goes where the exit leads (${g.NEXT_MAP})`);
+check((await one("SELECT maplist_next('a,b', 'B') n FROM rdb$database")).N === 'a' && (await one("SELECT maplist_next('', 'a') n FROM rdb$database")).N === null && (await one("SELECT maplist_next('a  b , c', 'a') n FROM rdb$database")).N === 'b', 'maplist_next parts the list at spaces and commas, case aside, and says nothing for an empty one');
+await db.exec("UPDATE game SET intermission_time = NULL, next_map = NULL, map_name = 'demo1', sv_maplist = '', dmflags = 32 WHERE id = 1");
+await db.exec('EXECUTE PROCEDURE end_dm_level'); g = await game();
+check(g.NEXT_MAP === 'demo1' && g.INTERMISSION_TIME !== null, 'the list cleared, the same level again under the flag, at the intermission');
 // the intermission ends on a button after five seconds, as the unit's end did
 await db.exec('UPDATE game SET time_ = time_ + 6 WHERE id = 1');
 await session.tic(cmd({ fire: 1 }), idle);
