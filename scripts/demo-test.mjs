@@ -169,6 +169,32 @@ if (moved) {
   await session.demoFrame(st2.view, st2.brushes);
   check(session.demoBrushState.get(eid) === key, 'and not written again while it stands');
 } else check(false, 'a brush model that moves');
+// a brush model's sounds come from the middle of its box, not its origin (CL_GetEntitySoundOrigin: solid 31 marks a
+// brush model, whose origin is wherever the mapper left it): its loop (a door's middle sound while it moves) given the
+// map's bounds, and a one-shot sound at it with no position of its own; without the bounds, from the origin as before
+{
+  let bl = null;
+  for (const f of demo.frames) { for (const s of f.ents.values()) { const n = demo.models[s.modelindex]; if (s.sound && s.solid === 31 && n && n[0] === '*') { bl = { f, s, n }; break; } } if (bl) break; }
+  if (bl) {
+    const bounds = (n) => setup.bsp.models[Number(n.slice(1))] ?? null;
+    const b = bounds(bl.n), mid = [0, 1, 2].map((k) => (b.mins[k] + b.maxs[k]) / 2);
+    const withB = new DemoPlayer(demo, { modelId: (n) => res.byName.get(n), brushBounds: bounds }).at(bl.f.time);
+    const without = new DemoPlayer(demo, { modelId: (n) => res.byName.get(n) }).at(bl.f.time);
+    const snd = demo.sounds[bl.s.sound];
+    const lw = withB.loops.find((l) => l[0] === snd), lo = without.loops.find((l) => l[0] === snd);
+    check(lw && lo && Math.hypot(...mid) > 8 && [0, 1, 2].every((k) => near(lw[k + 1], lo[k + 1] + mid[k])),
+      `frame ${demo.frames.indexOf(bl.f)}: ${bl.n}'s loop ${snd} comes from the middle of its box (${lw?.slice(1).map((v) => v.toFixed(0)).join(', ')}), ${Math.hypot(...mid).toFixed(0)} from the origin it came from without the map's bounds`);
+    const one = demo.frames.flatMap((f) => f.sounds.filter((x) => x.ent && !x.pos && f.ents.get(x.ent)?.solid === 31).map((x) => ({ x, f }))).find(Boolean);
+    if (one) {
+      const p3 = new DemoPlayer(demo, { modelId: (n) => res.byName.get(n), brushBounds: bounds });
+      const s3 = p3.at(one.f.time);
+      const row = p3.soundRows(s3.events, one.f, s3.view).rows.find((r) => r[0] === one.x.id);
+      const e = one.f.ents.get(one.x.ent), bb = bounds(demo.models[e.modelindex]);
+      check(row && bb && [0, 1, 2].every((k) => near(row[7 + k], e.origin[k] + (bb.mins[k] + bb.maxs[k]) / 2)),
+        `frame ${demo.frames.indexOf(one.f)}: ${demo.sounds[one.x.num]} at brush model ${demo.models[e.modelindex]}, with no position of its own, comes from its box's middle too`);
+    } else check(true, '(this demo has no one-shot sound at a brush model without a position)');
+  } else check(false, 'a brush model with a looped sound');
+}
 check(frame.faces.length > 50 && frame.sounds.length === 0, `the frame after it has ${frame.faces.length} faces and no sounds of the game's own (the game is not ticking)`);
 
 // ── painted: the faces, the entities and the gun make a picture ──

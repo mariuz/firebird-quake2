@@ -264,12 +264,15 @@ const lerpAngle = (a, b, f) => { let d = b - a; if (d > 180) d -= 360; if (d < -
 /**
  * The demo as it plays: `at(t)` is the view and the entities at `t` seconds from the start, lerped between the
  * frame then and the next (an entity in both; one just come snaps), with the events of the frames reached
- * since the last call, each once. `modelId(name)` maps the demo's model names to the page's (res.byName).
+ * since the last call, each once. `modelId(name)` maps the demo's model names to the page's (res.byName);
+ * `brushBounds(name)` gives a brush model's ('*N') { mins, maxs } from the map, for where its sounds come from
+ * (CL_GetEntitySoundOrigin: a brush model's origin is far from its box, so the client added the model's middle).
  */
 export class DemoPlayer {
-  constructor(demo, { modelId = () => null } = {}) {
+  constructor(demo, { modelId = () => null, brushBounds = () => null } = {}) {
     this.demo = demo;
     this.modelId = modelId;
+    this.brushBounds = brushBounds;
     this.frames = demo.frames;
     this.duration = this.frames.length ? this.frames[this.frames.length - 1].time : 0;
     this.played = -1;      // the last frame whose events were given
@@ -289,6 +292,19 @@ export class DemoPlayer {
   }
 
   get finished() { return this.played >= this.frames.length - 1; }
+
+  /**
+   * CL_GetEntitySoundOrigin: where an entity's sound comes from. A brush model (solid 31, the client's mark for one)
+   * has its origin at the map's origin or wherever the mapper left it, far from its box: its sound comes from the
+   * middle of the model's bounds, as the client placed it; anything else sounds from its origin.
+   */
+  soundOrigin(s, o = s.origin) {
+    if (s.solid !== 31) return o;
+    const name = this.demo.models[s.modelindex];
+    const b = name && name[0] === '*' ? this.brushBounds(name) : null;
+    if (!b) return o;
+    return [o[0] + (b.mins[0] + b.maxs[0]) / 2, o[1] + (b.mins[1] + b.maxs[1]) / 2, o[2] + (b.mins[2] + b.maxs[2]) / 2];
+  }
 
   /**
    * At `t`: { i, frac, ps, view: { x, y, z, viewZ, yaw, pitch, roll, fov, blend, rdflags, gunindex, gunframe, stats },
@@ -324,7 +340,7 @@ export class DemoPlayer {
         ? [0, 1, 2].map((k) => lerp(s.origin[k], n.origin[k], frac)) : s.origin.slice();
       const a = n ? [0, 1, 2].map((k) => lerpAngle(s.angles[k], n.angles[k], frac)) : s.angles.slice();
       const name = this.demo.models[s.modelindex] ?? '';
-      if (s.sound) { const snd = this.demo.sounds[s.sound]; if (snd) loops.push([snd, o[0], o[1], o[2]]); }
+      if (s.sound) { const snd = this.demo.sounds[s.sound]; if (snd) { const at = this.soundOrigin(s, o); loops.push([snd, at[0], at[1], at[2]]); } }
       if (!name) continue;
       if (name[0] === '*') { brushes.push({ name, origin: o, angles: a, frame: s.frame, effects: s.effects, number: num }); continue; }
       const mid = this.modelId(name);
@@ -342,14 +358,14 @@ export class DemoPlayer {
 
   /**
    * The sounds of the events as audio.playEvents' rows ([id, 0, ent, chan, name, vol, attn, x, y, z]): a sound with no
-   * position plays where its entity is (the frame's state, or the view for the player); a muzzle flash is its weapon's
-   * sound at the entity, and a light for the frame (fx 15).
+   * position plays where its entity is (the frame's state, a brush model's from its box's middle, or the view for the
+   * player); a muzzle flash is its weapon's sound at the entity, and a light for the frame (fx 15).
    */
   soundRows(events, frame, view, random = Math.random) {
     const rows = [], fx = [];
     const where = (ent) => {
       if (ent === this.demo.playernum + 1) return [view.x, view.y, view.z];
-      const s = frame.ents.get(ent); return s ? s.origin : [view.x, view.y, view.z];
+      const s = frame.ents.get(ent); return s ? this.soundOrigin(s) : [view.x, view.y, view.z];
     };
     for (const s of events.sounds) {
       const name = this.demo.sounds[s.num];

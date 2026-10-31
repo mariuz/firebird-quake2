@@ -565,7 +565,7 @@ the kick, the gun, the blend, the stats) and the entities lerped between the fra
 (`CL_AddPacketEntities`: an entity in both moves, one just come snaps), the brush models apart by name, the
 looped sounds, the light styles from the configstrings, and the events of every frame reached since the
 last call, once; `soundRows` makes the sounds the page's rows (a sound without a position plays where its
-entity is) and a flash its weapon's sound and light. The page loads the demo's map as for a new game and
+entity is; a brush model's, loop or one-shot, from the middle of its bounds, as `CL_GetEntitySoundOrigin` placed it, `DemoPlayer.soundOrigin` with the map's `brushBounds`) and a flash its weapon's sound and light. The page loads the demo's map as for a new game and
 `Session.demoBegin` hides the game's own alias models and sprites (the recording brings its own); each
 display frame `Session.demoFrame` moves the player's entity and row to the recording's view (the eye the
 frustum and PVS take) and each brush model to where the demo has it (written only when it moved), and asks

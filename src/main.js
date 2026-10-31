@@ -814,7 +814,8 @@ async function playDemo(name, { withMenu = false } = {}) {
   setStatus(`Loading ${mapName} for the demo…`);
   await mapLoaded(await session.startMap(mapName, { newGame: true, skill: settings.skill, faceVerts: settings.renderer === 'sql', coop: false, deathmatch: false }));
   await session.demoBegin();
-  const player = new DemoPlayer(parsed, { modelId: (n) => res.byName.get(n) });
+  // (a brush model's sounds come from its box's middle, as the client placed them: the map's bounds for its '*N')
+  const player = new DemoPlayer(parsed, { modelId: (n) => res.byName.get(n), brushBounds: (n) => map.bsp.models[Number(n.slice(1))] ?? null });
   demo = { name, player, time: 0, at: performance.now(), frames: parsed.frames.length, cprint: null, msg: null };
   $('mapname').textContent = `${mapName} (demo ${name})`;
   if ([...$('demo').options].some((o) => o.value === name)) $('demo').value = name;
