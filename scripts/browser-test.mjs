@@ -348,6 +348,14 @@ try {
     const closed = await page.evaluate(() => document.getElementById('conlog').hidden).catch(() => false);
     assert(nl.lines?.includes('unknown item: nosuch') && nl.log?.includes(']use nosuch') && opened.shown && /\]use nosuch\nunknown item: nosuch/.test(opened.text ?? '') && closed,
       `the print is drawn in the notify lines and kept in the scrollback after the line typed, which the console shows and hides (${JSON.stringify({ lines: nl.lines, log: nl.log })})`);
+    // condump downloads the scrollback as <name>.txt (Con_Dump_f), the lines typed and the answers in it; clear empties it (Con_Clear_f)
+    const [dumpDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('condump mylog')]);
+    const dumpText = dumpDl ? fs.readFileSync(await dumpDl.path(), 'utf8') : '';
+    await typeCommand('clear');
+    const clearedLog = await page.evaluate(() => ({ log: window.quake2.notify.log(64), shown: !document.getElementById('conlog').hidden })).catch(() => ({}));
+    assert(dumpDl && dumpDl.suggestedFilename() === 'mylog.txt' && /^\]use nosuch\nunknown item: nosuch$/m.test(dumpText) && dumpText.endsWith(']condump mylog\n')
+      && Array.isArray(clearedLog.log) && clearedLog.log.length === 0 && !clearedLog.shown,
+      `condump writes the scrollback as mylog.txt (${dumpText.split('\n').length - 1} lines) and clear empties it (${JSON.stringify(clearedLog)})`);
     // the chat: T (messagemode) opens the console with "say " on its line, and the words go to the message line by the
     // player's name (Cmd_Say_f), drawn in the notify lines
     await page.mouse.click(480, 360); await sleep(200);
