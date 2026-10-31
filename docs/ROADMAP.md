@@ -538,9 +538,14 @@ wants: in the order they are to be taken.
   guest's say reach the host cleaned and cut at 150; `test:input` the key; the browser test T opening the
   console with `say `, the words on the message line and in the notify lines, and a guest's say on the host's
   line by its client's name.
-- **No pause in a shared game**: the host's menu, its pause key and its hidden tab stop the tics, and every
-  guest with them; Quake 2 paused single player alone (`cl_paused` only with `maxclients 1`). While a guest is
-  connected the tics go on under the host's menu and pause, as they do under a guest's.
+- **No pause in a shared game**: done. The host's menu, its pause key and its hidden tab stopped the tics, and
+  every guest with them; Quake 2 paused single player alone (`SV_Frame` ran the game frame unless paused with
+  `maxclients 1`, and `pause` said "only valid in single player"). While a guest is connected the loop's halt
+  is for `running` alone: the tics go on under the host's menu (drawn over the frame just painted, the host's
+  player standing as the menu takes its keys) and in a hidden tab as far as the browser's timers let it (no
+  painting there), `P` does nothing on a host with guests or on a guest, and a guest's connecting lifts a pause
+  the host had on. The browser test, with the guest connected, sees the host's frames and the guest's keep
+  coming under the host's main menu and after its `P`.
 - **The settings as cvars at the console**: `name`, `hand`, `sensitivity`, `cl_run`, `m_pitch` (negative
   inverts, as the invert mouse option set it), `crosshair`, `s_volume` and `cd_volume`, shown alone and set
   with a value, kept with the settings as the menus set them, and `cvarlist` to list them.

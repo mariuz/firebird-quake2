@@ -153,7 +153,7 @@ window.addEventListener('keydown', (e) => {
   if (act === 'inven') { e.preventDefault(); toggleScreen(0, 'inventory'); }         // inven
   if (act || GAME_KEYS.has(e.code)) e.preventDefault();
   input.key(e.code);
-  if (e.code === 'KeyP' || e.code === 'Pause') paused = !paused;
+  if (e.code === 'KeyP' || e.code === 'Pause') { if (!netHost() && !netGuest()) paused = !paused; }   // ("Pause command is only valid in single player")
   if (e.code === 'F6') { e.preventDefault(); saveGame(); }
   if (e.code === 'F9') { e.preventDefault(); loadGame(); }
 });
@@ -584,7 +584,10 @@ async function frame() {
     nextFrame();
     return;
   }
-  if (!running || paused || document.hidden || menu.active) {
+  // a game shared with guests runs on under the host's menu and pause, and in a hidden tab as far as the browser's timers
+  // let it (Quake 2 paused single player alone: SV_Frame ran the game frame unless paused with maxclients 1)
+  const shared = netHost();
+  if (!running || (!shared && (paused || document.hidden || menu.active))) {
     lastTic = performance.now();
     audio.silenceLoops();
     const pad = input.pollPad();
@@ -608,7 +611,7 @@ async function frame() {
     if (netGuest()) { guestFrame(now); nextFrame(); return; }
     if (demo) { await demoFrame(now); nextFrame(); return; }
     if (owed === 0) {
-      if (lerps[0].frame && settings.renderer !== 'sql') paintFrames(now);   // (the SQL-projecting mode paints a tic's frame as it is)
+      if (lerps[0].frame && settings.renderer !== 'sql' && !document.hidden) { paintFrames(now); overlayMenu(); }   // (the SQL-projecting mode paints a tic's frame as it is)
       nextFrame();
       return;
     }
@@ -663,7 +666,7 @@ async function frame() {
     // this tic's frames become the current ones (the last tic's the previous), and are painted at the fraction gone by
     lerps[0].push(last, f);
     more.forEach((m, i) => lerps[i + 1].push(session.clients[i + 1] ?? last, m));
-    paintFrames(now);
+    if (!document.hidden) { paintFrames(now); overlayMenu(); }   // (a shared game's host hidden tics on and paints nothing)
     // the frame's spare time marks the cluster the player is heading into (premark_ahead), so the
     // crossing is a switch of slot and not a hitch; a call that finds nothing to do costs ~0.3 ms
     if (perf.tic + perf.faces + perf.draw < 30) await session.premark();
@@ -680,6 +683,10 @@ async function frame() {
  * fraction of the tic gone by at `now`; the first view's angles take the turn the input holds, not yet sent
  * with a tic, so looking around is immediate. The particles run by the real time since the last paint.
  */
+/** A shared game's host in a menu: the menu drawn over the frame just painted (the game goes on behind, as a server's did). */
+function overlayMenu() {
+  if (menu.active && renderer && netHost()) { menu.draw(renderer, performance.now()); renderer.present(); }
+}
 function paintFrames(now) {
   const t = performance.now();
   const dt = lastPaint ? Math.min(0.1, Math.max(0, (now - lastPaint) / 1000)) : 0.05;
@@ -1279,6 +1286,7 @@ async function hostAccept(peer, text) {
   netStage = null;
   const g = { client: freeClient(), peer, host: new HostLink(link) };
   net.guests.push(g);
+  paused = false;   // (a shared game does not pause)
   g.host.onClose = () => guestLeft(g);
   // the guest's name and hand are its client's (ClientUserinfoChanged), now and with every map
   g.host.onInfo = (info) => { if (net?.guests.includes(g)) session.setUserinfo(g.client, info).catch((err) => console.warn('userinfo:', err.message)); };
