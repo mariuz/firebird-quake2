@@ -847,8 +847,30 @@ the server's among them. In the order they are to be taken.
   `help` reach the host in a game running, and `sv_gravity` shown, set, refused and refused on a joined page;
   the browser test reads the name in the serverinfo, the gravity on the game row, the help computer up and put
   away, and, hosting again under a name, the rejoined guest's stats line naming it.
-- **`deathmatch`, `coop` and `maxclients` as cvars**: the Players select's words for the next game
-  (`deathmatch 1`, `coop 1`, `maxclients 4`), latched as Quake latched them ("will be changed for next game").
+- **`deathmatch`, `coop` and `maxclients` as cvars**: done. The Players select's words, latched as Quake
+  latched them: `deathmatch 1` is a deathmatch of the clients at the next game, `coop 1` a coop game of them,
+  `maxclients 2`–`4` how many (`1` single player), each saying "will be changed for next game." and going to
+  the settings and the select through the page's `setGameMode` without starting a game; shown alone, each
+  says what the next game is. `test:console` sees the three latch, show and refuse; the browser test types
+  them and reads the settings and the select following while the game running goes on.
+
+The twelfth list: what the console still lacks of Quake 2's own words and cvars with the demo pak, the
+client's speeds and the game's view cvars among them. In the order they are to be taken.
+
+- **`cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed`, `cl_sidespeed` and `cl_upspeed`**:
+  the keys' speeds as cvars (`CL_AdjustAngles` and `CL_BaseMove`'s: 140 and 150 degrees a second, the run key's
+  1.5 on the turn, 200 units a second each move), where `src/input.js` has the numbers.
+- **`gun_x`, `gun_y`, `gun_z` and `scr_centertime`**: the view weapon's offset (cl_view.c's three, 0 by
+  default) and the centre print's seconds (`scr_centertime`, 2.5).
+- **`dir`, `path`, `modellist`, `imagelist` and `soundlist`**: `dir <filter>` lists the pak's files as
+  `FS_Dir_f` did, `path` the search path (the pak's name and where it came from), and the three listings the
+  models, the pictures and the sounds loaded, on the scrollback with their counts.
+- **`gender`**: the gender userinfo (male, female, none): the obituaries' pronouns as `ClientObituary` chose
+  them ("blew himself up", "herself", "itself"), and the female pain and death sounds where a pak has them.
+- **`msg`**: the message level userinfo: at 1 the pickups' prints (`PRINT_LOW`) stay off the line, at 2 the
+  medium ones too, as `cprintf` filtered them by the client's level.
+- **`bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle` and `sv_rollspeed`**: the view's
+  bob and roll as the game's cvars (`SV_CalcViewOffset`, `SV_CalcRoll`), on the game row for the game running.
 
 ## Playing the demo
 

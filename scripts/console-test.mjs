@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, brightness: 1.4, hostname: '' },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -325,6 +325,22 @@ await con.submit('sv_gravity 300'); check(gravityNow === 300 && status.at(-1)?.[
 await con.submit('sv_gravity x'); check(gravityNow === 300 && status.at(-1)?.[1] === true, 'sv_gravity x is refused');
 host.gravity = async () => null;
 await con.submit('sv_gravity'); check(status.at(-1)?.[0] === 'sv_gravity: a joined page runs no server of its own, and a map must be running' && status.at(-1)?.[1] === true, 'sv_gravity on a joined page, or without a map, says so');
+// deathmatch, coop and maxclients: the Players select's words, latched for the next game
+{
+  let mode = null;
+  host.setGameMode = (m) => { mode = m; Object.assign(s, m); };
+  await con.submit('deathmatch'); check(status.at(-1)?.[0] === '"deathmatch" is "0"', 'deathmatch shows 0 in single player');
+  await con.submit('deathmatch 1');
+  check(mode?.deathmatch === true && mode.coop === true && mode.players === 2 && status.at(-1)?.[0] === 'deathmatch will be changed for next game.', 'deathmatch 1 latches a deathmatch of two for the next game, as Quake said');
+  await con.submit('maxclients 4'); check(mode?.players === 4 && mode.deathmatch === true && status.at(-1)?.[0] === 'maxclients will be changed for next game.', 'maxclients 4 makes it four');
+  await con.submit('maxclients'); check(status.at(-1)?.[0] === '"maxclients" is "4"', 'and shows so');
+  await con.submit('coop 1'); check(mode?.coop === true && mode.deathmatch === false && mode.players === 4, 'coop 1 makes it a coop game of the four');
+  await con.submit('coop'); check(status.at(-1)?.[0] === '"coop" is "1"', 'coop shows 1');
+  await con.submit('maxclients 1'); check(mode?.coop === false && mode.deathmatch === false, 'maxclients 1 is single player again');
+  await con.submit('maxclients 9'); check(status.at(-1)?.[0] === 'maxclients takes 1 to 4' && status.at(-1)?.[1] === true, 'maxclients 9 is refused');
+  await con.submit('coop 2'); check(status.at(-1)?.[0] === 'coop takes 0 or 1' && status.at(-1)?.[1] === true, 'coop 2 is refused');
+  Object.assign(s, { coop: false, deathmatch: false, players: 2 });
+}
 // vid_gamma (the video menu's brightness) and vid_fullscreen (the page's live state, set through the page)
 await con.submit('vid_gamma'); check(status.at(-1)?.[0] === '"vid_gamma" is "1.4"', 'vid_gamma shows the brightness, 1.4 by default');
 await con.submit('vid_gamma 1.6'); check(s.brightness === 1.6 && last() === 'set brightness 1.6', 'vid_gamma 1.6 sets the brightness through the page');
@@ -399,7 +415,7 @@ await con.submit('lookstrafe 2'); check(s.lookstrafe === true && status.at(-1)?.
 await con.submit('m_forward 2'); check(s.mForward === 2 && last() === 'set mForward 2', 'm_forward 2');
 await con.submit('m_side -1'); check(s.mSide === -1 && last() === 'set mSide -1' && status.at(-1)?.[0] === '"m_side" is "-1"', 'm_side -1');
 await con.submit('m_side x'); check(s.mSide === -1 && status.at(-1)?.[1] === true, 'm_side x is refused');
-Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, brightness: 1.4, hostname: '' });
+Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
 
 // the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
 {
