@@ -549,13 +549,14 @@ async function mapLoaded(setup) {
   audio.playMusic(setup.cdTrack);
   $('mapname').textContent = map.name;
   $('map').value = map.name;
+  setup.levelname = await session.levelName();   // (the level's message: a guest's recording writes it as CS_NAME)
   // the guest's page sets itself up from the same (SV_SpawnServer's configstrings, sent at the connect)
   if (netHost()) for (const g of net.guests) g.host.sendMap(mapMessage(setup));
 }
 /** The map message a guest sets itself up from (SV_SpawnServer's configstrings): at every map, and at a connect to a game running. */
 function mapMessage(setup = mapSetup) {
   return { name: map.name, sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack, gravity: setup.gravity,
-    speakers: setup.speakers, view: { w: viewWidth(), h: viewHeight(), fov: settings.fov }, nmodels: res.byName.size };
+    speakers: setup.speakers, view: { w: viewWidth(), h: viewHeight(), fov: settings.fov }, nmodels: res.byName.size, levelname: setup.levelname ?? '' };
 }
 async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   if (netGuest()) leaveNet();   // a game of this page's own: the joined one is left
@@ -768,6 +769,7 @@ function guestFrame(now) {
     if (f.fx.length) tempEnts.add(f.fx, last.TIME_, renderer);
     if (showInv[0]) invItems[0] = got.inv;
     lerps[0].push(last, f);
+    if (recorder) recordFrame(last, f);   // (a recording on a joined page: the host's frames as the client recorded the server's)
     guestGotAt = now; guestDt = got.dt || 0.05;
     perf.tic = 0; perf.faces = 0; perf.rows = f.faces.length;
     guestAck(got, now);
@@ -836,22 +838,36 @@ const model = (name) => res.models.get(res.byName.get(name))?.mdl;
 // ── recording (src/record.js): the game's frames written as the server's messages, a .dm2 Quake 2 plays ─────
 /**
  * CL_Record_f: from here on, each tic's row and frame go to a recorder set up for this map (its checksum, sky and
- * CD track as the server's configstrings, the brush models by name, the recording client's entity).
+ * CD track as the server's configstrings, the brush models by name, the recording client's entity). A joined
+ * page records the frames the host sends it, as the client recorded the server's: the map message gives the
+ * sky, the track and the level's name, the brush models are named by their faces as the frames show them, and
+ * its own entity is in no frame (the view's client is left out of its frame), so none is named.
  */
 async function startRecording(name) {
-  if (recorder || !running || !map || demo || netGuest()) return;
-  const playerEnt = (await db.query('SELECT ent_id FROM player WHERE id = 1')).rows[0]?.ENT_ID ?? 0;
-  const brushNames = new Map((await db.query("SELECT e.id, m.name FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B' AND m.name STARTING WITH '*'", [], { rowMode: 'array' })).rows);
-  const rec = new DemoRecorder({ map: map.name, res, bsp: map.bsp, mapBytes: pak.get(`maps/${map.name}.bsp`), setup: mapSetup ?? {}, playerEnt, brushNames,
-    levelname: await session.levelName(), fov: viewFov(), netname: settings.name || 'player' });
+  if (recorder || !running || !map || demo) return;
+  const guest = netGuest();
+  const playerEnt = guest ? 0 : (await db.query('SELECT ent_id FROM player WHERE id = 1')).rows[0]?.ENT_ID ?? 0;
+  const brushNames = guest ? new Map() : new Map((await db.query("SELECT e.id, m.name FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B' AND m.name STARTING WITH '*'", [], { rowMode: 'array' })).rows);
+  const setup = guest ? net.guest.map : mapSetup ?? {};
+  const rec = new DemoRecorder({ map: map.name, res, bsp: map.bsp, mapBytes: pak.get(`maps/${map.name}.bsp`), setup, playerEnt, brushNames,
+    levelname: guest ? setup.levelname ?? '' : await session.levelName(), fov: viewFov(), netname: settings.name || 'player' });
   recorder = { name, rec };
   setStatus(`Recording to ${name}.dm2`);
   setTimeout(() => { if (statusEl.textContent.startsWith('Recording to')) setStatus(''); }, 2500);
 }
-/** One tic to the recorder: the brush models' places go with it (a frame's faces carry them only in the fast mode). */
+/**
+ * One tic to the recorder: the brush models' places go with it (a frame's faces carry them only in the fast mode,
+ * which a guest's frames are: there each brush model is named by its faces the first time they show).
+ */
 async function recordFrame(row, f) {
   const r = recorder;
   try {
+    if (netGuest()) {
+      const mof = guestPred?.modelOfFace;
+      if (mof) for (const face of f.faces) if (face.length === 5 && face[1] && !r.rec.brushNames.has(face[1]) && mof[face[0]] > 0) r.rec.brushNames.set(face[1], `*${mof[face[0]]}`);
+      r.rec.frame(row, f);
+      return;
+    }
     if (!r.rec.due(row)) { r.rec.frame(row, f); return; }
     const brushes = (await db.query('SELECT e.id, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.frame, e.effects FROM ents e WHERE e.mkind = \'B\'', [], { rowMode: 'array' })).rows;
     if (recorder === r) r.rec.frame(row, f, { brushes });
@@ -1388,7 +1404,7 @@ async function netGo() {
       net.guest.onMap = (m) => guestMap(m).catch((err) => { console.error(err); setStatus(err.message, true); });
       net.guest.onPic = (file) => { if (pak.has(file)) { running = false; const p = loadPcx(pak.get(file)); renderer.drawPicFull(p); renderer.present(null, p.palette); } };
       net.guest.onCin = (file) => { if (pak.has(file) && !cinematic) playCinematic(file).catch((err) => console.error(err)); };
-      net.guest.onClose = () => { if (netGuest()) { net = null; running = false; netState('the host left'); setStatus('The host left. Press a key or click the view for a game of your own.'); anyKey = () => { setStatus(''); endGame(); }; } };
+      net.guest.onClose = () => { if (netGuest()) { if (recorder) stopRecording(); net = null; running = false; netState('the host left'); setStatus('The host left. Press a key or click the view for a game of your own.'); anyKey = () => { setStatus(''); endGame(); }; } };
       netEl.panel.hidden = true;
       canvas.scrollIntoView?.({ block: 'start' });
       netState('joined: waiting for the map');
@@ -1433,6 +1449,7 @@ function leaveNet() {
   guestPred = null;
   netEl.panel.hidden = true;
   if (!was) return;
+  if (was.guest && recorder) stopRecording();   // (a guest's recording ends with the connection, as the client's did at the disconnect)
   for (const g of was.guests ?? []) { g.host.close(); g.peer.close(); delete session.userinfo[g.client]; }   // (the guests' names and hands leave with them)
   was.offer?.peer.close();
   was.guest?.close();
