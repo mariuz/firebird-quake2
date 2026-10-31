@@ -14,7 +14,7 @@ export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, m
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5,
   coop: false, deathmatch: false,
-  dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, gender: 'male', rtcIce: '', rtcSignal: '', netgraph: false });
+  dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, gender: 'male', msg: 1, rtcIce: '', rtcSignal: '', netgraph: false });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, crosshair: 1 });
@@ -72,6 +72,7 @@ const CHECK = {
   hand: int(0, 2),
   // the gender userinfo (a word of at most 15 printable characters, male by default: f… is female, m… male, else neutral)
   gender: (v) => (typeof v === 'string' && /^[\x21-\x7e]{1,15}$/.test(v) ? v : undefined),
+  msg: int(0, 3),        // the msg userinfo: the message level a print must reach (0 low, 1 medium, 2 high, 3 chat), 1 as Quake's cvar
   // the ICE server the network game adds to the STUN (rtc_ice at the console): a url, or a url, a user and a password
   rtcIce: (v) => (typeof v === 'string' && v.length <= 300 && (v === '' || /^(stuns?|turns?):[^\s@]+( \S+ \S+)?$/i.test(v)) ? v : undefined),
   // the signalling relay (scripts/signal.mjs) the network game's texts go through under a room code (rtc_signal): its http(s) url

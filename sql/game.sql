@@ -76,10 +76,12 @@ BEGIN
 END^
 
 -- gi.cprintf: the message line of the client whose entity is `pe` (NULL: every client)
-CREATE OR ALTER PROCEDURE sprint (pe INTEGER, msg VARCHAR(200))
+-- `lvl` is the print's level (PRINT_LOW 0, PRINT_MEDIUM 1, PRINT_HIGH 2, PRINT_CHAT 3; high unless said): a client whose msg
+-- userinfo (player.msglevel) is above it gets nothing, as SV_ClientPrintf dropped the print
+CREATE OR ALTER PROCEDURE sprint (pe INTEGER, msg VARCHAR(200), lvl SMALLINT = 2)
 AS
 BEGIN
-  UPDATE player p SET p.msg = :msg, p.msg_time = (SELECT g.time_ FROM game g WHERE g.id = 1) + 3 WHERE :pe IS NULL OR p.ent_id = :pe;
+  UPDATE player p SET p.msg = :msg, p.msg_time = (SELECT g.time_ FROM game g WHERE g.id = 1) + 3 WHERE (:pe IS NULL OR p.ent_id = :pe) AND p.msglevel <= :lvl;
 END^
 
 -- Cmd_Say_f: a client's words on every client's message line as "name: text" (PRINT_CHAT; say_team is say here, there
@@ -91,7 +93,7 @@ BEGIN
   SELECT COALESCE(NULLIF(p.netname, ''), 'player ' || p.id) FROM player p WHERE p.id = :client INTO nm;
   t = TRIM(COALESCE(text, ''));
   IF (nm IS NULL OR t = '') THEN EXIT;
-  EXECUTE PROCEDURE sprint(NULL, nm || ': ' || t);
+  EXECUTE PROCEDURE sprint(NULL, nm || ': ' || t, 3);   -- (PRINT_CHAT)
 END^
 
 -- ent->client: the player row of an entity, NULL for anything that is not a client
@@ -2142,7 +2144,7 @@ BEGIN
   END
   IF (msg IS NOT NULL) THEN
   BEGIN
-    EXECUTE PROCEDURE sprint(NULL, me || ' ' || msg || '.');
+    EXECUTE PROCEDURE sprint(NULL, me || ' ' || msg || '.', 1);   -- (PRINT_MEDIUM, as the obituaries were)
     IF (dm = 1) THEN UPDATE player p SET p.score = p.score - 1 WHERE p.ent_id = :targ;   -- (a deathmatch suicide costs a frag)
     EXIT;
   END
@@ -2169,12 +2171,12 @@ BEGIN
     ELSE IF (w = 512 AND inflictor = attacker) THEN msg = 'was railed by';                                             -- MOD_RAILGUN
     IF (msg IS NOT NULL) THEN
     BEGIN
-      EXECUTE PROCEDURE sprint(NULL, me || ' ' || msg || ' ' || who || msg2 || '.');
+      EXECUTE PROCEDURE sprint(NULL, me || ' ' || msg || ' ' || who || msg2 || '.', 1);
       IF (dm = 1) THEN UPDATE player p SET p.score = p.score + 1 WHERE p.ent_id = :attacker;
       EXIT;
     END
   END
-  EXECUTE PROCEDURE sprint(NULL, me || ' died.');
+  EXECUTE PROCEDURE sprint(NULL, me || ' died.', 1);
   IF (dm = 1) THEN UPDATE player p SET p.score = p.score - 1 WHERE p.ent_id = :targ;
 END^
 

@@ -894,8 +894,14 @@ client's speeds and the game's view cvars among them. In the order they are to b
   by the row; `test:net` the guest's word on the host's row; `test:audio` the fallback; `test:console` the cvar,
   `cvarlist`, `writeconfig` and `userinfo` with it; the browser test types `gender female` and reads the settings
   and the userinfo line on both builds.
-- **`msg`**: the message level userinfo: at 1 the pickups' prints (`PRINT_LOW`) stay off the line, at 2 the
-  medium ones too, as `cprintf` filtered them by the client's level.
+- **`msg`**: done. The message level userinfo (`SV_ClientPrintf`: a print below the client's level is dropped), 0 to
+  3, archived, 1 by default as Quake's cvar was: so the "No shells for shotgun" prints, `PRINT_LOW`, stay off the line
+  unless `msg 0`, as they did in Quake 2; at 2 the obituaries (`PRINT_MEDIUM`) go too, at 3 only the chat. `sprint`
+  takes the level (high unless said), `player.msglevel` holds the client's, from `Session.setUserinfo` with the rest
+  of the userinfo, a guest's over the link. `test:coop` sees an obituary reach the first client alone at 2, a low
+  print none at 1 and one client at 0, the chat at 3; the smoke test reads the no-ammo prints at `msg 0` and none
+  at 1; `test:net` the guest's level on the row; `test:console` the cvar, `cvarlist`, `writeconfig` and `userinfo`
+  with it; the browser test types `msg 0` and reads the settings, the userinfo line and the row, on both builds.
 - **`bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle` and `sv_rollspeed`**: the view's
   bob and roll as the game's cvars (`SV_CalcViewOffset`, `SV_CalcRoll`), on the game row for the game running.
 

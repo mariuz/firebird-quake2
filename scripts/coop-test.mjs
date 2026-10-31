@@ -214,6 +214,25 @@ await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p2.ENT_ID}, 1000,
 check((await one('SELECT gender FROM player WHERE id = 2')).GENDER === 2 && (await one(`SELECT sexed(${p2.ENT_ID}, 'player/male/pain100_1.wav') S FROM rdb$database`)).S === 'player/male/pain100_1.wav', 'a neutral client is 2 on the row, its sounds the male\'s');
 await session.setUserinfo(2, { name: '', hand: 0 });
 check((await one('SELECT gender FROM player WHERE id = 2')).GENDER === 0, 'no gender given is male');
+// the msg userinfo (SV_ClientPrintf): a print below the client's level is dropped: an obituary (medium) at msg 2, a low print at the
+// default 1; chat (3) reaches everyone
+await session.setUserinfo(2, { name: '', hand: 0, msg: 2 });
+await db.exec(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p2.ENT_ID}, 1000, 0, 1)`);
+{
+  const m = await msgs();
+  check(m[0] === 'player 2 blew himself up.' && m[1] !== 'player 2 blew himself up.' && (await one('SELECT msglevel FROM player WHERE id = 2')).MSGLEVEL === 2, `at msg 2 the obituary reaches the first client alone (${JSON.stringify(m)})`);
+  await respawn();
+}
+await session.setUserinfo(2, { name: '', hand: 0 });
+await db.exec(`EXECUTE PROCEDURE sprint(${p2.ENT_ID}, 'low', 0); EXECUTE PROCEDURE sprint(${p1.ENT_ID}, 'low', 0)`);
+check((await msgs()).every((m) => m !== 'low'), 'a low print reaches no client at the default msg 1');
+await session.setUserinfo(2, { name: '', hand: 0, msg: 0 });
+await db.exec(`EXECUTE PROCEDURE sprint(NULL, 'low', 0)`);
+check((await msgs())[1] === 'low' && (await msgs())[0] !== 'low', 'at msg 0 it does');
+await session.setUserinfo(2, { name: '', hand: 0, msg: 3 });
+await session.say(1, 'hi');
+check((await msgs())[1] === 'player 1: hi' && (await msgs())[0] === 'player 1: hi', 'chat reaches a client at msg 3');
+await session.setUserinfo(2, { name: '', hand: 0 });
 // the player setup's names (pers.netname, Session.setUserinfo: ClientUserinfoChanged) are the obituaries' and the rows'
 await session.setUserinfo(1, { name: 'Ace', hand: 0 });
 await session.setUserinfo(2, { name: 'Grunt with a long name', hand: 1 });

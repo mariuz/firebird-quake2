@@ -239,7 +239,7 @@ function setSetting(k, v) {
     if (v && !document.fullscreenElement) canvas.requestFullscreen?.().catch(() => {});
     else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   } else { settings[k] = v; saveSettings(); }
-  if (k === 'name' || k === 'hand' || k === 'gender') applyUserinfo();
+  if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg') applyUserinfo();
   if (k === 'viewsize') applyView().catch((err) => console.warn('viewsize:', err.message));   // (the 3D view's rectangle, the SQL's frustum with it)
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
@@ -254,7 +254,7 @@ function setSetting(k, v) {
  */
 function applyUserinfo() {
   // (only a joined page watches: the host's and a local game's clients play)
-  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, fov: settings.fov, gender: settings.gender };
+  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, fov: settings.fov, gender: settings.gender, msg: settings.msg };
   if (netGuest()) { if (net.guest?.open) net.guest.sendInfo(info); return; }
   session?.setUserinfo(1, info).catch((err) => console.warn('userinfo:', err.message));
 }
@@ -303,7 +303,7 @@ const con = new Console({
     const g = (await db.query('SELECT map_name, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill FROM game')).rows[0];
     return g ? { mapname: g.MAP_NAME, deathmatch: g.DEATHMATCH, coop: g.COOP, dmflags: g.DMFLAGS, fraglimit: g.FRAGLIMIT, timelimit: g.TIMELIMIT, cheats: g.CHEATS, skill: g.SKILL, hostname: settings.hostname || 'noname' } : null;
   },
-  userInfo: () => ({ name: settings.name, hand: settings.hand, gender: settings.gender, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 }),
+  userInfo: () => ({ name: settings.name, hand: settings.hand, gender: settings.gender, msg: settings.msg, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 }),
   isFullscreen: () => !!document.fullscreenElement,   // (vid_fullscreen: the page's live state; setSetting('fullscreen', …) asks for it)
   toggleHelp: () => toggleScreen(0, 'help'),           // (help: Cmd_Help_f, F1's screen)
   // sv_gravity: the game row's gravity (the level's, the worldspawn's again at the next map); a joined page runs no server

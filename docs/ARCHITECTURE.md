@@ -542,7 +542,7 @@ guest's screen is up, and the score board's rows with each client's ping), dropp
 more than 256 KB queued; once a second a `ping` carrying the host's clock goes too, which the guest's link
 answers with a `pong` at once, the round trip read back against the clock (`HostLink.ping`: the score
 board's "Ping:", `players`' listing, the joined page's stats line). The guest's page
-(`GuestLink`) sends its userinfo (the player setup's name and hand, its gender, whether it only watches, and its fov, an `info` message) at the connect, then
+(`GuestLink`) sends its userinfo (the player setup's name and hand, its gender and message level, whether it only watches, and its fov, an `info` message) at the connect, then
 `Input.read`'s command each of its own tics, and paints the newest frame it holds
 exactly as the page paints its own (`drawFrame`), the sounds at its own ear, the effects and particles run
 there; it loads the pak as every page does and, at each map message (sent from `mapLoaded`: the name, the
@@ -761,7 +761,7 @@ clients go to the settings and the select through `setGameMode`, "will be change
 going on; the page's coop is more than one client at it, deathmatch them against each other, `maxclients 1` single player),
 `serverinfo` (`SV_Serverinfo_f`: the game's cvars, `mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`,
 `cheats` and `skill`, as `Info_Print` listed them, the host's `serverInfo`; a joined page runs no server of its own),
-`userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `gender`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:
+`userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `gender`, `msg`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:
 the map and the clients with their frags, pings and names, a line each in the scrollback and the sum on the line,
 `status` over the score board's rows, a joined page's from its row), `timedemo` (above) and
 `screenshot` (the view downloaded as `quakeNN.png`, as
@@ -775,7 +775,10 @@ the game's clients as `SV_Status_f` did (the number, the name, and what drives e
 the frames sent to it and dropped and whether it watches, a pad, or nothing: standing; `listPlayers` in
 `src/main.js`), `kick <n>` drops the guest driving client `n` as `SV_Kick_f` did (`kickGuest`: a `kick`
 message with the reason, which the guest's page shows in place of "The host left", then the channel closed
-and the client left standing; "<name> was kicked" on every message line, `sprint(NULL, …)`). The message line is
+and the client left standing; "<name> was kicked" on every message line, `sprint(NULL, …)`). A print has a level
+(`sprint`'s third argument: `PRINT_LOW` 0 for the "No shells for shotgun" prints, `PRINT_MEDIUM` 1 the obituaries', `PRINT_HIGH` 2 the rest,
+`PRINT_CHAT` 3 the chat) and a client whose `msg` userinfo (`player.msglevel`, 1 by default as Quake's cvar) is above it gets nothing,
+as `SV_ClientPrintf` dropped it. The message line is
 console.c's notify (`src/notify.js`): each print of the first view's row (the tic row's `MSG`, a new one by its
 `MSG_TIME`) is kept with the game's clock, the view draws the last four not yet three seconds old at the top
 as `Con_DrawNotify` did, and the backquote console shows the last twelve lines printed under its input line,
