@@ -412,6 +412,16 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   check(pausedNow === true && status.length === n0 + 1, 'pause pauses a single-player game, saying nothing');
   await con.submit('pause');
   check(pausedNow === false, 'and again goes on');
+  // score and putaway: the score board toggled (Cmd_Score_f: in a game running), every screen put away (Cmd_PutAway_f)
+  let scores = 0, putAway = 0;
+  host.toggleScores = () => { scores++; };
+  host.putAway = () => { putAway++; };
+  await con.submit('score');
+  running = false;
+  await con.submit('score');
+  running = true;
+  await con.submit('putaway');
+  check(scores === 1 && putAway === 1, 'score toggles the score board in a game running, not without one; putaway puts every screen away');
   // exec autoexec runs the autoexec.cfg kept in the browser (the Config control's box), unautoexec drops it
   let keptLines = null, dropped = 0;
   host.execAutoexec = async () => keptLines;

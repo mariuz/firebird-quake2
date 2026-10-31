@@ -402,6 +402,10 @@ try {
     const ml = await page.evaluate(() => ({ freelook: window.quake2.settings.freelook, lookspring: window.quake2.settings.lookspring, mlook: window.quake2.settings.binds.mlook.join() })).catch(() => ({}));
     await typeCommand('freelook 1'); await typeCommand('lookspring 0');
     assert(ml.freelook === false && ml.lookspring === true && ml.mlook === 'Backslash', `freelook 0 and lookspring 1 at the console reach the settings, +mlook on \\ by default (${JSON.stringify(ml)})`);
+    // score in single player shows nothing (Cmd_Score_f: coop or deathmatch alone); the shared game's check is further down
+    await typeCommand('score');
+    const sc1 = await page.evaluate(() => window.quake2.screens).catch(() => ({}));
+    assert(sc1.scores === false && !sc1.help && !sc1.inventory, `score in single player shows no score board (${JSON.stringify(sc1)})`);
     // writeconfig downloads config.cfg with the keys and the cvars; the settings put back, the file run through the Config
     // control (exec's picker) brings them again
     const [cfgDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('writeconfig')]);
@@ -864,6 +868,12 @@ try {
       const sh3 = await frames(page); await sleep(700); const sh4 = await frames(page);
       assert(sm === 'main' && sh2 > sh1 && sg2 > sg1 && sp === false && sh4 > sh3,
         `the host's menu and P do not stop the shared game: ${sh2 - sh1} host tics and ${sg2 - sg1} guest frames under the menu, ${sh4 - sh3} tics after P (paused: ${sp})`);
+      // score at the host's console shows the shared game's score board (Cmd_Score_f: a game of more than one client), putaway puts it away
+      await typeOn(page, 'score');
+      const sc2 = await page.evaluate(() => window.quake2.screens).catch(() => ({}));
+      await typeOn(page, 'putaway');
+      const sc3 = await page.evaluate(() => window.quake2.screens).catch(() => ({}));
+      assert(sc2.scores === true && sc3.scores === false && !sc3.help && !sc3.inventory, `score shows the shared game's score board and putaway puts it away (${JSON.stringify(sc2)} → ${JSON.stringify(sc3)})`);
       const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
       await typeOn(page, 'rtc_signal none');

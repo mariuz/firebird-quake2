@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_run', 'clear', 'cmdlist', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'version', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_run', 'clear', 'cmdlist', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'version', 'wait', 'wave', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -46,6 +46,7 @@ const HISTORY = 32;
  *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), setSetting(key, value) (the cvars: through the page's controls and the userinfo),
  *         download(name, text) (writeconfig), clearLog() (clear: the scrollback emptied), dumpLog(name) (condump: the scrollback downloaded as <name>.txt),
  *         print(text) (lines into the scrollback alone: cmdlist), version() → the page's version string (version), togglePause() → paused now, null for a shared game or none (pause),
+ *         toggleScores() (score: the score board, in a game of more than one client), putAway() (putaway: every screen off),
  *         execConfig() (exec: the page's file picker, whose file runs through execText),
  *         execAutoexec() → the lines run, or null when none is kept (exec autoexec), dropAutoexec() → true when one was kept (unautoexec),
  *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
@@ -305,6 +306,15 @@ export class Console {
         if (p === null || p === undefined) say('Pause command is only valid in single player');
         return;
       }
+      case 'score':
+        // Cmd_Score_f: the score board toggled, the inventory and the help put away; nothing in single player
+        if (!h.isRunning()) return;
+        h.toggleScores?.();
+        return;
+      case 'putaway':
+        // Cmd_PutAway_f: the help computer, the inventory and the score board put away
+        h.putAway?.();
+        return;
       case 'demos': {
         // the page's own: the pak's demos and the recordings kept (this session's, and the earlier ones' from the store)
         const d = h.listDemos?.() ?? { pak: [], kept: [] };
