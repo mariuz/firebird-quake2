@@ -577,7 +577,11 @@ the row's state (the tic row carries the velocity, the ground flag, the step, th
 bob's pitch for it) through the commands past the ack, and each command it sends through the state at
 once, the brush models where the frame's faces have them; the painter takes the predicted eye and angles
 (`FrameLerp.at`'s `view`) with the frame's entities lerped as before. A correction that lands away from
-the prediction fades over the next tenth of a second (`prediction_error`); a teleport snaps. The box
+the prediction fades over the next tenth of a second (`prediction_error`); a teleport snaps. `cl_predict 0`
+at the console stops the prediction (`CL_PredictMovement`'s early return: the commands go, nothing runs
+ahead, the host's frames are painted as they come), and `cl_showmiss 1` prints each miss as
+`CL_CheckPredictionError` printed it ("prediction miss on <tic>: <the deltas summed in eighths>"), the
+misses counted on the page's `prediction` debug object; neither archived, as Quake's were not. The box
 entities about the guest (the monsters, the other clients, the barrels: within 384 of its eye, with the
 contents `trace_move` gives them, its own missiles left out) come with its frame (`frame_all`'s kind 10,
 asked for with `with_boxes`; `Session.frame`'s `boxes`), so the prediction clips against them as the host

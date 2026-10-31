@@ -778,8 +778,14 @@ pak. In the order they are to be taken.
   help computer, the inventory and the score board put away (`putAway`). `test:console` sees `score` reach the
   host in a game running and not without one, and `putaway` reach it; the browser test types `score` in single
   player and sees no board, then at the host of a shared game sees the board up and `putaway` take it down.
-- **`cl_predict` and `cl_showmiss`**: a guest's prediction switched off (its view then the host's frames as they
-  come), and the prediction's misses counted and printed on its line as `CL_CheckPredictionError` printed them.
+- **`cl_predict` and `cl_showmiss`**: done. `cl_predict 0` at a joined page's console stops its prediction
+  (`CL_PredictMovement`'s early return: the commands go, nothing runs ahead, the host's frames painted as they
+  come; `cl_predict 1` starts it again), and `cl_showmiss 1` prints each miss as `CL_CheckPredictionError`
+  printed it ("prediction miss on <tic>: <the deltas summed in eighths>"), the misses counted on the page's
+  `prediction` debug object; neither archived, as Quake's were not. `test:console` shows, sets and refuses
+  them and leaves them out of config.cfg; the browser test, on the joined page of both builds, turns the
+  prediction off and sees no state ahead of the frames while its keys still reach the host as its command,
+  the misses counted.
 - **`viewsize`, `sizeup` and `sizedown`**: the view at 40 to 100 percent of the screen within the backtile, as
   `SCR_CalcVrect` laid it, `-` and `=` default.cfg's keys for them, the status bar staying where it is.
 

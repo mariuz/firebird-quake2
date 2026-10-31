@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_run', 'clear', 'cmdlist', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'version', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_predict', 'cl_run', 'cl_showmiss', 'clear', 'cmdlist', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'version', 'wait', 'wave', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -36,6 +36,10 @@ export const CVARS = {
   m_side: { key: 'mSide', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && Math.abs(n) <= 100 ? n : null; }, help: 'a number, 1 as Quake had it', archive: false },
   // the network graph along the bottom of a joined page's view (SCR_DrawDebugGraph: a column a frame); not archived, as Quake's was not
   netgraph: { key: 'netgraph', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  // a guest's prediction (CL_PredictMovement): cl_predict 0 paints the host's frames as they come, cl_showmiss 1 prints each
+  // prediction miss as CL_CheckPredictionError printed it; neither archived, as Quake's were not
+  cl_predict: { key: 'clPredict', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  cl_showmiss: { key: 'clShowmiss', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
 };
 const HISTORY = 32;
 
@@ -231,7 +235,7 @@ export class Console {
         say((await h.dropAutoexec?.()) ? 'autoexec.cfg dropped' : 'no autoexec.cfg kept');
         return;
       case 'name': case 'hand': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume':
-      case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'netgraph': {
+      case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'netgraph': case 'cl_predict': case 'cl_showmiss': {
         // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
         // page's setSetting, so the menus and the page's controls agree; a word the cvar refuses leaves it
         const name = cmd.toLowerCase(), cv = CVARS[name];
