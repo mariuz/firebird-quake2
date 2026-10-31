@@ -247,6 +247,7 @@ function setSetting(k, v) {
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
   if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
   if (k === 'scrCentertime') for (const c of centerPrints) c.seconds = Number(v) || 0;   // (scr_centertime: a centre print's seconds)
+  if (k === 'clFootsteps') audio.footsteps = v !== false;   // (cl_footsteps 0: the footsteps dropped)
 }
 /**
  * The player setup's name and hand as this client's userinfo (ClientUserinfoChanged): to the game's first client,
@@ -278,7 +279,8 @@ function quitGame() {
 // seconds, four at most, as Con_DrawNotify drew them, and kept for the console's scrollback with the lines typed
 // and the commands' answers (those two in the scrollback alone)
 const notify = new Notify({ seconds: Number(settings.conNotifytime) || 3 });   // (con_notifytime: the notify lines' seconds)
-const centerPrints = perPlayer(() => new CenterPrint({ seconds: Number(settings.scrCentertime ?? 2.5) }));   // (scr_centertime: each view's centre print's seconds)
+const centerPrints = perPlayer(() => new CenterPrint({ seconds: Number(settings.scrCentertime ?? 2.5) }));
+audio.footsteps = settings.clFootsteps !== false;   // (cl_footsteps)   // (scr_centertime: each view's centre print's seconds)
 let lastMsgTime = null;
 const gameClock = () => last?.TIME_ ?? 0;
 function noteMessage(row) {
@@ -1159,7 +1161,7 @@ async function demoFrame(now) {
   perf.rows = f.faces.length;
   last = demoRow(st);
   const listener = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW };
-  const { rows, fx } = d.player.soundRows(st.events, st.frame, st.view);
+  const { rows, fx } = d.player.soundRows(st.events, st.frame, st.view, undefined, settings.clFootsteps !== false);   // (the entities' events among them: a footstep, cl_footsteps allowing)
   if (rows.length) audio.playEvents(rows, listener);
   audio.setLoops(st.loops);
   audio.update(listener);

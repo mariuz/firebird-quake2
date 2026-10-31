@@ -717,6 +717,7 @@ DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRE
 DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION;
 DECLARE cbu DOUBLE PRECISION; DECLARE cbp DOUBLE PRECISION; DECLARE cbr DOUBLE PRECISION; DECLARE crp DOUBLE PRECISION; DECLARE crr DOUBLE PRECISION;
 DECLARE cra DOUBLE PRECISION; DECLARE crs DOUBLE PRECISION; DECLARE bvz DOUBLE PRECISION; DECLARE rside DOUBLE PRECISION; DECLARE mroll DOUBLE PRECISION;
+DECLARE bobmove DOUBLE PRECISION;
 DECLARE wx DOUBLE PRECISION; DECLARE wy DOUBLE PRECISION; DECLARE wz DOUBLE PRECISION; DECLARE wspd DOUBLE PRECISION; DECLARE maxspd DOUBLE PRECISION;
 DECLARE cur DOUBLE PRECISION; DECLARE add_ DOUBLE PRECISION; DECLARE acc DOUBLE PRECISION;
 DECLARE jr SMALLINT; DECLARE onground SMALLINT;
@@ -1026,8 +1027,9 @@ BEGIN
   -- game row's bob_up, bob_pitch and bob_roll are the units of speed (p_view.c's cvars, the console's), run_pitch and
   -- run_roll the pitch and roll from the velocity along the view's forward and right
   xys = SQRT(bvx * bvx + bvy * bvy);
+  bobmove = 0;
   IF (xys < 5) THEN bt = 0;
-  ELSE IF (BIN_AND(flags, 512) <> 0) THEN bt = pbobtime + IIF(xys > 210, 0.25e0, IIF(xys > 100, 0.125e0, 0.0625e0)) * dt / 0.1e0;
+  ELSE IF (BIN_AND(flags, 512) <> 0) THEN BEGIN bobmove = IIF(xys > 210, 0.25e0, IIF(xys > 100, 0.125e0, 0.0625e0)) * dt / 0.1e0; bt = pbobtime + bobmove; END
   ELSE bt = pbobtime;
   bts = IIF(ducked2 = 1, bt * 4, bt);
   bfs = ABS(SIN(bts * PI()));
@@ -1041,6 +1043,10 @@ BEGIN
   -- what the other players and a recording see
   mroll = IIF(crs > 0 AND ABS(rside) < crs, ABS(rside) * cra / crs, cra) * IIF(rside < 0, -1, 1) * 4;
   UPDATE ents e SET e.roll = :mroll WHERE e.id = :pe AND e.roll <> :mroll;
+  -- G_SetClientEvent's footstep (EV_FOOTSTEP): on the ground past 225 units a second, each time the bob cycle's next step turns its
+  -- whole number, player/step1-4.wav on the body channel as CL_EntityEvent played it (the page's cl_footsteps 0 mutes them)
+  IF (BIN_AND(flags, 512) <> 0 AND xys > 225 AND FLOOR(bt + bobmove) <> FLOOR(bt)) THEN
+    EXECUTE PROCEDURE snd(pe, 3, 'player/step' || CAST(1 + FLOOR(rnd() * 4) AS INTEGER) || '.wav', 1, 1);
   -- smooth the view over steps
   stepz2 = IIF(BIN_AND(flags, 512) <> 0 AND pz - oldz > 0 AND pz - oldz <= 18, MINVALUE(pstepz + (pz - oldz), 18), MAXVALUE(0, pstepz - 160 * dt));
 
