@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -241,7 +241,8 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   const offer = 'q2net1:' + 'A'.repeat(600);
   await con.submit(`connect ${offer}`);
   check(joins.at(-1) === offer && status.at(-1)?.[0] === 'connecting to q2net1:AAAAAAAAAAAAAAAAA…', 'connect <offer> takes an offer text, shown cut');
-  check(con.complete('con') === 'condump ' && con.complete('conn') === 'connect ' && con.complete('dis') === 'disconnect ' && con.complete('rec') === 'reconnect ', 'Tab completes condump, connect, disconnect and reconnect (condump before connect, reconnect before record)');
+  check(con.complete('con') === 'con_notifytime ' && con.complete('cond') === 'condump ' && con.complete('conn') === 'connect ' && con.complete('dis') === 'disconnect ' && con.complete('rec') === 'reconnect ',
+    'Tab completes con_notifytime, condump, connect, disconnect and reconnect (the alphabetical first each time, reconnect before record)');
   delete host.connect; delete host.disconnect; delete host.reconnect; delete host.lastConnect;
 }
 
@@ -306,7 +307,16 @@ await con.submit('netgraph 1'); check(s.netgraph === true && last() === 'set net
 await con.submit('netgraph 2'); check(s.netgraph === true && status.at(-1)?.[0] === 'netgraph takes 0 or 1' && status.at(-1)?.[1] === true, 'netgraph 2 is refused');
 await con.submit('netgraph 0'); check(s.netgraph === false, 'netgraph 0 turns it off');
 await con.submit('cvarlist');
-check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+// m_yaw (the turn a count), cl_gun (the view weapon) and con_notifytime (the notify lines' seconds)
+await con.submit('m_yaw'); check(status.at(-1)?.[0] === '"m_yaw" is "0.022"', 'm_yaw shows 0.022 by default');
+await con.submit('m_yaw 0.044'); check(s.mYaw === 0.044 && last() === 'set mYaw 0.044', 'm_yaw 0.044 doubles the turn a count');
+await con.submit('m_yaw x'); check(s.mYaw === 0.044 && status.at(-1)?.[1] === true, 'm_yaw x is refused');
+await con.submit('cl_gun 0'); check(s.clGun === false && last() === 'set clGun false', 'cl_gun 0 draws no view weapon');
+await con.submit('cl_gun 2'); check(s.clGun === false && status.at(-1)?.[0] === 'cl_gun takes 0 or 1' && status.at(-1)?.[1] === true, 'cl_gun 2 is refused');
+await con.submit('con_notifytime 1.5'); check(s.conNotifytime === 1.5 && last() === 'set conNotifytime 1.5', 'con_notifytime 1.5 shortens the notify lines\' stay');
+await con.submit('con_notifytime -1'); check(s.conNotifytime === 1.5 && status.at(-1)?.[0] === 'con_notifytime takes seconds, 0 to 60' && status.at(-1)?.[1] === true, 'con_notifytime -1 is refused');
+Object.assign(s, { mYaw: 0.022, clGun: true, conNotifytime: 3 });
 // ref_soft's switches: r_fullbright, r_drawentities, r_drawworld, r_lerpmodels, r_novis and r_speeds, 0 or 1 through the page
 for (const [name, key, dflt] of [['r_fullbright', 'rFullbright', false], ['r_drawentities', 'rDrawentities', true], ['r_drawworld', 'rDrawworld', true], ['r_lerpmodels', 'rLerpmodels', true], ['r_novis', 'rNovis', false], ['r_speeds', 'rSpeeds', false]]) {
   await con.submit(name); const shown = status.at(-1)?.[0] === `"${name}" is "${dflt ? '1' : '0'}"`;
@@ -357,7 +367,7 @@ await con.submit('lookstrafe 2'); check(s.lookstrafe === true && status.at(-1)?.
 await con.submit('m_forward 2'); check(s.mForward === 2 && last() === 'set mForward 2', 'm_forward 2');
 await con.submit('m_side -1'); check(s.mSide === -1 && last() === 'set mSide -1' && status.at(-1)?.[0] === '"m_side" is "-1"', 'm_side -1');
 await con.submit('m_side x'); check(s.mSide === -1 && status.at(-1)?.[1] === true, 'm_side x is refused');
-Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false });
+Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3 });
 
 // the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
 {
@@ -408,8 +418,8 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   const setAt = lines.findIndex((l) => l.startsWith('set ')), godAt = lines.indexOf('bind j "god"');
   check(lines[0].startsWith('//') && lines[1] === 'unbindall' && lines[2] === 'bind k "+attack"' && lines[3] === 'bind MOUSE2 "+attack"' && lines.includes('bind MWHEELDOWN "weapnext"') && !lines.some((l) => l.includes('"+moveup"'))
     && godAt > 3 && godAt < setAt && lines[godAt + 1] === 'bind MOUSE3 "say hello"'
-    && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && lines.includes('set freelook "1"') && lines.includes('set lookspring "0"') && lines.includes('set viewsize "100"') && !lines.some((l) => l.startsWith('set netgraph') || l.startsWith('set m_forward') || l.startsWith('set m_side') || l.startsWith('set cl_predict') || l.startsWith('set cl_showmiss') || l.startsWith('set r_')) && cfg.endsWith('\n'),
-    'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them (netgraph, m_forward, m_side, cl_predict, cl_showmiss and the r_ switches, not archived, left out)');
+    && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && lines.includes('set freelook "1"') && lines.includes('set lookspring "0"') && lines.includes('set viewsize "100"') && !lines.some((l) => l.startsWith('set netgraph') || l.startsWith('set m_forward') || l.startsWith('set m_side') || l.startsWith('set cl_predict') || l.startsWith('set cl_showmiss') || l.startsWith('set r_') || l.startsWith('set m_yaw') || l.startsWith('set cl_gun') || l.startsWith('set con_notifytime')) && cfg.endsWith('\n'),
+    'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them (netgraph, m_forward, m_side, m_yaw, cl_gun, con_notifytime, cl_predict, cl_showmiss and the r_ switches, not archived, left out)');
   let downloaded = null;
   host.download = (name, text) => { downloaded = { name, text }; };
   await con.submit('writeconfig');

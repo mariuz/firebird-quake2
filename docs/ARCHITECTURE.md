@@ -735,6 +735,8 @@ skipped) and `r_drawworld` (0: the world's faces left out), `r_lerpmodels` (0: n
 `r_novis` (`viewcfg.novis`: `build_vis_set` marks every leaf, the PVS and the area portals ignored as `R_MarkLeaves` did
 with it, the kept sets dropped with the switch; a guest paints the host's frames as they are) and `r_speeds` (the
 frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame),
+`m_yaw` (the turn a mouse count, 0.022 as Quake had it, `Input.mouse`'s), `cl_gun` (0: no view weapon, as `CL_AddViewWeapon`
+had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
 `serverinfo` (`SV_Serverinfo_f`: the game's cvars, `mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`,
 `cheats` and `skill`, as `Info_Print` listed them, the host's `serverInfo`; a joined page runs no server of its own),
 `userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:

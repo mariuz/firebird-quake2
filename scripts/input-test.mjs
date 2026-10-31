@@ -202,6 +202,8 @@ check(readPad(null) === null, 'no pad reads as null');
   check(Math.abs(c[3] - (-100 * 0.022 * 7)) < 1e-9 && Math.abs(c[4] - (-50 * 0.022 * 7)) < 1e-9, 'the mouse turns right for right and looks up for up, at 0.022 degrees a count times the sensitivity');
   inp.mouse(0, -50, { ...settings, invertMouse: true }); c = cmd();
   check(c[4] > 0, 'inverted, up looks down');
+  inp.mouse(100, 0, { ...settings, mYaw: 0.044 }); c = cmd();
+  check(Math.abs(c[3] - (-100 * 0.044 * 7)) < 1e-9, 'm_yaw is the turn a count: doubled, the turn doubles');
   check(cmd()[3] === 0, 'the movement is spent by the read');
   // CL_MouseMove's switches: +strafe held, the mouse's horizontal sidesteps (m_side, in cl_sidespeed's 200) and its vertical walks
   // (m_forward); free look off, its vertical walks unless +mlook is held; lookstrafe with +mlook, its horizontal sidesteps; +mlook

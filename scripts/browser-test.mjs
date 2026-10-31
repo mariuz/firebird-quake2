@@ -452,6 +452,13 @@ try {
       && /^User info settings: name "[^"]*" · hand "0" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
+    // m_yaw, cl_gun and con_notifytime reach the settings, con_notifytime the notify's seconds; back to the defaults after
+    await typeCommand('m_yaw 0.044'); await typeCommand('cl_gun 0'); await typeCommand('con_notifytime 1');
+    const three = await page.evaluate(() => ({ yaw: window.quake2.settings.mYaw, gun: window.quake2.settings.clGun, notify: window.quake2.settings.conNotifytime, seconds: window.quake2.notify.seconds })).catch(() => ({}));
+    await typeCommand('m_yaw 0.022'); await typeCommand('cl_gun 1'); await typeCommand('con_notifytime 3');
+    const threeBack = await page.evaluate(() => ({ yaw: window.quake2.settings.mYaw, gun: window.quake2.settings.clGun, seconds: window.quake2.notify.seconds })).catch(() => ({}));
+    assert(three.yaw === 0.044 && three.gun === false && three.notify === 1 && three.seconds === 1 && threeBack.yaw === 0.022 && threeBack.gun === true && threeBack.seconds === 3,
+      `m_yaw, cl_gun and con_notifytime reach the settings, the last the notify's seconds (${JSON.stringify(three)} → ${JSON.stringify(threeBack)})`);
     // writeconfig downloads config.cfg with the keys and the cvars; the settings put back, the file run through the Config
     // control (exec's picker) brings them again
     const [cfgDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('writeconfig')]);

@@ -826,8 +826,12 @@ the server's among them. In the order they are to be taken.
   `test:console` reads the three lines and the scrollback's layout, and the refusals; the browser test types
   them in single player and reads the cvars, the userinfo and the one client, then `status` on the joined page
   with both clients and `serverinfo` refused there.
-- **`m_yaw`, `cl_gun` and `con_notifytime`**: three small cvars: the turn a mouse count (`m_yaw`, 0.022),
-  the view weapon drawn or not (`cl_gun 0`), and the notify lines' seconds (`con_notifytime`, 3).
+- **`m_yaw`, `cl_gun` and `con_notifytime`**: done. `m_yaw` is the turn a mouse count (0.022 as Quake had
+  it; `Input.mouse` reads it beside `m_pitch`'s sign), `cl_gun 0` draws no view weapon (as `CL_AddViewWeapon`
+  had it), and `con_notifytime` is the notify lines' seconds (3; `Notify.seconds`, set at the start and on the
+  word). None archived, as Quake's were not. `test:input` doubles the turn with `m_yaw`; `test:console` shows,
+  sets and refuses the three and leaves them out of config.cfg; the browser test sets the three and reads them
+  in the settings and the notify's seconds, then puts them back.
 - **`vid_gamma` and `vid_fullscreen`**: the video menu's words: the brightness and fullscreen settings as
   cvars, as `vid_gamma` and `vid_fullscreen` were.
 - **`help`, `sv_gravity` and `hostname`**: `help` as a word (`Cmd_Help_f`, F1's), `sv_gravity` the level's

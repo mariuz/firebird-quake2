@@ -195,7 +195,7 @@ export class Input {
     const mlook = held('mlook'), strafe = held('strafe');
     const mx = dx * settings.sensitivity, my = dy * settings.sensitivity;
     if (strafe || (settings.lookstrafe === true && mlook)) this.mouseSide += (settings.mSide ?? 1) * mx / 200;
-    else this.mouseYaw -= mx * MOUSE;
+    else this.mouseYaw -= mx * (settings.mYaw ?? MOUSE);   // (m_yaw: the turn a count)
     if ((mlook || settings.freelook !== false) && !strafe) this.mousePitch += my * MOUSE * (settings.invertMouse ? -1 : 1);
     else this.mouseFwd -= (settings.mForward ?? 1) * my / 200;
   }

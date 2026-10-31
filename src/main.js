@@ -244,6 +244,7 @@ function setSetting(k, v) {
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
+  if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
 }
 /**
  * The player setup's name and hand as this client's userinfo (ClientUserinfoChanged): to the game's first client,
@@ -274,7 +275,7 @@ function quitGame() {
 // src/notify.js: the game's prints (the first view's row, a new one by its time) drawn at the top of the view for three
 // seconds, four at most, as Con_DrawNotify drew them, and kept for the console's scrollback with the lines typed
 // and the commands' answers (those two in the scrollback alone)
-const notify = new Notify();
+const notify = new Notify({ seconds: Number(settings.conNotifytime) || 3 });   // (con_notifytime: the notify lines' seconds)
 let lastMsgTime = null;
 const gameClock = () => last?.TIME_ ?? 0;
 function noteMessage(row) {
@@ -1269,7 +1270,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   // (the hand: a left-hander's gun is drawn mirrored, a centre-hander's not at all, as ref_soft and ref_gl had hand 1 and 2)
   const wp = WEAPONS[last.WEAPON];
   const gunName = last.GUN_MODEL ?? wp?.view;
-  if (!last.DEAD && !last.INTERMISSION && gunName && last.HAND !== 2 && settings.rDrawentities) {   // (r_drawentities 0: R_DrawViewModel skipped too)
+  if (!last.DEAD && !last.INTERMISSION && gunName && last.HAND !== 2 && settings.rDrawentities && settings.clGun !== false) {   // (r_drawentities 0 and cl_gun 0: no view weapon, as CL_AddViewWeapon had them)
     const vm = res.models.get(res.byName.get(gunName));
     if (vm) {
       // SV_CalcGunOffset: the gun sways with the walk cycle and lags behind turns of the view (the delta over a
