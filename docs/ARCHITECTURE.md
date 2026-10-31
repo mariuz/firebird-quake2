@@ -708,7 +708,12 @@ key's binding into the command buffer; the `+` actions stay the held ones; `unbi
 `writeconfig` and the keys menu's reset cover the lines, and a key the menu binds to an action loses its
 line), `clear` (`Con_Clear_f`: the scrollback and the notify lines emptied, the page's `clearLog`) and
 `condump <name>` (`Con_Dump_f`: the scrollback downloaded as `<name>.txt`, the lines typed and the answers in
-it, `dumpLog`; the name as typed with a path's characters and a `.txt` taken off), `timedemo` (above) and
+it, `dumpLog`; the name as typed with a path's characters and a `.txt` taken off), `echo` (`Cmd_Echo_f`: its words
+printed as typed), `cmdlist` (`Cmd_List_f`: every command on a line of the scrollback, the page's `print`, and how
+many), `version` (the page's version and build, which `scripts/build.mjs` stamps into the bundle, the engine
+package's version and the engine line: Firebird's version, threads or not), `pause` (`CL_Pause_f`: a single-player
+game running pauses or goes on, `togglePause`; a shared game or none, "Pause command is only valid in single
+player"), `timedemo` (above) and
 `screenshot` (the view downloaded as `quakeNN.png`, as
 `SCR_ScreenShot_f` wrote `quakeNN.pcx`), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the

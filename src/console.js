@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_run', 'clear', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'wait', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_run', 'clear', 'cmdlist', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'version', 'wait', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -45,6 +45,7 @@ const HISTORY = 32;
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
  *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), setSetting(key, value) (the cvars: through the page's controls and the userinfo),
  *         download(name, text) (writeconfig), clearLog() (clear: the scrollback emptied), dumpLog(name) (condump: the scrollback downloaded as <name>.txt),
+ *         print(text) (lines into the scrollback alone: cmdlist), version() → the page's version string (version), togglePause() → paused now, null for a shared game or none (pause),
  *         execConfig() (exec: the page's file picker, whose file runs through execText),
  *         execAutoexec() → the lines run, or null when none is kept (exec autoexec), dropAutoexec() → true when one was kept (unautoexec),
  *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
@@ -283,6 +284,25 @@ export class Console {
         if (!name) { say('usage: condump <filename>', true); return; }
         h.dumpLog?.(name);
         say(`Dumped console text to ${name}.txt.`);
+        return;
+      }
+      case 'echo':
+        // Cmd_Echo_f: the words printed as typed
+        say(arg);
+        return;
+      case 'cmdlist':
+        // Cmd_List_f: every command on a line of the scrollback, and how many
+        h.print?.(COMMANDS.join('\n'));
+        say(`${COMMANDS.length} commands`);
+        return;
+      case 'version':
+        // the version command (Com_Printf of the version string): the page's version and build, the engine's package and Firebird's
+        say(h.version?.() ?? 'version: unknown', false, 8000);
+        return;
+      case 'pause': {
+        // CL_Pause_f: a single-player game running pauses or goes on; a shared game, or none, "Pause command is only valid in single player"
+        const p = h.togglePause?.();
+        if (p === null || p === undefined) say('Pause command is only valid in single player');
         return;
       }
       case 'demos': {

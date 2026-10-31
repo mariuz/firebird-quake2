@@ -392,6 +392,26 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   check(dumpedAs === 'my log', 'the name as typed, the quotes and a .txt taken off');
   await con.submit('condump ../x:y');
   check(dumpedAs === '..xy', 'a path\'s characters are dropped from the name');
+  // echo, cmdlist, version and pause: cmd.c's, common.c's and cl_main.c's words
+  await con.submit('echo Hello, World!');
+  check(status.at(-1)?.[0] === 'Hello, World!' && status.at(-1)?.[1] === false, 'echo prints its words as typed');
+  let printed = null;
+  host.print = (text) => { printed = text; };
+  host.version = () => 'Firebird Quake 2 0.1.0 build x';
+  await con.submit('cmdlist');
+  check(printed === COMMANDS.join('\n') && status.at(-1)?.[0] === `${COMMANDS.length} commands`, 'cmdlist prints every command on a line of the scrollback and says how many');
+  await con.submit('version');
+  check(status.at(-1)?.[0] === 'Firebird Quake 2 0.1.0 build x', 'version says which build the page runs');
+  let pausedNow = null;
+  host.togglePause = () => (pausedNow === null ? null : (pausedNow = !pausedNow));
+  const n0 = status.length;
+  await con.submit('pause');
+  check(status.at(-1)?.[0] === 'Pause command is only valid in single player' && status.length === n0 + 1, 'pause in a shared game, or without one, says so as CL_Pause_f did');
+  pausedNow = false;
+  await con.submit('pause');
+  check(pausedNow === true && status.length === n0 + 1, 'pause pauses a single-player game, saying nothing');
+  await con.submit('pause');
+  check(pausedNow === false, 'and again goes on');
   // exec autoexec runs the autoexec.cfg kept in the browser (the Config control's box), unautoexec drops it
   let keptLines = null, dropped = 0;
   host.execAutoexec = async () => keptLines;
