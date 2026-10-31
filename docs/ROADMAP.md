@@ -902,8 +902,41 @@ client's speeds and the game's view cvars among them. In the order they are to b
   print none at 1 and one client at 0, the chat at 3; the smoke test reads the no-ammo prints at `msg 0` and none
   at 1; `test:net` the guest's level on the row; `test:console` the cvar, `cvarlist`, `writeconfig` and `userinfo`
   with it; the browser test types `msg 0` and reads the settings, the userinfo line and the row, on both builds.
-- **`bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle` and `sv_rollspeed`**: the view's
-  bob and roll as the game's cvars (`SV_CalcViewOffset`, `SV_CalcRoll`), on the game row for the game running.
+- **`bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle` and `sv_rollspeed`**: done. p_view.c's
+  cvars on the game row (Quake's defaults, in the save), set at the console for the game running as `sv_gravity` is
+  (`gameCvar`, `setGameCvar`, `GAME_CVARS`'s ranges). `player_think` bobs the eye, the pitch and the roll by the first
+  three a unit of speed and adds the velocity along the view's forward and right times `run_pitch` and `run_roll`
+  (`SV_CalcViewOffset`'s "angles based on velocity", which the port lacked: a run pitches the view down a little, a
+  sidestep rolls it), and rolls the player's model by `SV_CalcRoll` times four (`sv_rollangle`, full at a sideways
+  `sv_rollspeed`), what the other players and a recording see. `src/pmove.js` is the twin, the cvars given with the
+  world (`VIEW_CVARS` the defaults; a guest's come in the map message, so one changed at the host's console reaches a
+  guest's prediction at the next map). The smoke test walks with `bob_up 0`, sidesteps with `run_roll` and reads the
+  model's roll; `test:predict` holds the JS to the SQL's eye, pitch and roll with the cvars changed; `test:console`
+  shows, sets and refuses them and Tab; the browser test sets two on the game row on both builds.
+
+The thirteenth list: what the page still lacks of Quake 2's own words, sounds and pictures with the demo pak, the
+client's events among them. In the order they are to be taken.
+
+- **`viewpos` and `timerefresh`**: the eye's position and angles on the line (`viewpos`: what `screenshot.mjs
+  --at=` takes), and `SCR_TimeRefresh_f`: the view spun a full turn in 128 frames with the painter timed, the
+  seconds and the frames a second said.
+- **`play`, `stopsound` and `soundinfo`**: `play <sound>` plays a pak sound at the ear (`S_Play`: `play
+  weapons/blastf1a` or with `.wav`), `stopsound` cuts every channel and loop (`S_StopAllSounds`), and `soundinfo`
+  says the mix's figures (`S_SoundInfo_f`: the rate, the channels, the sounds decoded).
+- **Footsteps and `cl_footsteps`**: `EV_FOOTSTEP` as pmove set it (the bob cycle's half turned on the ground past
+  225 units a second) with `player/step1-4.wav` at the entity as `CL_EntityEvent` played them, in a frame's events,
+  a recording's and a demo's, for the other players too; `cl_footsteps 0` plays none.
+- **`scr_showpause`, `scr_showturtle` and `cl_maxfps`**: the pause plaque drawn as `pics/pause.pcx` in place of
+  the word (`SCR_DrawPause`, off with `scr_showpause 0`), the turtle (`pics/turtle.pcx`) at the view's corner
+  when a frame takes longer than a tic (`SCR_DrawNet`'s neighbour, `scr_showturtle`), and the paint rate capped
+  (`cl_maxfps`, 90 as Quake had it; 0 the display's).
+- **`sv_maxvelocity`, `sv_airaccelerate` and `g_select_empty`**: the velocity clamp (`SV_CheckVelocity`, 2000),
+  the air acceleration (`pm_airaccelerate`, 0: with it, strafe jumps, in `player_think` and the prediction's twin),
+  and the weapon cycle visiting weapons with no ammo (`Cmd_WeapNext_f` with `g_select_empty`), `weapnext` and
+  `weapprev` as the console's words too.
+- **`sv_maplist` and `sky`**: the deathmatch rotation (`EndDMLevel`: the next map of the list at the exit, the
+  fraglimit or the timelimit, round again from the end), and `sky <name> [rotate] [axis x y z]` (`SCR_Sky_f`: the
+  sky box changed and spun for the map running; the demo pak has `unit1_`).
 
 ## Playing the demo
 

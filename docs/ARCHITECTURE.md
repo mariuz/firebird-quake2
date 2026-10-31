@@ -754,7 +754,12 @@ as written; none archived, as Quake's were not),
 clamped to them, archived: the painter's light scale and the control follow through `setSetting`) and `vid_fullscreen` (the page's live fullscreen state shown, `isFullscreen`; 0 or 1 asks the page
 for it or leaves it, as the video menu's box does), `help` (`Cmd_Help_f`: the help computer, or the score board in deathmatch, as
 F1 brings it, `toggleHelp`), `sv_gravity` (the game row's gravity for the game running, `gravity` and `setGravity`; a new map
-takes its worldspawn's again, and a joined page runs no server) and `hostname` (the host's name, archived as Quake's was,
+takes its worldspawn's again, and a joined page runs no server), `bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle` and
+`sv_rollspeed` (p_view.c's cvars on the game row the same way, `gameCvar` and `setGameCvar`, Quake's defaults: `player_think` bobs
+the eye, the pitch and the roll by the first three a unit of speed, adds the velocity along the view's forward and right times
+`run_pitch` and `run_roll`, `SV_CalcViewOffset`, and rolls the player's model by `SV_CalcRoll` times four, `sv_rollangle` full at
+a sideways `sv_rollspeed`, what the other players and a recording see; `src/pmove.js` has the same from the map message, so a
+guest's prediction bobs by the host's, one changed at the host's console reaching it at the next map) and `hostname` (the host's name, archived as Quake's was,
 "noname" when empty: the serverinfo's, and the map message carries it so a joined page's stats line names the host),
 `deathmatch`, `coop` and `maxclients` (the Players select's words, latched as Quake latched them: the next game's mode and
 clients go to the settings and the select through `setGameMode`, "will be changed for next game." said, the game running

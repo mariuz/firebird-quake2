@@ -31,6 +31,15 @@ CREATE TABLE game (
   level_msg      VARCHAR(200),
   help_msg       VARCHAR(400),                          -- target_help with spawnflags 1: the help computer's first message (kept across levels)
   gravity        DOUBLE PRECISION DEFAULT 800 NOT NULL,
+  -- p_view.c's cvars (SV_CalcViewOffset, SV_CalcRoll), Quake's defaults: the bob's height, pitch and roll a unit of speed, the pitch and
+  -- roll from the velocity along the view, the model's roll angle and the sideways speed it is full at
+  bob_up         DOUBLE PRECISION DEFAULT 0.005 NOT NULL,
+  bob_pitch      DOUBLE PRECISION DEFAULT 0.002 NOT NULL,
+  bob_roll       DOUBLE PRECISION DEFAULT 0.002 NOT NULL,
+  run_pitch      DOUBLE PRECISION DEFAULT 0.002 NOT NULL,
+  run_roll       DOUBLE PRECISION DEFAULT 0.005 NOT NULL,
+  sv_rollangle   DOUBLE PRECISION DEFAULT 2 NOT NULL,
+  sv_rollspeed   DOUBLE PRECISION DEFAULT 200 NOT NULL,
   sky            VARCHAR(32),                           -- worldspawn "sky": env/<sky>rt.pcx …
   cd_track       INTEGER DEFAULT 0 NOT NULL,
   intermission_time DOUBLE PRECISION,                   -- set at a unit's end: the player watches from an info_player_intermission

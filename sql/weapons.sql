@@ -715,6 +715,8 @@ DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PREC
 DECLARE spd DOUBLE PRECISION; DECLARE ns DOUBLE PRECISION; DECLARE control DOUBLE PRECISION; DECLARE drop_ DOUBLE PRECISION;
 DECLARE fx_ DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION;
 DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION;
+DECLARE cbu DOUBLE PRECISION; DECLARE cbp DOUBLE PRECISION; DECLARE cbr DOUBLE PRECISION; DECLARE crp DOUBLE PRECISION; DECLARE crr DOUBLE PRECISION;
+DECLARE cra DOUBLE PRECISION; DECLARE crs DOUBLE PRECISION; DECLARE bvz DOUBLE PRECISION; DECLARE rside DOUBLE PRECISION; DECLARE mroll DOUBLE PRECISION;
 DECLARE wx DOUBLE PRECISION; DECLARE wy DOUBLE PRECISION; DECLARE wz DOUBLE PRECISION; DECLARE wspd DOUBLE PRECISION; DECLARE maxspd DOUBLE PRECISION;
 DECLARE cur DOUBLE PRECISION; DECLARE add_ DOUBLE PRECISION; DECLARE acc DOUBLE PRECISION;
 DECLARE jr SMALLINT; DECLARE onground SMALLINT;
@@ -740,8 +742,10 @@ DECLARE spec SMALLINT; DECLARE chase SMALLINT; DECLARE fheld SMALLINT;
 BEGIN
   -- (the player and ents rows are wide: what the think decides is written back once, at the end)
   SELECT p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz,
-         p.ducked, p.bobtime, p.water_x, p.water_y, p.water_z, g.coop, g.deathmatch, g.dmflags
-    FROM player p CROSS JOIN game g WHERE p.ent_id = :pe AND g.id = 1 INTO jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz, pducked, pbobtime, wcx, wcy, wcz, coop, dm, dmf;
+         p.ducked, p.bobtime, p.water_x, p.water_y, p.water_z, g.coop, g.deathmatch, g.dmflags,
+         g.bob_up, g.bob_pitch, g.bob_roll, g.run_pitch, g.run_roll, g.sv_rollangle, g.sv_rollspeed
+    FROM player p CROSS JOIN game g WHERE p.ent_id = :pe AND g.id = 1 INTO jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz, pducked, pbobtime, wcx, wcy, wcz, coop, dm, dmf,
+         cbu, cbp, cbr, crp, crr, cra, crs;
   IF (jr IS NULL) THEN EXIT;
   SELECT e.deadflag, e.flags, e.waterlevel, e.watertype, e.yaw, e.health, e.z, e.max_health, e.x, e.y FROM ents e WHERE e.id = :pe
     INTO dead, flags, owl, wt, yaw, hp, oldz, mhp, oldx, oldy;
@@ -1016,18 +1020,27 @@ BEGIN
     END
     EXECUTE PROCEDURE link_ent(pe);
   END
-  SELECT e.x, e.y, e.z, e.flags, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz, e.vx, e.vy FROM ents e WHERE e.id = :pe INTO px, py, pz, flags, mnx, mny, mnz, mxx, mxy, mxz, bvx, bvy;
+  SELECT e.x, e.y, e.z, e.flags, e.minx, e.miny, e.minz, e.maxx, e.maxy, e.maxz, e.vx, e.vy, e.vz FROM ents e WHERE e.id = :pe INTO px, py, pz, flags, mnx, mny, mnz, mxx, mxy, mxz, bvx, bvy, bvz;
   -- the view's bob (ClientEndServerFrame, SV_CalcViewOffset): the walk cycle advances with the speed while on the
-  -- ground, four times as fast ducked; the height bob is at most 6, the pitch and roll six times as strong ducked
+  -- ground, four times as fast ducked; the height bob is at most 6, the pitch and roll six times as strong ducked; the
+  -- game row's bob_up, bob_pitch and bob_roll are the units of speed (p_view.c's cvars, the console's), run_pitch and
+  -- run_roll the pitch and roll from the velocity along the view's forward and right
   xys = SQRT(bvx * bvx + bvy * bvy);
   IF (xys < 5) THEN bt = 0;
   ELSE IF (BIN_AND(flags, 512) <> 0) THEN bt = pbobtime + IIF(xys > 210, 0.25e0, IIF(xys > 100, 0.125e0, 0.0625e0)) * dt / 0.1e0;
   ELSE bt = pbobtime;
   bts = IIF(ducked2 = 1, bt * 4, bt);
   bfs = ABS(SIN(bts * PI()));
-  bobz = MINVALUE(6, bfs * xys * 0.005e0);
-  bobp = bfs * 0.002e0 * xys * IIF(ducked2 = 1, 6, 1);
-  bobr = bobp * IIF(MOD(CAST(FLOOR(bts) AS INTEGER), 2) = 1, -1, 1);
+  bobz = MINVALUE(6, bfs * xys * cbu);
+  bobp = bfs * cbp * xys * IIF(ducked2 = 1, 6, 1);
+  bobr = bfs * cbr * xys * IIF(ducked2 = 1, 6, 1) * IIF(MOD(CAST(FLOOR(bts) AS INTEGER), 2) = 1, -1, 1);
+  rside = bvx * SIN(yaw * 0.0174532925e0) - bvy * COS(yaw * 0.0174532925e0);
+  bobp = bobp + ((bvx * COS(yaw * 0.0174532925e0) + bvy * SIN(yaw * 0.0174532925e0)) * COS(pitch * 0.0174532925e0) - bvz * SIN(pitch * 0.0174532925e0)) * crp;
+  bobr = bobr + rside * crr;
+  -- ClientEndServerFrame: the model's roll from the sideways speed (SV_CalcRoll: sv_rollangle, full at sv_rollspeed, times four),
+  -- what the other players and a recording see
+  mroll = IIF(crs > 0 AND ABS(rside) < crs, ABS(rside) * cra / crs, cra) * IIF(rside < 0, -1, 1) * 4;
+  UPDATE ents e SET e.roll = :mroll WHERE e.id = :pe AND e.roll <> :mroll;
   -- smooth the view over steps
   stepz2 = IIF(BIN_AND(flags, 512) <> 0 AND pz - oldz > 0 AND pz - oldz <= 18, MINVALUE(pstepz + (pz - oldz), 18), MAXVALUE(0, pstepz - 160 * dt));
 

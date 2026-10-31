@@ -309,6 +309,10 @@ const con = new Console({
   // sv_gravity: the game row's gravity (the level's, the worldspawn's again at the next map); a joined page runs no server
   gravity: async () => (netGuest() || !db || !map ? null : (await db.query('SELECT gravity FROM game')).rows[0]?.GRAVITY ?? null),
   setGravity: async (n) => { if (netGuest() || !db || !map) return; await db.exec(`UPDATE game SET gravity = ${Number(n)} WHERE id = 1`); },
+  // p_view.c's cvars on the game row the same way (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed; the console names the column
+  // from its own table); a guest's prediction has the host's from the map message, so one changed here reaches it at the next map
+  gameCvar: async (col) => (netGuest() || !db || !map || !/^[a-z_]+$/.test(col) ? null : (await db.query(`SELECT ${col} AS v FROM game`)).rows[0]?.V ?? null),
+  setGameCvar: async (col, n) => { if (netGuest() || !db || !map || !/^[a-z_]+$/.test(col)) return; await db.exec(`UPDATE game SET ${col} = ${Number(n)} WHERE id = 1`); },
   // deathmatch, coop and maxclients: the next game's mode and clients, latched (the settings and the Players select, no game started)
   setGameMode: ({ coop, deathmatch, players }) => { settings.coop = !!coop; settings.deathmatch = !!deathmatch; settings.players = Math.max(2, Math.min(4, Number(players) || 2)); saveSettings(); $('players').value = playersValue(); },
   status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}` })) } : null),
@@ -637,7 +641,7 @@ async function mapLoaded(setup) {
 }
 /** The map message a guest sets itself up from (SV_SpawnServer's configstrings): at every map, and at a connect to a game running. */
 function mapMessage(setup = mapSetup) {
-  return { name: map.name, sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack, gravity: setup.gravity,
+  return { name: map.name, sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack, gravity: setup.gravity, viewCvars: setup.viewCvars,
     speakers: setup.speakers, view: { w: viewWidth(), h: viewHeight(), fov: settings.fov }, nmodels: res.byName.size, levelname: setup.levelname ?? '',
     hostname: settings.hostname || 'noname' };   // (the hostname cvar: the guest's stats line names the host)
 }
@@ -900,7 +904,7 @@ function guestAck(got, now) {
     const mi = p.modelOfFace[r[0]];
     if (mi > 0) solids.push({ model: mi, origin: [r[2], r[3], r[4]], angles: got.frame.brushAngles.get(r[1]) ?? [0, 0, 0] });
   }
-  p.world = { solids, boxes: got.frame.boxes ?? [], gravity: p.gravity };
+  p.world = { solids, boxes: got.frame.boxes ?? [], gravity: p.gravity, view: p.view };
   const st = stateFromRow(row);
   for (const c of p.cmds) pmove(p.cm, st, c.cmd, c.dt, p.world);
   p.st = p.cmds.length ? st : null;
@@ -920,8 +924,8 @@ function guestPredict(cmd, tics, seq) {
   if (!p || !settings.clPredict) return;   // (cl_predict 0: the command goes, nothing runs ahead)
   const c = { seq, cmd: cmdOf(cmd), dt: tics * 0.05 };
   p.cmds.push(c);
-  if (p.st) pmove(p.cm, p.st, c.cmd, c.dt, p.world ?? { gravity: p.gravity });
-  else if (last && !last.DEAD && !last.INTERMISSION && last.VX != null) { p.st = stateFromRow(last); pmove(p.cm, p.st, c.cmd, c.dt, p.world ?? { gravity: p.gravity }); }
+  if (p.st) pmove(p.cm, p.st, c.cmd, c.dt, p.world ?? { gravity: p.gravity, view: p.view });
+  else if (last && !last.DEAD && !last.INTERMISSION && last.VX != null) { p.st = stateFromRow(last); pmove(p.cm, p.st, c.cmd, c.dt, p.world ?? { gravity: p.gravity, view: p.view }); }
 }
 /** The guest's view now: the predicted state's, with what is left of the last correction's error added back. */
 function guestView(now) {
@@ -1585,7 +1589,7 @@ async function guestMap(m) {
   // the prediction's clip data for this map, and which brush model each face belongs to (the frame names the faces)
   const modelOfFace = new Int32Array(bsp.faces.length).fill(-1);
   bsp.models.forEach((bm, mi) => { for (let f = bm.firstFace; f < bm.firstFace + bm.numFaces; f++) modelOfFace[f] = mi; });
-  guestPred = { cm: new ClipMap(bsp), seq: guestPred?.seq ?? 0, cmds: [], st: null, world: null, gravity: Number(m.gravity) || 800, modelOfFace, error: null };
+  guestPred = { cm: new ClipMap(bsp), seq: guestPred?.seq ?? 0, cmds: [], st: null, world: null, gravity: Number(m.gravity) || 800, view: m.viewCvars && typeof m.viewCvars === 'object' ? m.viewCvars : undefined, modelOfFace, error: null };
   await applyView();
   renderer.setResources(res);
   renderer.particles = [];

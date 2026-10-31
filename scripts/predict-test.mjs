@@ -13,7 +13,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
-import { ClipMap, trace, traceBox, pmove, stateFromRow, checkWater, clipVelocity, MASK_PLAYERSOLID } from '../src/pmove.js';
+import { ClipMap, trace, traceBox, pmove, stateFromRow, checkWater, clipVelocity, MASK_PLAYERSOLID, VIEW_CVARS } from '../src/pmove.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let failures = 0;
@@ -131,6 +131,26 @@ check(st0.x === last.PX && st0.vx === last.VX && st0.onground === !!last.ONGROUN
   'stateFromRow takes the origin, velocity, flags, the raw pitch (the bob and the punch taken off), the step and the bob clock from the row');
 const noclip = pmove(cm, { ...st0, noclip: true, onground: true, pitch: 0 }, { fwd: 1, side: 0, yawd: 0, pitchd: 0, jump: 1, run: 1 }, 0.05);
 check(!noclip.onground && near(noclip.vz, 300) && near(noclip.z, st0.z + 15) && near(Math.hypot(noclip.vx, noclip.vy), 300), 'in noclip the move flies where the view points and rises on jump, through everything');
+
+// ── p_view.c's cvars on the game row (bob_up, bob_pitch, bob_roll, run_pitch, run_roll): the JS bobs by the ones it is given, and
+// lands on the SQL's view with the same ones; the defaults are Quake's
+{
+  const view = { bobUp: 0.01, bobPitch: 0.004, bobRoll: 0.001, runPitch: 0.01, runRoll: 0.02 };
+  await db.exec(`UPDATE game SET bob_up = ${view.bobUp}, bob_pitch = ${view.bobPitch}, bob_roll = ${view.bobRoll}, run_pitch = ${view.runPitch}, run_roll = ${view.runRoll}`);
+  let worstV = 0, moved = 0;
+  for (let i = 0; i < 16; i++) {
+    const c = { fwd: 1, side: i % 2 ? 1 : -1, yawd: 3, pitchd: 0, jump: 0, run: 1 };
+    const world = { solids: await solidsNow(), boxes: await boxesNow(), gravity: 800, view };
+    const st = pmove(cm, stateFromRow(last), c, 0.05, world);
+    const row = await session.tic([1, c.fwd, c.side, c.yawd, c.pitchd, 0, c.jump, c.run, 0]);
+    worstV = Math.max(worstV, Math.abs(st.view.viewZ - row.VIEW_Z), Math.abs(st.view.pitch - (row.PITCH - row.PUNCH)), Math.abs(st.view.roll - row.ROLL));
+    moved = Math.max(moved, Math.abs(row.ROLL));
+    last = row;
+  }
+  check(worstV < 1e-6 && moved > 1, `with the game row's view cvars changed and given to the JS, the eye, the pitch and the roll agree to the number over 16 tics (the largest difference ${worstV.toExponential(1)}, a roll of ${moved.toFixed(2)})`);
+  check(VIEW_CVARS.bobUp === 0.005 && VIEW_CVARS.bobPitch === 0.002 && VIEW_CVARS.bobRoll === 0.002 && VIEW_CVARS.runPitch === 0.002 && VIEW_CVARS.runRoll === 0.005, 'the defaults are p_view.c\'s');
+  await db.exec('UPDATE game SET bob_up = 0.005, bob_pitch = 0.002, bob_roll = 0.002, run_pitch = 0.002, run_roll = 0.005');
+}
 
 await db.close();
 console.log(failures ? `${failures} FAILED` : 'all good');
