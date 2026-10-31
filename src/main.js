@@ -53,6 +53,7 @@ let map = null;          // { name, bsp }
 let last = null;         // last Q2_TIC row
 let running = false;
 let paused = false;
+let rSpeedsAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
 let lastTic = 0;
 // src/net.js: a game shared over a data channel. The host runs the game here and sends the guest its frames
 // (`host`, a HostLink); the guest paints the host's frames and sends its commands (`guest`, a GuestLink)
@@ -240,6 +241,9 @@ function setSetting(k, v) {
   } else { settings[k] = v; saveSettings(); }
   if (k === 'name' || k === 'hand') applyUserinfo();
   if (k === 'viewsize') applyView().catch((err) => console.warn('viewsize:', err.message));   // (the 3D view's rectangle, the SQL's frustum with it)
+  if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
+  // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
+  if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
 }
 /**
  * The player setup's name and hand as this client's userinfo (ClientUserinfoChanged): to the game's first client,
@@ -1219,14 +1223,18 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION;
   if (underwater) r.beginUnderwater();
   r.beginFrame(view);
-  if (faces) {
+  if (faces && (settings.rDrawworld || settings.rDrawentities)) {
     const frames = new Map();
     for (const [id, [f, eff]] of brushFrames) frames.set(id, entityFrame(f, eff, time));
-    if (settings.renderer === 'sql') r.drawFaces(faces, styles, time, frames);
-    else r.drawFaceList(faces, styles, time, frames, brushAngles);
+    // r_drawworld 0 leaves the world's faces out, r_drawentities 0 the brush models' (the SQL-projecting rows name the entity last)
+    const rows = settings.rDrawworld && settings.rDrawentities ? faces
+      : faces.filter((row) => ((settings.renderer === 'sql' ? row[9] : row[1]) ? settings.rDrawentities : settings.rDrawworld));
+    if (settings.renderer === 'sql') r.drawFaces(rows, styles, time, frames);
+    else r.drawFaceList(rows, styles, time, frames, brushAngles);
   }
   const bsp = map.bsp;
-  for (const e of ents) {
+  perf.ents = ents.length;
+  for (const e of settings.rDrawentities ? ents : []) {   // (r_drawentities 0: R_DrawEntitiesOnList skipped)
     const [, mid, frame, skin, x, y, z, pitch, yaw, roll, effects, alpha, kindRaw] = e;
     const kind = String(kindRaw).trim();
     const m = res.models.get(mid);
@@ -1237,7 +1245,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       const spin = effects & 1 ? (time * 100) % 360 : 0;   // EF_ROTATE items spin
       // (a row that carries the frame it left and the blend toward this one, from the lerp or the demo: the pose between)
       r.drawAlias(m.mdl, frame, skin, [x, y, z], [pitch, yaw + spin, roll], light,
-        { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0, oldFrame: e[14], backlerp: e[15] ?? 0 });
+        { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0, oldFrame: e[14], backlerp: settings.rLerpmodels ? e[15] ?? 0 : 0 });   // (r_lerpmodels 0: no blend)
       if (effects & 8) r.particles.push({ x, y, z, vx: 0, vy: 0, vz: 0, color: 0xe0 + (Math.random() * 4 | 0), die: time + 0.05, type: 'still' });   // the blaster bolt's glow
       if (effects & 16) r.spawnParticles('gunshot', x, y, z, 2, [0, 0, 0], 0xe0 + 8);   // rocket smoke
     } else if (kind === 'S') {
@@ -1253,7 +1261,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   // (the hand: a left-hander's gun is drawn mirrored, a centre-hander's not at all, as ref_soft and ref_gl had hand 1 and 2)
   const wp = WEAPONS[last.WEAPON];
   const gunName = last.GUN_MODEL ?? wp?.view;
-  if (!last.DEAD && !last.INTERMISSION && gunName && last.HAND !== 2) {
+  if (!last.DEAD && !last.INTERMISSION && gunName && last.HAND !== 2 && settings.rDrawentities) {   // (r_drawentities 0: R_DrawViewModel skipped too)
     const vm = res.models.get(res.byName.get(gunName));
     if (vm) {
       // SV_CalcGunOffset: the gun sways with the walk cycle and lags behind turns of the view (the delta over a
@@ -1275,7 +1283,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       // its frame with the one it stepped from and the blend (CL_AddViewWeapon's backlerp): the demo's as the server sent them
       const [gframe, gold, gbl] = last.GUNFRAME != null ? [last.GUNFRAME, last.GUN_OLDFRAME ?? last.GUNFRAME, last.GUN_BACKLERP ?? 0] : viewFrameLerp(vm.mdl, last, time);
       r.drawAlias(vm.mdl, gframe, 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light,
-        { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z), mirror: last.HAND === 1, oldFrame: gold, backlerp: gbl });
+        { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z), mirror: last.HAND === 1, oldFrame: gold, backlerp: settings.rLerpmodels ? gbl : 0 });
     }
   }
   // ... warped (D_WarpScreen) onto the screen; the status bar is drawn over that
@@ -1325,6 +1333,11 @@ function updateStats() {
     : demo ? ` · demo ${demo.name}: frame ${demo.player.played + 1} of ${demo.frames}` : '';
   const rec = recorder ? ` · recording ${recorder.name}: ${recorder.rec.frames} frames (${(recorder.rec.size / 1024).toFixed(0)} KB)` : '';
   statsEl.textContent = `${fps.toFixed(1)} fps · q2_tic ${perf.tic.toFixed(0)} ms · frame queries ${perf.faces.toFixed(0)} ms (${perf.rows} rows) · raster ${perf.draw.toFixed(0)} ms · ${renderer.particles.length} particles${link}${rec}`;
+  // r_speeds: the frame's figures on the console's line, as R_RenderFrame printed "ms, wpoly, epoly" (once a second here, not every frame)
+  if (settings.rSpeeds && performance.now() - rSpeedsAt > 1000) {
+    rSpeedsAt = performance.now();
+    notify.add(`${(perf.faces + perf.draw).toFixed(0)} ms, ${perf.rows} wpoly ${perf.ents ?? 0} epoly (q2_tic ${perf.tic.toFixed(0)} ms)`, gameClock());
+  }
 }
 
 // ── a game over the network (src/net.js): this page hosts one, or joins one ───────────────────────
@@ -1637,6 +1650,7 @@ async function usePak(buffer, label) {
   session.use(pak, res);
   const cm = loadColormap(pak);
   renderer = new Renderer(canvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
+  renderer.fullbright = !!settings.rFullbright;   // (r_fullbright as the settings have it)
   renderer.setSize(viewWidth(), viewHeight());
   renderer.lightScale = settings.brightness;
   hud = new Hud(pak);

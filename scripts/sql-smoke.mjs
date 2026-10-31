@@ -116,6 +116,17 @@ for (let a = 0; a < 4; a++) {
   assert(r > 10, `heading +${(a + 1) * 90}°: ${r} faces`);
 }
 
+// r_novis (viewcfg.novis, R_MarkLeaves with r_novis): every leaf marked, the PVS and the area portals ignored, so the frame has
+// more faces than with the PVS; the kept sets are dropped with the switch, so the PVS's count comes back
+{
+  const withPvs = (await db.query('SELECT COUNT(*) c FROM frame_faces_fast')).rows[0].C;
+  await db.exec('UPDATE viewcfg SET novis = 1, vis_cluster = NULL WHERE id = 1');
+  const all = (await db.query('SELECT COUNT(*) c FROM frame_faces_fast')).rows[0].C;
+  await db.exec('UPDATE viewcfg SET novis = 0, vis_cluster = NULL WHERE id = 1');
+  const back = (await db.query('SELECT COUNT(*) c FROM frame_faces_fast')).rows[0].C;
+  assert(all > withPvs && back === withPvs, `r_novis marks every leaf: ${all} faces in the frame against ${withPvs} with the PVS, ${back} with it again`);
+}
+
 // monsters think: run 40 tics and see that the state machine runs without error
 t0 = t();
 for (let i = 0; i < 20; i++) s = await tic([2, 0, 0, 0, 0, 0, 0, 1, 0]);

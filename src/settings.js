@@ -9,7 +9,8 @@ export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1,
-  crosshair: 1, clPredict: true, clShowmiss: false, viewsize: 100, coop: false, deathmatch: false,
+  crosshair: 1, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false,
+  coop: false, deathmatch: false,
   dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, rtcIce: '', rtcSignal: '', netgraph: false });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
@@ -43,6 +44,8 @@ const CHECK = {
   // a guest's prediction (CL_PredictMovement): cl_predict runs it, cl_showmiss prints the misses (CL_CheckPredictionError)
   clPredict: bool, clShowmiss: bool,
   viewsize: int(40, 100),   // SCR_CalcVrect's viewsize: the 3D view's share of the screen, the backtile around a smaller one
+  // ref_soft's switches: the world unlit, the entities or the world left out, the poses unblended, the PVS ignored, the frame's figures printed
+  rFullbright: bool, rDrawentities: bool, rDrawworld: bool, rLerpmodels: bool, rNovis: bool, rSpeeds: bool,
   coop: bool,            // a new game with two players: the view split, the gamepad the second's
   deathmatch: bool,      // ... against each other (deathmatch wins over coop)
   dmflags: int(0, 65535), fraglimit: int(0, 999), timelimit: int(0, 999),   // the deathmatch cvars

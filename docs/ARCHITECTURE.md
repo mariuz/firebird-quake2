@@ -727,7 +727,15 @@ the height of 2, centred, `Renderer.setViewSize`, with `pics/backtile.pcx` tiled
 the status bar, the notify lines and the menus where they were; the projection's centre and scale are the rectangle's, every
 span, triangle and particle clips to it, the SQL-projecting mode's points move with it, and the SQL's frustum, `viewcfg`, is
 the rectangle's size), `sizeup` and `sizedown` (`SCR_SizeUp_f`, `SCR_SizeDown_f`: ten up or down; `=` and `-` by default,
-default.cfg's, as lines beside END's centerview), `timedemo` (above) and
+default.cfg's, as lines beside END's centerview), ref_soft's switches, none archived as Quake's were not: `r_fullbright`
+(`Renderer.fullbright`: every surface built at full light, `R_BuildLightMap`'s, no lightmap and no dynamic light, the
+surface cache cleared with the switch; every model at light 255 as `RF_FULLBRIGHT` has it), `r_drawentities` (0: the
+brush models' faces, the models, the sprites and the view weapon left out, `R_DrawEntitiesOnList` and `R_DrawViewModel`
+skipped) and `r_drawworld` (0: the world's faces left out), `r_lerpmodels` (0: no pose blended, `backlerp` 0),
+`r_novis` (`viewcfg.novis`: `build_vis_set` marks every leaf, the PVS and the area portals ignored as `R_MarkLeaves` did
+with it, the kept sets dropped with the switch; a guest paints the host's frames as they are) and `r_speeds` (the
+frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame),
+`timedemo` (above) and
 `screenshot` (the view downloaded as `quakeNN.png`, as
 `SCR_ScreenShot_f` wrote `quakeNN.pcx`), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the

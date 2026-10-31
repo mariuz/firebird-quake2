@@ -804,10 +804,19 @@ pak. In the order they are to be taken.
 The eleventh list: what the console still lacks of Quake 2's own words with the demo pak, the painter's and
 the server's among them. In the order they are to be taken.
 
-- **`r_fullbright`, `r_drawentities`, `r_drawworld`, `r_lerpmodels`, `r_novis` and `r_speeds`**: ref_soft's
-  switches at the console: the world unlit, the entities or the world left out, the poses unblended, the
-  PVS ignored, and `r_speeds` printing the frame's figures (the faces, the entities, the tic's and the
-  raster's times) as `R_RenderFrame` printed them.
+- **`r_fullbright`, `r_drawentities`, `r_drawworld`, `r_lerpmodels`, `r_novis` and `r_speeds`**: done. ref_soft's
+  switches at the console, none archived as Quake's were not: `r_fullbright` builds every surface at full light
+  (`R_BuildLightMap`'s, no lightmap and no dynamic light, the surface cache cleared with the switch) and draws
+  every model at light 255; `r_drawentities 0` leaves out the brush models' faces, the models, the sprites and
+  the view weapon, `r_drawworld 0` the world's faces; `r_lerpmodels 0` blends no pose; `r_novis` is
+  `viewcfg.novis`, which `build_vis_set` reads to mark every leaf with the PVS and the area portals ignored as
+  `R_MarkLeaves` did with it, the kept sets dropped with the switch (a guest paints the host's frames as they
+  are); `r_speeds` prints the frame's figures on the console's line once a second, "ms, wpoly, epoly" as
+  `R_RenderFrame` printed them every frame. The smoke test switches novis on and finds more faces in the frame,
+  then the PVS's count again; `test:painter` builds a surface at full light and finds it brighter than lit, as
+  it was once the switch is off; `test:console` shows, flips, refuses and restores the six and leaves them out of
+  config.cfg; the browser test marks every leaf, sets the painter's flag, reads an r_speeds line, and sees the
+  defaults back.
 - **`serverinfo`, `userinfo` and `status`**: the server's words: `serverinfo` prints the game's cvars
   (`mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`, `cheats`, `skill`), `userinfo` this
   client's (`name`, `hand`, `fov`, `spectator`), `status` the clients with their frags, pings and names as

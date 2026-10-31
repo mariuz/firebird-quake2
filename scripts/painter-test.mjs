@@ -79,6 +79,14 @@ const m2 = r.surface(id, styles, 0, 0, 2);
 assert(m2 !== plain && m2.w === f.extents[0] >> 2 && m2.h === f.extents[1] >> 2 && m2.ms === 0.25 && r.surfCache.size === before + 1,
   `a surface at mip 2 is a quarter the size (${m2.w}×${m2.h} of ${plain.w}×${plain.h}), its texels a quarter, cached apart`);
 assert(Math.abs(lum(m2) - lum(plain)) < 12, `... and about as bright (${lum(m2).toFixed(0)} against ${lum(plain).toFixed(0)})`);
+// r_fullbright: the surface built at full light, no lightmap and no dynamic light in it; off again, as it was
+r.fullbright = true; r.surfCache.clear();
+r.dlights = [{ ...at(48), r: 300 }];
+const bright = r.surface(id, styles, 0, 0);
+r.fullbright = false; r.surfCache.clear(); r.dlights = [];
+const again = r.surface(id, styles, 0, 0);
+assert(lum(bright) >= lum(lit) && lum(bright) > lum(plain) + 1 && Math.abs(lum(again) - lum(plain)) < 1e-9,
+  `r_fullbright builds the surface at full light (${lum(bright).toFixed(0)} against ${lum(plain).toFixed(0)} plain, ${lum(lit).toFixed(0)} lit), and off again it is as it was (${lum(again).toFixed(0)})`);
 // a frame from the start: the near walls at mip 0, the far ones at higher levels
 const last = (await db.query('SELECT * FROM q2_tic(1, 0, 0, 0, 0, 0, 0, 1, 0)', [], { rowMode: 'object' })).rows[0];
 const rows = (await db.query('SELECT * FROM frame_faces_fast', [], { rowMode: 'array' })).rows;
