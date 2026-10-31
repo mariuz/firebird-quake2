@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'chase', 'cl_run', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'm_pitch', 'map', 'name', 'netgraph', 'noclip', 'notarget', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
+export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'chase', 'cl_run', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'm_pitch', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -42,6 +42,7 @@ const HISTORY = 32;
  *         kick(n) → the name kicked, or 'none' | 'not-hosting' (kick),
  *         connect(text) → true once joining began (false: no pak yet), disconnect() → true when this page was in a shared game,
  *         reconnect(), lastConnect() → what this page last joined with ('' for nothing),
+ *         openMenu(name) → true once the menu is up (main, game, loadgame, savegame, options, keys, video, multiplayer, playerconfig, credits, quit; the menu_* commands),
  *         forward(cmd, arg) → true when the command went to the host (a joined page), false to run it here }
  */
 /** The cvars config.cfg carries (CVARS, and fov and skill with them), each with its setting and how it shows. */
@@ -296,6 +297,12 @@ export class Console {
         if (!last) { say('reconnect: this page has not joined a game yet', true); return; }
         await h.reconnect?.();
         say(`reconnecting to ${last.length > 24 ? `${last.slice(0, 24)}…` : last}`);
+        return;
+      }
+      case 'menu_main': case 'menu_game': case 'menu_loadgame': case 'menu_savegame': case 'menu_options': case 'menu_keys':
+      case 'menu_video': case 'menu_multiplayer': case 'menu_playerconfig': case 'menu_credits': case 'menu_quit': {
+        // M_Init's commands (M_Menu_Main_f and its kin): the menu opens over the view, so a key bound to one opens it
+        if (!h.openMenu?.(cmd.toLowerCase().slice(5))) say(`${cmd.toLowerCase()}: the menus wait on the pak`, true);
         return;
       }
       case 'players': {

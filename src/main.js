@@ -309,6 +309,14 @@ const con = new Console({
   disconnect: () => disconnect(),                        // (disconnect: Leave; true when this page was in a shared game)
   reconnect: () => (lastConnect ? connectTo(lastConnect) : false),   // (reconnect: Join again with what this page last joined with)
   lastConnect: () => lastConnect,
+  // M_Init's menu_* commands: the menu opens over the view as the key or the menu's item would open it
+  openMenu: (name) => {
+    const open = { main: () => menu.main(), game: () => menu.game(), loadgame: () => menu.loadMenu(), savegame: () => menu.saveMenu(), options: () => menu.options(), keys: () => menu.keysMenu(),
+      video: () => menu.video(), multiplayer: () => menu.multiplayer(), playerconfig: () => menu.playerConfig(), credits: () => menu.credits(), quit: () => menu.quitMenu() }[name];
+    if (!open || !res) return false;
+    openMenu(open);
+    return true;
+  },
   kick: (n) => kickGuest(n),                             // (kick <n>: the guest driving client n dropped; its name, or 'none', 'not-hosting')
 });
 function openConsole(prefill = '') {

@@ -440,6 +440,21 @@ try {
     const uk = await page.evaluate(() => window.quake2.settings.lines.KeyK ?? null).catch(() => 'x');
     assert(bk.line === 'god' && bk.stored === 'god' && bk.status === '"k" = "god"' && g0 === 0 && g1 === 16 && g2 === 0 && uk === null,
       `bind k god binds K to the line, kept in the settings; K switches godmode on and K again off; unbind k takes it off (${JSON.stringify({ bk, g0, g1, g2, uk })})`);
+    // the menus from the console (M_Init's menu_* words): menu_options opens the options menu over the game, Escape puts it
+    // away; a key bound to one (bind F4 menu_video) opens it as it goes down
+    await typeCommand('menu_options');
+    const mOpt = await menuId();
+    await page.keyboard.press('Escape'); await sleep(300);
+    const mClosed = await menuId();
+    await typeCommand('bind F4 menu_video');
+    await page.mouse.click(480, 360); await sleep(300);
+    await page.keyboard.press('F4'); await sleep(400);
+    const mVid = await menuId();
+    await page.keyboard.press('Escape'); await sleep(300);
+    await typeCommand('unbind F4');
+    const f4 = await page.evaluate(() => window.quake2.settings.lines.F4 ?? null).catch(() => 'x');
+    assert(mOpt === 'options' && mClosed === null && mVid === 'video' && (await menuId()) === null && f4 === null,
+      `menu_options at the console opens the options menu, Escape puts it away; F4 bound to menu_video opens the video menu; unbind F4 takes it off (${JSON.stringify({ mOpt, mClosed, mVid, f4 })})`);
 
     // a recording: `record run` at the console writes the game from then on as a demo (src/record.js: the stats line
     // counts its frames), `stop` downloads it as run.dm2 (parsed here as the page parses the pak's: every block read
