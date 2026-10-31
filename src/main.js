@@ -546,9 +546,10 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   setStatus(`Loading ${name} into Firebird…`);
   const t0 = performance.now();
   // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on; a new
-  // game has the players the setting says (one, or two to four in coop or deathmatch; two when a guest is connected)
-  // and the deathmatch cvars, a level change keeps the game's
-  const modes = newGame ? { coop: netHost() || settings.coop, deathmatch: !netHost() && settings.deathmatch, players: netHost() ? hostClients() : settings.players,
+  // game has the players the setting says (one, or two to four in coop or deathmatch; with guests connected, as many as
+  // they drive, in deathmatch when the select says so and coop otherwise) and the deathmatch cvars, a level change keeps
+  // the game's
+  const modes = newGame ? { coop: netHost() ? !settings.deathmatch : settings.coop, deathmatch: settings.deathmatch, players: netHost() ? hostClients() : settings.players,
     cvars: { dmflags: settings.dmflags, fraglimit: settings.fraglimit, timelimit: settings.timelimit } } : {};
   await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...modes }));
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);

@@ -594,10 +594,14 @@ Quake: in the order they are to be taken.
   know. `test:net` sees a guest's `god` reach the host and switch the second client's godmode on and off, the
   first untouched, the sizes cut; `test:console` the forwarding when joined and the local run alone; the
   browser test `god` typed on the guest's page take at the host and answer on the guest's line.
-- **Deathmatch over the network**: a hosted game is coop whatever the Players select says
-  (`startMap`'s modes: `deathmatch: !netHost() && settings.deathmatch`). The select's deathmatch makes the
-  shared game a deathmatch (the spots, the maps' deathmatch items, the frags on every page's status bar and
-  score board, `fraglimit` and `timelimit`), coop otherwise.
+- **Deathmatch over the network**: done. A hosted game was coop whatever the Players select said
+  (`startMap`'s modes had `deathmatch: !netHost() && settings.deathmatch`). The select's deathmatch makes the
+  shared game a deathmatch now, coop otherwise: the guests' clients at deathmatch spots with fresh pers
+  (`client_begin` chose them already), the maps' deathmatch items and no monster, the frags on every page's
+  status bar and score board (the row and its `SCORES` carried them already), `dmflags`, `fraglimit` and
+  `timelimit` the host's. `test:net` hosts a deathmatch and sees the guest's row say so with the board's rows,
+  its forwarded `kill` cost it a frag; the browser test flips the host's select to deathmatch with a guest
+  connected and back.
 - **Keys bound to command lines**: `bind` takes the actions alone; Quake's binds were command lines (`bind t
   "say hello"`, `bind k god`). A key bound to a line runs it at the console when it goes down, the `+` actions
   staying the held ones, `writeconfig` and `exec` carrying such binds.
