@@ -156,5 +156,30 @@ r = recorder(80, 40);
 hud.drawScores(r, scores, 2, 120);
 assert(inside(r) && textOverlaps(r) === 0 && !picAt(r, 'tag1') && textAt(r, 4) === 'Lister' && textAt(r, 12) === 'Score:7' && !textAt(r, 24), 'at 80×40 one client fits, no tag, the time left off');
 
+// the netgraph (src/netgraph.js, SCR_DebugGraph and SCR_DrawDebugGraph): a column a client frame along the bottom of
+// the view, the newest at the right, over a band 32 high; a dropped frame a tall red column, a late one a tall orange
+// one, a frame that came a column ping/30 high; a value past the height wraps as the original's did
+{
+  const { Netgraph, GRAPH_HEIGHT, GRAPH_BACK, COLOUR_DROPPED, COLOUR_LATE, COLOUR_PING } = await import('../src/netgraph.js');
+  const fills = [];
+  const rr = { w: 320, h: 240, fillRect: (x, y, w, h, c) => fills.push({ x, y, w, h, c }) };
+  const g = new Netgraph(8);
+  g.draw(rr);
+  assert(fills.length === 1 && fills[0].x === 0 && fills[0].y === 240 - GRAPH_HEIGHT && fills[0].w === 320 && fills[0].h === GRAPH_HEIGHT && fills[0].c === GRAPH_BACK, 'with no frame yet the band alone is drawn along the bottom');
+  g.frame({ ping: 60 }); g.frame({ dropped: 2, ping: 900 }); g.frame({ late: true, ping: 0 });
+  fills.length = 0;
+  g.draw(rr);
+  const cols = fills.slice(1);
+  assert(g.added === 6 && cols.length === 5 && cols[0].x === 318 && cols[0].h === 30 && cols[0].c === COLOUR_LATE && cols[1].x === 317 && cols[1].h === 30 && cols[1].c === COLOUR_PING
+    && cols[2].x === 316 && cols[2].h === 30 && cols[2].c === COLOUR_DROPPED && cols[3].x === 315 && cols[3].c === COLOUR_DROPPED && cols[4].x === 314 && cols[4].h === 2 && cols[4].c === COLOUR_PING,
+    `the columns stand right to left, newest first (a ping of 0 at 319 draws nothing): a late frame, a 900 ms ping clamped to 30, two drops, a 60 ms ping two high (${cols.map((c) => `${c.h}@${c.x}`).join(' ')})`);
+  assert(cols.every((c) => c.y === 240 - c.h && c.w === 1) && !fills.some((c) => c.y < 240 - GRAPH_HEIGHT), 'each column one wide from the bottom, none above the band');
+  for (let i = 0; i < 10; i++) g.frame({ ping: 30 * i });
+  fills.length = 0; g.draw(rr);
+  assert(fills.length === 1 + 8 && fills[1].h === 9 && fills[8].h === 2, 'the ring keeps the last eight (its size), the newest at the right');
+  fills.length = 0; g.draw(rr, { scale: 4 });
+  assert(fills[1].h === (9 * 4) % GRAPH_HEIGHT, 'a value past the height wraps, as scr_graphscale could make one');
+}
+
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
 console.log('all good');

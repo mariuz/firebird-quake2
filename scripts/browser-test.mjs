@@ -715,6 +715,17 @@ try {
       }
       assert(Number.isInteger(pinged.host) && pinged.host >= 0 && pinged.host < 1000 && Number.isInteger(pinged.row) && /ping \d+ ms/.test(pinged.stats),
         `the host measures the guest's round trip (${pinged.host} ms), the guest's score board row carries it (${pinged.row} ms) and its stats line says so`);
+      // netgraph 1 at the guest's console: a column a frame from the host along the bottom of its view (the newest a ping
+      // column), netgraph 0 stops it; not written to config.cfg
+      await typeOn(gp, 'netgraph 1');
+      let ng = {};
+      for (let i = 0; i < 40 && !(ng.added > 10); i++) { await sleep(250); ng = await gp.evaluate(() => ({ on: window.quake2.settings.netgraph, ...window.quake2.netgraph })).catch(() => ({})); }
+      await typeOn(gp, 'netgraph 0');
+      const ngOff = await gp.evaluate(() => ({ on: window.quake2.settings.netgraph, added: window.quake2.netgraph.added })).catch(() => ({}));
+      await sleep(500);
+      const ngAfter = await gp.evaluate(() => window.quake2.netgraph.added).catch(() => -1);
+      assert(ng.on === true && ng.added > 10 && ng.last?.colour === 0xd0 && ngOff.on === false && ngAfter === ngOff.added,
+        `netgraph 1 on the joined page adds a column a frame (${ng.added}, the last a ping column) and netgraph 0 stops it (${ngOff.added} → ${ngAfter})`);
       // the host's save and load with the guest connected: F6 saves the shared game, F9 loads it; the guest's client is
       // kept and the map sent again, so its frames keep coming (as at a level change)
       await page.evaluate(() => document.activeElement?.blur?.()).catch(() => undefined);

@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50, netgraph: false },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -287,9 +287,13 @@ await con.submit('crosshair 4'); check(s.crosshair === 3 && status.at(-1)?.[1] =
 await con.submit('s_volume'); check(status.at(-1)?.[0] === '"s_volume" is "0.70"', 's_volume shows the effects volume as 0..1');
 await con.submit('s_volume 0.25'); check(s.sfx === 25 && last() === 'set sfx 25', 's_volume 0.25 sets it as a percentage through the page');
 await con.submit('cd_volume 2'); check(s.music === 100 && status.at(-1)?.[0] === '"cd_volume" is "1.00"', 'cd_volume clamps to 1');
+await con.submit('netgraph'); check(status.at(-1)?.[0] === '"netgraph" is "0"', 'netgraph shows 0 by default');
+await con.submit('netgraph 1'); check(s.netgraph === true && last() === 'set netgraph true' && status.at(-1)?.[0] === '"netgraph" is "1"', 'netgraph 1 turns the graph on through the page');
+await con.submit('netgraph 2'); check(s.netgraph === true && status.at(-1)?.[0] === 'netgraph takes 0 or 1' && status.at(-1)?.[1] === true, 'netgraph 2 is refused');
+await con.submit('netgraph 0'); check(s.netgraph === false, 'netgraph 0 turns it off');
 await con.submit('cvarlist');
-check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
-Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 });
+check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · netgraph "0" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50, netgraph: false });
 
 // timescale: the game's clock against the wall's, shown, set within 0.1..10, refused at 0 or for a word, a guest told
 {
@@ -320,8 +324,8 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   const setAt = lines.findIndex((l) => l.startsWith('set ')), godAt = lines.indexOf('bind j "god"');
   check(lines[0].startsWith('//') && lines[1] === 'unbindall' && lines[2] === 'bind k "+attack"' && lines[3] === 'bind MOUSE2 "+attack"' && lines.includes('bind MWHEELDOWN "weapnext"') && !lines.some((l) => l.includes('"+moveup"'))
     && godAt > 3 && godAt < setAt && lines[godAt + 1] === 'bind MOUSE3 "say hello"'
-    && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && cfg.endsWith('\n'),
-    'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them');
+    && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && !lines.some((l) => l.startsWith('set netgraph')) && cfg.endsWith('\n'),
+    'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them (netgraph, not archived, left out)');
   let downloaded = null;
   host.download = (name, text) => { downloaded = { name, text }; };
   await con.submit('writeconfig');
