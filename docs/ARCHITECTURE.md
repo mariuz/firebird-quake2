@@ -717,7 +717,12 @@ line), `clear` (`Con_Clear_f`: the scrollback and the notify lines emptied, the 
 it, `dumpLog`; the name as typed with a path's characters and a `.txt` taken off), `echo` (`Cmd_Echo_f`: its words
 printed as typed), `cmdlist` (`Cmd_List_f`: every command on a line of the scrollback, the page's `print`, and how
 many), `version` (the page's version and build, which `scripts/build.mjs` stamps into the bundle, the engine
-package's version and the engine line: Firebird's version, threads or not), `pause` (`CL_Pause_f`: a single-player
+package's version and the engine line: Firebird's version, threads or not), `path` (`FS_Path_f`: the pak in use, its files
+counted and where it came from, `pakInfo`), `dir <wildcard>` (`FS_Dir_f`: the pak's files the wildcard names, `*.*` without one,
+`*` and `?` within a directory as the file system's glob had them, `dirList`; on the scrollback by their names under "Directory
+of"), `modellist`, `imagelist` and `soundlist` (`Mod_Modellist_f`, `R_ImageList_f`, `S_SoundList_f`: the models with their size in
+the pak, the pictures, wall textures and skins with their kind and size, the sounds decoded with L on the ones looping, a line
+each on the scrollback as those laid them out and the totals; the page's `modelList`, `imageList`, `soundList`), `pause` (`CL_Pause_f`: a single-player
 game running pauses or goes on, `togglePause`; a shared game or none, "Pause command is only valid in single
 player"), `score` (`Cmd_Score_f`: the score board toggled in a game of more than one client, coop, deathmatch or
 shared, the inventory and the help put away; nothing in single player, `toggleScores`) and `putaway`

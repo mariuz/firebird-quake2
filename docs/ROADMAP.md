@@ -874,9 +874,16 @@ client's speeds and the game's view cvars among them. In the order they are to b
   None archived, as Quake's were not. `test:console` shows, sets and refuses the four, `cvarlist` with them, and
   holds the clock to its cases (the same text, the text back, a new one, the seconds changed, a new level); the
   browser test types `gun_z 10` and `scr_centertime 1` and reads the settings on both builds.
-- **`dir`, `path`, `modellist`, `imagelist` and `soundlist`**: `dir <filter>` lists the pak's files as
-  `FS_Dir_f` did, `path` the search path (the pak's name and where it came from), and the three listings the
-  models, the pictures and the sounds loaded, on the scrollback with their counts.
+- **`dir`, `path`, `modellist`, `imagelist` and `soundlist`**: done. `path` is `FS_Path_f`: the pak in use (the
+  demo's, or the picked one the browser keeps), its files counted and where it came from. `dir <wildcard>` is
+  `FS_Dir_f`: the pak's files the wildcard names (`*.*` without one; `*` and `?` within a directory, as the file
+  system's glob had them, so `dir maps/*.bsp`), on the scrollback by their names under "Directory of", and how many
+  on the line. `modellist`, `imagelist` and `soundlist` are `Mod_Modellist_f`, `R_ImageList_f` and `S_SoundList_f`:
+  the models with their size in the pak (the full game's monsters on a row without a mesh at 0), the pictures (P),
+  the wall textures the painter has built (W) and the models' skins (M) with their sizes, and the sounds decoded so
+  far with L on the ones looping, a line each as those laid them out, and the totals. `test:console` reads the
+  lines printed and the answers, the glob's cases and Tab; the browser test types the five on the demo pak and
+  reads the pak's name, the three maps and the counts, on both builds.
 - **`gender`**: the gender userinfo (male, female, none): the obituaries' pronouns as `ClientObituary` chose
   them ("blew himself up", "herself", "itself"), and the female pain and death sounds where a pak has them.
 - **`msg`**: the message level userinfo: at 1 the pickups' prints (`PRINT_LOW`) stay off the line, at 2 the

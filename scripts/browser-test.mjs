@@ -370,6 +370,16 @@ try {
     const p2 = await page.evaluate(() => window.quake2.paused).catch(() => null);
     assert(echoed === 'Hello, World!' && /^Firebird Quake 2 \d+\.\d+\.\d+ build \w+, firebird-wasm \d+\.\d+\.\d+, Firebird \d/.test(ver) && /^\d+ commands$/.test(cl.status ?? '') && cl.log > 60 && p1 === true && p2 === false,
       `echo prints its words (${echoed}), version names the build (${ver}), cmdlist counts the commands (${cl.status}, ${cl.log} lines in the scrollback), pause pauses and unpauses (${p1}, ${p2})`);
+    // path, dir and the listings: the pak named with its files, the maps listed by a wildcard, the models, images and sounds counted
+    await typeCommand('path'); const pathLine = await status();
+    await typeCommand('dir maps/*.bsp');
+    const dirRes = await page.evaluate(() => ({ status: document.getElementById('status').textContent, log: window.quake2.notify.log(6).join('|') })).catch(() => ({}));
+    await typeCommand('modellist'); const models = await status();
+    await typeCommand('imagelist'); const images = await status();
+    await typeCommand('soundlist'); const sounds = await status();
+    assert(/^Current search path: pak0\.pak \(\d{3,} files, the demo's, \.\/pak\/pak0\.pak\)$/.test(pathLine) && dirRes.status === 'dir maps/*.bsp: 3 files' && /Directory of pak0\.pak\/maps\/\*\.bsp\|----\|demo1\.bsp\|demo2\.bsp\|demo3\.bsp/.test(dirRes.log ?? '')
+      && /^\d{2,} models loaded, \d{6,} bytes$/.test(models) && /^\d{2,} images, \d{5,} texels$/.test(images) && /^\d+ sounds loaded, \d+ bytes$/.test(sounds),
+      `path names the pak (${pathLine}), dir lists the maps (${dirRes.status}: ${dirRes.log}), modellist, imagelist and soundlist count what is loaded (${models}; ${images}; ${sounds})`);
     // the chat: T (messagemode) opens the console with "say " on its line, and the words go to the message line by the
     // player's name (Cmd_Say_f), drawn in the notify lines
     await page.mouse.click(480, 360); await sleep(200);
