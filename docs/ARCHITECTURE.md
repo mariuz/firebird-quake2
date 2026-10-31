@@ -27,7 +27,7 @@ src/net.js     a game shared over a data channel: host, guest, the texts (no DOM
 src/pmove.js   the player's move and the traces in JS: a guest's prediction, the SQL's twin (no DOM)
 src/demo.js    a .dm2 read as the server's messages, played between frames (no DOM)
 src/record.js  a game written as a .dm2: the tics' rows as the server's messages (no DOM)
-src/demostore.js  the recordings kept across reloads, by name in IndexedDB (no DOM)
+src/demostore.js  the recordings, the picked pak and a picked folder's tracks kept across reloads in IndexedDB (no DOM)
 src/cinematic.js  a .cin read as cl_cin.c read it: the Huffman trees, a frame at a time, its sound (no DOM)
 src/lerp.js    the frames between tics: the last two tics' frames moved by the fraction (no DOM)
 src/effects.js  explosions, beams, flashes, lights (no DOM)
@@ -63,8 +63,11 @@ response it downloaded) and shows "offline ready". The worker serves the pak and
 cache, a navigation from the network with the cached page as the fallback, and anything else of the origin
 from the build cache, each missing one fetched and kept (a 200 only: a track's 404 or a range's 206 is not);
 a new build's worker takes over at once and drops the older builds' caches. A browser without service
-workers or the Cache API plays as before. The browser test checks the registration, the caches and the
-manifest, and reloads the page offline.
+workers or the Cache API plays as before. The player's own files are not the worker's to fetch, so they are
+kept in IndexedDB (`src/demostore.js`, §8): a pak picked from the PAK control, which the next start loads in
+place of the demo's download until the button beside the control forgets it, and a picked folder's tracks as
+they play. The browser test checks the registration, the caches and the manifest, picks a pak and a music
+folder, and reloads the page offline, where both are found again.
 
 ## 2. Loading: the pak becomes tables (`src/loader.js`)
 
@@ -449,7 +452,9 @@ The page mixes them as `S_AddLoopSounds` did: one looped channel per sound name,
 sound adding its spatialised left and right at full volume and `ATTN_STATIC`, each side clamped.
 The loops fall silent while the game is paused or in a menu.
 Music was CD audio: `public/music/trackNN.ogg|mp3`, or a folder picked on the page, plays each map's
-`worldspawn` track; without them a synthesised drone fills in.
+`worldspawn` track; without them a synthesised drone fills in. A picked folder's track is kept as it plays
+(`setMusicStore`: the page's file store, under `music/trackNN` with the file's name and bytes) and plays from
+there at the next start when no folder is picked: the picked file first, then the kept one, then the site's.
 
 ## 8. The page (`src/main.js`, `src/session.js`, `public/`)
 
@@ -607,9 +612,15 @@ it keeps them for the page): the select lists the kept names at the start, after
 bytes when it plays; a `.dm2` opened from the file input beside the select (one made here and downloaded, or
 Quake 2's own) is parsed, kept under its name cleaned as `record` cleans one, and played; `demos` at the
 console lists the pak's and the kept, `deldemo <name>` drops a kept one from the select and the store.
+The same database keeps the player's files in a second object store (`FileStore`, `files`; both stores are
+a `KeptStore` over the one database, version 2): the pak picked from the PAK control under `pak`, with its
+name and bytes, and a picked music folder's tracks under `music/trackNN` as they play.
 
-Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
-`pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
+Boot opens `memory://quake2` through the Worker, loads the pak (the pak kept from an earlier pick, else the
+fetched demo), creates the schema and resources, and starts the map. A picked pak is kept as it is picked and
+loaded at the next start in its place (`useKeptPak`; one that fails to load is forgotten and the demo's
+downloads), and the "demo pak" button beside the control, shown while a picked pak is in use, forgets it and
+loads the demo's now (`forgetPak`). Settings (map, skill, detail: 160×120, 320×240 or 640×480,
 brightness, renderer mode, sound, music) persist in `localStorage`. Input (`src/input.js`, an `Input`
 the page attaches to the canvas and reads each tic as the usercmd, the page keeping the keys that
 are its own): WASD/arrows, or whatever the keys menu bound (`settings.binds`), mouse look under pointer lock; on a touch screen the view's left half moves and its right half looks, a tap

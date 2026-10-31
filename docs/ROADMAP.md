@@ -155,8 +155,8 @@ the order they are to be taken.
   (the pak) after its first load and shows "offline ready", the worker serves from them and drops older builds'
   caches when a new one takes over, a navigation falling back to the cached page. The browser test checks
   the registration, the caches, the manifest and the icons, and reloads the page offline, where the game
-  runs. Left: the music tracks go into the data cache only as they play; the picked pak and music folder are
-  not cached (they are the player's files).
+  runs. The music tracks go into the data cache as they play; the picked pak and a picked folder's tracks are
+  kept in IndexedDB (*The picked pak and the music tracks kept*, below).
 - **An audit of the temporary entities**: done, against cl_tent.c's `CL_ParseTEnt` and the game's senders
   (g_weapon.c, g_misc.c). The BFG's lasers were there already (kind 12); what was not: the water explosions
   (`TE_ROCKET_EXPLOSION_WATER`, `TE_GRENADE_EXPLOSION_WATER`: the same pictures with `weapons/xpld_wat.wav`,
@@ -418,9 +418,17 @@ The fourth list, from what the entries above and below still leave: in the order
   a shot do no harm, the watcher fly through the yard's wall the players stop at, and the client back as a player
   with the blaster; `test:console` the command's cases; the browser test the box ticked on the guest's page
   and unticked.
-- **The picked pak and the music tracks in the data cache**: a pak the player picked and the music folder
-  are the player's files and are not cached, so the page offline runs the demo pak only. The picked pak
-  kept in IndexedDB as the recordings are, offered at the next load, and the tracks cached as they play.
+- **The picked pak and the music tracks kept**: done. The player's files go into IndexedDB as the recordings
+  do (`src/demostore.js`: a `KeptStore` per object store of the one database, the recordings' `demos` and the
+  files' `files`): a pak picked from the PAK control is kept with its name and the next start loads it in place
+  of the demo's download (a kept pak that fails to load is forgotten and the demo's downloads), the button
+  beside the control ("demo pak", shown while a picked pak is in use) forgets it and loads the demo's now; a
+  picked folder's track is kept as it plays, under its number, and plays from the store at the next start when
+  no folder is picked (the site's `music/` tracks were in the data cache already, as the service worker fetches
+  them). `test:audio` sees the picked track kept and played from the store, a track neither picked nor kept fall
+  to the drone; the browser test picks a copy of the pak under another name and a folder with demo1's track
+  made as a WAV, reloads offline and finds the picked pak loaded from the store and the track playing with no
+  folder picked, then forgets the pak and sees the demo's load with the track still kept.
 - **A slot downloaded from the load menu, and keys for the silencer and the power shield**: Download
   writes the game as it stands; a slot of the load menu cannot be written to a file. And the silencer and
   the power shield have no key of their own (`s` and `p` are the page's back and pause): a binding each.

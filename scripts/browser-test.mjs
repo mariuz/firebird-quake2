@@ -15,6 +15,7 @@
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -370,6 +371,41 @@ try {
       assert(!dropped.list?.includes('mycopy') && !dropped.stored?.includes('mycopy') && !dropped.options?.includes('mycopy') && dropped.stored?.includes('run'), `deldemo drops it from the list, the select and the store, the other staying (${JSON.stringify(dropped)})`);
     }
 
+    // the player's files are kept across reloads too (src/demostore.js's file store): a pak picked from the PAK control
+    // (a copy of the demo's under another name) loads and goes into the store with its name, and the game on demo1 with
+    // a folder picked for the music (one file, track09.wav made here: demo1's track) keeps the track as it plays
+    const pickedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fbq2-picked-'));
+    const pickedPath = path.join(pickedDir, 'picked.pak');
+    fs.copyFileSync(path.join(root, 'public/pak/pak0.pak'), pickedPath);
+    await page.setInputFiles('#pakfile', pickedPath);
+    const pakState = () => page.evaluate(async () => ({ name: document.getElementById('pakname')?.textContent, picked: window.quake2?.pickedPak, forget: !document.getElementById('pak-forget')?.hidden,
+      kept: await window.quake2.fileStore.list(), pak: (await window.quake2.fileStore.get('pak'))?.name ?? null, demo: window.quake2?.demo?.name ?? null, running: window.quake2?.running })).catch((e) => ({ error: e.message }));
+    let ps = {};
+    for (let i = 0; i < 480 && !(ps.name === 'picked.pak' && ps.pak === 'picked.pak' && ps.demo); i++) { await sleep(250); ps = await pakState(); }
+    assert(ps.name === 'picked.pak' && ps.picked === 'picked.pak' && ps.forget && ps.pak === 'picked.pak' && ps.demo === 'q2demo1',
+      `a picked pak loads (the attract loop again), is kept under its name and the button to forget it shows (${JSON.stringify(ps)})`);
+    await page.selectOption('#map', 'demo1');
+    let onDemo1 = {};
+    for (let i = 0; i < 240 && !(onDemo1.demo === null && onDemo1.running === true && onDemo1.map === 'demo1'); i++) { await sleep(250); onDemo1 = await attractState(); }
+    const wav = (() => {   // half a second of a 440 Hz tone, 8 kHz mono 16-bit: what decodeAudioData takes
+      const n = 4000, b = Buffer.alloc(44 + n * 2);
+      b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+      b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+      for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(8000 * Math.sin((2 * Math.PI * 440 * i) / 8000)), 44 + i * 2);
+      return b;
+    })();
+    const musicDir = path.join(pickedDir, 'music');
+    fs.mkdirSync(musicDir);
+    fs.writeFileSync(path.join(musicDir, 'track09.wav'), wav);
+    await page.evaluate(() => { window.quake2.audio.unlock(); });
+    await page.setInputFiles('#musicdir', musicDir);   // (a folder, as the control takes one)
+    const musicState = () => page.evaluate(async () => ({ kind: window.quake2?.audio?.music?.kind ?? null, track: window.quake2?.audio?.track, mode: window.quake2?.audio?.musicMode,
+      kept: await window.quake2.fileStore.list(), file: (await window.quake2.fileStore.get('music/track09'))?.name ?? null })).catch((e) => ({ error: e.message }));
+    let ms = {};
+    for (let i = 0; i < 80 && !(ms.kind === 'track' && ms.file); i++) { await sleep(250); ms = await musicState(); }
+    assert(onDemo1.map === 'demo1' && ms.kind === 'track' && ms.track === 9 && ms.file === 'track09.wav' && ms.kept?.join() === 'music/track09,pak',
+      `on demo1 the picked folder's track plays and is kept as it plays (${JSON.stringify(ms)})`);
+
     // without a network: the page reloads from the service worker's caches (the page, the build's files, the pak)
     // and the game runs as before; then the network is back
     await page.context().setOffline(true);
@@ -396,7 +432,20 @@ try {
       await typeCommand('deldemo run');
       const gone = await page.evaluate(async () => ({ stored: await window.quake2.demoStore.list(), options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({}));
       assert(!gone.stored?.includes('run') && !gone.options?.includes('run'), `deldemo drops it after the reload too (${JSON.stringify(gone)})`);
+      // the reload (offline: no download to be had) loaded the picked pak from the store, and the game on demo1 plays the
+      // kept track with no folder picked; the button forgets the pak: the demo's loads now, and the next start downloads it
+      const kp = await pakState();
+      assert(kp.name === 'picked.pak' && kp.picked === 'picked.pak' && kp.forget && kp.pak === 'picked.pak', `the picked pak was loaded from the store at the start (${JSON.stringify(kp)})`);
+      await page.evaluate(() => { window.quake2.audio.unlock(); });
+      let km = {};
+      for (let i = 0; i < 80 && !(km.kind === 'track'); i++) { await sleep(250); km = await musicState(); }
+      assert(km.kind === 'track' && km.track === 9 && km.file === 'track09.wav', `and the kept track plays, no folder picked (${JSON.stringify(km)})`);
+      await page.click('#pak-forget');
+      let fp = {};
+      for (let i = 0; i < 480 && !(fp.name === 'pak0.pak' && fp.demo); i++) { await sleep(250); fp = await pakState(); }
+      assert(fp.name === 'pak0.pak' && fp.picked === null && !fp.forget && fp.pak === null && fp.kept?.join() === 'music/track09', `the button forgets it: the demo's pak loads, the store keeps the track alone (${JSON.stringify(fp)})`);
     }
+    fs.rmSync(pickedDir, { recursive: true, force: true });
   }
 
   // two pages over WebRTC: this one hosts, a second joins with the texts passed between them (the offer and

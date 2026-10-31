@@ -103,7 +103,10 @@ The page installs as an app (a web app manifest, `public/manifest.webmanifest`, 
 pak's console font by `scripts/icon.mjs`) and runs without a network once it has run once: a caching
 service worker (`public/sw.js`) serves the build's files and the pak from the caches the page fills after
 its first load (the "offline ready" pill says when), each build in its own cache and the pak in one that
-outlives them. The browser test reloads the page offline and plays.
+outlives them. A pak picked from the PAK control is kept in the browser (IndexedDB, as the recordings are)
+and loads at the next start in the demo's place, until the button beside the control forgets it; a picked
+music folder's tracks are kept as they play. The browser test reloads the page offline and plays, the picked
+pak and track found again.
 
 ## How it works
 
@@ -222,8 +225,8 @@ Sound: `sound_events` rows are played with the Web Audio API, attenuated and pan
 happened. The map's looped `target_speaker`s play at their origins and follow their on/off state in the
 `ents` table; the entities' looped sounds (a bolt's or rocket's flight, a moving door, the railgun's hum)
 are listed by each frame and follow the entities, and both are mixed per sound as `S_AddLoopSounds` mixed them. Quake 2's music was CD audio, not in the pak: put `track02.ogg`…`track11.ogg` (or `.mp3`)
-in `public/music/`, or pick that folder in the page, and each map plays its `worldspawn` track;
-without them a synthesised drone fills in.
+in `public/music/`, or pick that folder in the page (its tracks are kept as they play, for the next start),
+and each map plays its `worldspawn` track; without them a synthesised drone fills in.
 
 ## Firebird lessons
 
