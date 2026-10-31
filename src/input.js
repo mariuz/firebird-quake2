@@ -8,7 +8,7 @@
 // (menus, the console, the F keys) and hands the rest to key(). Nothing here touches the page's
 // state, so a test can drive it with plain calls.
 
-import { readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON, TURN, LOOK } from './gamepad.js';
+import { readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON } from './gamepad.js';
 
 // default.cfg's keys the browser must not act on itself (scrolling, the menu bar, tabbing away)
 export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
@@ -140,6 +140,14 @@ export function checkLine(line) {
 const MOUSE = 0.022;      // degrees per count at sensitivity 1 (m_yaw, m_pitch)
 const TOUCH_LOOK = 0.4;   // degrees per pixel of a look drag
 const TOUCH_MOVE = 40;    // pixels of a move drag for full speed
+
+// CL_AdjustAngles and CL_BaseMove's speeds (the cl_ cvars, Quake's defaults: 140 and 150 degrees a second, the run key's
+// 1.5 on them, 200 units a second each move), as degrees a tic and fractions of the full speed (200 a tic, the command's 1)
+export const SPEEDS = Object.freeze({ clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200 });
+export function speeds(settings) {
+  const v = (k) => (typeof settings?.[k] === 'number' && Number.isFinite(settings[k]) ? settings[k] : SPEEDS[k]);
+  return { turn: v('clYawspeed') / 20, look: v('clPitchspeed') / 20, key: v('clAnglespeedkey'), fwd: v('clForwardspeed') / 200, side: v('clSidespeed') / 200 };
+}
 const TAP = { px: 10, ms: 250 };
 
 export class Input {
@@ -266,7 +274,10 @@ export class Input {
   /**
    * One tic's command. `tics` is how many the frame owes; the turning keys and sticks scale with it. The
    * pad is read here (once a frame) and merged in, unless `pad` is false: then it is the second player's,
-   * read by readPad after this.
+   * read by readPad after this. The keys turn and look at cl_yawspeed and cl_pitchspeed (degrees a second,
+   * cl_anglespeedkey times that with +speed held, CL_AdjustAngles) and walk and sidestep at cl_forwardspeed and
+   * cl_sidespeed (CL_BaseMove's, in the full speed's 200 a second: the command's fraction, kept within 1, the run
+   * being the game's 300 over 200 as pmove's most).
    */
   read(tics, settings, { pad: usePad = true } = {}) {
     const k = (c) => this.keys.has(c);
@@ -286,6 +297,8 @@ export class Input {
     const lookKeys = (b('lookdown') ? 1 : 0) - (b('lookup') ? 1 : 0) - (klook ? walk : 0);
     const shift = b('run');
     let run = settings.alwaysRun ? (shift ? 0 : 1) : (shift ? 1 : 0);    // cl_run: always run with the run key to walk, or the other way
+    const sp = speeds(settings);
+    fwd *= sp.fwd; side *= sp.side;   // cl_forwardspeed and cl_sidespeed, in the full speed's 200
     if (this.touch.move) {
       fwd = Math.max(-1, Math.min(1, -this.touch.move.dy / TOUCH_MOVE));
       side = Math.max(-1, Math.min(1, this.touch.move.dx / TOUCH_MOVE));
@@ -294,11 +307,13 @@ export class Input {
     if (pad && (pad.fwd || pad.side)) { fwd = pad.fwd; side = pad.side; run = settings.alwaysRun || pad.run ? 1 : 0; }
     if (pad) {
       // the right stick at the keyboard's turning speed at full throw, scaled by the mouse sensitivity (7 is 1×)
-      padTurn = pad.turn * TURN * tics * settings.sensitivity / 7;
-      padLook = pad.look * LOOK * tics * settings.sensitivity / 7 * (settings.invertMouse ? -1 : 1);
+      padTurn = pad.turn * sp.turn * tics * settings.sensitivity / 7;
+      padLook = pad.look * sp.look * tics * settings.sensitivity / 7 * (settings.invertMouse ? -1 : 1);
     }
-    const yaw = turnKeys * 7 * tics + this.mouseYaw + padTurn;
-    const pitch = lookKeys * 5 * tics + this.mousePitch + padLook;
+    // CL_AdjustAngles: the keys at cl_yawspeed and cl_pitchspeed a second, cl_anglespeedkey times that with +speed held
+    const keySpeed = tics * (shift ? sp.key : 1);
+    const yaw = turnKeys * sp.turn * keySpeed + this.mouseYaw + padTurn;
+    const pitch = lookKeys * sp.look * keySpeed + this.mousePitch + padLook;
     this.mouseYaw = 0; this.mousePitch = 0;
     // the mouse's sidestep and walk (+strafe held, lookstrafe, free look off), on top of the keys', within full speed
     fwd = Math.max(-1, Math.min(1, fwd + this.mouseFwd)); side = Math.max(-1, Math.min(1, side + this.mouseSide));
@@ -321,8 +336,9 @@ export class Input {
   readPad(tics, settings, index = 0) {
     const pad = index === 0 ? this.pad.last : this.pollPadAt(index);
     if (!pad) return [tics, 0, 0, 0, 0, 0, 0, settings.alwaysRun ? 1 : 0, 0];
-    const yaw = pad.turn * TURN * tics * settings.sensitivity / 7;
-    const pitch = pad.look * LOOK * tics * settings.sensitivity / 7 * (settings.invertMouse ? -1 : 1);
+    const sp = speeds(settings);
+    const yaw = pad.turn * sp.turn * tics * settings.sensitivity / 7;
+    const pitch = pad.look * sp.look * tics * settings.sensitivity / 7 * (settings.invertMouse ? -1 : 1);
     return [tics, pad.fwd, pad.side, yaw, pitch, pad.fire ? 1 : 0, (pad.jump ? 1 : 0) - (pad.crouch ? 1 : 0), settings.alwaysRun || pad.run ? 1 : 0, padImpulse(pad)];
   }
   /** The pad at `index` among the connected ones (1 the second), read once: a press counts once; null without one. */

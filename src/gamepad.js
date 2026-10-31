@@ -9,9 +9,7 @@
 // the command and the buttons that went down since, so the page's tests can drive it with plain objects.
 
 export const DEAD = 0.2;               // a stick's dead zone, of its throw
-export const RUN_AT = 0.9;             // a stick this far out runs
-export const TURN = 7;                 // degrees a tic at full throw, the keyboard's turning speed
-export const LOOK = 5;                 // degrees a tic at full throw, the keyboard's looking speed
+export const RUN_AT = 0.9;             // a stick this far out runs (the right stick turns and looks at the keyboard's speeds: input.js's cl_yawspeed and cl_pitchspeed)
 
 // the standard mapping's buttons, by index
 export const BUTTON = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, LS: 10, RS: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
@@ -33,7 +31,7 @@ export function down(pad, i) {
 /**
  * Read a pad. `prev` is the last read's `held` (a Set of button indices), so a press is reported once.
  * Returns { fwd, side, turn, look, fire, jump, crouch, run, held, pressed } with turn/look as fractions
- * of full throw (the caller multiplies by TURN/LOOK and the tics), or null without a pad.
+ * of full throw (the caller multiplies by the keyboard's speeds a tic, cl_yawspeed and cl_pitchspeed's, and the tics), or null without a pad.
  */
 export function readPad(pad, prev = new Set()) {
   if (!pad || !pad.axes) return null;
