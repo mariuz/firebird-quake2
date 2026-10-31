@@ -53,6 +53,7 @@ let map = null;          // { name, bsp }
 let last = null;         // last Q2_TIC row
 let running = false;
 let paused = false;
+let timeRefreshing = false;   // timerefresh's spin: the loop paints and tics nothing meanwhile
 let rSpeedsAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
 let lastTic = 0;
 // src/net.js: a game shared over a data channel. The host runs the game here and sends the guest its frames
@@ -305,6 +306,34 @@ const con = new Console({
   },
   userInfo: () => ({ name: settings.name, hand: settings.hand, gender: settings.gender, msg: settings.msg, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 }),
   isFullscreen: () => !!document.fullscreenElement,   // (vid_fullscreen: the page's live state; setSetting('fullscreen', …) asks for it)
+  // viewpos: the first view's eye and yaw, from the last tic row (a guest's: the host's frame row)
+  viewPos: () => (running && last ? { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW } : null),
+  // timerefresh (SCR_TimeRefresh_f): the view spun a full turn in 128 frames, the player's yaw set on its row for each frame's query and
+  // put back after, the loop held meanwhile (no tic runs, so nothing in the game changes); `flip` false presents once at the end
+  timeRefresh: async (flip = true) => {
+    if (!running || demo || netGuest() || !session?.map || !renderer || !last || menu.active || timeRefreshing) return null;
+    timeRefreshing = true;
+    try {
+      const who = '(SELECT p.ent_id FROM player p WHERE p.id = 1)';
+      const yaw0 = (await db.query(`SELECT yaw FROM ents WHERE id = ${who}`)).rows[0]?.YAW;
+      if (yaw0 == null) return null;
+      const start = performance.now();
+      for (let i = 0; i < 128; i++) {
+        const yaw = i / 128 * 360;
+        await db.exec(`UPDATE ents SET yaw = ${yaw} WHERE id = ${who}`);
+        const f = await session.frame({ sqlRenderer: settings.renderer === 'sql', client: 1 });
+        const L = new FrameLerp(); L.push({ ...last, YAW: yaw }, f);
+        const s = L.at(1, {}, true);
+        brushFrames = L.frame.brushFrames; brushAngles = s.brushAngles;
+        drawFrame(0, s.row, s.faces, s.ents, L.frame.styles, last.TIME_);
+        if (flip) renderer.present();
+      }
+      if (!flip) renderer.present();
+      await db.exec(`UPDATE ents SET yaw = ${yaw0} WHERE id = ${who}`);
+      const seconds = (performance.now() - start) / 1000;
+      return { seconds, fps: 128 / seconds };
+    } finally { timeRefreshing = false; lastTic = performance.now(); }
+  },
   toggleHelp: () => toggleScreen(0, 'help'),           // (help: Cmd_Help_f, F1's screen)
   // sv_gravity: the game row's gravity (the level's, the worldspawn's again at the next map); a joined page runs no server
   gravity: async () => (netGuest() || !db || !map ? null : (await db.query('SELECT gravity FROM game')).rows[0]?.GRAVITY ?? null),
@@ -691,6 +720,7 @@ let guestPred = null;   // { cm, seq, cmds: [{ seq, cmd, dt }], st, world, gravi
 
 async function frame() {
   if (con.pending.length) con.tick().catch((err) => console.error(err));   // (Cbuf_Execute: the lines `wait` held back run at the next frame)
+  if (timeRefreshing) { lastTic = performance.now(); nextFrame(); return; }   // (timerefresh holds the game: SCR_TimeRefresh_f ran its frames alone)
   // a demo with the menu over it (the attract loop): the demo plays on behind, the menu drawn over each frame,
   // the pad driving the menu (SCR_UpdateScreen drew the demo's frame, then M_Draw)
   if (demo && running && menu.active && !document.hidden && renderer) {

@@ -917,9 +917,14 @@ client's speeds and the game's view cvars among them. In the order they are to b
 The thirteenth list: what the page still lacks of Quake 2's own words, sounds and pictures with the demo pak, the
 client's events among them. In the order they are to be taken.
 
-- **`viewpos` and `timerefresh`**: the eye's position and angles on the line (`viewpos`: what `screenshot.mjs
-  --at=` takes), and `SCR_TimeRefresh_f`: the view spun a full turn in 128 frames with the painter timed, the
-  seconds and the frames a second said.
+- **`viewpos` and `timerefresh`**: done. `viewpos` is `V_Viewpos_f`: the eye's position and the yaw as whole
+  numbers, "(x y z) : yaw" (`screenshot.mjs --at=` takes the same, its z the origin's, 22 under the eye standing).
+  `timerefresh` is `SCR_TimeRefresh_f`: the view spun a full turn in 128 frames, each a frame query with the
+  player's yaw set on its row (put back after; the loop held meanwhile, so no tic runs and nothing in the game
+  changes) and a paint, presented each or once at the end with an argument, then the seconds and the frames a
+  second as `Com_Printf("%f seconds (%f fps)")` said them; a joined page, a demo or the menu up refuse it.
+  `test:console` reads the line's whole numbers, the two ways and the refusals, and Tab; the browser test types
+  both, reads the position, the timing, and the game going on after, on both builds.
 - **`play`, `stopsound` and `soundinfo`**: `play <sound>` plays a pak sound at the ear (`S_Play`: `play
   weapons/blastf1a` or with `.wav`), `stopsound` cuts every channel and loop (`S_StopAllSounds`), and `soundinfo`
   says the mix's figures (`S_SoundInfo_f`: the rate, the channels, the sounds decoded).

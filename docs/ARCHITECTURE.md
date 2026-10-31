@@ -770,7 +770,9 @@ going on; the page's coop is more than one client at it, deathmatch them against
 the map and the clients with their frags, pings and names, a line each in the scrollback and the sum on the line,
 `status` over the score board's rows, a joined page's from its row), `timedemo` (above) and
 `screenshot` (the view downloaded as `quakeNN.png`, as
-`SCR_ScreenShot_f` wrote `quakeNN.pcx`), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
+`SCR_ScreenShot_f` wrote `quakeNN.pcx`), `viewpos` (`V_Viewpos_f`: the eye's position and the yaw as whole numbers, `viewPos`), `timerefresh`
+(`SCR_TimeRefresh_f`: the view spun a full turn in 128 frames, the player's yaw set on its row for each frame's query and put back,
+the loop held meanwhile, the seconds and the frames a second said; an argument presents once at the end, `timeRefresh`), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the
 guest's client); the rest go to `player_command(cmd, arg)` (on a joined page to the host as a `con` message,
 `GuestLink.sendConsole` and `HostLink.onConsole`, which runs `player_command` for the guest's client, as

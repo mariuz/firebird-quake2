@@ -107,6 +107,18 @@ await con.submit('timedemo nosuch');
 check(status.at(-1)?.[0] === 'no demo "nosuch" in this pak' && status.at(-1)?.[1] === true && last() === 'timedemo q2demo1', 'a demo not to be had is refused');
 await con.submit('screenshot');
 check(last() === 'screenshot', 'screenshot takes the view');
+// viewpos and timerefresh: V_Viewpos_f's line (whole numbers) and SCR_TimeRefresh_f's "seconds (fps)", an argument without page flipping
+host.viewPos = () => ({ x: 100.7, y: -200.2, z: 30.5, yaw: 89.9 });
+await con.submit('viewpos'); check(status.at(-1)?.[0] === '(100 -200 30) : 89', 'viewpos says the eye and the yaw as whole numbers');
+host.viewPos = () => null;
+await con.submit('viewpos'); check(status.at(-1)?.[0] === 'viewpos: nothing is on the view' && status.at(-1)?.[1] === true, 'and nothing without a view');
+let flipped = null;
+host.timeRefresh = async (flip) => { flipped = flip; return { seconds: 0.512, fps: 128 / 0.512 }; };
+await con.submit('timerefresh'); check(flipped === true && status.at(-1)?.[0] === '0.512000 seconds (250.000000 fps)', 'timerefresh spins the view and says the seconds and the frames a second');
+await con.submit('timerefresh 1'); check(flipped === false, 'timerefresh 1 runs without page flipping');
+host.timeRefresh = async () => null;
+await con.submit('timerefresh'); check(status.at(-1)?.[1] === true, 'refused without a game of this page\'s own');
+check(con.complete('timer') === 'timerefresh ' && con.complete('viewp') === 'viewpos ', 'Tab completes the two');
 // say and say_team: Cmd_Say_f's words, as typed
 host.say = async (text) => calls.push(['say', text]);
 await con.submit('say Hello, World!');

@@ -478,6 +478,14 @@ try {
     const spdBack = await page.evaluate(() => ({ yaw: window.quake2.settings.clYawspeed, fwd: window.quake2.settings.clForwardspeed })).catch(() => ({}));
     assert(spd.yaw === 280 && spd.fwd === 100 && spdBack.yaw === 140 && spdBack.fwd === 200,
       `cl_yawspeed and cl_forwardspeed reach the settings and go back (${JSON.stringify(spd)} → ${JSON.stringify(spdBack)})`);
+    // viewpos says the eye and the yaw; timerefresh spins the view a full turn in 128 frames and times it, the game going on after
+    await typeCommand('viewpos'); const vpos = await status();
+    await typeCommand('timerefresh'); await sleep(1500); const tref = await status();
+    const tBefore = await page.evaluate(() => window.quake2.session.last.TIME_).catch(() => null);
+    await sleep(600);
+    const tAfter = await page.evaluate(() => window.quake2.session.last.TIME_).catch(() => null);
+    assert(/^\(-?\d+ -?\d+ -?\d+\) : -?\d+$/.test(vpos) && /^\d+\.\d{6} seconds \(\d+\.\d{6} fps\)$/.test(tref) && tAfter > tBefore,
+      `viewpos says the eye and the yaw (${vpos}), timerefresh times a full turn (${tref}) and the game goes on (${tBefore} → ${tAfter})`);
     // p_view.c's cvars reach the game row (bob_up, sv_rollangle), and the defaults come back
     await typeCommand('bob_up 0'); await typeCommand('sv_rollangle 4');
     const pv = await page.evaluate(async () => (await window.quake2.sql('SELECT bob_up, sv_rollangle FROM game'))[0]).catch(() => ({}));
