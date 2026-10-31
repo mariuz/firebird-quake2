@@ -8,7 +8,7 @@
 
 import { parseIceServer } from './net.js';
 
-export const COMMANDS = ['deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'save', 'seed', 'skill', 'spectator', 'stop', 'timelimit', 'use'];
+export const COMMANDS = ['deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 'save', 'seed', 'skill', 'spectator', 'stop', 'timelimit', 'use'];
 const HISTORY = 32;
 
 /**
@@ -22,6 +22,7 @@ export class Console {
     this.host = host;
     this.history = [];
     this.histPos = 0;
+    this.said = 0;   // the messages said, for their clearing timers
   }
 
   /** Opening the line: the history cursor past its end. */
@@ -54,7 +55,9 @@ export class Console {
     const h = this.host;
     const [cmd, ...rest] = line.split(/\s+/);
     const arg = rest.join(' ');
-    const say = (msg, isError = false, ms = 2500) => { h.setStatus(msg, isError); setTimeout(() => h.setStatus(''), ms); };
+    // (a message clears itself after its time unless a newer one has taken the line: an earlier message's timer
+    // used to clear whatever was showing)
+    const say = (msg, isError = false, ms = 2500) => { h.setStatus(msg, isError); const id = ++this.said; setTimeout(() => { if (this.said === id) h.setStatus(''); }, ms); };
     switch (cmd.toLowerCase()) {
       case 'map': {
         const name = arg.toLowerCase();
@@ -158,6 +161,17 @@ export class Console {
         h.settings.rtcIce = arg.trim().split(/\s+/).join(' ');
         h.saveSettings();
         say(`rtc_ice: ${h.settings.rtcIce.split(' ')[0]} for the next network game`);
+        return;
+      }
+      case 'rtc_signal': {
+        // the signalling relay (scripts/signal.mjs) the next network game passes its offer and answer through under a
+        // room code, in place of the texts; no argument shows it, `none` clears it. Kept in the settings; both pages set it.
+        if (!arg) { say(`"rtc_signal" is "${h.settings.rtcSignal || 'none'}"`); return; }
+        if (/^(none|off|0)$/i.test(arg)) { h.settings.rtcSignal = ''; h.saveSettings(); say('rtc_signal: the offer and the answer as texts'); return; }
+        if (!/^https?:\/\/\S+$/i.test(arg) || arg.length > 300) { say("rtc_signal takes the relay's http(s) url", true); return; }
+        h.settings.rtcSignal = arg.replace(/\/+$/, '');
+        h.saveSettings();
+        say(`rtc_signal: ${h.settings.rtcSignal} for the next network game`);
         return;
       }
       case 'save': return h.saveGame();

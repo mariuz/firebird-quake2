@@ -46,6 +46,11 @@ for (let i = 0; i < 180 && !up; i++) {
 }
 if (!up) { console.error('the dev server did not come up:\n' + serverLog); server.kill(); process.exit(1); }
 console.log(`serving on ${base} (${coi ? 'COOP/COEP from the server: the threaded build' : 'no headers, like Pages: the build without threads'})`);
+// the signalling relay (scripts/signal.mjs) on the next port, for the network section: the pages' rtc_signal
+const RELAY_PORT = PORT + 1;
+const relay = spawn(process.execPath, ['scripts/signal.mjs'], { cwd: root, env: { ...process.env, PORT: String(RELAY_PORT) }, stdio: ['ignore', 'ignore', 'pipe'] });
+let relayUp = false;
+for (let i = 0; i < 60 && !relayUp; i++) { try { relayUp = (await fetch(`http://localhost:${RELAY_PORT}/rooms/ZZZZ`)).status === 404; } catch { await sleep(500); } }
 
 // ── the browser ───────────────────────────────────────────────────────────────────────────
 const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
@@ -496,18 +501,27 @@ try {
     assert(gready, 'a second page loads, to join from');
     if (gready) {
       const text = (p) => p.evaluate(() => document.getElementById('net-text')?.value ?? '').catch(() => '');
+      // through the relay (scripts/signal.mjs, spawned above; rtc_signal on both pages, set in place: both are on the attract
+      // loop here, where a key brings the menu up and not the console): Host shows a four-letter code, the guest types it
+      // after Join, the answer goes back by itself, and the room is dropped once they are connected; then the host's
+      // console clears it (a game runs by then) for the third page's join by text
+      const typeOn = async (p, line) => { await p.evaluate(() => document.exitPointerLock?.()); await p.mouse.click(480, 360); await sleep(200); await p.keyboard.press('Backquote'); await sleep(200); await p.keyboard.type(line); await p.keyboard.press('Enter'); await sleep(300); };
+      assert(relayUp, `the signalling relay runs on port ${RELAY_PORT}`);
+      for (const p of [page, gp]) await p.evaluate((url) => { window.quake2.settings.rtcSignal = url; }, `http://localhost:${RELAY_PORT}`);
+      const relaySet = await Promise.all([page, gp].map((p) => p.evaluate(() => window.quake2?.settings?.rtcSignal).catch(() => null)));
+      assert(relaySet.every((s) => s === `http://localhost:${RELAY_PORT}`), `rtc_signal points both pages at it (${relaySet.join(', ')})`);
       await page.click('#net-host');
-      let offer = '';
-      for (let i = 0; i < 80 && !offer.startsWith('q2net1:'); i++) { await sleep(250); offer = await text(page); }
-      assert(offer.startsWith('q2net1:') && offer.length < 4000, `Host makes an offer text to pass on (${offer.length} characters)`);
+      let offer = '';   // (the code, here; the third page below joins by text)
+      for (let i = 0; i < 80 && !/^[A-Z2-9]{4}$/.test(offer); i++) { await sleep(250); offer = await text(page); }
+      const hostHelp = await page.evaluate(() => document.getElementById('net-help')?.textContent ?? '').catch(() => '');
+      const room = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
+      assert(/^[A-Z2-9]{4}$/.test(offer) && hostHelp.includes(`the code ${offer}`) && room === 200, `Host publishes the offer at the relay and shows its code (${offer}; the room there: ${room})`);
       await gp.click('#net-join');
-      await gp.fill('#net-text', offer);
+      const joinHelp = await gp.evaluate(() => document.getElementById('net-help')?.textContent ?? '').catch(() => '');
+      assert(/Type the code/.test(joinHelp), `Join asks for the code (${joinHelp})`);
+      await gp.fill('#net-text', offer.toLowerCase());
       await gp.click('#net-go');
-      let answer = '';
-      for (let i = 0; i < 80 && !(answer.startsWith('q2net1:') && answer !== offer); i++) { await sleep(250); answer = await text(gp); }
-      assert(answer.startsWith('q2net1:') && answer !== offer, `Join answers it with a text to pass back (${answer.length} characters)`);
-      await page.fill('#net-text', answer);
-      await page.click('#net-go');
+      const answer = '';   // (none to pass by hand: the relay carries it)
       const hstate = () => page.evaluate(() => ({ role: window.quake2?.net?.role, guests: window.quake2?.net?.guests?.map((g) => g.client), clients: window.quake2?.session?.clients?.length,
         coop: window.quake2?.session?.coop, views: window.quake2?.renderer?.views, sent: window.quake2?.net?.guests?.reduce((n, g) => n + g.host.sentFrames, 0) ?? 0 })).catch(() => ({}));
       const gstate = () => gp.evaluate(() => ({ role: window.quake2?.net?.role, frames: window.quake2?.net?.guest?.frames ?? 0, map: window.quake2?.net?.guest?.map?.name,
@@ -519,6 +533,11 @@ try {
       assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
         `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
       assert(/joined: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
+      const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
+      assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
+      await typeOn(page, 'rtc_signal none');
+      const relayOff = await page.evaluate(() => ({ setting: window.quake2.settings.rtcSignal, status: document.getElementById('status')?.textContent })).catch(() => ({}));
+      assert(relayOff.setting === '' && /the offer and the answer as texts/.test(relayOff.status ?? ''), `rtc_signal none at the host's console clears it (${JSON.stringify(relayOff)})`);
       // the guest's keys move its player at the host
       const p2 = () => page.evaluate(() => { const c = window.quake2.session.clients[1]; return [c.PX, c.PY]; }).catch(() => [0, 0]);
       const [x0, y0] = await p2();
@@ -687,7 +706,7 @@ try {
   console.error('FAIL:', e.message);
   failed++;
 } finally {
-  if (!process.argv.includes('--keep')) { await browser.close(); server.kill(); }
+  if (!process.argv.includes('--keep')) { await browser.close(); server.kill(); relay.kill(); }
 }
 
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }

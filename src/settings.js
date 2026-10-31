@@ -9,7 +9,7 @@ export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, crosshair: 1, coop: false, deathmatch: false,
-  dmflags: 0, fraglimit: 0, timelimit: 0, players: 2, binds: DEFAULT_BINDS, name: '', hand: 0, rtcIce: '' });
+  dmflags: 0, fraglimit: 0, timelimit: 0, players: 2, binds: DEFAULT_BINDS, name: '', hand: 0, rtcIce: '', rtcSignal: '' });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1 });
@@ -47,6 +47,8 @@ const CHECK = {
   hand: int(0, 2),
   // the ICE server the network game adds to the STUN (rtc_ice at the console): a url, or a url, a user and a password
   rtcIce: (v) => (typeof v === 'string' && v.length <= 300 && (v === '' || /^(stuns?|turns?):[^\s@]+( \S+ \S+)?$/i.test(v)) ? v : undefined),
+  // the signalling relay (scripts/signal.mjs) the network game's texts go through under a room code (rtc_signal): its http(s) url
+  rtcSignal: (v) => (typeof v === 'string' && v.length <= 300 && (v === '' || /^https?:\/\/\S+$/i.test(v)) ? v : undefined),
 };
 
 /**

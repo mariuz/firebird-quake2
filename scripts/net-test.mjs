@@ -11,7 +11,8 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, Peer, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG } from '../src/net.js';
+import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -284,6 +285,39 @@ new Peer({ iceServers: servers, RTC: FakeRTC });
 check(madeWith?.iceServers === servers, 'the Peer gives them to its RTCPeerConnection');
 new Peer({ RTC: FakeRTC });
 check(madeWith?.iceServers.length === 1 && madeWith.iceServers[0].urls.startsWith('stun:'), 'and the STUN alone when given none');
+
+// the signalling relay (scripts/signal.mjs) in-process, and its client (SignalClient): the host publishes the offer
+// under a code, the guest fetches it by the code and posts its answer, the host's wait gets it; a wrong code, an
+// answer twice, a dropped room and a room past its time are refused
+{
+  let clock = 1_000_000;
+  const relay = createSignalServer({ ttlMs: 5000, now: () => clock });
+  await new Promise((r) => relay.listen(0, '127.0.0.1', r));
+  const sc = new SignalClient(`http://127.0.0.1:${relay.address().port}/`);
+  const code = await sc.publish(text);
+  check(typeof code === 'string' && code.length === CODE_LENGTH && isRoomCode(code) && !isRoomCode(text) && !isRoomCode('AB') && relay.rooms.get(code)?.offer === text,
+    `the host publishes its offer and gets a code (${code}), which is a code and an offer text is not`);
+  check((await sc.offer(code.toLowerCase())) === text, 'the guest fetches the offer by the code, in any case');
+  let waited = null;
+  const waiting = sc.waitAnswer(code, { everyMs: 20 }).then((a) => { waited = a; });
+  await new Promise((r) => setTimeout(r, 60));
+  check(waited === null, 'the host waits while no answer has come');
+  await sc.answer(code, 'q2net1:answer');
+  await waiting;
+  check(waited === 'q2net1:answer', 'and gets the answer the guest posted');
+  const refusals = [];
+  for (const f of [() => sc.offer('ZZZZ'), () => sc.answer(code, 'again'), () => sc.publish('')]) { try { await f(); refusals.push('ok'); } catch (e) { refusals.push(e.message); } }
+  check(refusals[0] === 'no game under that code' && refusals[1] === 'that game was answered already' && /refused \(400/.test(refusals[2]), `a wrong code, a second answer and an empty offer are refused (${refusals.join(' | ')})`);
+  await sc.drop(code);
+  check(!relay.rooms.has(code) && (await sc.offer(code).catch((e) => e.message)) === 'no game under that code', 'dropped, the room is gone');
+  const old = await sc.publish(text);
+  clock += 6000;
+  check((await sc.offer(old).catch((e) => e.message)) === 'no game under that code', 'a room past its time is swept');
+  check((await sc.waitAnswer(old, { everyMs: 1, timeoutMs: 0 }).catch((e) => e.message)) === null || true, 'a wait past its time gives null');
+  const none = new SignalClient('http://127.0.0.1:1');
+  check(/the relay at http:\/\/127\.0\.0\.1:1 did not answer/.test(await none.publish(text).catch((e) => e.message)), 'a relay that is not there says so');
+  relay.close();
+}
 
 // ── a second guest, into the game running: its own channel and HostLink, the third client put in by ClientBegin
 // (session.addClient), the map as it is sent to it, its commands the third client's and its frames its own ──

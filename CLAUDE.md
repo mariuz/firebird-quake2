@@ -50,6 +50,7 @@ npm run test:browser                  # the page in a headless Chromium (npx pla
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
 npm run serve -- --coi                # with COOP/COEP: cross-origin isolated, the threaded build
+npm run signal                        # the signalling relay for the network game (PORT=8787): rtc_signal http://host:8787 at both pages' consoles
 npm run perf                          # the performance guard CI runs: the load, the tics, the frame query and the raster against docs/perf-baseline.json (--record after a change meant to cost more)
 npm run bench:tic / bench:raster / bench:calls / bench:ab -- <dir>   # measuring (below)
 ```

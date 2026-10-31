@@ -143,6 +143,17 @@ await con.submit('rtc_ice http://relay');
 check(host.settings.rtcIce === 'turn:relay.example.org:3478 ace secret' && status.at(-1)?.[1] === true, 'another scheme is refused');
 await con.submit('rtc_ice none');
 check(host.settings.rtcIce === '' && status.at(-1)?.[0] === 'rtc_ice: the STUN server alone', 'rtc_ice none clears it');
+// rtc_signal: the relay the network game's texts go through under a code (scripts/signal.mjs), kept in the settings
+host.settings.rtcSignal = '';
+await con.submit('rtc_signal');
+check(status.at(-1)?.[0] === '"rtc_signal" is "none"', 'rtc_signal alone shows none');
+await con.submit('rtc_signal http://relay.example.org:8787/');
+check(host.settings.rtcSignal === 'http://relay.example.org:8787' && last() === 'saveSettings' && status.at(-1)?.[0] === 'rtc_signal: http://relay.example.org:8787 for the next network game',
+  'rtc_signal <url> keeps the relay in the settings, a trailing slash off');
+await con.submit('rtc_signal ws://relay');
+check(host.settings.rtcSignal === 'http://relay.example.org:8787' && status.at(-1)?.[0] === "rtc_signal takes the relay's http(s) url" && status.at(-1)?.[1] === true, 'another scheme is refused, the setting as it was');
+await con.submit('rtc_signal none');
+check(host.settings.rtcSignal === '' && status.at(-1)?.[0] === 'rtc_signal: the offer and the answer as texts', 'rtc_signal none clears it');
 
 // the history: not twice in a row, 32 at most, up and down through it, the empty line past the newest
 const h = new Console(host);

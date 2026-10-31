@@ -14,8 +14,9 @@
 // The wire is JSON over a data channel, in chunks a channel is sure to take (16 KB); a frame of demo1 is
 // 10–30 KB, one or two chunks, twenty times a second. Signalling is by hand: Pages is static, so the offer
 // and the answer are texts the players pass each other (gzipped and base64'd, under a kilobyte each), with
-// the ICE candidates gathered before the text is made. HostLink and GuestLink know nothing of WebRTC: a
-// test runs them over Loopback.pair() in one process.
+// the ICE candidates gathered before the text is made; or through a relay of the player's own
+// (scripts/signal.mjs, SignalClient here) under a room code. HostLink and GuestLink know nothing of WebRTC:
+// a test runs them over Loopback.pair() in one process.
 
 export const CHUNK = 16000;           // characters a data channel message is kept under
 export const BACKLOG = 256 * 1024;    // bytes queued on the channel before frames are dropped (a slow link)
@@ -212,6 +213,49 @@ export async function unpackSignal(text) {
   if (!d || typeof d.sdp !== 'string' || !d.type) throw new Error('that is not an offer or an answer');
   return d;
 }
+
+// ── a signalling relay of the player's own (scripts/signal.mjs): the texts under a room code ──────────────
+/**
+ * The relay's client, over fetch (given, so a test runs it in Node against the server in-process): the host
+ * publishes its offer and gets a code, waits for the answer under it; the guest fetches the offer by the code
+ * and posts its answer. Every failure is an Error with words for the page.
+ */
+export class SignalClient {
+  constructor(url, fetchFn = globalThis.fetch) {
+    this.base = String(url ?? '').trim().replace(/\/+$/, '');
+    this.fetchFn = fetchFn;
+  }
+  async call(method, path, body) {
+    let res;
+    // (the window's fetch wants the window as `this`: "Illegal invocation" otherwise)
+    try { res = await this.fetchFn.call(globalThis, `${this.base}${path}`, { method, body, headers: body ? { 'Content-Type': 'text/plain' } : undefined }); }
+    catch (err) { throw new Error(`the relay at ${this.base} did not answer (${err?.message ?? err})`); }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(res.status === 404 ? 'no game under that code' : res.status === 409 ? 'that game was answered already' : `the relay refused (${res.status}${data.error ? `: ${data.error}` : ''})`);
+    return data;
+  }
+  /** The host's: the offer published under a new code. */
+  async publish(offer) { const { code } = await this.call('POST', '/rooms', offer); if (!code) throw new Error('the relay gave no code'); return code; }
+  /** The guest's: the offer under a code. */
+  async offer(code) { const { offer } = await this.call('GET', `/rooms/${roomCode(code)}`); if (!offer) throw new Error('no game under that code'); return offer; }
+  /** The guest's: its answer posted under the code. */
+  async answer(code, text) { await this.call('POST', `/rooms/${roomCode(code)}/answer`, text); }
+  /** The host's: the answer when it comes, asked for every `everyMs`; null past `timeoutMs` or once `stopped()`. */
+  async waitAnswer(code, { everyMs = 1000, timeoutMs = 10 * 60 * 1000, stopped = () => false, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+    const until = Date.now() + timeoutMs;
+    while (Date.now() < until && !stopped()) {
+      const { answer } = await this.call('GET', `/rooms/${roomCode(code)}/answer`);
+      if (answer) return answer;
+      await sleep(everyMs);
+    }
+    return null;
+  }
+  /** The host's: the room is done with (a failure here is nobody's concern). */
+  async drop(code) { await this.call('DELETE', `/rooms/${roomCode(code)}`).catch(() => undefined); }
+}
+/** Whether a text is a room code (four of the relay's letters and digits) rather than an offer. */
+export const isRoomCode = (text) => /^[A-Z2-9]{4}$/i.test(String(text ?? '').trim());
+const roomCode = (code) => String(code ?? '').trim().toUpperCase();
 
 // ── the ICE servers: a STUN server always, and the one the player set (rtc_ice at the console) ────────────
 const STUN = 'stun:stun.l.google.com:19302';

@@ -28,8 +28,8 @@ the order they are to be taken.
   moves it again); the host leaving ends the guest's game. `test:net` runs the host and guest sides over
   a loopback in one process; the browser test joins a second page to the first over real WebRTC. The guest
   predicts its own move (the second list's entry below), and a third and a fourth page join the game as it runs (the third
-  list's first entry). Left: a TURN relay for the networks a STUN cannot cross, a signalling service of the
-  player's own in place of the texts, and spectating.
+  list's first entry). A TURN relay for the networks a STUN cannot cross and spectating came with the fourth
+  list, a signalling relay of the player's own in place of the texts with the fifth.
 - **Local deathmatch**: done for two players at one page (the Players select's "Two (deathmatch)", the
   game menu's players spin) or over the network (the host's mode is the game's), as g_spawn.c, g_items.c
   and p_client.c had it. The spawn keeps out `NOT_DEATHMATCH` entities instead of the skill's, so the
@@ -447,6 +447,39 @@ The fourth list, from what the entries above and below still leave: in the order
   `src/net.js`), on both pages. `test:net` parses the setting's forms and refuses the rest, and sees the Peer
   give the servers to its connection; `test:settings` the round trip and the fallbacks; `test:console` the
   command shown, set, refused and cleared; the browser test the command kept in the settings and cleared.
+
+The fifth list, from what the entries above and below still leave: in the order they are to be taken.
+
+- **A signalling relay of the player's own**: done. The offer and the answer went by hand, as texts, since
+  Pages is static. `scripts/signal.mjs` (`npm run signal`, port 8787) is a relay anyone can run on a machine
+  both players reach: an offer published under a four-letter room code (no 0, O, 1 or I: a code is said
+  aloud), the answer posted under it, rooms swept after ten minutes, nothing on disk, any origin let in
+  (Chrome's private network access header too; a page served over https reaches an http relay only at
+  `localhost`, so a relay elsewhere goes behind https).
+  `rtc_signal <url>` at the console (shown alone, `none` clears it; kept in the settings as `rtcSignal`) on
+  both pages makes Host publish its offer there and show the code in place of the text, waiting for the
+  answer by itself (`SignalClient` in `src/net.js`: publish, offer, answer, waitAnswer, drop), and Join take
+  the code (an offer text still works; a code with no relay set says what it needs); the room is dropped once
+  the answer is in. `test:net` runs the relay in-process: the code's shape, the offer by the code, the wait
+  until the answer comes, a wrong code, a second answer, an empty offer, a dropped room and a swept one
+  refused, a relay that is not there named; `test:settings` and `test:console` the setting and the command;
+  the browser test spawns the relay, sets it on both pages, hosts (a code shown) and joins by the code, sees
+  the room gone once connected, then clears it for the third page's join by text.
+- **The multiplayer menu's network items**: `join network server` and `start network server` are drawn greyed;
+  the page's Join and Host buttons do the work. The items drive the same functions (the panel opens under the
+  menu, the code field when a relay is set), as `M_Menu_JoinServer_f` and `M_Menu_StartServer_f` opened theirs.
+- **The mouse buttons and the wheel bindable**: the keys menu binds keys alone; the mouse button fires and the
+  wheel changes weapon, fixed. `MOUSE1`–`MOUSE3`, `MWHEELUP` and `MWHEELDOWN` as keys of `settings.binds`
+  (Enter then a button binds, as `KeyBindingFunc` took `K_MOUSE1`), the defaults MOUSE1 attack and the wheel
+  weapnext, `src/input.js` routing the buttons through the binds.
+- **`bind`, `unbind`, `unbindall` and `bindlist` at the console**: Quake's words over the same binds
+  (`bind k +attack`, the key names `Key_StringToKeynum` took), a command the page has no action for refused.
+- **The notify lines and the console's scrollback**: what the game prints (pickups, obituaries, the help's news)
+  drawn at the top of the view for three seconds, four lines, as `Con_DrawNotify` did, and the backquote
+  console showing the last lines printed above the input line (`Con_DrawConsole`'s scrollback).
+- **`timedemo` and `screenshot`**: `timedemo <demo>` plays a recording as fast as the page paints, no pacing,
+  and reports frames and seconds as `CL_Timedemo_f` did; `screenshot` saves the view as a PNG download
+  (`SCR_ScreenShot_f` wrote `quake00.pcx`).
 
 ## Playing the demo
 
