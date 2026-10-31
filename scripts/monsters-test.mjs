@@ -80,7 +80,7 @@ for (const m of MONSTERS) {
     if (e.ENEMY_ID === pe) break;
   }
   assert(e.ENEMY_ID === pe, `${m.name} saw the player (state ${e.ST} after sighting)`);
-  assert((await sounds(m.sight_snd)) > 0, `${m.name} called out (${m.sight_snd})`);
+  assert(!m.sight_snd || (await sounds(m.sight_snd)) > 0, `${m.name} called out (${m.sight_snd ?? 'it has no sight sound: the actor'})`);
   // a shot along the line to it: soldiers, infantry, gunners, the iron maiden and the medic duck a quarter of the time, the rest never
   const dodger = ['soldier_light', 'soldier', 'soldier_ss', 'infantry', 'gunner', 'chick', 'medic'].includes(m.name);
   const box0 = await q1(`SELECT minz, maxz FROM ents WHERE id = ${id}`);

@@ -278,6 +278,17 @@ export const MONSTERS = [
     sight_snd: 'insane/insane3.wav', idle_snd: 'insane/insane7.wav', search_snd: 'insane/insane7.wav', pain_snd: 'insane/insane4.wav',
     death_snd: 'insane/insane5.wav',
   },
+  {
+    // the actor (misc_actor, m_actor.c): a marine on the player's model who walks the target_actor path he is given
+    // once used, talks at its corners, jumps and fights as they say, and shoots back with a machine gun (actorMachineGun);
+    // the frame table m_actor.h's (the demo pak has no player model: he runs on a model row without a mesh)
+    name: 'actor', model: 'players/male/tris.md2', skin: 0, health: 100, gib_health: -80, mass: 200,
+    run_speed: 15, walk_speed: 3, yaw_speed: 25,
+    anims: [['attack', 4], ['death1', 7], ['death2', 13], ['flip', 14], ['pain1', 3], ['pain2', 3], ['pain3', 3], ['push', 9], ['run', 6], ['stand', 40], ['taunt', 17], ['walk', 8], ['jump', 6]],
+    stand_anim: 'stand', walk_anim: 'walk', run_anim: 'run', pain_anims: 'pain1,pain2,pain3', death_anims: 'death1,death2',
+    missile_anim: 'attack', missile_frames: '0,1', missile_kind: 'machinegun', attack_chance: 0.3, pain_chance: 1,
+    pain_snd: 'player/male/pain100_1.wav', death_snd: 'player/male/death1.wav', attack_snd: 'infantry/infatck1.wav',
+  },
 ];
 /**
  * The full game's decorations with a model the demo pak lacks: a model row without a mesh and its frame runs, as the

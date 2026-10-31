@@ -71,6 +71,14 @@ await add('misc_insane', 300, -200, 24, { angle: 180 });
 await add('misc_insane', 340, -200, 24, { angle: 180, spawnflags: 4 });
 await add('misc_insane', 380, -200, 60, { angle: 180, spawnflags: 8 + 16 });
 await add('monster_commander_body', 300, -150, 30, { targetname: 'body' });
+// an actor (misc_actor) with a path of three target_actors east of it along the corridor beyond the yard's wall (out of
+// the player's sight while the turret is tried): the first says something, the second is a JUMP (1, east at 150, up
+// 250), the third an ATTACK (4) with HOLD (16) on a soldier named by its pathtarget
+await add('misc_actor', 300, -30, 24, { angle: 360, target: 'act1', targetname: 'actor' });
+await add('target_actor', 350, -30, 24, { targetname: 'act1', target: 'act2', message: 'Follow me' });
+await add('target_actor', 400, -30, 24, { targetname: 'act2', target: 'act3', spawnflags: 1, angle: 360, speed: 150, height: 250 });
+await add('target_actor', 440, -30, 24, { targetname: 'act3', spawnflags: 4 + 16, pathtarget: 'victim' });
+await add('monster_soldier', 480, -30, 24, { targetname: 'victim', angle: 180 });
 // two power cubes by the start and three doors that each want one (the full game's power cube hunt)
 await add('key_power_cube', 200, -300, 24);
 await add('key_power_cube', 230, -300, 24);
@@ -80,7 +88,7 @@ await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents
 await db.exec(`EXECUTE PROCEDURE init_map('demo1', ${world}, 2, 1, NULL)`);
 const pe = (await q1('SELECT ent_id e FROM player')).E;
 await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16 + 64) WHERE id = ${pe}`);   // god, notarget
-await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL AND classname <> 'turret_driver' AND mtype NOT STARTING WITH 'insane'");   // the map's monsters, not the turret's driver nor the marines
+await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL AND classname <> 'turret_driver' AND mtype NOT STARTING WITH 'insane' AND mtype <> 'actor' AND COALESCE(targetname, '') <> 'victim'");   // the map's monsters, not the turret's driver, the marines, the actor nor its victim
 // fire a targetname as if the player's own target, with a pathtarget for the elevator
 const use = (name, pathtarget = null) => db.query(`EXECUTE BLOCK AS BEGIN
   UPDATE ents SET target = '${name}', pathtarget = ${pathtarget ? `'${pathtarget}'` : 'NULL'} WHERE id = ${pe};
@@ -280,6 +288,43 @@ const near = (a, b) => Math.abs(a - b) < 0.5;
     if (b.NEXTTHINK === null && b.FRAME > 0) sitting = b;
   }
   assert(sitting && sitting.FRAME === 23 && heard.join() === 'tank/pain.wav,tank/thud.wav', `used, it sits up through its frames to the last (${sitting?.FRAME}) with the tank's pain, then the thud, and stays (${heard.join(', ')})`);
+}
+
+// ── the actor and its path of target_actors
+{
+  const actor = await ent('monster_actor');
+  const runs = await qa(`SELECT anim, first_frame, frame_count FROM anims WHERE model_id = ${actor.MODEL_ID} ORDER BY first_frame`);
+  assert(actor.MTYPE === 'actor' && actor.HEALTH === 100 && !res.models.has(actor.MODEL_ID) && runs.length === 13 && runs.reduce((n, r) => n + r.FRAME_COUNT, 0) === 133 && actor.TARGET === 'act1',
+    `misc_actor is the monster 'actor' on a model row of m_actor.h's thirteen runs (133 frames) the painter has no mesh for, its target the first corner`);
+  const corners = await qa("SELECT targetname, solid, spawnflags, p1x, p1y, speed, height FROM ents WHERE classname = 'target_actor' ORDER BY targetname");
+  assert(corners.length === 3 && corners.every((c) => c.SOLID === 1) && Math.abs(corners[1].P1X - 1) < 1e-9 && corners[1].SPEED === 150 && corners[1].HEIGHT === 250,
+    `the three corners are triggers, the JUMP one pointing east at 150 and 250 up`);
+  const ax = actor.X;
+  for (let i = 0; i < 30; i++) await tic();
+  const stood = await ent('monster_actor');
+  assert(stood.ST === 'stand' && stood.X === ax, `he stands where he was put until used (${stood.ST} after 1.5 s)`);
+  await use('actor');
+  let at1 = null, said = null;
+  for (let i = 0; i < 200 && !at1; i++) {
+    await tic();
+    const a = await ent('monster_actor');
+    const m = (await q1('SELECT msg FROM player WHERE id = 1')).MSG;
+    if (m && /Follow me/.test(m)) said = m;
+    if (a.TARGET === 'act2') at1 = a;
+  }
+  assert(at1 && at1.X > ax + 30 && said && /^(Hellrot|Tokay|Killme|Disruptor|Adrianator|Rambear|Titus|Bitterman): Follow me$/.test(said),
+    `used, he walks to the first corner (x ${ax.toFixed(0)} → ${at1?.X?.toFixed(0)}), says its message by name ("${said}") and takes the next`);
+  let jumped = null;
+  for (let i = 0; i < 200 && !jumped; i++) { await tic(); const a = await ent('monster_actor'); if (a.VZ > 100 || a.TARGET === 'act3') jumped = a; }
+  assert(jumped && jumped.TARGET === 'act3' && (jumped.VZ > 100 || jumped.Z > stood.Z + 10), `at the JUMP corner he is thrown up (vz ${jumped?.VZ?.toFixed(0)}, z ${jumped?.Z?.toFixed(0)} from ${stood.Z.toFixed(0)}) and heads for the third`);
+  const victim = (await q1("SELECT id, x, y FROM ents WHERE targetname = 'victim'"));
+  let fights = null;
+  for (let i = 0; i < 300 && !fights; i++) { await tic(); const a = await ent('monster_actor'); if (a.ENEMY_ID === victim.ID) fights = a; }
+  assert(fights && (fights.AIFLAGS & 1) && fights.TARGET === null,
+    `at the ATTACK corner the soldier its pathtarget names is his enemy, held where he stands (HOLD; ${fights?.ST}), the path done`);
+  let shot = false;
+  for (let i = 0; i < 200 && !shot; i++) { await tic(); const a = await ent('monster_actor'); if (a.ST === 'missile') shot = true; }
+  assert(shot, 'and he shoots at it');
 }
 
 // ── target_string, target_character, func_clock

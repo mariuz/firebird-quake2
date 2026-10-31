@@ -248,7 +248,7 @@ the `player_trail` markers that `player_trail_check` drops at 10 Hz for each cli
 `new_chase_dir` take a spot as well as an entity for that). The demo's monsters: soldier (light, shotgun,
 machinegun), infantry, gunner, berserker, flyer, parasite, tank. The full game's, as logic: gladiator, iron
 maiden (chick), brain, medic, mutant, icarus (hover), technician (floater), barracuda shark (flipper), the
-supertank, the hornet (boss2), Jorg and Makron (boss3), the insane marines. Each is a row like the others
+supertank, the hornet (boss2), Jorg and Makron (boss3), the insane marines, the actor (`misc_actor`, who walks his `target_actor` path once used: `actor_use`, `target_actor_touch`). Each is a row like the others
 with a frame table of its own (`anims`: the runs of m_*.h, in the model's order), which the loader turns
 into a model row without a mesh and its `anims` rows when the pak lacks the MD2 (the demo pak does), so the
 logic animates, fires and dies on the right frames and the painter, having no mesh, skips it; a registered

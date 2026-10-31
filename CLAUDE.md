@@ -28,7 +28,7 @@ npm run test:save                     # save, play on, load: the game comes back
 npm run test:menu                     # the menus, headless: keys, slots, settings, pictures
 npm run test:painter                  # the painter headless: dynamic lights, mip levels
 npm run test:walkthrough              # every trigger the player can walk into fires, its movers move
-npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper, clock, turret, the insane marines, the commander's body
+npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper, clock, turret, the insane marines, the commander's body, the actor's path
 npm run test:replay                   # the same seed and inputs give the same game twice; a save carries the chances on
 npm run test:input                    # the page's input as the usercmd: keys, mouse, touches, buttons, a gamepad
 npm run test:console                  # the console line headless: the page's commands (demos and deldemo among them), player_command, history, Tab

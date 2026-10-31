@@ -10,6 +10,7 @@ SET TERM ^ ;
 CREATE OR ALTER PROCEDURE t_damage (targ INTEGER, inflictor INTEGER, attacker INTEGER, damage INTEGER, knockback INTEGER, dflags INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE use_targets (eid INTEGER, activator INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE monster_die (eid INTEGER, attacker INTEGER) AS BEGIN END^
+CREATE OR ALTER PROCEDURE actor_use (eid INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE spawn_monster_at (mname VARCHAR(16), x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION) RETURNS (id INTEGER) AS BEGIN SUSPEND; END^
 CREATE OR ALTER PROCEDURE monster_pain (eid INTEGER, attacker INTEGER, damage INTEGER) AS BEGIN END^
 CREATE OR ALTER PROCEDURE teleport_touch (trig INTEGER, other INTEGER) AS BEGIN END^
@@ -1298,6 +1299,7 @@ BEGIN
       -- target_earthquake_use: count seconds from now, the sound at once
       UPDATE ents e SET e.attack_finished = now_() + e.count_, e.pausetime = 0, e.think = 'earthquake_think', e.nextthink = now_() + 0.1e0, e.enemy_id = :activator
        WHERE e.id = :t;
+    ELSE IF (tcls = 'monster_actor') THEN EXECUTE PROCEDURE actor_use(t);
     ELSE IF (tcls LIKE 'monster_%') THEN EXECUTE PROCEDURE monster_wake(t, activator);
     ELSE IF (tcls = 'target_crosslevel_trigger') THEN
     BEGIN
@@ -3063,6 +3065,8 @@ BEGIN
     sf = BIN_AND(sf, BIN_NOT(7936));
     -- SP_misc_insane: the marine's form is its spawnflags' (4 CRAWL, 8 CRUCIFIED), a monster type each; the rest stand
     IF (cls = 'misc_insane') THEN cls = TRIM(CASE WHEN BIN_AND(sf, 8) <> 0 THEN 'monster_insane_cross' WHEN BIN_AND(sf, 4) <> 0 THEN 'monster_insane_crawl' ELSE 'monster_insane' END);
+    -- SP_misc_actor: the actor is the monster 'actor' (m_actor.c); one without a target was freed
+    IF (cls = 'misc_actor') THEN BEGIN IF (tg IS NULL OR tg = '') THEN CONTINUE; cls = 'monster_actor'; END
     -- (every monster's spawn function freed itself in deathmatch; the commander's body is a decoration)
     IF (dm = 1 AND cls LIKE 'monster_%' AND cls <> 'monster_commander_body') THEN CONTINUE;
     -- "angles" overrides "angle"
@@ -3493,6 +3497,23 @@ BEGIN
       ELSE EXECUTE PROCEDURE link_ent(eid);
       IF (tg IS NOT NULL AND tg <> '' AND BIN_AND(sf, 2) = 0) THEN
         UPDATE ents e SET e.st = 'walk', e.anim = NULL WHERE e.id = :eid;
+      -- an actor stands where it is until it is used (actor_use starts it down its target_actor path)
+      IF (mname = 'actor') THEN UPDATE ents e SET e.st = 'stand', e.anim = NULL, e.search_time = 1e9 WHERE e.id = :eid;
+    END
+    -- ── target_actor (SP_target_actor): a corner of an actor's path, a trigger 16 across the actor touches; JUMP (1)
+    -- throws it along the corner's angle at `speed` (200) and up by `height` (200), kept as the push direction ──
+    ELSE IF (cls = 'target_actor') THEN
+    BEGIN
+      UPDATE ents e SET e.solid = 1, e.model_id = NULL, e.mkind = NULL, e.minx = -8, e.miny = -8, e.minz = -8, e.maxx = 8, e.maxy = 8, e.maxz = 8 WHERE e.id = :eid;
+      IF (BIN_AND(sf, 1) <> 0) THEN
+      BEGIN
+        IF (spd IS NULL OR spd = 0) THEN spd = 200;
+        IF (hgt IS NULL OR hgt = 0) THEN hgt = 200;
+        IF (ang IS NULL OR ang = 0) THEN ang = 360;
+        EXECUTE PROCEDURE movedir(ang) RETURNING_VALUES dx, dy, dz;
+        UPDATE ents e SET e.p1x = :dx, e.p1y = :dy, e.speed = :spd, e.height = :hgt WHERE e.id = :eid;
+      END
+      EXECUTE PROCEDURE link_ent(eid);
     END
     -- ── decorations ──
     ELSE IF (cls = 'misc_deadsoldier') THEN

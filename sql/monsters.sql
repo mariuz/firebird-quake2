@@ -82,6 +82,66 @@ BEGIN
   END
 END^
 
+-- target_actor_touch: an actor reaching a corner of its path. Its message is said to every client (gi.cprintf, the
+-- actor named as actor_names named it); JUMP (1) throws the actor along the corner's direction at its speed and
+-- up by its height; ATTACK (4) makes whatever the pathtarget names the actor's enemy, held where it is with HOLD
+-- (16), run at otherwise; a corner neither SHOOT (2) nor ATTACK fires its pathtarget instead. Then the corner's
+-- target is the next corner, and an actor with nowhere to go and no enemy stands for good.
+CREATE OR ALTER PROCEDURE target_actor_touch (pt INTEGER, eid INTEGER)
+AS
+DECLARE tgt VARCHAR(40); DECLARE sf INTEGER; DECLARE ptgt VARCHAR(40); DECLARE msg VARCHAR(400); DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION;
+DECLARE spd DOUBLE PRECISION; DECLARE hgt DOUBLE PRECISION; DECLARE enemy INTEGER; DECLARE nxt INTEGER; DECLARE nm VARCHAR(16);
+DECLARE gx DOUBLE PRECISION; DECLARE gy DOUBLE PRECISION; DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION;
+BEGIN
+  SELECT p.target, p.spawnflags, p.pathtarget, p.message, p.p1x, p.p1y, p.speed, p.height FROM ents p WHERE p.id = :pt INTO tgt, sf, ptgt, msg, px, py, spd, hgt;
+  SELECT e.enemy_id, e.x, e.y FROM ents e WHERE e.id = :eid INTO enemy, ex, ey;
+  IF (enemy IS NOT NULL) THEN EXIT;   -- (an actor with an enemy is past its corners)
+  UPDATE ents e SET e.goal_id = NULL WHERE e.id = :eid;
+  IF (msg IS NOT NULL AND msg <> '') THEN
+  BEGIN
+    nm = TRIM(CASE MOD(eid, 8) WHEN 0 THEN 'Hellrot' WHEN 1 THEN 'Tokay' WHEN 2 THEN 'Killme' WHEN 3 THEN 'Disruptor' WHEN 4 THEN 'Adrianator' WHEN 5 THEN 'Rambear' WHEN 6 THEN 'Titus' ELSE 'Bitterman' END);
+    EXECUTE PROCEDURE sprint(NULL, nm || ': ' || msg);
+  END
+  IF (BIN_AND(sf, 1) <> 0) THEN
+    UPDATE ents e SET e.vx = COALESCE(:px, 0) * :spd, e.vy = COALESCE(:py, 0) * :spd, e.vz = :hgt, e.flags = BIN_AND(e.flags, BIN_NOT(512)) WHERE e.id = :eid;
+  ELSE IF (BIN_AND(sf, 4) <> 0 AND ptgt IS NOT NULL AND ptgt <> '') THEN
+  BEGIN
+    SELECT FIRST 1 n.id FROM ents n WHERE n.targetname = :ptgt AND n.health > 0 INTO enemy;
+    IF (enemy IS NOT NULL) THEN
+    BEGIN
+      UPDATE ents e SET e.enemy_id = :enemy, e.goal_id = :enemy, e.trail_time = now_(), e.search_time = now_() + 5,
+             e.ls_x = (SELECT n.x FROM ents n WHERE n.id = :enemy), e.ls_y = (SELECT n.y FROM ents n WHERE n.id = :enemy), e.ls_z = (SELECT n.z FROM ents n WHERE n.id = :enemy),
+             -- (HOLD: AI_STAND_GROUND, fought from here as a held point_combat is: the run state with the flag)
+             e.aiflags = BIN_OR(BIN_AND(e.aiflags, BIN_NOT(16 + 32 + 64 + 128)), IIF(BIN_AND(:sf, 16) <> 0, 1, 0)),
+             e.st = 'run', e.anim = NULL, e.target = :tgt WHERE e.id = :eid;
+      EXIT;
+    END
+  END
+  IF (BIN_AND(sf, 6) = 0 AND ptgt IS NOT NULL AND ptgt <> '') THEN
+  BEGIN
+    UPDATE ents p SET p.target = :ptgt WHERE p.id = :pt;
+    EXECUTE PROCEDURE use_targets(pt, eid);
+    UPDATE ents p SET p.target = :tgt WHERE p.id = :pt;
+  END
+  SELECT FIRST 1 n.id, n.x, n.y FROM ents n WHERE n.targetname = :tgt AND n.classname IN ('target_actor', 'path_corner') INTO nxt, gx, gy;
+  IF (nxt IS NULL) THEN
+    UPDATE ents e SET e.target = NULL, e.st = 'stand', e.anim = NULL, e.search_time = 1e9 WHERE e.id = :eid;   -- (pausetime forever)
+  ELSE
+    UPDATE ents e SET e.target = :tgt, e.goal_id = :nxt, e.ideal_yaw = vectoyaw(:gx - :ex, :gy - :ey), e.st = 'walk', e.anim = NULL WHERE e.id = :eid;
+END^
+
+-- actor_use: the actor starts down its path (its target names the first target_actor), facing it
+CREATE OR ALTER PROCEDURE actor_use (eid INTEGER)
+AS
+DECLARE tgt VARCHAR(40); DECLARE nxt INTEGER; DECLARE gx DOUBLE PRECISION; DECLARE gy DOUBLE PRECISION; DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION;
+BEGIN
+  SELECT e.target, e.x, e.y FROM ents e WHERE e.id = :eid AND e.st IN ('stand', 'walk') AND e.health > 0 INTO tgt, ex, ey;
+  IF (tgt IS NULL) THEN EXIT;
+  SELECT FIRST 1 n.id, n.x, n.y FROM ents n WHERE n.targetname = :tgt AND n.classname = 'target_actor' INTO nxt, gx, gy;
+  IF (nxt IS NULL) THEN BEGIN UPDATE ents e SET e.target = NULL, e.search_time = 1e9 WHERE e.id = :eid; EXIT; END   -- (a bad target: it stands)
+  UPDATE ents e SET e.goal_id = :nxt, e.ideal_yaw = vectoyaw(:gx - :ex, :gy - :ey), e.yaw = vectoyaw(:gx - :ex, :gy - :ey), e.st = 'walk', e.anim = NULL, e.search_time = 0, e.nextthink = now_() + 0.1e0 WHERE e.id = :eid;
+END^
+
 CREATE OR ALTER PROCEDURE change_yaw (eid INTEGER)
 AS
 DECLARE cur DOUBLE PRECISION; DECLARE ideal DOUBLE PRECISION; DECLARE spd DOUBLE PRECISION; DECLARE mv DOUBLE PRECISION;
@@ -941,7 +1001,7 @@ BEGIN
       IF (nt > t + 0.2e0) THEN walk_spd = walk_spd * 4;
       IF (goal IS NULL) THEN
       BEGIN
-        SELECT FIRST 1 e.id FROM ents e WHERE e.targetname = :tgt AND e.classname = 'path_corner' INTO goal;
+        SELECT FIRST 1 e.id FROM ents e WHERE e.targetname = :tgt AND e.classname IN ('path_corner', 'target_actor') INTO goal;
         UPDATE ents e SET e.goal_id = :goal WHERE e.id = :eid;
       END
       IF (goal IS NOT NULL) THEN
@@ -949,6 +1009,13 @@ BEGIN
         SELECT e.x, e.y, e.z, e.target, e.wait_ FROM ents e WHERE e.id = :goal INTO gx, gy, gz, gt, gw;
         IF (vlen(gx - x, gy - y, 0) < MAXVALUE(24, walk_spd)) THEN   -- SV_CloseEnough: within a stride of the corner
         BEGIN
+          -- an actor's corner: target_actor_touch says what happens there (the message, a jump, a fight, the next corner)
+          IF ((SELECT c.classname FROM ents c WHERE c.id = :goal) = 'target_actor') THEN
+          BEGIN
+            EXECUTE PROCEDURE target_actor_touch(goal, eid);
+            UPDATE ents e SET e.nextthink = :nt WHERE e.id = :eid;
+            EXIT;
+          END
           UPDATE ents e SET e.target = :gt, e.goal_id = NULL, e.ideal_yaw = vectoyaw(:gx - e.x, :gy - e.y) WHERE e.id = :eid;
           IF (gt IS NULL OR gw > 0) THEN
           BEGIN
@@ -963,7 +1030,7 @@ BEGIN
         END
       END
     END
-    ELSE IF (st = 'stand' AND tgt IS NOT NULL AND (SELECT e.search_time FROM ents e WHERE e.id = :eid) < t AND EXISTS (SELECT 1 FROM ents c WHERE c.targetname = :tgt AND c.classname = 'path_corner')) THEN
+    ELSE IF (st = 'stand' AND tgt IS NOT NULL AND (SELECT e.search_time FROM ents e WHERE e.id = :eid) < t AND EXISTS (SELECT 1 FROM ents c WHERE c.targetname = :tgt AND c.classname IN ('path_corner', 'target_actor'))) THEN
     BEGIN
       UPDATE ents e SET e.st = 'walk', e.nextthink = :nt WHERE e.id = :eid;
       EXECUTE PROCEDURE set_anim(eid, walk_a);
@@ -1017,9 +1084,11 @@ BEGIN
       UPDATE ents e SET e.anim_frame = :af, e.frame = :ff + :af, e.nextthink = :nt WHERE e.id = :eid;
       EXIT;
     END
-    IF (BIN_AND(aif, 1) <> 0) THEN
+    IF (BIN_AND(aif, 1) <> 0 AND atkst NOT IN (3, 4)) THEN
     BEGIN
-      -- AI_STAND_GROUND (a point_combat held): face the enemy and fight from here
+      -- AI_STAND_GROUND (a point_combat held, an actor's HOLD corner): face the enemy and fight from here; an attack
+      -- the check found due is taken below first, as ai_run took the attack states before anything else (this
+      -- branch used to exit on the check's word every think, and a monster holding its ground never fired)
       UPDATE ents e SET e.ideal_yaw = (SELECT vectoyaw(n.x - :x, n.y - :y) FROM ents n WHERE n.id = :enemy) WHERE e.id = :eid;
       EXECUTE PROCEDURE change_yaw(eid);
       IF (check_attack(eid) = 1) THEN EXIT;
