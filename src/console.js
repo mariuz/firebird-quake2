@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'chase', 'cl_run', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'm_pitch', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'chase', 'cl_run', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'm_pitch', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'wait', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -61,12 +61,39 @@ export function writeConfig(settings) {
   return lines.join('\n') + '\n';
 }
 
+/** Cmd_TokenizeString's line split: a line is commands parted by `;` outside quotes (a `;` within "" stays, as a bind's line does). */
+export function splitLine(line) {
+  const parts = [];
+  let cur = '', quoted = false;
+  for (const ch of String(line ?? '')) {
+    if (ch === '"') { quoted = !quoted; cur += ch; continue; }
+    if (ch === ';' && !quoted) { parts.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  parts.push(cur);
+  return parts.map((p) => p.trim()).filter(Boolean);
+}
+const MAX_ALIAS_NAME = 32;   // cmd.c's MAX_ALIAS_NAME
+const ALIAS_LOOP_COUNT = 16; // cmd.c's ALIAS_LOOP_COUNT: an alias that runs itself (through others) sixteen deep stops
+
 export class Console {
   constructor(host) {
     this.host = host;
     this.history = [];
     this.histPos = 0;
     this.said = 0;   // the messages said, for their clearing timers
+    this.aliases = new Map();   // Cmd_Alias_f's: a name for a line (several commands with `;`), for the session as Quake kept them
+    this.pending = [];          // the lines `wait` held back for the next frame (Cbuf's cmd_wait), run by tick()
+    this.aliasDepth = 0;
+  }
+
+  /** Cbuf_Execute's wait: the frame has come, so the lines held back run (the page calls it once a frame). */
+  async tick() {
+    if (!this.pending.length) return 0;
+    const lines = this.pending; this.pending = [];
+    let n = 0;
+    for (const line of lines) { await this.run(line); n++; }
+    return n;
   }
 
   /** Opening the line: the history cursor past its end. */
@@ -107,7 +134,30 @@ export class Console {
     return n;
   }
 
+  /**
+   * Cbuf_ExecuteText over a line: its commands parted at `;` run in order; `wait` holds the rest to the next frame
+   * (tick); a command that is an alias runs the alias's line, sixteen deep at most (ALIAS_LOOP_COUNT).
+   */
   async run(line) {
+    const parts = splitLine(line);
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const word = part.split(/\s+/)[0].toLowerCase();
+      if (word === 'wait') { if (i + 1 < parts.length) this.pending.push(parts.slice(i + 1).join('; ')); return; }
+      const alias = this.aliases.get(word);
+      if (alias !== undefined && !this.builtin(word)) {
+        if (this.aliasDepth >= ALIAS_LOOP_COUNT) { this.host.setStatus('ALIAS_LOOP_COUNT', true); return; }   // (each level's finally takes its depth back)
+        this.aliasDepth++;
+        try { if (alias) await this.run(alias); } finally { this.aliasDepth--; }
+        continue;
+      }
+      await this.runOne(part);
+    }
+  }
+  /** Whether a word is one of the console's own (an alias of that name is never run: Cmd_ExecuteString looked at the commands first). */
+  builtin(word) { return COMMANDS.includes(word); }
+
+  async runOne(line) {
     const h = this.host;
     const [cmd, ...rest] = line.split(/\s+/);
     const arg = rest.join(' ');
@@ -299,6 +349,21 @@ export class Console {
         say(`reconnecting to ${last.length > 24 ? `${last.slice(0, 24)}…` : last}`);
         return;
       }
+      case 'alias': {
+        // Cmd_Alias_f: `alias` lists them, `alias <name> <line>` names a line (the rest of the command, `;` and all: it ran as
+        // one line, so quote it where a bind would), `alias <name>` an empty one; a name past 32 characters is refused
+        const [name, ...words] = arg.split(/\s+/).filter(Boolean);
+        if (!name) {
+          say(this.aliases.size ? `Current alias commands: ${[...this.aliases].map(([n, l]) => `${n} : ${l}`).join(' · ')}` : 'Current alias commands: none', false, 8000);
+          return;
+        }
+        if (name.length >= MAX_ALIAS_NAME) { say('Alias name is too long', true); return; }
+        const value = words.join(' ').replace(/^"(.*)"$/, '$1');
+        this.aliases.set(name.toLowerCase(), value);
+        say(`alias ${name.toLowerCase()} : ${value}`);
+        return;
+      }
+      case 'wait': return;   // (alone on a line: nothing to hold back)
       case 'menu_main': case 'menu_game': case 'menu_loadgame': case 'menu_savegame': case 'menu_options': case 'menu_keys':
       case 'menu_video': case 'menu_multiplayer': case 'menu_playerconfig': case 'menu_credits': case 'menu_quit': {
         // M_Init's commands (M_Menu_Main_f and its kin): the menu opens over the view, so a key bound to one opens it

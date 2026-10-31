@@ -625,6 +625,7 @@ let guestLastTic = null;           // the tic of the host's last frame, for the 
 let guestPred = null;   // { cm, seq, cmds: [{ seq, cmd, dt }], st, world, gravity, modelOfFace, error: { dx, dy, dz, at } | null }
 
 async function frame() {
+  if (con.pending.length) con.tick().catch((err) => console.error(err));   // (Cbuf_Execute: the lines `wait` held back run at the next frame)
   // a demo with the menu over it (the attract loop): the demo plays on behind, the menu drawn over each frame,
   // the pad driving the menu (SCR_UpdateScreen drew the demo's frame, then M_Draw)
   if (demo && running && menu.active && !document.hidden && renderer) {

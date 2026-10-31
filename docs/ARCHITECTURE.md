@@ -676,7 +676,10 @@ as raw samples and ends at the file's end or a key) and loads the next map behin
 loading plaque. `F1` toggles the help computer (`HelpComputer`): skill, level name, the two
 `target_help` messages and the counts; it is also drawn at the intermission.
 
-The console: the backquote opens a command line over the view. `map <name>`, `save`, `load`, `fov`,
+The console: the backquote opens a command line over the view. A line's commands part at `;` outside
+quotes (`splitLine`, as `Cbuf_ExecuteText` parted them), `alias <name> <line>` names a line that runs by its
+name (`Cmd_Alias_f`, sixteen deep at most, the aliases lasting the session as Quake's did), and `wait` holds
+the rest of a line to the next frame (`Console.tick` from the page's frame). `map <name>`, `save`, `load`, `fov`,
 `seed` and `skill` are the page's (`skill 0`–`3`: the next map's skill, 3 the nightmare the menus stop short
 of, latched as the cvar was: "skill will be changed for next game."), as are the settings as cvars (`name`,
 `hand`, `sensitivity`, `cl_run`, `m_pitch`, `crosshair`, `s_volume`, `cd_volume`, and `netgraph`, cl_scrn.c's

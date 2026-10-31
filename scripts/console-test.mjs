@@ -439,6 +439,49 @@ check(status.at(-1)?.[0] === 'no keys bound', 'and bindlist says so');
   check(n.lines(10).length === 0 && n.log().length === 0, 'cleared with the level');
 }
 
+// `;`, alias and wait (Cbuf_ExecuteText, Cmd_Alias_f, cmd_wait): a line's commands parted at `;` outside quotes run in order,
+// an alias names a line and runs it by name (sixteen deep at most), wait holds the rest of a line to the next frame
+{
+  const { splitLine } = await import('../src/console.js');
+  check(splitLine('god; noclip ;  notarget').join('|') === 'god|noclip|notarget' && splitLine('bind k "god; noclip"; fov 90').join('|') === 'bind k "god; noclip"|fov 90' && splitLine(' ; ;').length === 0,
+    'a line parts at ; outside quotes, the parts trimmed and the empty ones dropped');
+  const n0 = calls.length;
+  await con.submit('fov 100; fov 110');
+  check(host.settings.fov === 110 && calls.filter((c, i) => i >= n0 && c[0] === 'setView').map((c) => c[1]).join() === '100,110', 'two commands on a line run in order');
+  await con.submit('bind k "fov 120; fov 130"');
+  check(host.settings.lines.KeyK === 'fov 120; fov 130', 'a bind keeps its quoted line whole, ; and all');
+  await con.submit('unbind k');
+  await con.submit('alias');
+  check(status.at(-1)?.[0] === 'Current alias commands: none', 'alias alone lists none');
+  await con.submit('alias Wide "fov 140; fov 150"');
+  check(con.aliases.get('wide') === 'fov 140; fov 150' && status.at(-1)?.[0] === 'alias wide : fov 140; fov 150', 'alias names a line, the name in lower case, the quotes off');
+  await con.submit('alias narrow fov 20');
+  await con.submit('WIDE');
+  check(host.settings.fov === 150, 'the alias runs its line, case aside');
+  await con.submit('narrow; wide');
+  check(host.settings.fov === 150 && calls.filter((c) => c[0] === 'setView').slice(-3).map((c) => c[1]).join() === '20,140,150', 'aliases part at ; too, each its line');
+  await con.submit('alias');
+  check(status.at(-1)?.[0] === 'Current alias commands: wide : fov 140; fov 150 · narrow : fov 20', 'alias lists them as Cmd_Alias_f printed them');
+  await con.submit(`alias ${'x'.repeat(32)} fov 1`);
+  check(status.at(-1)?.[0] === 'Alias name is too long' && status.at(-1)?.[1] === true && con.aliases.size === 2, 'a name of 32 characters or more is refused');
+  await con.submit('alias fov fov 1');
+  await con.submit('fov 90');
+  check(host.settings.fov === 90, 'an alias named as a command never runs: the command does (Cmd_ExecuteString looked at the commands first)');
+  await con.submit('alias loop loop');
+  await con.submit('loop');
+  check(status.at(-1)?.[0] === 'ALIAS_LOOP_COUNT' && status.at(-1)?.[1] === true && con.aliasDepth === 0, 'an alias that runs itself stops at ALIAS_LOOP_COUNT, the depth back at zero');
+  await con.submit('alias empty');
+  await con.submit('empty');
+  check(con.aliases.get('empty') === '' && host.settings.fov === 90, 'an empty alias runs nothing');
+  await con.submit('fov 50; wait; fov 60; fov 70');
+  check(host.settings.fov === 50 && con.pending.join('|') === 'fov 60; fov 70', 'wait holds the rest of the line for the next frame');
+  check(await con.tick() === 1 && host.settings.fov === 70 && con.pending.length === 0 && await con.tick() === 0, 'tick runs what was held, once');
+  await con.submit('wait');
+  check(con.pending.length === 0, 'wait alone holds nothing');
+  check(con.complete('al') === 'alias ' && con.complete('wa') === 'wait ', 'Tab completes alias and wait');
+  con.aliases.clear();
+}
+
 // the history: not twice in a row, 32 at most, up and down through it, the empty line past the newest
 const h = new Console(host);
 await h.submit('god'); await h.submit('god'); await h.submit('noclip'); await h.submit('   ');
