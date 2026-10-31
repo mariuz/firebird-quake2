@@ -24,7 +24,7 @@
         <canvas id="screen" width="320" height="240" tabindex="0" aria-label="Quake 2 view rendered from Firebird query results"></canvas>
         <div id="status" class="status">Loading…</div>
         <input id="cmdline" class="cmdline" type="text" autocomplete="off" spellcheck="false" hidden
-               placeholder="god · noclip · notarget · give all|health|weapons|ammo|armor|keys · kill · map demo2 · save · load · record name · stop · demos · deldemo name · dmflags · fraglimit · timelimit" aria-label="Console">
+               placeholder="god · noclip · notarget · give all|health|weapons|ammo|armor|keys · kill · map demo2 · save · load · record name · stop · demos · deldemo name · spectator · dmflags · fraglimit · timelimit" aria-label="Console">
         <!-- on-screen buttons, shown on touch screens: the halves of the view move and look, these fire and jump -->
         <div id="touch" class="touch" hidden>
           <button type="button" data-act="menu" aria-label="Menu">≡</button>
@@ -90,6 +90,7 @@
           <button id="net-host" type="button">Host</button>
           <button id="net-join" type="button">Join</button>
           <button id="net-leave" type="button">Leave</button>
+          <label title="Joined: watch the game with no player in it (3.20's spectator: no body, noclip through the level, nothing hurts you, the monsters ignore you)"><input id="net-spectate" type="checkbox"> spectate</label>
           <span id="net-state" class="pill"></span></label>
       </div>
       <!-- the offer and the answer, by hand: there is no signalling server on a static site -->
@@ -109,7 +110,8 @@
         With two to four players (coop, or deathmatch: the maps' deathmatch weapons and spots, no monsters, frags at the top right, <kbd>F1</kbd> the score board;
         <code>dmflags</code>, <code>fraglimit</code> and <code>timelimit</code> at the console) the view is split in two or four, the keyboard and mouse are the first player's and the gamepads the others' (640×480 gives four views of 320×240).
         Over the network: one page hosts (Host makes an offer to send to the other player), the other joins (Join takes the offer and makes an answer to send back),
-        and the host's game runs with the guest's player in it, each page its own view; Host again while hosting makes an offer for a third and a fourth player, who join the game as it runs.
+        and the host's game runs with the guest's player in it, each page its own view; Host again while hosting makes an offer for a third and a fourth player, who join the game as it runs;
+        a joined page that ticks spectate (or <code>spectator 1</code> at its console) only watches: no body, a noclip move through the level, nothing hurts it and the monsters ignore it.
         The page opens on the attract loop, the pak's recording with the main menu over it, and goes back to it after a game; a new game starts from the menu, the Map select or the console.
         The Demo select (or <code>demomap q2demo1</code> at the console) plays a recording too; a key or a click brings the menu up over it.
         <code>record name</code> at the console records the game from then on as a demo of its own, <code>stop</code> (or the level's end) downloads it as <code>name.dm2</code>, which the select plays here and Quake 2 plays itself with the same pak;

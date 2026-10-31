@@ -92,7 +92,7 @@ export class HostLink {
     this.last = null;       // the last command the tic ran
     this.ack = -1;          // the sequence number of the newest command merged into a tic (the guest predicts past it)
     this.wantInv = false;   // the guest has its inventory screen up
-    this.info = null;       // the guest's userinfo: { name, hand }, as it last sent it (ClientUserinfoChanged)
+    this.info = null;       // the guest's userinfo: { name, hand, spectator }, as it last sent it (ClientUserinfoChanged)
     this.onInfo = null;
     this.onClose = null;
     this.sentFrames = 0;
@@ -100,7 +100,7 @@ export class HostLink {
     link.onMessage = (m) => {
       if (!m) return;
       if (m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; if (Number.isInteger(m.seq)) this.pendingSeq = m.seq; }
-      else if (m.t === 'info') { this.info = { name: typeof m.name === 'string' ? m.name.slice(0, 15) : '', hand: [0, 1, 2].includes(m.hand) ? m.hand : 0 }; this.onInfo?.(this.info); }
+      else if (m.t === 'info') { this.info = { name: typeof m.name === 'string' ? m.name.slice(0, 15) : '', hand: [0, 1, 2].includes(m.hand) ? m.hand : 0, spectator: m.spectator ? 1 : 0 }; this.onInfo?.(this.info); }
     };
     link.onClose = () => this.onClose?.();
   }
@@ -181,8 +181,8 @@ export class GuestLink {
   }
   /** This tic's usercmd (Input.read's array); `inv` asks for the inventory rows with the frames; `seq` numbers it for the ack. */
   sendCommand(cmd, { inv = false, seq } = {}) { this.link.send({ t: 'cmd', c: cmd, inv: !!inv, ...(Number.isInteger(seq) ? { seq } : {}) }); }
-  /** The guest's userinfo (the name and the hand of its player setup), at the connect and whenever it changes. */
-  sendInfo({ name = '', hand = 0 } = {}) { this.link.send({ t: 'info', name: String(name).slice(0, 15), hand }); }
+  /** The guest's userinfo (the name and the hand of its player setup, and whether it only watches), at the connect and whenever it changes. */
+  sendInfo({ name = '', hand = 0, spectator = 0 } = {}) { this.link.send({ t: 'info', name: String(name).slice(0, 15), hand, spectator: spectator ? 1 : 0 }); }
   /** The newest frame since the last take, with its row, or null. */
   take() {
     if (!this.fresh) return null;

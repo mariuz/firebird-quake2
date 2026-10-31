@@ -406,9 +406,18 @@ The fourth list, from what the entries above and below still leave: in the order
   and shoot at it. Found on the way: a monster holding its ground (`AI_STAND_GROUND`, a held `point_combat`) never
   fired, the run state's held branch exiting on the attack check's word every think before the missile transition
   could run; the attack states come first now, as `ai_run` took them.
-- **Spectating over the network**: a guest who only watches: a client that joins as a spectator (3.20's
-  `spectator` userinfo: no model, nothing solid, no damage, a noclip move through the level), so a page can
-  follow a game without a player in it.
+- **Spectating over the network**: done. A joined page that ticks "spectate" beside the Network controls (or
+  `spectator 1` at its console; `spectator` alone shows it, a page that has not joined is told it cannot) sends
+  it with its userinfo (3.20's `spectator`, `player.spectator`), and the host puts its client back in at its spot
+  as a watcher (`client_spectator`, as `spectator_respawn` did; `put_client_in_server` marks every entry of such a
+  client): nothing solid, no model, no damage, nothing in hand, the noclip move through the level
+  (`PM_SPECTATOR`, the move the player already had) and `FL_NOTARGET`, so the monsters pass it over
+  (`ai_set_sight_client` skips it too). Unticked, the client goes back in as a player at its spot, solid, with
+  its model and a weapon in hand. Only a joined page watches: the host's and a local game's clients play.
+  `test:net` sees the guest's word make the second client a watcher, the monsters look for the first alone,
+  a shot do no harm, the watcher fly through the yard's wall the players stop at, and the client back as a player
+  with the blaster; `test:console` the command's cases; the browser test the box ticked on the guest's page
+  and unticked.
 - **The picked pak and the music tracks in the data cache**: a pak the player picked and the music folder
   are the player's files and are not cached, so the page offline runs the demo pak only. The picked pak
   kept in IndexedDB as the recordings are, offered at the next load, and the tracks cached as they play.

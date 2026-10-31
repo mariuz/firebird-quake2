@@ -136,7 +136,7 @@ BEGIN
   SELECT p.id FROM game g JOIN player p ON p.ent_id = g.sight_client WHERE g.id = 1 INTO cur;
   cur = COALESCE(cur, 0);
   -- (the ones after the current first, then round to the start: one cursor, a tic's worth of rows)
-  SELECT FIRST 1 p.ent_id FROM player p JOIN ents e ON e.id = p.ent_id WHERE e.health > 0 AND BIN_AND(e.flags, 64) = 0
+  SELECT FIRST 1 p.ent_id FROM player p JOIN ents e ON e.id = p.ent_id WHERE e.health > 0 AND BIN_AND(e.flags, 64) = 0 AND p.spectator = 0
    ORDER BY IIF(p.id > :cur, 0, 1), p.id INTO n;
   UPDATE game g SET g.sight_client = :n WHERE g.id = 1 AND g.sight_client IS DISTINCT FROM :n;
 END^
@@ -2835,6 +2835,13 @@ BEGIN
          AND e.x + e.maxx >= :x - 16 AND e.x + e.minx <= :x + 16 AND e.y + e.maxy >= :y - 16 AND e.y + e.miny <= :y + 16
          AND e.z + e.maxz >= :z + 1 - 24 AND e.z + e.minz <= :z + 1 + 32 INTO v DO
     EXECUTE PROCEDURE t_damage(v, pe, pe, 100000, 0, 32);
+  -- a spectator (pers.spectator, 3.20): no body to see or hit (SVF_NOCLIENT, SOLID_NOT, no damage), nothing in hand,
+  -- the noclip move (PM_SPECTATOR); FL_NOTARGET keeps the monsters off it as AI_SetSightClient's skip did
+  IF (EXISTS (SELECT 1 FROM player p WHERE p.ent_id = :pe AND p.spectator = 1)) THEN
+  BEGIN
+    UPDATE ents e SET e.solid = 0, e.movetype = 2, e.takedamage = 0, e.model_id = NULL, e.mkind = NULL, e.flags = BIN_OR(e.flags, 64) WHERE e.id = :pe;
+    UPDATE player p SET p.weapon = 0 WHERE p.ent_id = :pe;
+  END
   EXECUTE PROCEDURE link_ent(pe);
 END^
 
@@ -2942,6 +2949,26 @@ BEGIN
   UPDATE player p SET p.ent_id = :pe WHERE p.id = :pid;
   SELECT p.pers_health, p.pers_max_health, p.pers_flags FROM player p WHERE p.id = :pid INTO php, pmh, pfl;
   EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, php, pmh, pfl);
+END^
+
+-- ClientUserinfoChanged's spectator (3.20): a client that watches, or stops watching, goes back in at its spot as
+-- spectator_respawn did (the pers kept, the health as it stood); a change with no level loaded only marks the row
+CREATE OR ALTER PROCEDURE client_spectator (pid SMALLINT, on_ SMALLINT)
+AS
+DECLARE pe INTEGER; DECLARE isnow SMALLINT; DECLARE sp VARCHAR(40);
+DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
+DECLARE hp INTEGER; DECLARE mhp INTEGER; DECLARE fl INTEGER;
+BEGIN
+  on_ = IIF(COALESCE(on_, 0) = 0, 0, 1);
+  UPDATE player p SET p.spectator = :on_ WHERE p.id = :pid;
+  SELECT p.ent_id, IIF(e.solid = 0 AND e.movetype = 2 AND e.takedamage = 0, 1, 0), e.health, e.max_health, BIN_AND(e.flags, 16)
+    FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = :pid INTO pe, isnow, hp, mhp, fl;
+  IF (pe IS NULL OR isnow = on_) THEN EXIT;
+  SELECT g.spawnpoint FROM game g WHERE g.id = 1 INTO sp;
+  EXECUTE PROCEDURE select_spawn_point(pid, sp) RETURNING_VALUES x, y, z, yaw;
+  IF (x IS NULL) THEN EXIT;
+  EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, hp, mhp, fl);
+  IF (on_ = 0) THEN UPDATE player p SET p.weapon = best_weapon(p.ent_id) WHERE p.id = :pid AND (p.weapon = 0 OR BIN_AND(p.weapons, p.weapon) = 0);
 END^
 
 -- SaveClientData: at a level's exit, each client's health, max health and god or notarget flags go to its

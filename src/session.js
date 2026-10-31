@@ -118,18 +118,24 @@ export class Session {
 
   /**
    * ClientUserinfoChanged: a client's name (pers.netname, at most 15 characters, the obituaries' and the score
-   * board's; empty, "player N") and hand (pers.hand: 0 right, 1 left, 2 centre, which turns the shots' origin and
-   * the gun drawn). Kept, and written to the client's row after every map load and loaded game, as the userinfo
+   * board's; empty, "player N"), hand (pers.hand: 0 right, 1 left, 2 centre, which turns the shots' origin and
+   * the gun drawn) and spectator (3.20's: a watcher with no body, noclipping, whom nothing hurts and the monsters
+   * ignore). Kept, and written to the client's row after every map load and loaded game, as the userinfo
    * came with the client and not with the level; written at once to a game running.
    */
-  async setUserinfo(client, { name = '', hand = 0 } = {}) {
-    const info = { name: String(name ?? '').replace(/[^\x20-\x7e]/g, '').slice(0, 15), hand: [0, 1, 2].includes(hand) ? hand : 0 };
+  async setUserinfo(client, { name = '', hand = 0, spectator = 0 } = {}) {
+    const info = { name: String(name ?? '').replace(/[^\x20-\x7e]/g, '').slice(0, 15), hand: [0, 1, 2].includes(hand) ? hand : 0, spectator: spectator ? 1 : 0 };
     this.userinfo[client] = info;
-    if (this.map) await this.db.query('UPDATE player SET netname = ?, hand = ? WHERE id = ?', [info.name, info.hand, client]);
+    if (this.map) await this.writeUserinfo(client, info);
     return info;
   }
   async applyUserinfo() {
-    for (const [client, info] of Object.entries(this.userinfo)) await this.db.query('UPDATE player SET netname = ?, hand = ? WHERE id = ?', [info.name, info.hand, Number(client)]);
+    for (const [client, info] of Object.entries(this.userinfo)) await this.writeUserinfo(Number(client), info);
+  }
+  /** The row's name and hand; `spectator` through client_spectator, which puts the client back in as a watcher, or as a player again. */
+  async writeUserinfo(client, info) {
+    await this.db.query('UPDATE player SET netname = ?, hand = ? WHERE id = ?', [info.name, info.hand, client]);
+    await this.db.query('EXECUTE PROCEDURE client_spectator(?, ?)', [client, info.spectator ? 1 : 0]);
   }
 
   /**

@@ -113,6 +113,21 @@ host.db.query = async () => { throw new Error('boom'); };
 await con.submit('kill');
 check(status.at(-1)?.[0] === 'kill: boom' && status.at(-1)?.[1] === true, 'an error from the game is shown with the command');
 
+// spectator: 3.20's userinfo for a joined page (null from the host: this page has not joined)
+let spectating = 0, joined = false;
+host.setSpectator = (on) => { if (!joined) return null; if (on !== null && on !== undefined) spectating = on ? 1 : 0; return spectating; };
+await con.submit('spectator 1');
+check(status.at(-1)?.[0] === 'spectator: only a page that has joined a game can watch' && status.at(-1)?.[1] === true, 'a page that has not joined cannot watch');
+joined = true;
+await con.submit('spectator');
+check(status.at(-1)?.[0] === '"spectator" is "0"', 'spectator alone shows it');
+await con.submit('spectator 1');
+check(spectating === 1 && status.at(-1)?.[0] === 'spectator: watching', 'spectator 1 watches');
+await con.submit('spectator x');
+check(spectating === 1 && status.at(-1)?.[0] === 'spectator takes 0 or 1' && status.at(-1)?.[1] === true, 'anything but a number is refused');
+await con.submit('spectator 0');
+check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'spectator 0 plays again');
+
 // the history: not twice in a row, 32 at most, up and down through it, the empty line past the newest
 const h = new Console(host);
 await h.submit('god'); await h.submit('god'); await h.submit('noclip'); await h.submit('   ');

@@ -521,7 +521,7 @@ guest in the fast mode and sends each its frame (`sendFrame`: the faces as `[fac
 the entities, the loops, the styles, the brush models' frames and angles, the guest's own `Q2_TIC` row, the
 tic's sounds and effects, which came with the host's own frame query, and the inventory rows when the
 guest's screen is up), dropping it when the channel has more than 256 KB queued. The guest's page
-(`GuestLink`) sends its userinfo (the player setup's name and hand, an `info` message) at the connect, then
+(`GuestLink`) sends its userinfo (the player setup's name and hand, and whether it only watches, an `info` message) at the connect, then
 `Input.read`'s command each of its own tics, and paints the newest frame it holds
 exactly as the page paints its own (`drawFrame`), the sounds at its own ear, the effects and particles run
 there; it loads the pak as every page does and, at each map message (sent from `mapLoaded`: the name, the
@@ -669,7 +669,7 @@ fifteen characters) and a spin for the handedness (right, left, center); the mod
 pak with the player model. Both are settings (`name`, `hand`) and this client's userinfo
 (`Session.setUserinfo`, `ClientUserinfoChanged`): the session keeps it and writes `player.netname` and
 `player.hand` after every map load and loaded game (the player table is made anew by `init_map` and by a save),
-and at once to a game running; a guest sends its own to the host (`GuestLink.sendInfo`, an `info` message, at
+and at once to a game running (`spectator`, 3.20's, through `client_spectator`: the client back in at its spot as a watcher with no body, noclipping, unhurt and unhunted, or as a player again); a guest sends its own to the host (`GuestLink.sendInfo`, an `info` message, at
 the connect and on every change), which gives it to the second client. The name is the obituaries'
 (`client_obituary`) and the score board's (`Q2_TIC`'s `netname`, "player N" without one); the hand turns the
 muzzle (`muzzle`, `P_ProjectSource`: the right distance negated for a left-hander, zero for a centre-hander)
