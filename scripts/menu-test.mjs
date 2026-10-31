@@ -18,7 +18,7 @@ const assert = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if 
 // a host that records what the menus ask for, and a renderer that records what they draw
 const calls = [];
 const settings = { sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, crosshair: 1, renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false, binds: defaultBinds(), name: '', hand: 0,
-  map: 'demo2', timelimit: 0, fraglimit: 0, hostname: '' };
+  map: 'demo2', timelimit: 0, fraglimit: 0, hostname: '', rtcSignal: '', addressBook: [] };
 const mode = { coop: false, deathmatch: false, players: 2 };   // the start server menu's rules and max players (the page's latched mode)
 const slots = Array.from({ length: 15 }, (_, i) => (i === 0 ? { valid: true, name: 'ENTERING Outer Base' } : i === 3 ? { valid: true, name: ' 9:05 10/ 8  Outer Base' } : { valid: false }));
 const cache = new Map();
@@ -36,6 +36,8 @@ const host = {
   gameMode: () => ({ ...mode }),
   setGameMode: ({ coop, deathmatch, players }) => { mode.coop = !!coop; mode.deathmatch = !!deathmatch; mode.players = Math.max(2, Math.min(4, Number(players) || 2)); calls.push(`mode ${mode.coop ? 1 : 0}${mode.deathmatch ? 1 : 0}${mode.players}`); },
   startServer: (name) => calls.push(`start ${name}`),
+  // the join server menu's and the address book's: Join with a text, the book in the settings
+  connect: (text) => calls.push(`connect ${text}`), addressBook: () => settings.addressBook, setAddressBook: (b) => { settings.addressBook = b; },
 };
 const drawn = [];
 const r = {
@@ -255,6 +257,40 @@ assert(keys('Enter') === 'dmoptions' && keys('Escape') === 'startserver', 'Enter
 keys('ArrowDown', 'Enter');
 assert(calls.at(-2) === 'start demo3' && !menu.active, `begin starts the map chosen, the menu gone (${calls.at(-2)})`);
 Object.assign(settings, { map: 'demo2', timelimit: 0, fraglimit: 0, hostname: '' }); Object.assign(mode, { coop: false, deathmatch: false, players: 2 });
+// the join server menu (M_Menu_JoinServer_f): the multiplayer menu's sixth row; the address book first, the relay and the code
+// or offer as fields, connect joining with the text typed, the address book's entries under "connect to..." joining by code
+// (a relay named in one set first), "<no server>" greyed while the book is empty; the address book (M_Menu_AddressBook_f):
+// nine fields writing the settings as typed, read live by the join menu on return
+settings.rtcSignal = ''; settings.addressBook = [];
+menu.mainCursor = 1; menu.main(); keys('Enter');
+assert(keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter') === 'joinserver' && menu.current.items.length === 5 + 9 && menu.current.items[0].name === 'address book',
+  'the multiplayer menu\'s join server opens the join server menu: the address book, the relay, the code, connect and nine rows');
+draw();
+assert(drawn.some(([k, p]) => k === 'pic' && p === hud.pic('m_banner_join_server')) && drawn.some(([k, s]) => k === 'str' && s === '<no server>') && menu.current.items[5].grayed === true && menu.current.items[6].name() === '',
+  'under the join server banner, the first row says <no server> greyed with the book empty, the rest blank');
+assert(keys('Enter') === 'addressbook' && menu.current.items.length === 9 && menu.current.items.every((i) => i.type === 'field' && i.length === 60 && i.visible === 30),
+  'address book opens the address book: nine fields of sixty characters, thirty shown');
+draw();
+assert(drawn.some(([k, p]) => k === 'pic' && p === hud.pic('m_banner_addressbook')) && drawn.filter(([k, n]) => k === 'char' && n === 19).length === 9 * 30, 'under its banner, nine boxes of thirty');
+type('K9H2');
+assert(settings.addressBook[0] === 'K9H2' && settings.addressBook.length === 9, `the first entry typed is the setting, nine slots kept (${JSON.stringify(settings.addressBook)})`);
+keys('ArrowDown'); type('http://relay:8787 AB12');
+assert(settings.addressBook[1] === 'http://relay:8787 AB12', 'the second with a relay named');
+assert(keys('Escape') === 'joinserver' && menu.current.items[5].name() === 'K9H2' && menu.current.items[5].grayed === false && menu.current.items[6].name() === 'http://relay:8787 AB12' && menu.current.items[7].grayed === true,
+  'Escape comes back to the join server menu, whose rows show the entries live, the third greyed');
+keys('ArrowDown'); type('http://r');
+assert(settings.rtcSignal === 'http://r', `the relay field writes the rtc_signal setting as typed (${settings.rtcSignal})`);
+keys('ArrowDown'); type('ab12');
+keys('ArrowDown', 'Enter');
+assert(calls.at(-2) === 'connect ab12' && !menu.active, `connect joins with the code typed, the menu gone (${calls.at(-2)})`);
+menu.mainCursor = 1; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
+keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown');
+assert(menu.current.cursor === 6 && keys('Enter') === '-' && calls.at(-2) === 'connect AB12' && settings.rtcSignal === 'http://relay:8787',
+  `Enter on an entry with a relay named sets the relay and joins its code (${calls.at(-2)}, ${settings.rtcSignal})`);
+menu.mainCursor = 1; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown');
+assert(menu.current.cursor === 7 && keys('Enter') === 'joinserver' && calls.at(-2) !== 'connect ', 'Enter on a blank row does nothing');
+keys('Escape'); keys('Escape'); keys('Escape');
+settings.rtcSignal = ''; settings.addressBook = [];
 settings.dmflags = 0;
 menu.mainCursor = 1; menu.main(); keys('Enter');
 keys('ArrowDown', 'ArrowDown', 'Enter');

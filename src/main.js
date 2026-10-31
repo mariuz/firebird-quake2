@@ -21,7 +21,7 @@ import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
 import { Effects } from './effects.js';
 import { Hud, viewFrameLerp } from './hud.js';
-import { Menu, saveComment } from './menu.js';
+import { Menu, saveComment, ADDRESS_BOOK } from './menu.js';
 import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
 import { SAVE_VERSION } from './savegame.js';
 import { Q2Audio } from './audio.js';
@@ -246,6 +246,10 @@ const menu = new Menu({
   gameMode: () => ({ coop: !!settings.coop, deathmatch: !!settings.deathmatch, players: settings.players }),
   setGameMode: (mode) => con.host.setGameMode(mode),
   startServer: (name) => { if (!name || !pak?.has(`maps/${name}.bsp`)) return; settings.map = name; saveSettings(); $('map').value = name; startMap(name, true).catch((err) => setStatus(err.message, true)); },
+  // the join server menu and the address book: Join with a text (a code at the relay, or an offer), the book in the settings
+  connect: (text) => connectTo(text).catch((err) => netState(err.message, true)),
+  addressBook: () => settings.addressBook ?? [],
+  setAddressBook: (texts) => { settings.addressBook = texts.slice(0, ADDRESS_BOOK).map((t) => String(t ?? '')); saveSettings(); },
 });
 /** A setting changed from a menu: through the page's own control where there is one, so both agree. */
 function setSetting(k, v) {
@@ -445,7 +449,7 @@ const con = new Console({
   openMenu: (name) => {
     const open = { main: () => menu.main(), game: () => menu.game(), loadgame: () => menu.loadMenu(), savegame: () => menu.saveMenu(), options: () => menu.options(), keys: () => menu.keysMenu(),
       video: () => menu.video(), multiplayer: () => menu.multiplayer(), playerconfig: () => menu.playerConfig(), credits: () => menu.credits(), quit: () => menu.quitMenu(), dmoptions: () => menu.dmOptions(),
-      startserver: () => menu.startServer() }[name];
+      startserver: () => menu.startServer(), joinserver: () => menu.joinServer(), addressbook: () => menu.addressBook() }[name];
     if (!open || !res) return false;
     openMenu(open);
     return true;
@@ -1486,6 +1490,12 @@ let netStage = null;   // 'offer' (hosting: the guest's answer goes in the box),
 let hostCode = null;   // the code this page published its offers under at the relay: kept for the session, so Host again keeps it and a guest's reconnect finds it
 let lastConnect = '';  // what this page last joined with (a code or an offer text): reconnect at the console joins it again
 const signalRelay = () => (settings.rtcSignal ? new SignalClient(settings.rtcSignal) : null);
+/** The address book (the menu's, in the settings): an entry joined by code goes first, once, the last one off past nine. */
+function rememberAddress(entry) {
+  const book = (settings.addressBook ?? []).filter((e) => e && e !== entry);
+  settings.addressBook = [entry, ...book].slice(0, ADDRESS_BOOK);
+  saveSettings();
+}
 function netState(msg, error = false) {
   netEl.state.textContent = msg;
   netEl.state.classList.toggle('error', error);
@@ -1648,6 +1658,7 @@ async function netGo() {
       const code = isRoomCode(text) ? text.trim().toUpperCase() : null;
       if (code && !relay) { netState('a code needs the relay: rtc_signal <url> at the console', true); return; }
       if (text.trim()) lastConnect = code ?? text.trim();
+      if (code) rememberAddress(`${settings.rtcSignal} ${code}`);   // (the address book keeps the relay and the code, as it kept servers)
       let offerText = text;
       if (code) { netState(`fetching the offer for ${code}…`); offerText = await relay.offer(code); }
       if (netStage !== 'join') return;

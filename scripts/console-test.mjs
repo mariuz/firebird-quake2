@@ -237,10 +237,10 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   await con.submit('menu_options');
   check(opened.length === 0 && status.at(-1)?.[0] === 'menu_options: the menus wait on the pak' && status.at(-1)?.[1] === true, 'before the pak is in, a menu word says the menus wait');
   menusReady = true;
-  for (const w of ['menu_main', 'menu_game', 'menu_loadgame', 'menu_savegame', 'menu_options', 'menu_keys', 'menu_video', 'menu_multiplayer', 'menu_playerconfig', 'menu_credits', 'menu_quit', 'menu_dmoptions', 'menu_startserver']) await con.submit(w);
-  check(opened.join() === 'main,game,loadgame,savegame,options,keys,video,multiplayer,playerconfig,credits,quit,dmoptions,startserver', `the thirteen menu words open their menus (${opened.join(', ')})`);
+  for (const w of ['menu_main', 'menu_game', 'menu_loadgame', 'menu_savegame', 'menu_options', 'menu_keys', 'menu_video', 'menu_multiplayer', 'menu_playerconfig', 'menu_credits', 'menu_quit', 'menu_dmoptions', 'menu_startserver', 'menu_joinserver', 'menu_addressbook']) await con.submit(w);
+  check(opened.join() === 'main,game,loadgame,savegame,options,keys,video,multiplayer,playerconfig,credits,quit,dmoptions,startserver,joinserver,addressbook', `the fifteen menu words open their menus (${opened.join(', ')})`);
   await con.submit('MENU_KEYS');
-  check(opened.at(-1) === 'keys' && con.complete('menu_') === 'menu_credits ' && con.complete('menu_o') === 'menu_options ', 'case aside, and Tab completes them');
+  check(opened.at(-1) === 'keys' && con.complete('menu_') === 'menu_addressbook ' && con.complete('menu_o') === 'menu_options ', 'case aside, and Tab completes them');
   delete host.openMenu;
 }
 

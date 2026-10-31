@@ -843,7 +843,7 @@ menu.c's `idcredits` (`src/credits.js`) up the screen as `M_Credits_MenuDraw` di
 pixels rising a pixel every 40 ms, the `+` lines in the highlighted font, round again once the last is off
 the top, Escape to leave. The console's `menu_main`, `menu_game`, `menu_loadgame`, `menu_savegame`,
 `menu_options`, `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits`, `menu_quit`,
-`menu_dmoptions` and `menu_startserver` open the menus as `M_Init` registered them (the host's `openMenu`), so a key bound to one opens
+`menu_dmoptions`, `menu_startserver`, `menu_joinserver` and `menu_addressbook` open the menus as `M_Init` registered them (the host's `openMenu`), so a key bound to one opens
 it. The multiplayer menu's `deathmatch options` is `M_Menu_DMOptions_f`: the dmflags as thirteen yes/no rows (the "no" flags
 inverted, as `DMOptions_MenuInit` showed them; no teamplay row, there being no model or skin teams here), each turn writing the
 page's `dmflags` setting as `DMFlagCallback` wrote the cvar, the next game's and the game running's, the status bar saying the
@@ -852,7 +852,16 @@ in place of `maps.lst`), the rules (single player, cooperative, deathmatch: the 
 `coop` and `deathmatch` words latch it), the time limit and the frag limit (numbers-only fields writing the settings and the game
 row at every key, as the console's words do), the max players (two to four at this page), the hostname, the deathmatch flags
 (greyed outside a deathmatch, as `RulesChangeFunc` greyed them) and `begin`, which starts a new game on the map as the Map select
-does (`StartServerActionFunc` ran `map`); a field's text is the menu's own until it goes, as `menufield_s`'s buffer was. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
+does (`StartServerActionFunc` ran `map`); a field's text is the menu's own until it goes, as `menufield_s`'s buffer was. Its
+`join server` is `M_Menu_JoinServer_f` as `JoinServer_MenuInit` laid it out: `address book` first, then (in place of the server
+search, there being no LAN here) the relay (the `rtcSignal` setting typed, the console's `rtc_signal`) and the host's code at it,
+or its offer text, `connect` joining with it as Join and Answer would (the host's `connect`: the menu goes and the panel shows
+the answer or waits for the host), and under "connect to..." the address book's entries as the found servers were listed, each
+joining with its code (a relay named in it, "http://host:8787 K9H2", set first), "<no server>" greyed while the book is empty;
+the rows read the book live, so the address book's edits show on return. `address book` is `M_Menu_AddressBook_f`: nine text
+fields (`adr0` to `adr8`, sixty characters, thirty shown) kept in the page's settings (`addressBook`) as the cvars were archived,
+each key writing the setting; a page that joins by code puts the relay and the code first in the book by itself
+(`rememberAddress`), once, the last entry off past nine. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
 high for each of the twenty-six bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
 centre view, "drop item" (`invdrop`, BACKSPACE by default) and "mouse look" among them (`+mlook`, `\` by default: held, the mouse
 looks with free look off, `CL_MouseMove`'s switch; let go with lookspring on, the view levelled, `IN_MLookUp`) (`centerview` is a game word, END's by default as a command line, `DEFAULT_LINES`), with sidestep (`+strafe`, ALT: held, the turning keys step sideways) and keyboard look (`+klook`, INS: held, the walking keys look up and down) as `CL_BaseMove` read them, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
