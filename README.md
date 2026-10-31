@@ -38,7 +38,7 @@ npm run test:base2     # the same on the Installation (demo2)
 npm run test:base3     # and on demo3
 npm run test:monsters  # every monster, the demo's and the full game's: spawned, it sees the player, attacks, and dies
 npm run test:save      # save, play on, load: the game comes back exactly and keeps running
-# in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, skill 0-3, save, load, record …, stop, demos, deldemo …, timedemo …, screenshot, say …, bind k +attack, bind t "say hello", unbind k, unbindall, bindlist, the cvars name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume, cvarlist, writeconfig, exec, timescale 0.5); T chats (say); F1 the help computer
+# in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, skill 0-3, save, load, record …, stop, demos, deldemo …, timedemo …, screenshot, say …, bind k +attack, bind t "say hello", unbind k, unbindall, bindlist, the cvars name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume, cvarlist, writeconfig, exec, exec autoexec, unautoexec, timescale 0.5); T chats (say); F1 the help computer
 npm run serve          # http://localhost:8080/ (as Pages serves it); add -- --coi for the threaded engine
 npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs demo1 --at=x,y,z,yaw)
 npm run bench          # where a tic and a frame spend their time
@@ -95,7 +95,8 @@ unit transitions play as `cl_cin.c` played them).
 
 Escape brings up Quake 2's menus over the game: a new game, the save slots, the credits, the options with
 `customize controls` (the keys menu: Enter then a key, a mouse button or a wheel notch rebinds an action, Backspace clears it; `writeconfig` and the
-Config control write the binds and the cvars as Quake's `config.cfg`, which `exec` or the control runs back in another browser; the binds are
+Config control write the binds and the cvars as Quake's `config.cfg`, which `exec` or the control runs back in another browser, and a config
+picked with the control's autoexec box ticked is kept in the browser and runs at every start, as `autoexec.cfg` did; the binds are
 kept with the settings in this browser; a key bound at the console to any other line, `bind k god`, `bind t "say hello"`, runs it as it goes down), the multiplayer menu's `join network server` and `start network
 server` (the page's Join and Host) and its `player setup` (your name, for the
 obituaries and the score board, and your handedness: a left-hander's shots come from the left and the gun is

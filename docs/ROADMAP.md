@@ -622,9 +622,12 @@ Quake: in the order they are to be taken.
   level's name and the sky from the map message, every frame's player state the row the host sent, the brush
   models by their inline names, the models and sounds the frames carried); the browser test records on the
   joined page, parses the download and finds it kept.
-- **An autoexec.cfg kept in the browser**: a config file picked runs once. Kept in IndexedDB as the pak is
-  (the Config control's "keep", or `exec` with `autoexec`), it runs at every start as `autoexec.cfg` did;
-  `unautoexec` drops it.
+- **An autoexec.cfg kept in the browser**: done. A config file picked ran once. With the Config control's
+  autoexec box ticked, the file picked is kept in IndexedDB as the pak is (`FileStore`, under `autoexec`) and
+  runs through the console once a start, after the attract loop is up, as `autoexec.cfg` did (`runAutoexec`);
+  `exec autoexec` runs it again, `unautoexec` or the box unticked drops it, and the box ticked with none kept
+  opens the picker. `test:console` covers the words, the browser test keeps a config, sees it run, run again
+  and run at the next start (the offline reload), and dropped.
 - **`players` and `kick` at the host's console**: the host has no list of its guests but the stats line's
   count. `players` lists the clients (number, name, frames sent and dropped, watching or playing), `kick <n>`
   drops a guest, as `SV_Status_f` and `SV_Kick_f` did.

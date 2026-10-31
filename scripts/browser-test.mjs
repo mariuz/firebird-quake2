@@ -389,6 +389,20 @@ try {
     assert(cfgDl && cfgDl.suggestedFilename() === 'config.cfg' && /^unbindall$/m.test(cfgText) && /^bind MOUSE1 "\+attack"$/m.test(cfgText) && /^set sensitivity "5"$/m.test(cfgText) && /^set name "Ace"$/m.test(cfgText)
       && cfgBefore.sens === 7 && cfgBefore.name === '' && /config\.cfg: \d+ lines run/.test(ran) && cfgAfter.sens === 5 && cfgAfter.name === 'Ace' && cfgAfter.attack === 'Control,Mouse1',
       `writeconfig writes config.cfg (${cfgText.split('\n').length} lines) and the Config control runs it back: ${ran} (${JSON.stringify(cfgAfter)})`);
+    // the autoexec box ticked, the config picked is kept (the file store, under autoexec) and run; it runs again at the
+    // next start (checked after the offline reload below), exec autoexec runs it now, unautoexec drops it
+    await page.check('#cfg-keep');
+    await page.setInputFiles('#cfg-file', { name: 'mine.cfg', mimeType: 'text/plain', buffer: Buffer.from('// mine\nbind k god\nset sensitivity 6\n') });
+    let kept = '';
+    for (let i = 0; i < 40 && !/mine\.cfg: 2 lines run, kept as autoexec\.cfg/.test(kept); i++) { await sleep(250); kept = await status(); }
+    const ax = await page.evaluate(async () => ({ stored: (await window.quake2.fileStore.get('autoexec'))?.name ?? null, line: window.quake2.settings.lines.KeyK ?? null, sens: window.quake2.settings.sensitivity, box: document.getElementById('cfg-keep').checked, ran: window.quake2.autoexec })).catch((e) => ({ error: e.message }));
+    await typeCommand('sensitivity 7'); await typeCommand('unbind k');
+    await typeCommand('exec autoexec');
+    const ax2 = await page.evaluate(() => ({ line: window.quake2.settings.lines.KeyK ?? null, sens: window.quake2.settings.sensitivity, status: document.getElementById('status')?.textContent })).catch((e) => ({ error: e.message }));
+    await typeCommand('sensitivity 7'); await typeCommand('unbind k');
+    assert(/mine\.cfg: 2 lines run, kept as autoexec\.cfg/.test(kept) && ax.stored === 'mine.cfg' && ax.line === 'god' && ax.sens === 6 && ax.box === true && ax.ran === null
+      && ax2.line === 'god' && ax2.sens === 6 && ax2.status === 'execing autoexec.cfg: 2 lines run',
+      `the autoexec box keeps the config picked and runs it (${kept}; ${JSON.stringify(ax)}), exec autoexec runs it again (${JSON.stringify(ax2)})`);
     // timescale: the game's clock against the wall's (the tics owed scaled; at most two a frame still, so a slow page
     // cannot reach twice the pace: at 2 the clock runs faster than the wall where the page keeps up, at 0.5 half as fast)
     const clock2 = () => page.evaluate(() => ({ game: window.quake2.session.last.TIME_, wall: performance.now(), paints: window.quake2.paints, scale: window.quake2.timescale })).catch(() => null);
@@ -570,7 +584,7 @@ try {
       kept: await window.quake2.fileStore.list(), file: (await window.quake2.fileStore.get('music/track09'))?.name ?? null })).catch((e) => ({ error: e.message }));
     let ms = {};
     for (let i = 0; i < 80 && !(ms.kind === 'track' && ms.file); i++) { await sleep(250); ms = await musicState(); }
-    assert(onDemo1.map === 'demo1' && ms.kind === 'track' && ms.track === 9 && ms.file === 'track09.wav' && ms.kept?.join() === 'music/track09,pak',
+    assert(onDemo1.map === 'demo1' && ms.kind === 'track' && ms.track === 9 && ms.file === 'track09.wav' && ms.kept?.join() === 'autoexec,music/track09,pak',   // (the autoexec kept above is there too)
       `on demo1 the picked folder's track plays and is kept as it plays (${JSON.stringify(ms)})`);
 
     // without a network: the page reloads from the service worker's caches (the page, the build's files, the pak)
@@ -599,6 +613,13 @@ try {
       await typeCommand('deldemo run');
       const gone = await page.evaluate(async () => ({ stored: await window.quake2.demoStore.list(), options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({}));
       assert(!gone.stored?.includes('run') && !gone.options?.includes('run'), `deldemo drops it after the reload too (${JSON.stringify(gone)})`);
+      // the autoexec.cfg kept above ran at this start (K bound to god again, the sensitivity its), the box ticked; unautoexec drops it
+      const axBack = await page.evaluate(() => ({ ran: window.quake2.autoexec, line: window.quake2.settings.lines.KeyK ?? null, sens: window.quake2.settings.sensitivity, box: document.getElementById('cfg-keep').checked })).catch((e) => ({ error: e.message }));
+      await typeCommand('unautoexec');
+      const axGone = await page.evaluate(async () => ({ stored: (await window.quake2.fileStore.get('autoexec'))?.name ?? null, box: document.getElementById('cfg-keep').checked, status: document.getElementById('status')?.textContent })).catch((e) => ({ error: e.message }));
+      await typeCommand('sensitivity 7'); await typeCommand('unbind k');
+      assert(axBack.ran?.name === 'mine.cfg' && axBack.ran.lines === 2 && axBack.line === 'god' && axBack.sens === 6 && axBack.box === true && axGone.stored === null && axGone.box === false && axGone.status === 'autoexec.cfg dropped',
+        `the kept autoexec.cfg ran at the start (${JSON.stringify(axBack)}), and unautoexec drops it (${JSON.stringify(axGone)})`);
       // the reload (offline: no download to be had) loaded the picked pak from the store, and the game on demo1 plays the
       // kept track with no folder picked; the button forgets the pak: the demo's loads now, and the next start downloads it
       const kp = await pakState();

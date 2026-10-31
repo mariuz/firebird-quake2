@@ -268,6 +268,20 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   host.execConfig = () => { picked++; };
   await con.submit('exec');
   check(picked === 1, 'exec opens the Config picker');
+  // exec autoexec runs the autoexec.cfg kept in the browser (the Config control's box), unautoexec drops it
+  let keptLines = null, dropped = 0;
+  host.execAutoexec = async () => keptLines;
+  host.dropAutoexec = async () => { dropped++; const had = keptLines !== null; keptLines = null; return had; };
+  await con.submit('exec autoexec');
+  check(picked === 1 && status.at(-1)?.[0] === 'no autoexec.cfg kept: tick the Config control\'s autoexec and pick one' && status.at(-1)?.[1] === true, 'exec autoexec with none kept says so, the picker left alone');
+  keptLines = 3;
+  await con.submit('exec autoexec.cfg');
+  check(status.at(-1)?.[0] === 'execing autoexec.cfg: 3 lines run' && status.at(-1)?.[1] === false, 'exec autoexec (.cfg or not) runs the kept one and says how many lines');
+  await con.submit('unautoexec');
+  check(dropped === 1 && keptLines === null && status.at(-1)?.[0] === 'autoexec.cfg dropped', 'unautoexec drops it');
+  await con.submit('unautoexec');
+  check(dropped === 2 && status.at(-1)?.[0] === 'no autoexec.cfg kept', 'and says when there was none');
+  check(con.complete('una') === 'unautoexec ' && con.complete('unb') === 'unbind ', 'Tab completes unautoexec before unbind');
   s.sensitivity = 7; s.name = ''; s.invertMouse = false; host.settings.binds = defaultBinds(); host.settings.lines = {};
   const n = await con.execText(cfg + '\n// a comment\n\nset fov 100 // trailing\nbind nosuch +attack\n');
   check(n === lines.length && s.name === 'Ace Rimmer' && s.sensitivity === 5 && s.invertMouse === true && host.settings.fov === 100 && host.settings.binds.attack.join() === 'KeyK,Mouse2' && host.settings.binds.moveup.length === 0
