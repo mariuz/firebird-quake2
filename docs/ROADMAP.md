@@ -497,9 +497,17 @@ The fifth list, from what the entries above and below still leave: in the order 
   one line. A key or a command the page has not is refused with the words. `test:console` runs them all,
   `test:input` the names back to their codes and every action's command; the browser test binds J to attack
   at the console, sees it in the settings and the input, unbinds it and puts the defaults back.
-- **The notify lines and the console's scrollback**: what the game prints (pickups, obituaries, the help's news)
-  drawn at the top of the view for three seconds, four lines, as `Con_DrawNotify` did, and the backquote
-  console showing the last lines printed above the input line (`Con_DrawConsole`'s scrollback).
+- **The notify lines and the console's scrollback**: done. The message line showed one print at a time, the
+  newest. `src/notify.js` is console.c's notify: each print of the first view's row (a new one by the time the
+  tic row now carries, `MSG_TIME`: the same words printed again are a new print) goes in with the game's
+  clock, and the view draws the last four not yet three seconds old at the top, a line each, as
+  `Con_DrawNotify` did (`NUM_CON_TIMES`, `con_notifytime`); another view of a split screen keeps its one
+  line. The same entries are the scrollback: the backquote console shows the last twelve lines printed under
+  its input line (a `pre` the page fills as it opens), the lines typed echoed as `]line` and the commands'
+  answers among them, those two in the scrollback alone; a level change clears it with the level's clock.
+  `test:console` holds the lines to their seconds, count and order, the hidden lines to the scrollback, the
+  keep; the browser test sees the game's answer to `use nosuch` drawn in the notify lines and kept in the
+  scrollback after the line typed, the console show it and hide it as it closes.
 - **`timedemo` and `screenshot`**: `timedemo <demo>` plays a recording as fast as the page paints, no pacing,
   and reports frames and seconds as `CL_Timedemo_f` did; `screenshot` saves the view as a PNG download
   (`SCR_ScreenShot_f` wrote `quake00.pcx`).

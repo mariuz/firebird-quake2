@@ -3,6 +3,7 @@
 //   node scripts/console-test.mjs
 
 import { Console, COMMANDS } from '../src/console.js';
+import { Notify } from '../src/notify.js';
 import { ACTIONS, defaultBinds } from '../src/input.js';
 
 let failures = 0;
@@ -184,6 +185,25 @@ await con.submit('unbindall');
 check(ACTIONS.every((a) => binds[a.id].length === 0) && status.at(-1)?.[0] === 'all keys unbound', 'unbindall empties every action');
 await con.submit('bindlist');
 check(status.at(-1)?.[0] === 'no keys bound', 'and bindlist says so');
+
+// the notify lines (src/notify.js, Con_DrawNotify): the last four prints, three seconds each, and the scrollback
+{
+  const n = new Notify();
+  n.add('You got the shotgun', 0);
+  n.add('Primary objective\nfind the key\n', 1);
+  check(n.lines(1).join('|') === 'You got the shotgun|Primary objective|find the key', 'a print is its lines, drawn oldest first');
+  check(n.lines(3.5).join('|') === 'Primary objective|find the key' && n.lines(4.2).length === 0, 'a line goes after three seconds');
+  for (let i = 0; i < 6; i++) n.add(`line ${i}`, 10);
+  check(n.lines(10).join('|') === 'line 2|line 3|line 4|line 5', 'four lines at most, the newest');
+  n.add(']give all', 10, { show: false }); n.add('Very impressive', 10.1);
+  check(n.lines(10.2).join('|') === 'line 3|line 4|line 5|Very impressive' && n.log(3).join('|') === 'line 5|]give all|Very impressive', 'a hidden line is in the scrollback and not drawn');
+  check(n.lines(9.9).length === 0, 'a print from a clock ahead of now is not drawn yet');
+  const big = new Notify({ keep: 5 });
+  for (let i = 0; i < 9; i++) big.add(`l${i}`, i);
+  check(big.log().join('|') === 'l4|l5|l6|l7|l8', 'the scrollback keeps the last lines alone');
+  n.clear();
+  check(n.lines(10).length === 0 && n.log().length === 0, 'cleared with the level');
+}
 
 // the history: not twice in a row, 32 at most, up and down through it, the empty line past the newest
 const h = new Console(host);

@@ -30,6 +30,7 @@ import { padMenuKeys, padScreens, BUTTON } from './gamepad.js';
 import { Input, GAME_KEYS, DEFAULT_BINDS, MOUSE_KEYS, bindKey } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
+import { Notify } from './notify.js';
 import { DemoRecorder } from './record.js';
 import { DemoStore, FileStore } from './demostore.js';
 import { ClipMap, pmove, stateFromRow } from './pmove.js';
@@ -240,10 +241,23 @@ function quitGame() {
 }
 
 // ── the console: Quake's commands on a line (backquote opens it, Enter runs, Escape closes) ─────────
-// src/console.js runs the commands and keeps the history; this is the input element around it
+// src/notify.js: the game's prints (the first view's row, a new one by its time) drawn at the top of the view for three
+// seconds, four at most, as Con_DrawNotify drew them, and kept for the console's scrollback with the lines typed
+// and the commands' answers (those two in the scrollback alone)
+const notify = new Notify();
+let lastMsgTime = null;
+const gameClock = () => last?.TIME_ ?? 0;
+function noteMessage(row) {
+  if (!row?.MSG || row.MSG_TIME === lastMsgTime) return;
+  lastMsgTime = row.MSG_TIME;
+  notify.add(row.MSG, row.TIME_);
+}
+// src/console.js runs the commands and keeps the history; this is the input element around it, with the scrollback above
 const cmdline = $('cmdline');
+const conlog = $('conlog');
 const con = new Console({
-  get db() { return db; }, get pak() { return pak; }, settings, saveSettings, setStatus,
+  get db() { return db; }, get pak() { return pak; }, settings, saveSettings,
+  setStatus: (msg, isError) => { setStatus(msg, isError); if (msg) notify.add(msg, gameClock(), { show: false }); },
   startMap: (name) => startMap(name, true),
   setView: (fov) => applyView(fov),
   saveGame: () => saveGame(), loadGame: () => loadGame(),
@@ -267,11 +281,15 @@ function openConsole() {
   input.clear();
   cmdline.hidden = false;
   cmdline.value = '';
+  // the scrollback: the last lines printed, the lines typed and the answers, under the input line
+  conlog.textContent = notify.log(12).join('\n');
+  conlog.hidden = !conlog.textContent;
   con.reset();
   cmdline.focus();
 }
 function closeConsole() {
   cmdline.hidden = true;
+  conlog.hidden = true;
   canvas.focus();
 }
 cmdline.addEventListener('keydown', async (e) => {
@@ -282,6 +300,7 @@ cmdline.addEventListener('keydown', async (e) => {
   e.preventDefault();
   const line = cmdline.value;
   closeConsole();
+  if (line.trim()) notify.add(`]${line}`, gameClock(), { show: false });   // (the line echoed into the scrollback, as the console echoed it)
   await con.submit(line);
 });
 
@@ -453,6 +472,7 @@ function beginMap() {
   if (recorder) stopRecording();   // (a recording ends with its level, as the client's did at the disconnect)
   for (const L of lerps) { L.prev = null; L.cur = null; }   // (the frames of the map being left)
   lastPaint = 0;
+  notify.clear(); lastMsgTime = null;   // (the prints were the level's; its clock starts over)
   menu.off();
   showHelp = perPlayer(false);
   showInv = perPlayer(false);
@@ -939,7 +959,7 @@ function demoRow(st) {
     TIMER_ICON: Math.max(0, TIMER_ICONS.indexOf(image(s[9]))), TIMER: s[10], HELP_CHANGED: s[11] ? 1 : 0,
     DMG_TIME: s[15] & 1 ? d.time : -10, BONUS_TIME: -10, DMG_TAKE: 0, DMG_SAVE: 0,
     WATERLEVEL: v.rdflags & 1 ? 3 : 0, WATERTYPE: 0, INTERMISSION: st.ps.pmType === 4 ? 1 : 0, DEAD: 0, DEATHMATCH: 0,
-    CPRINT: d.cprint && d.cprint.until > d.time ? d.cprint.text : null, MSG: d.msg && d.msg.until > d.time ? d.msg.text : null,
+    CPRINT: d.cprint && d.cprint.until > d.time ? d.cprint.text : null, MSG: d.msg && d.msg.until > d.time ? d.msg.text : null, MSG_TIME: d.msg?.until ?? 0,
     BOBTIME: 0, XYSPEED: 0, DUCKED: 0, DEMO: 1,
   };
   if (weapon && WEAPONS[weapon].ammo) row[WEAPONS[weapon].ammo.toUpperCase()] = s[3];
@@ -1114,7 +1134,9 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   else if (showHelp[which]) hud.drawHelp(r, last);
   else if (showInv[which] && !last.DEAD) hud.drawInventory(r, invItems[which], last.INV_SEL, performance.now() / 1000);
   if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
-  if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
+  // Con_DrawNotify for the first view: the last prints at the top, a line each, three seconds; another view its one line
+  if (which === 0) { noteMessage(last); notify.lines(last.TIME_).forEach((s, i) => r.drawString(hud.conchars, s, 8, 8 + i * 8)); }
+  else if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
   if (last.DEAD) hud.drawCenter(r, session.twoPlayers || net ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
   // the palette blend: damage, bonus, powerups, water (a demo's row carries the server's ps.blend as it was)
   let tint = null;
@@ -1424,7 +1446,7 @@ async function boot() {
     db = await openDatabase();
     session = new Session(db, storage);
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
-    window.quake2 = { db, session, audio, menu, input, settings, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
+    window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, get paints() { return paints; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
