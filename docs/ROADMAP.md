@@ -642,9 +642,15 @@ Quake: in the order they are to be taken.
 
 The eighth list: what a game shared over the network and the console still lack, from Quake 2's own words.
 
-- **`connect`, `disconnect` and `reconnect` at the console**: Join, Leave and the last host are the page's
-  buttons alone. `connect <code or offer>` joins as Join does (`CL_Connect_f`), `disconnect` leaves a joined
-  or hosted game (`CL_Disconnect_f`), `reconnect` joins the last host again through the relay's code.
+- **`connect`, `disconnect` and `reconnect` at the console**: done. Join and Leave were the page's buttons
+  alone, and the last host was gone with its code. `connect <code or offer>` joins as Join and Answer do
+  (`CL_Connect_f`; `connectTo` in `src/main.js`), `disconnect` is the Leave button (`CL_Disconnect_f`: a
+  joined page starts a game of its own), `reconnect` joins again with what the page last joined with
+  (`CL_Reconnect_f`; `lastConnect`, set by Join's box too). For that the host keeps its code for the session
+  (`hostCode`): Host again publishes the new offer under it (`POST /rooms/<code>` at the relay, the room made
+  anew; `SignalClient.publish(offer, own)`), so the guest's `reconnect` finds it. `test:console` covers the
+  words, `test:net` the relay's room under the host's own code, the browser test `disconnect` at the guest's
+  console and, the host Hosting again under its code, `reconnect` joining the game again.
 - **The chase cam for a watcher**: a spectator floats where it likes. 3.20's `g_chase.c`: a watcher's view at
   a player's eye (`UpdateChaseCam`), the attack key cycling to the next player (`ChaseNext`, `ChasePrev`),
   `chase <n>` at the console, and back to floating on jump.

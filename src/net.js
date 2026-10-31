@@ -246,8 +246,12 @@ export class SignalClient {
     if (!res.ok) throw new Error(res.status === 404 ? 'no game under that code' : res.status === 409 ? 'that game was answered already' : `the relay refused (${res.status}${data.error ? `: ${data.error}` : ''})`);
     return data;
   }
-  /** The host's: the offer published under a new code. */
-  async publish(offer) { const { code } = await this.call('POST', '/rooms', offer); if (!code) throw new Error('the relay gave no code'); return code; }
+  /** The host's: the offer published under a new code, or under `own`, the code it had (a guest's reconnect finds it there). */
+  async publish(offer, own = null) {
+    const { code } = await this.call('POST', own ? `/rooms/${roomCode(own)}` : '/rooms', offer);
+    if (!code) throw new Error('the relay gave no code');
+    return code;
+  }
   /** The guest's: the offer under a code. */
   async offer(code) { const { offer } = await this.call('GET', `/rooms/${roomCode(code)}`); if (!offer) throw new Error('no game under that code'); return offer; }
   /** The guest's: its answer posted under the code. */

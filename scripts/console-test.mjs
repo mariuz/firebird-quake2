@@ -200,6 +200,37 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   delete host.listPlayers; delete host.kick;
 }
 
+// connect, disconnect and reconnect: Join with a code or an offer, Leave, and the last host joined again (CL_Connect_f,
+// CL_Disconnect_f, CL_Reconnect_f over the page's buttons)
+{
+  const joins = []; let inGame = false, last = '', pakIn = true;
+  host.connect = async (t) => { if (!pakIn) return false; joins.push(t); last = t; inGame = true; return true; };
+  host.disconnect = () => { const was = inGame; inGame = false; return was; };
+  host.reconnect = async () => host.connect(last);
+  host.lastConnect = () => last;
+  await con.submit('connect');
+  check(status.at(-1)?.[0] === 'usage: connect <code or offer>' && status.at(-1)?.[1] === true && joins.length === 0, 'connect alone shows its usage');
+  await con.submit('reconnect');
+  check(status.at(-1)?.[0] === 'reconnect: this page has not joined a game yet' && status.at(-1)?.[1] === true, 'reconnect with nothing joined says so');
+  await con.submit('disconnect');
+  check(status.at(-1)?.[0] === 'not connected' && status.at(-1)?.[1] === true, 'disconnect with no connection says so');
+  pakIn = false;
+  await con.submit('connect K9H2');
+  check(status.at(-1)?.[0] === 'connect: no pak is loaded yet' && status.at(-1)?.[1] === true && joins.length === 0, 'connect before the pak is loaded is refused');
+  pakIn = true;
+  await con.submit('connect k9h2');
+  check(joins.join() === 'k9h2' && status.at(-1)?.[0] === 'connecting to k9h2' && status.at(-1)?.[1] === false, 'connect <code> joins with the code');
+  await con.submit('disconnect');
+  check(!inGame && status.at(-1)?.[0] === 'disconnected' && status.at(-1)?.[1] === false, 'disconnect leaves');
+  await con.submit('reconnect');
+  check(joins.join() === 'k9h2,k9h2' && inGame && status.at(-1)?.[0] === 'reconnecting to k9h2', 'reconnect joins the last host again');
+  const offer = 'q2net1:' + 'A'.repeat(600);
+  await con.submit(`connect ${offer}`);
+  check(joins.at(-1) === offer && status.at(-1)?.[0] === 'connecting to q2net1:AAAAAAAAAAAAAAAAA…', 'connect <offer> takes an offer text, shown cut');
+  check(con.complete('con') === 'connect ' && con.complete('dis') === 'disconnect ' && con.complete('rec') === 'reconnect ', 'Tab completes connect, disconnect and reconnect (reconnect before record)');
+  delete host.connect; delete host.disconnect; delete host.reconnect; delete host.lastConnect;
+}
+
 // rtc_ice: the ICE server for the next network game, kept in the settings; shown, set, refused, cleared
 host.settings.rtcIce = '';
 await con.submit('rtc_ice');

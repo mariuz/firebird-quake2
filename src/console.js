@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'players', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
+export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -38,6 +38,8 @@ const HISTORY = 32;
  *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
  *         listPlayers() → the clients as [{ num, name, kind: 'page' | 'guest' | 'pad' | 'standing', sent, dropped, spectator }], 'guest' on a joined page, null without a game (players),
  *         kick(n) → the name kicked, or 'none' | 'not-hosting' (kick),
+ *         connect(text) → true once joining began (false: no pak yet), disconnect() → true when this page was in a shared game,
+ *         reconnect(), lastConnect() → what this page last joined with ('' for nothing),
  *         forward(cmd, arg) → true when the command went to the host (a joined page), false to run it here }
  */
 /** The cvars config.cfg carries (CVARS, and fov and skill with them), each with its setting and how it shows. */
@@ -272,6 +274,26 @@ export class Console {
         h.saveSettings();
         h.setSkill?.(value);
         say(h.isRunning() ? 'skill will be changed for next game.' : `"skill" is "${value}"`);
+        return;
+      }
+      case 'connect': {
+        // CL_Connect_f: a game over the network joined with the host's code (at the relay) or its offer text, as Join and
+        // Answer would; the host's answer, by text, shows in the box to send back
+        if (!arg) { say('usage: connect <code or offer>', true); return; }
+        if (!(await h.connect?.(arg))) { say('connect: no pak is loaded yet', true); return; }
+        say(`connecting to ${arg.length > 24 ? `${arg.slice(0, 24)}…` : arg}`);
+        return;
+      }
+      case 'disconnect':
+        // CL_Disconnect_f: the connection dropped (the Leave button); a joined page starts a game of its own
+        { const was = !!h.disconnect?.(); say(was ? 'disconnected' : 'not connected', !was); }
+        return;
+      case 'reconnect': {
+        // CL_Reconnect_f: the last host joined again (its code at the relay, under which Host again publishes, or its offer)
+        const last = h.lastConnect?.() ?? '';
+        if (!last) { say('reconnect: this page has not joined a game yet', true); return; }
+        await h.reconnect?.();
+        say(`reconnecting to ${last.length > 24 ? `${last.slice(0, 24)}…` : last}`);
         return;
       }
       case 'players': {
