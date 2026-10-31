@@ -724,8 +724,13 @@ The ninth list: what the console and a shared game still lack of Quake 2's own w
   sends it again). `test:net` sends a fov with the userinfo and sees the row take it, clamped, and the frame
   narrower at 30 than at 160; the browser test types `fov 60` at the joined page's console and reads it on the
   host's row, the frames coming on.
-- **`clear` and `condump`**: the console's scrollback is read in the backquote line alone. `clear` empties it
-  (`Con_Clear_f`), `condump <name>` downloads it as `<name>.txt` (`Con_Dump_f`).
+- **`clear` and `condump`**: done. The console's scrollback was read in the backquote line alone. `clear`
+  empties it, the notify lines with it (`Con_Clear_f`; the page's `clearLog`), `condump <name>` downloads it
+  as `<name>.txt`, the lines typed and the answers in it (`Con_Dump_f`; `dumpLog`: the name as typed with a
+  path's characters and a `.txt` taken off, none refused with the usage, "Dumped console text to name.txt."
+  said). `test:console` sees both reach the host and the name cleaned; the browser test types `condump mylog`
+  and reads the file downloaded, the print and the line typed before it in it, and `clear` leaving an empty
+  scrollback.
 - **`invdrop` and `weaplast`**: bindnames' "drop item" (`invdrop`: the selected item dropped, `Cmd_InvDrop_f`)
   and the last weapon back (`weaplast`, `Cmd_WeapLast_f`), with their keys in the keys menu and `bind`.
 

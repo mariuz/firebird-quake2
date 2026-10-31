@@ -241,7 +241,7 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   const offer = 'q2net1:' + 'A'.repeat(600);
   await con.submit(`connect ${offer}`);
   check(joins.at(-1) === offer && status.at(-1)?.[0] === 'connecting to q2net1:AAAAAAAAAAAAAAAAA…', 'connect <offer> takes an offer text, shown cut');
-  check(con.complete('con') === 'connect ' && con.complete('dis') === 'disconnect ' && con.complete('rec') === 'reconnect ', 'Tab completes connect, disconnect and reconnect (reconnect before record)');
+  check(con.complete('con') === 'condump ' && con.complete('conn') === 'connect ' && con.complete('dis') === 'disconnect ' && con.complete('rec') === 'reconnect ', 'Tab completes condump, connect, disconnect and reconnect (condump before connect, reconnect before record)');
   delete host.connect; delete host.disconnect; delete host.reconnect; delete host.lastConnect;
 }
 
@@ -368,6 +368,21 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   host.execConfig = () => { picked++; };
   await con.submit('exec');
   check(picked === 1, 'exec opens the Config picker');
+  // clear and condump: the scrollback emptied (Con_Clear_f), or downloaded as <name>.txt (Con_Dump_f)
+  let cleared = 0, dumpedAs = null;
+  host.clearLog = () => { cleared++; };
+  host.dumpLog = (name) => { dumpedAs = name; return 3; };
+  const before = status.length;
+  await con.submit('clear');
+  check(cleared === 1 && status.length === before, 'clear empties the scrollback and says nothing');
+  await con.submit('condump');
+  check(dumpedAs === null && status.at(-1)?.[0] === 'usage: condump <filename>' && status.at(-1)?.[1] === true, 'condump alone is refused with its usage');
+  await con.submit('condump mylog');
+  check(dumpedAs === 'mylog' && status.at(-1)?.[0] === 'Dumped console text to mylog.txt.', 'condump <name> downloads the scrollback as <name>.txt and says so');
+  await con.submit('condump "my log.txt"');
+  check(dumpedAs === 'my log', 'the name as typed, the quotes and a .txt taken off');
+  await con.submit('condump ../x:y');
+  check(dumpedAs === '..xy', 'a path\'s characters are dropped from the name');
   // exec autoexec runs the autoexec.cfg kept in the browser (the Config control's box), unautoexec drops it
   let keptLines = null, dropped = 0;
   host.execAutoexec = async () => keptLines;

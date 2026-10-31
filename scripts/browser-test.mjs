@@ -348,6 +348,14 @@ try {
     const closed = await page.evaluate(() => document.getElementById('conlog').hidden).catch(() => false);
     assert(nl.lines?.includes('unknown item: nosuch') && nl.log?.includes(']use nosuch') && opened.shown && /\]use nosuch\nunknown item: nosuch/.test(opened.text ?? '') && closed,
       `the print is drawn in the notify lines and kept in the scrollback after the line typed, which the console shows and hides (${JSON.stringify({ lines: nl.lines, log: nl.log })})`);
+    // condump downloads the scrollback as <name>.txt (Con_Dump_f), the lines typed and the answers in it; clear empties it (Con_Clear_f)
+    const [dumpDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('condump mylog')]);
+    const dumpText = dumpDl ? fs.readFileSync(await dumpDl.path(), 'utf8') : '';
+    await typeCommand('clear');
+    const clearedLog = await page.evaluate(() => ({ log: window.quake2.notify.log(64), shown: !document.getElementById('conlog').hidden })).catch(() => ({}));
+    assert(dumpDl && dumpDl.suggestedFilename() === 'mylog.txt' && /^\]use nosuch\nunknown item: nosuch$/m.test(dumpText) && dumpText.endsWith(']condump mylog\n')
+      && Array.isArray(clearedLog.log) && clearedLog.log.length === 0 && !clearedLog.shown,
+      `condump writes the scrollback as mylog.txt (${dumpText.split('\n').length - 1} lines) and clear empties it (${JSON.stringify(clearedLog)})`);
     // the chat: T (messagemode) opens the console with "say " on its line, and the words go to the message line by the
     // player's name (Cmd_Say_f), drawn in the notify lines
     await page.mouse.click(480, 360); await sleep(200);
@@ -601,7 +609,7 @@ try {
     const pakState = () => page.evaluate(async () => ({ name: document.getElementById('pakname')?.textContent, picked: window.quake2?.pickedPak, forget: !document.getElementById('pak-forget')?.hidden,
       kept: await window.quake2.fileStore.list(), pak: (await window.quake2.fileStore.get('pak'))?.name ?? null, demo: window.quake2?.demo?.name ?? null, running: window.quake2?.running })).catch((e) => ({ error: e.message }));
     let ps = {};
-    for (let i = 0; i < 480 && !(ps.name === 'picked.pak' && ps.pak === 'picked.pak' && ps.demo); i++) { await sleep(250); ps = await pakState(); }
+    for (let i = 0; i < 480 && !(ps.name === 'picked.pak' && ps.pak === 'picked.pak' && ps.demo && ps.picked === 'picked.pak' && ps.forget); i++) { await sleep(250); ps = await pakState(); }   // (the store's put, the page's marker and its button come a moment after the load on a slow runner)
     assert(ps.name === 'picked.pak' && ps.picked === 'picked.pak' && ps.forget && ps.pak === 'picked.pak' && ps.demo === 'q2demo1',
       `a picked pak loads (the attract loop again), is kept under its name and the button to forget it shows (${JSON.stringify(ps)})`);
     await page.selectOption('#map', 'demo1');

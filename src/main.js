@@ -290,6 +290,8 @@ const con = new Console({
   say: (text) => sayText(text),
   setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
   download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
+  clearLog: () => { notify.clear(); conlog.textContent = ''; conlog.hidden = true; },   // (clear: the scrollback and the notify lines emptied, Con_Clear_f)
+  dumpLog: (name) => { const lines = notify.log(notify.keep); downloadText(`${name}.txt`, lines.join('\n') + '\n'); return lines.length; },   // (condump: the scrollback as <name>.txt, Con_Dump_f)
   // a joined page's game commands (god, give, kill…) go to the host, which runs them for this page's client (Cmd_ForwardToServer)
   forward: (cmd, arg) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendConsole(cmd, arg); return true; },
   // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)
