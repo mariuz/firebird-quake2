@@ -3,6 +3,7 @@
 //   node scripts/console-test.mjs
 
 import { Console, COMMANDS } from '../src/console.js';
+import { ACTIONS, defaultBinds } from '../src/input.js';
 
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failures++; };
@@ -12,7 +13,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90, skill: 1 },
+  settings: { fov: 90, skill: 1, binds: defaultBinds() },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
   setStatus: (msg, isError = false) => status.push([msg, isError]),
@@ -154,6 +155,35 @@ await con.submit('rtc_signal ws://relay');
 check(host.settings.rtcSignal === 'http://relay.example.org:8787' && status.at(-1)?.[0] === "rtc_signal takes the relay's http(s) url" && status.at(-1)?.[1] === true, 'another scheme is refused, the setting as it was');
 await con.submit('rtc_signal none');
 check(host.settings.rtcSignal === '' && status.at(-1)?.[0] === 'rtc_signal: the offer and the answer as texts', 'rtc_signal none clears it');
+
+// bind and its kin: Key_Bind_f, Key_Unbind_f, Key_Unbindall_f and Key_Bindlist_f over the keys menu's binds
+const binds = host.settings.binds;
+await con.submit('bind');
+check(status.at(-1)?.[0] === 'bind <key> [command] : attach a command to a key' && status.at(-1)?.[1] === true, 'bind alone shows its usage');
+await con.submit('bind j +attack');
+check(binds.attack.join() === 'KeyJ' && last() === 'saveSettings' && status.at(-1)?.[0] === '"j" = "+attack"', 'bind j +attack binds J to attack (its two defaults made room), saved, shown as Key_Bind_f printed it');
+await con.submit('bind J');
+check(status.at(-1)?.[0] === '"j" = "+attack"' && status.at(-1)?.[1] === false, 'bind <key> alone shows the binding, case aside');
+await con.submit('bind uparrow weapprev');
+check(binds.weapprev.join() === 'MWheelUp,ArrowUp' && binds.forward.join() === 'KeyW', 'a key bound to another action leaves its old one (UPARROW off walk forward)');
+await con.submit('bind mouse2 use power shield');
+check(binds.shield.join() === 'KeyH,Mouse2' && status.at(-1)?.[0] === '"MOUSE2" = "use power shield"', 'a mouse button binds to a command of two words');
+await con.submit('bind k nosuch');
+check(binds.attack.join() === 'KeyJ' && /"nosuch" is not a command this page binds: \+attack, weapnext/.test(status.at(-1)?.[0] ?? '') && status.at(-1)?.[1] === true, 'a command the page has not is refused, the commands listed');
+await con.submit('bind zz +attack');
+check(binds.attack.join() === 'KeyJ' && status.at(-1)?.[0] === '"zz" isn\'t a valid key' && status.at(-1)?.[1] === true, 'a key that is not one is refused');
+await con.submit('bind m');
+check(status.at(-1)?.[0] === '"m" is not bound', 'a key with no binding says so');
+await con.submit('bindlist');
+check(status.at(-1)?.[0].startsWith('j "+attack" · / "weapnext" · MWHEELDOWN "weapnext" · MWHEELUP "weapprev" · UPARROW "weapprev"') && status.at(-1)?.[0].includes('MOUSE2 "use power shield"'), 'bindlist shows every key bound with its command, in the actions\' order');
+await con.submit('unbind');
+check(status.at(-1)?.[0] === 'unbind <key> : remove commands from a key' && status.at(-1)?.[1] === true, 'unbind alone shows its usage');
+await con.submit('unbind j');
+check(binds.attack.length === 0 && last() === 'saveSettings' && status.at(-1)?.[0] === '"j" unbound', 'unbind j takes the key off');
+await con.submit('unbindall');
+check(ACTIONS.every((a) => binds[a.id].length === 0) && status.at(-1)?.[0] === 'all keys unbound', 'unbindall empties every action');
+await con.submit('bindlist');
+check(status.at(-1)?.[0] === 'no keys bound', 'and bindlist says so');
 
 // the history: not twice in a row, 32 at most, up and down through it, the empty line past the newest
 const h = new Console(host);

@@ -4,7 +4,7 @@
 //   node scripts/input-test.mjs
 
 import { readPad, padImpulse, padScreens, padMenuKeys, firstPad, connectedPads, axis, DEAD, BUTTON } from '../src/gamepad.js';
-import { Input, GAME_KEYS, ACTIONS, DEFAULT_BINDS, defaultBinds, bindKey, keyName, normalizeKey } from '../src/input.js';
+import { Input, GAME_KEYS, ACTIONS, DEFAULT_BINDS, defaultBinds, bindKey, keyName, keyCode, actionOfCommand, normalizeKey } from '../src/input.js';
 
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failures++; };
@@ -157,6 +157,13 @@ check(readPad(null) === null, 'no pad reads as null');
     && keyName('BracketLeft') === '[' && keyName('PageDown') === 'PGDN' && keyName('F1') === 'F1' && keyName('Numpad5') === 'KP_5' && keyName('Delete') === 'DEL',
     'the keys are named as Key_KeynumToString named them');
   check(normalizeKey('ShiftLeft') === 'Shift' && normalizeKey('AltRight') === 'Alt' && normalizeKey('KeyA') === 'KeyA', 'the two shifts, controls and alts are one key each');
+  // Key_StringToKeynum (keyCode): a name back to its code, for `bind` at the console; and every action's bind command
+  check(keyCode('k') === 'KeyK' && keyCode('K') === 'KeyK' && keyCode('3') === 'Digit3' && keyCode('UPARROW') === 'ArrowUp' && keyCode('ctrl') === 'Control' && keyCode('MOUSE1') === 'Mouse1'
+    && keyCode('mwheelup') === 'MWheelUp' && keyCode('KP_5') === 'Numpad5' && keyCode('f12') === 'F12' && keyCode('[') === 'BracketLeft' && keyCode('SPACE') === 'Space' && keyCode('zz') === null && keyCode('') === null && keyCode('F13') === null,
+    'a key\'s name goes back to its code, case aside, nothing for rubbish');
+  check(['KeyW', 'Digit0', 'ArrowUp', 'Control', 'Mouse2', 'MWheelDown', 'Numpad7', 'F1', 'Comma', 'Slash', 'Backquote', 'Space', 'Tab', 'Delete'].every((c) => keyCode(keyName(c)) === c), 'every code round-trips through its name');
+  check(actionOfCommand('+attack')?.id === 'attack' && actionOfCommand('USE  Silencer')?.id === 'silencer' && actionOfCommand('weapprev')?.id === 'weapprev' && actionOfCommand('+speed')?.id === 'run'
+    && actionOfCommand('nosuch') === null && ACTIONS.every((a) => a.cmd && actionOfCommand(a.cmd) === a), 'every action has Quake\'s bind command for it, found case and spacing aside');
   check(ACTIONS.length === 21 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
     'every action has its default keys, no key twice');
   inp.clear();

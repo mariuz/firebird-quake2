@@ -339,6 +339,15 @@ try {
     const iceOff = await page.evaluate(() => window.quake2.settings.rtcIce).catch(() => null);
     assert(ice.setting === 'turn:relay.example.org:3478 ace secret' && ice.stored === ice.setting && /rtc_ice: turn:relay.example.org:3478 for the next network game/.test(ice.status ?? '') && iceOff === '',
       `rtc_ice keeps a TURN server in the settings for the next network game, and none clears it (${JSON.stringify(ice)})`);
+    // bind and unbind at the console: Quake's words over the keys menu's binds, kept in the settings and read by the input
+    await typeCommand('bind j +attack');
+    const bj = await page.evaluate(() => ({ attack: window.quake2.settings.binds.attack.join(), stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).binds.attack.join(), input: window.quake2.input.bound('KeyJ'), status: document.getElementById('status')?.textContent })).catch(() => ({}));
+    await typeCommand('unbind j');
+    const uj = await page.evaluate(() => ({ attack: window.quake2.settings.binds.attack.join(), input: window.quake2.input.bound('KeyJ') })).catch(() => ({}));
+    await typeCommand('bind ctrl +attack'); await typeCommand('bind mouse1 +attack');   // (the defaults back)
+    const back = await page.evaluate(() => window.quake2.settings.binds.attack.join()).catch(() => '');
+    assert(bj.attack === 'KeyJ' && bj.stored === 'KeyJ' && bj.input === 'attack' && bj.status === '"j" = "+attack"' && uj.attack === '' && uj.input === null && back === 'Control,Mouse1',
+      `bind j +attack binds J to attack in the settings and the input, unbind j takes it off, bind ctrl and mouse1 put the defaults back (${JSON.stringify({ bj, uj, back })})`);
 
     // a recording: `record run` at the console writes the game from then on as a demo (src/record.js: the stats line
     // counts its frames), `stop` downloads it as run.dm2 (parsed here as the page parses the pak's: every block read

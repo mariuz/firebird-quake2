@@ -27,16 +27,19 @@ export const KEY_IMPULSE = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5:
 
 // The bindable actions, as menu.c's bindnames listed them (the ones with a meaning here: no mouse look, keyboard
 // look, sidestep or centre view), with the impulse the one-shot ones send; the keys menu edits settings.binds.
+// Each action carries the command Quake's `bind` took for it (`cmd`: bindnames' commands, `+speed` the run).
 export const ACTIONS = [
-  { id: 'attack', name: 'attack' }, { id: 'weapnext', name: 'next weapon', impulse: 12 }, { id: 'weapprev', name: 'previous weapon', impulse: 22 },
-  { id: 'forward', name: 'walk forward' }, { id: 'back', name: 'backpedal' }, { id: 'left', name: 'turn left' }, { id: 'right', name: 'turn right' },
-  { id: 'run', name: 'run' }, { id: 'moveleft', name: 'step left' }, { id: 'moveright', name: 'step right' },
-  { id: 'lookup', name: 'look up' }, { id: 'lookdown', name: 'look down' }, { id: 'moveup', name: 'up / jump' }, { id: 'movedown', name: 'down / crouch' },
-  { id: 'inven', name: 'inventory' }, { id: 'invuse', name: 'use item', impulse: 13 }, { id: 'invprev', name: 'prev item', impulse: 15 }, { id: 'invnext', name: 'next item', impulse: 14 },
-  { id: 'help', name: 'help computer' },
+  { id: 'attack', name: 'attack', cmd: '+attack' }, { id: 'weapnext', name: 'next weapon', impulse: 12, cmd: 'weapnext' }, { id: 'weapprev', name: 'previous weapon', impulse: 22, cmd: 'weapprev' },
+  { id: 'forward', name: 'walk forward', cmd: '+forward' }, { id: 'back', name: 'backpedal', cmd: '+back' }, { id: 'left', name: 'turn left', cmd: '+left' }, { id: 'right', name: 'turn right', cmd: '+right' },
+  { id: 'run', name: 'run', cmd: '+speed' }, { id: 'moveleft', name: 'step left', cmd: '+moveleft' }, { id: 'moveright', name: 'step right', cmd: '+moveright' },
+  { id: 'lookup', name: 'look up', cmd: '+lookup' }, { id: 'lookdown', name: 'look down', cmd: '+lookdown' }, { id: 'moveup', name: 'up / jump', cmd: '+moveup' }, { id: 'movedown', name: 'down / crouch', cmd: '+movedown' },
+  { id: 'inven', name: 'inventory', cmd: 'inven' }, { id: 'invuse', name: 'use item', impulse: 13, cmd: 'invuse' }, { id: 'invprev', name: 'prev item', impulse: 15, cmd: 'invprev' }, { id: 'invnext', name: 'next item', impulse: 14, cmd: 'invnext' },
+  { id: 'help', name: 'help computer', cmd: 'help' },
   // default.cfg's "use silencer" (s) and "use power shield" (p), whose keys the page has (back, pause): bound to l and h
-  { id: 'silencer', name: 'silencer', impulse: 18 }, { id: 'shield', name: 'power shield', impulse: 21 },
+  { id: 'silencer', name: 'silencer', impulse: 18, cmd: 'use silencer' }, { id: 'shield', name: 'power shield', impulse: 21, cmd: 'use power shield' },
 ];
+/** The action whose `bind` command this is (`+attack`, `weapnext`, `use silencer`…, case and spacing aside), or null. */
+export const actionOfCommand = (cmd) => { const c = String(cmd ?? '').trim().toLowerCase().replace(/\s+/g, ' '); return ACTIONS.find((a) => a.cmd === c) ?? null; };
 // default.cfg's keys for them (and this port's WASD and the page keys), at most two a command as the keys menu shows; the
 // mouse buttons and the wheel are keys too (MOUSE1-3, MWHEELUP, MWHEELDOWN: Mouse1-3, MWheelUp, MWheelDown here)
 export const DEFAULT_BINDS = Object.freeze({
@@ -64,6 +67,19 @@ export function keyName(code) {
   m = /^Numpad(\d)$/.exec(code); if (m) return `KP_${m[1]}`;
   if (/^F\d{1,2}$/.test(code)) return code;
   return code.toUpperCase();
+}
+/** Key_StringToKeynum: a key's code from the name the keys menu shows and `bind` takes (a letter or digit as itself, the rest as Quake named them, case aside); null for none. */
+export function keyCode(name) {
+  const n = String(name ?? '').trim();
+  if (!n) return null;
+  if (/^[a-z]$/i.test(n)) return `Key${n.toUpperCase()}`;
+  if (/^[0-9]$/.test(n)) return `Digit${n}`;
+  const u = n.toUpperCase();
+  for (const [code, nm] of Object.entries(KEY_NAMES)) if (nm === u) return code;
+  const kp = /^KP_([0-9])$/.exec(u);
+  if (kp) return `Numpad${kp[1]}`;
+  if (/^F([1-9]|1[0-2])$/.test(u)) return u;
+  return null;
 }
 /** The action a key is bound to, or null. */
 export function boundAction(binds, code) {

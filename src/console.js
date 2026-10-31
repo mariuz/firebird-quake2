@@ -1,5 +1,5 @@
 // console.js – Quake's console line: the commands the page runs itself (map, fov, seed, save, load,
-// inven, rtc_ice …) and the rest handed to the game's player_command (god, noclip, give, use, kill, drop …);
+// inven, bind and its kin over the keys menu's binds, rtc_ice …) and the rest handed to the game's player_command (god, noclip, give, use, kill, drop …);
 // the history (Key_Console: up and down step through the lines typed) and Tab completion
 // (Cmd_CompleteCommand: the first command that starts with what is typed).
 //
@@ -7,8 +7,9 @@
 // submit(), and gives a host with what the commands act on, so the tests can drive it with a fake one.
 
 import { parseIceServer } from './net.js';
+import { ACTIONS, actionOfCommand, bindKey, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 'save', 'seed', 'skill', 'spectator', 'stop', 'timelimit', 'use'];
+export const COMMANDS = ['bind', 'bindlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 'save', 'seed', 'skill', 'spectator', 'stop', 'timelimit', 'unbind', 'unbindall', 'use'];
 const HISTORY = 32;
 
 /**
@@ -172,6 +173,47 @@ export class Console {
         h.settings.rtcSignal = arg.replace(/\/+$/, '');
         h.saveSettings();
         say(`rtc_signal: ${h.settings.rtcSignal} for the next network game`);
+        return;
+      }
+      case 'bind': {
+        // Key_Bind_f over the keys menu's binds (settings.binds): `bind <key> <command>` binds the key (named as the keys menu
+        // names it: k, 3, UPARROW, CTRL, MOUSE1, KP_5…) to the action whose command that is (+attack, weapnext, use silencer…),
+        // as bindKey binds it; `bind <key>` shows the key's binding. A key or a command the page has not is refused.
+        const [key, ...words] = arg.split(/\s+/).filter(Boolean);
+        if (!key) { say('bind <key> [command] : attach a command to a key', true); return; }
+        const code = keyCode(key);
+        if (!code) { say(`"${key}" isn't a valid key`, true); return; }
+        const binds = h.settings.binds;
+        if (!words.length) { const a = ACTIONS.find((x) => binds[x.id]?.includes(code)); say(a ? `"${keyName(code)}" = "${a.cmd}"` : `"${keyName(code)}" is not bound`); return; }
+        const act = actionOfCommand(words.join(' '));
+        if (!act) { say(`"${words.join(' ')}" is not a command this page binds: ${ACTIONS.map((a) => a.cmd).join(', ')}`, true, 8000); return; }
+        bindKey(binds, act.id, code);
+        h.saveSettings();
+        say(`"${keyName(code)}" = "${act.cmd}"`);
+        return;
+      }
+      case 'unbind': {
+        // Key_Unbind_f: the key leaves whatever it was bound to
+        if (!arg) { say('unbind <key> : remove commands from a key', true); return; }
+        const code = keyCode(arg);
+        if (!code) { say(`"${arg}" isn't a valid key`, true); return; }
+        for (const a of ACTIONS) if (h.settings.binds[a.id]) h.settings.binds[a.id] = h.settings.binds[a.id].filter((c) => c !== code);
+        h.saveSettings();
+        say(`"${keyName(code)}" unbound`);
+        return;
+      }
+      case 'unbindall': {
+        // Key_Unbindall_f: every action loses its keys (the keys menu's reset defaults, or bind, gives them back)
+        for (const a of ACTIONS) h.settings.binds[a.id] = [];
+        h.saveSettings();
+        say('all keys unbound');
+        return;
+      }
+      case 'bindlist': {
+        // Key_Bindlist_f: every key bound with its command, in the actions' order, on the one line the page has
+        const lines = [];
+        for (const a of ACTIONS) for (const c of h.settings.binds[a.id] ?? []) lines.push(`${keyName(c)} "${a.cmd}"`);
+        say(lines.length ? lines.join(' · ') : 'no keys bound', false, 8000);
         return;
       }
       case 'save': return h.saveGame();
