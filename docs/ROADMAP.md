@@ -486,8 +486,17 @@ The fifth list, from what the entries above and below still leave: in the order 
   bind in the menu and draw as named; `test:settings` keeps them; the smoke test the previous weapon back
   over one without ammo and round the end; the browser test the left button firing under the lock and the
   right button binding attack in the keys menu, reset defaults putting MOUSE1 back.
-- **`bind`, `unbind`, `unbindall` and `bindlist` at the console**: Quake's words over the same binds
-  (`bind k +attack`, the key names `Key_StringToKeynum` took), a command the page has no action for refused.
+- **`bind`, `unbind`, `unbindall` and `bindlist` at the console**: done. Quake's words over the keys menu's
+  binds (`settings.binds`, kept with the settings and read by the input): `bind <key> <command>` binds the key
+  (named as the keys menu names it and `Key_StringToKeynum` took it: `k`, `3`, `UPARROW`, `CTRL`, `MOUSE1`,
+  `KP_5`, `F1`, case aside; `keyCode` in `src/input.js`) to the action whose command that is (each action
+  carries bindnames' command, `cmd`: `+attack`, `weapnext`, `+speed`, `inven`, `use silencer`…;
+  `actionOfCommand`), as the keys menu binds it (the key leaves its old action, a third key makes two go);
+  `bind <key>` shows the key's binding as `Key_Bind_f` printed it (`"k" = "+attack"`); `unbind <key>` takes the
+  key off, `unbindall` empties every action, `bindlist` shows every key bound with its command on the page's
+  one line. A key or a command the page has not is refused with the words. `test:console` runs them all,
+  `test:input` the names back to their codes and every action's command; the browser test binds J to attack
+  at the console, sees it in the settings and the input, unbinds it and puts the defaults back.
 - **The notify lines and the console's scrollback**: what the game prints (pickups, obituaries, the help's news)
   drawn at the top of the view for three seconds, four lines, as `Con_DrawNotify` did, and the backquote
   console showing the last lines printed above the input line (`Con_DrawConsole`'s scrollback).
