@@ -738,7 +738,7 @@ fifteen characters) and a spin for the handedness (right, left, center); the mod
 pak with the player model. Both are settings (`name`, `hand`) and this client's userinfo
 (`Session.setUserinfo`, `ClientUserinfoChanged`): the session keeps it and writes `player.netname` and
 `player.hand` after every map load and loaded game (the player table is made anew by `init_map` and by a save),
-and at once to a game running (`spectator`, 3.20's, through `client_spectator`: the client back in at its spot as a watcher with no body, noclipping, unhurt and unhunted, or as a player again); a guest sends its own to the host (`GuestLink.sendInfo`, an `info` message, at
+and at once to a game running (`spectator`, 3.20's, through `client_spectator`: the client back in at its spot as a watcher with no body, noclipping, unhurt and unhunted, or as a player again; a watcher's attack key chases the next client playing and jump lets go, 3.20's `g_chase.c` as `chase_next` and `update_chase_cam` in game.sql, the eye thirty units behind the chased client's along its view, the angles its, no move of its own; `chase <n>` at the console does it by hand; `player.chase` says whom, in the tic row as `CHASE`); a guest sends its own to the host (`GuestLink.sendInfo`, an `info` message, at
 the connect and on every change), which gives it to the second client. The name is the obituaries'
 (`client_obituary`) and the score board's (`Q2_TIC`'s `netname`, "player N" without one); the hand turns the
 muzzle (`muzzle`, `P_ProjectSource`: the right distance negated for a left-hander, zero for a centre-hander)

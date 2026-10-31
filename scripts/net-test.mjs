@@ -118,6 +118,38 @@ await session.setUserinfo(2, { name: '', hand: 0 });
   for (let i = 0; i < 20; i++) { guest.sendCommand([1, 1, 0, 0, 0, 0, 0, 1, 0]); await session.tic(idle, host.takeCommand()); }
   const flew = await e2();
   check(flew.X > 300, `it flies through the wall the players stop at (x 200 → ${flew.X.toFixed(0)})`);
+  // the chase cam (g_chase.c, 3.20): the attack key, as it goes down, puts the watcher's eye thirty units behind the first
+  // client's along its view, its angles the client's, and it stays there as the client turns (no move of its own); a
+  // second press with nobody else to chase keeps it; jump lets go; `chase <n>` and `chase 0` at the console do the same
+  const eye = async () => (await q('SELECT e.x, e.y, e.z + e.viewheight ez, e.yaw, p.pitch FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1'))[0];
+  const cam = async () => (await q('SELECT e.x, e.y, e.z + p.view_ofs ez, e.yaw, p.pitch, p.chase FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0];
+  await db.exec('UPDATE player SET pitch = 10 WHERE id = 1');
+  guest.sendCommand([1, 0, 0, 0, 0, 1, 0, 1, 0]);   // (attack)
+  let last2 = await session.tic(idle, host.takeCommand());
+  const t1 = await eye(), c1 = await cam();
+  const behind = (t, c) => Math.hypot(c.X - t.X, c.Y - t.Y, c.EZ - t.EZ);
+  check(c1.CHASE === 1 && behind(t1, c1) > 20 && behind(t1, c1) <= 32 && Math.abs(c1.YAW - t1.YAW) < 1e-6 && Math.abs(c1.PITCH - t1.PITCH) < 1e-6,
+    `attack chases the first client: the eye ${behind(t1, c1).toFixed(1)} units behind its, the angles its (yaw ${c1.YAW.toFixed(1)}, pitch ${c1.PITCH})`);
+  check(session.clients[1].CHASE === 1 && session.clients[0].CHASE === 0, 'the tic row says whom the watcher chases (the page predicts no move then)');
+  // held, the attack counts once; the client turns and the watcher's view turns with it
+  await session.tic([1, 0, 0, 30, 0, 0, 0, 1, 0], host.takeCommand());
+  guest.sendCommand([1, 0, 0, 0, 0, 1, 0, 1, 0]);
+  await session.tic([1, 0, 0, 30, 0, 0, 0, 1, 0], host.takeCommand());
+  const t2 = await eye(), c2 = await cam();
+  check(c2.CHASE === 1 && Math.abs(c2.YAW - t2.YAW) < 1e-6 && Math.abs(t2.YAW - t1.YAW) > 50 && behind(t2, c2) <= 32, `the view follows the client's turn (yaw ${t1.YAW.toFixed(0)} → ${t2.YAW.toFixed(0)})`);
+  // let go, pressed again: the next after 1 is 1 again (nobody else plays); jump floats free where it is
+  guest.sendCommand([1, 0, 0, 0, 0, 0, 0, 1, 0]); await session.tic(idle, host.takeCommand());
+  guest.sendCommand([1, 0, 0, 0, 0, 1, 0, 1, 0]); await session.tic(idle, host.takeCommand());
+  check((await cam()).CHASE === 1, 'attack again with nobody else to chase keeps the first client');
+  guest.sendCommand([1, 0, 0, 0, 0, 0, 1, 1, 0]); await session.tic(idle, host.takeCommand());
+  const c3 = await cam();
+  check(c3.CHASE === 0 && Math.hypot(c3.X - c2.X, c3.Y - c2.Y) < 40, `jump lets go: floating free from where it was (chase ${c3.CHASE})`);
+  const chaseCmd = async (arg, client = 2) => (await q(`SELECT msg FROM player_command('chase', '${arg}', ${client})`))[0].MSG;
+  check(await chaseCmd('1') === 'chasing player 1' && (await cam()).CHASE === 1 && await chaseCmd('') === 'chasing player 1', 'chase 1 at the console chases the first client, chase alone says so');
+  check(await chaseCmd('2') === 'no such player to chase' && await chaseCmd('9') === 'no such player to chase' && await chaseCmd('x') === 'chase <client number>, 0 to float free' && (await cam()).CHASE === 1,
+    'itself, a client that is none and a word are refused');
+  check(await chaseCmd('0') === 'chasing nobody: floating free' && (await cam()).CHASE === 0 && await chaseCmd('1', 1) === 'chase: only a watcher (spectator 1) can chase', 'chase 0 floats free; a player cannot chase');
+  await db.exec('UPDATE player SET pitch = 0 WHERE id = 1');
   guest.sendInfo({ name: 'Holly', hand: 0, spectator: 0 });
   await session.setUserinfo(2, host.info);
   const back = await e2();

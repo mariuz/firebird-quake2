@@ -570,6 +570,22 @@ BEGIN
     UPDATE ents e SET e.movetype = IIF(:mt = 2, 3, 2), e.vx = 0, e.vy = 0, e.vz = 0 WHERE e.id = :pe;
     msg = TRIM(IIF(mt = 2, 'noclip OFF', 'noclip ON'));
   END
+  ELSE IF (cmd = 'chase') THEN
+  BEGIN
+    -- the chase cam by hand (this port's word over g_chase.c): `chase <n>` a watcher's view at client n's, `chase 0` floating
+    -- free again, `chase` alone saying whom; a player, or a client that is no player, is refused
+    SELECT p.spectator, p.chase FROM player p WHERE p.id = :client INTO sp, num;
+    IF (sp IS DISTINCT FROM 1) THEN msg = 'chase: only a watcher (spectator 1) can chase';
+    ELSE IF (arg = '') THEN msg = TRIM(IIF(num > 0, 'chasing player ' || num, 'chasing nobody: floating free'));
+    ELSE IF (arg NOT SIMILAR TO '[0-9]+') THEN msg = 'chase <client number>, 0 to float free';
+    ELSE
+    BEGIN
+      num = CAST(arg AS INTEGER);
+      IF (num = 0) THEN BEGIN UPDATE player p SET p.chase = 0 WHERE p.id = :client; msg = 'chasing nobody: floating free'; END
+      ELSE IF (num = client OR NOT EXISTS (SELECT 1 FROM player p WHERE p.id = :num AND p.spectator = 0 AND p.ent_id IS NOT NULL)) THEN msg = 'no such player to chase';
+      ELSE BEGIN UPDATE player p SET p.chase = :num WHERE p.id = :client; msg = 'chasing player ' || num; END
+    END
+  END
   ELSE IF (cmd = 'kill') THEN
   BEGIN
     -- suicide: godmode does not save you from it
@@ -666,6 +682,7 @@ DECLARE bvx DOUBLE PRECISION; DECLARE bvy DOUBLE PRECISION; DECLARE xys DOUBLE P
 DECLARE bfs DOUBLE PRECISION; DECLARE bobz DOUBLE PRECISION; DECLARE bobp DOUBLE PRECISION; DECLARE bobr DOUBLE PRECISION;
 DECLARE noclip SMALLINT; DECLARE coop SMALLINT; DECLARE ppitch DOUBLE PRECISION; DECLARE pstepz DOUBLE PRECISION; DECLARE gtic INTEGER; DECLARE stepz2 DOUBLE PRECISION; DECLARE jr2 SMALLINT; DECLARE afin2 DOUBLE PRECISION; DECLARE ddmg2 INTEGER;
 DECLARE dm SMALLINT; DECLARE dmf INTEGER;
+DECLARE spec SMALLINT; DECLARE chase SMALLINT; DECLARE fheld SMALLINT;
 BEGIN
   -- (the player and ents rows are wide: what the think decides is written back once, at the end)
   SELECT p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz,
@@ -691,6 +708,26 @@ BEGIN
     UPDATE player p SET p.bobtime = 0, p.bob_z = 0, p.bob_pitch = 0, p.bob_roll = 0, p.ducked = 0 WHERE p.ent_id = :pe AND (p.bob_z <> 0 OR p.bob_pitch <> 0 OR p.bob_roll <> 0 OR p.ducked <> 0);
     IF (coop = 1 OR dm = 1) THEN EXECUTE PROCEDURE set_client_frame(pe, 0, 1, 0);        -- the death animation plays out
     EXIT;
+  END
+
+  -- a watcher (3.20's ClientThink for a spectator): attack, as it goes down, chases the next player (g_chase.c), jump
+  -- lets go; chasing, the view is the chased client's and the watcher makes no move of its own (PM_FREEZE)
+  SELECT p.spectator, p.chase, p.fire_held FROM player p WHERE p.ent_id = :pe INTO spec, chase, fheld;
+  IF (spec = 1) THEN
+  BEGIN
+    IF (fire = 1 AND fheld = 0) THEN
+    BEGIN
+      chase = chase_next(pe, chase);
+      IF (chase = 0) THEN EXECUTE PROCEDURE sprint(pe, 'No other players to chase.');
+    END
+    IF (jump > 0) THEN chase = 0;
+    IF (chase > 0 AND NOT EXISTS (SELECT 1 FROM player p WHERE p.id = :chase AND p.spectator = 0 AND p.ent_id IS NOT NULL)) THEN chase = 0;   -- (the target gone, or watching too)
+    UPDATE player p SET p.chase = :chase, p.fire_held = :fire WHERE p.ent_id = :pe;
+    IF (chase > 0) THEN
+    BEGIN
+      EXECUTE PROCEDURE update_chase_cam(pe, chase);
+      EXIT;
+    END
   END
 
   -- view angles

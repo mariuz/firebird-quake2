@@ -659,10 +659,9 @@ try {
       // console clears it (a game runs by then) for the third page's join by text
       // (a line typed at a page's console; the pointer let go while a game runs brings the main menu up, which Escape puts away first)
       const typeOn = async (p, line) => {
-        if (await p.evaluate(() => !!document.pointerLockElement).catch(() => false)) {
-          await p.evaluate(() => document.exitPointerLock?.()); await sleep(400);
-          if (await p.evaluate(() => window.quake2?.menu?.active).catch(() => false)) { await p.keyboard.press('Escape'); await sleep(200); }
-        }
+        await p.evaluate(() => document.activeElement?.blur?.()).catch(() => undefined);   // (a control with the focus, a box ticked, keeps the keys from the page)
+        if (await p.evaluate(() => !!document.pointerLockElement).catch(() => false)) { await p.evaluate(() => document.exitPointerLock?.()); await sleep(400); }
+        if (await p.evaluate(() => window.quake2?.menu?.active).catch(() => false)) { await p.keyboard.press('Escape'); await sleep(200); }   // (a menu up takes the keys)
         await p.locator('#screen').click(); await sleep(200);   // (the view, wherever the page is scrolled to: a click elsewhere could land on a control)
         await p.keyboard.press('Backquote'); await sleep(200); await p.keyboard.type(line); await p.keyboard.press('Enter'); await sleep(300);
       };
@@ -805,6 +804,17 @@ try {
       let watcher = null;
       for (let i = 0; i < 40 && !watcher; i++) { await sleep(250); const r = await c2(); if (r && r.SPECTATOR === 1 && r.SOLID === 0) watcher = r; }
       assert(watcher && watcher.MOVETYPE === 2 && watcher.TAKEDAMAGE === 0, `spectate ticked on the guest's page makes its client a watcher at the host (${JSON.stringify(watcher)})`);
+      // the chase cam: the watcher's attack key (Ctrl) puts its eye behind the host's player, jump lets go (g_chase.c)
+      const chaseState = () => page.evaluate(() => window.quake2.sql('SELECT p.chase, e.x, e.y, (SELECT h.x FROM player q JOIN ents h ON h.id = q.ent_id WHERE q.id = 1) hx, (SELECT h.y FROM player q JOIN ents h ON h.id = q.ent_id WHERE q.id = 1) hy FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2').then((r) => ({ chase: r[0].CHASE, d: Math.hypot(r[0].X - r[0].HX, r[0].Y - r[0].HY) }))).catch(() => null);
+      await gp.locator('#screen').click(); await sleep(200);   // (the keys go to the view, not the spectate box ticked above)
+      await gp.keyboard.down('ControlLeft'); await sleep(200); await gp.keyboard.up('ControlLeft');   // (held a few frames: the guest sends a command a frame)
+      let ch = null;
+      for (let i = 0; i < 40 && ch?.chase !== 1; i++) { await sleep(250); ch = await chaseState(); }
+      const chasing = ch;
+      await gp.keyboard.down('Space'); await sleep(200); await gp.keyboard.up('Space');
+      for (let i = 0; i < 40 && ch?.chase !== 0; i++) { await sleep(250); ch = await chaseState(); }
+      assert(chasing?.chase === 1 && chasing.d < 40 && ch?.chase === 0, `the watcher's attack key chases the host's player (${chasing?.d.toFixed(0)} units off) and jump lets go (${JSON.stringify({ chasing, after: ch })})`);
+      await gp.evaluate(() => document.exitPointerLock?.()); await sleep(300);   // (the click on the view took the pointer: the box needs it back)
       await gp.uncheck('#net-spectate');
       let player2 = null;
       for (let i = 0; i < 40 && !player2; i++) { await sleep(250); const r = await c2(); if (r && r.SPECTATOR === 0 && r.SOLID === 3) player2 = r; }

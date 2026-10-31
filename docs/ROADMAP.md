@@ -651,9 +651,16 @@ The eighth list: what a game shared over the network and the console still lack,
   anew; `SignalClient.publish(offer, own)`), so the guest's `reconnect` finds it. `test:console` covers the
   words, `test:net` the relay's room under the host's own code, the browser test `disconnect` at the guest's
   console and, the host Hosting again under its code, `reconnect` joining the game again.
-- **The chase cam for a watcher**: a spectator floats where it likes. 3.20's `g_chase.c`: a watcher's view at
-  a player's eye (`UpdateChaseCam`), the attack key cycling to the next player (`ChaseNext`, `ChasePrev`),
-  `chase <n>` at the console, and back to floating on jump.
+- **The chase cam for a watcher**: done. A spectator floated where it liked. 3.20's `g_chase.c` now: the
+  attack key, as it goes down (`player.fire_held`, the latched button), chases the next client playing
+  (`chase_next`, cycling; "No other players to chase." when there is none), and each tic `update_chase_cam`
+  puts the watcher's eye thirty units behind the chased client's along its view, traced out of the walls and
+  two units back, its angles the client's, no move of its own (`PM_FREEZE`); jump lets go, floating free
+  from there; `chase <n>` and `chase 0` at the console (`player_command`, forwarded from a guest) do the same
+  by hand, `chase` alone says whom. `player.chase` is the target (0 free), in the tic row as `CHASE`, which
+  the guest's prediction stands down on; a watcher turning player again chases nobody. `test:net` runs the
+  keys and the words over a loopback (the eye behind the client's, the view following its turn, a second
+  press with nobody else, jump, the console's refusals), the browser test the watcher's Ctrl and Space.
 - **Pings on the score board**: "Ping: 0" for everyone. The host measures each guest's round trip with a
   `ping` message a second and puts it in the row (`ping`), the score board shows it; a joined page shows its
   own on the stats line.
