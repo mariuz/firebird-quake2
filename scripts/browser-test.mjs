@@ -448,7 +448,7 @@ try {
     const usInfo = await status();
     await typeCommand('status');
     const stLine = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(8) })).catch(() => ({}));
-    assert(/^Server info settings: mapname "demo1" · deathmatch "0" · coop "0" · dmflags "\d+" · fraglimit "\d+" · timelimit "\d+" · cheats "\d" · skill "\d"$/.test(svInfo)
+    assert(/^Server info settings: mapname "demo1" · deathmatch "0" · coop "0" · dmflags "\d+" · fraglimit "\d+" · timelimit "\d+" · cheats "\d" · skill "\d" · hostname "noname"$/.test(svInfo)
       && /^User info settings: name "[^"]*" · hand "0" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
@@ -466,6 +466,19 @@ try {
     await typeCommand('vid_fullscreen');
     const fsLine = await status();
     assert(gamma.setting === 1.6 && gamma.scale === 1.6 && gamma.control === '1.6' && /^"vid_fullscreen" is "0"$/.test(fsLine), `vid_gamma 1.6 sets the brightness, the painter's scale and the control (${JSON.stringify(gamma)}); vid_fullscreen shows the page's state ("${fsLine}")`);
+    // hostname goes into the serverinfo, sv_gravity onto the game row (the level's gravity), help brings the help computer and putaway takes it away
+    await typeCommand('hostname Hal');
+    await typeCommand('serverinfo');
+    const svHost = await status();
+    await typeCommand('sv_gravity 300');
+    const grav = await page.evaluate(() => window.quake2.sql('SELECT gravity FROM game').then((r) => r[0].GRAVITY)).catch(() => null);
+    await typeCommand('sv_gravity 800');
+    await typeCommand('help');
+    const helpUp = await page.evaluate(() => window.quake2.screens.help).catch(() => null);
+    await typeCommand('putaway');
+    const helpDown = await page.evaluate(() => window.quake2.screens.help).catch(() => null);
+    await typeCommand('hostname ""');
+    assert(/hostname "Hal"/.test(svHost) && grav === 300 && helpUp === true && helpDown === false, `hostname Hal shows in the serverinfo, sv_gravity 300 reaches the game row (${grav}), help brings the help computer (${helpUp}) and putaway takes it away (${helpDown})`);
     // writeconfig downloads config.cfg with the keys and the cvars; the settings put back, the file run through the Config
     // control (exec's picker) brings them again
     const [cfgDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('writeconfig')]);
@@ -835,7 +848,7 @@ try {
         `connected, the host runs a game with two clients, one view of its own, and sends the guest its frames (${JSON.stringify(hs)})`);
       assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
         `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
-      assert(/joined: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
+      assert(/joined[^:]*: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
       // the ping: the host measures the guest's round trip a second (a ping, its pong), the guest's score board row and
       // its stats line carry it
       let pinged = {};
@@ -1101,6 +1114,7 @@ try {
       await typeOn(page, `rtc_signal http://localhost:${RELAY_PORT}`); await typeOn(gp, `rtc_signal http://localhost:${RELAY_PORT}`);
       await page.evaluate(() => document.exitPointerLock?.()); await sleep(300);
       if (await page.evaluate(() => window.quake2?.menu?.active).catch(() => false)) { await page.keyboard.press('Escape'); await sleep(200); }
+      await typeOn(page, 'hostname Hal');   // (the hostname cvar: the map message names the host, the guest's stats line shows it)
       await page.click('#net-host');
       let again = '';
       for (let i = 0; i < 80 && !/^[A-Z2-9]{4}$/.test(again); i++) { await sleep(250); again = await text(page); }
@@ -1108,8 +1122,9 @@ try {
       await typeOn(gp, 'reconnect');
       let hr = {}, gr = {};
       for (let i = 0; i < 240 && !(hr.guests?.length === 1 && gr.role === 'guest' && gr.frames > 20); i++) { await sleep(250); hr = await hstate(); gr = await gstate(); }
-      assert(again === offer && lastJoined === null && hr.role === 'host' && hr.guests?.length === 1 && gr.role === 'guest' && gr.frames > 20 && gr.map === 'demo1',
-        `Host again publishes under the code the host had (${again}), and reconnect at the guest's console joins the game again (${JSON.stringify({ hr, gr })})`);
+      const rejoinedStats = await gstats();
+      assert(again === offer && lastJoined === null && hr.role === 'host' && hr.guests?.length === 1 && gr.role === 'guest' && gr.frames > 20 && gr.map === 'demo1' && /joined Hal: \d+ frames/.test(rejoinedStats),
+        `Host again publishes under the code the host had (${again}), and reconnect at the guest's console joins the game again (${JSON.stringify({ hr, gr })}), its stats line naming the host (${rejoinedStats})`);
       await typeOn(gp, 'disconnect');
       for (let i = 0; i < 40 && (await hstate()).role !== undefined; i++) await sleep(250);
       for (const p of [page, gp]) await p.evaluate(() => { window.quake2.settings.rtcSignal = ''; }).catch(() => undefined);   // (the guest is back on the attract loop: no console there)

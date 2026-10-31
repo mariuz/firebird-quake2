@@ -838,9 +838,15 @@ the server's among them. In the order they are to be taken.
   asking the page for it or leaving it, as the video menu's box does. `test:console` shows, sets and refuses
   the two and writes `vid_gamma` to config.cfg; the browser test sets the brightness by the word and reads
   the setting, the painter's scale and the control, and reads the fullscreen state of a headless page.
-- **`help`, `sv_gravity` and `hostname`**: `help` as a word (`Cmd_Help_f`, F1's), `sv_gravity` the level's
-  gravity for the game running (`sv_gravity 300` floats), `hostname` the host's name a guest sees on its
-  score board and the relay's room.
+- **`help`, `sv_gravity` and `hostname`**: done. `help` is `Cmd_Help_f` as a word (the help computer, or the
+  score board in deathmatch, as F1 brings it; `toggleHelp`), `sv_gravity` the game row's gravity for the game
+  running (`gravity`, `setGravity`: `sv_gravity 300` floats; a new map takes its worldspawn's again; a joined
+  page runs no server and says so), and `hostname` the host's name (archived, as Quake's was; "noname" when
+  empty): the serverinfo lists it, and the map message carries it so a joined page's stats line names the host
+  ("joined Hal: …"). The relay's room does not carry it yet. `test:console` sets and refuses the name, sees
+  `help` reach the host in a game running, and `sv_gravity` shown, set, refused and refused on a joined page;
+  the browser test reads the name in the serverinfo, the gravity on the game row, the help computer up and put
+  away, and, hosting again under a name, the rejoined guest's stats line naming it.
 - **`deathmatch`, `coop` and `maxclients` as cvars**: the Players select's words for the next game
   (`deathmatch 1`, `coop 1`, `maxclients 4`), latched as Quake latched them ("will be changed for next game").
 

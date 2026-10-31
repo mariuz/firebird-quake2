@@ -299,10 +299,14 @@ const con = new Console({
   serverInfo: async () => {
     if (netGuest() || !db || !map) return null;
     const g = (await db.query('SELECT map_name, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill FROM game')).rows[0];
-    return g ? { mapname: g.MAP_NAME, deathmatch: g.DEATHMATCH, coop: g.COOP, dmflags: g.DMFLAGS, fraglimit: g.FRAGLIMIT, timelimit: g.TIMELIMIT, cheats: g.CHEATS, skill: g.SKILL } : null;
+    return g ? { mapname: g.MAP_NAME, deathmatch: g.DEATHMATCH, coop: g.COOP, dmflags: g.DMFLAGS, fraglimit: g.FRAGLIMIT, timelimit: g.TIMELIMIT, cheats: g.CHEATS, skill: g.SKILL, hostname: settings.hostname || 'noname' } : null;
   },
   userInfo: () => ({ name: settings.name, hand: settings.hand, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 }),
   isFullscreen: () => !!document.fullscreenElement,   // (vid_fullscreen: the page's live state; setSetting('fullscreen', …) asks for it)
+  toggleHelp: () => toggleScreen(0, 'help'),           // (help: Cmd_Help_f, F1's screen)
+  // sv_gravity: the game row's gravity (the level's, the worldspawn's again at the next map); a joined page runs no server
+  gravity: async () => (netGuest() || !db || !map ? null : (await db.query('SELECT gravity FROM game')).rows[0]?.GRAVITY ?? null),
+  setGravity: async (n) => { if (netGuest() || !db || !map) return; await db.exec(`UPDATE game SET gravity = ${Number(n)} WHERE id = 1`); },
   status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}` })) } : null),
   isRunning: () => running,
   // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
@@ -613,7 +617,8 @@ async function mapLoaded(setup) {
 /** The map message a guest sets itself up from (SV_SpawnServer's configstrings): at every map, and at a connect to a game running. */
 function mapMessage(setup = mapSetup) {
   return { name: map.name, sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack, gravity: setup.gravity,
-    speakers: setup.speakers, view: { w: viewWidth(), h: viewHeight(), fov: settings.fov }, nmodels: res.byName.size, levelname: setup.levelname ?? '' };
+    speakers: setup.speakers, view: { w: viewWidth(), h: viewHeight(), fov: settings.fov }, nmodels: res.byName.size, levelname: setup.levelname ?? '',
+    hostname: settings.hostname || 'noname' };   // (the hostname cvar: the guest's stats line names the host)
 }
 async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   if (netGuest()) leaveNet();   // a game of this page's own: the joined one is left
@@ -1338,7 +1343,7 @@ function updateStats() {
   const now = performance.now();
   if (now - fpsT > 500) { fps = (fpsN * 1000) / (now - fpsT); fpsT = now; fpsN = 0; }
   const sum = (k) => net.guests.reduce((n, g) => n + g.host[k], 0);
-  const link = netGuest() ? ` · joined: ${net.guest.frames} frames from the host${ownPing() != null ? `, ping ${ownPing()} ms` : ''}`
+  const link = netGuest() ? ` · joined${net.guest.map?.hostname ? ` ${net.guest.map.hostname}` : ''}: ${net.guest.frames} frames from the host${ownPing() != null ? `, ping ${ownPing()} ms` : ''}`
     : netHost() ? ` · hosting: ${sum('sentFrames')} frames sent${net.guests.length > 1 ? ` to ${net.guests.length} guests` : ''}${sum('droppedFrames') ? `, ${sum('droppedFrames')} dropped` : ''}`
     : demo ? ` · demo ${demo.name}: frame ${demo.player.played + 1} of ${demo.frames}` : '';
   const rec = recorder ? ` · recording ${recorder.name}: ${recorder.rec.frames} frames (${(recorder.rec.size / 1024).toFixed(0)} KB)` : '';
