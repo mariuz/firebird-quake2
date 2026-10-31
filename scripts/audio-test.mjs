@@ -173,6 +173,22 @@ audio.setMusicVolume(0.25);
 check(audio.musicGain.gain.value === 0.25, 'the music volume moves the music gain');
 audio.setMusicMode('off');
 check(track.stopped && audio.music === null, 'music off stops the track');
+// a picked folder's track is kept as it plays (src/demostore.js's file store at the page; a map here), and plays from
+// there at the next start, when no folder is picked; a track neither picked nor kept falls to the drone
+const store = new Map();
+audio.setMusicStore({ get: async (k) => store.get(k) ?? null, put: async (k, v) => { store.set(k, v); } });
+audio.setMusicMode('tracks');   // (track 9 again, with the store this time)
+await tick(); await tick(); await tick();
+const kept9 = store.get('music/track09');
+check(audio.music?.kind === 'track' && store.size === 1 && kept9?.name === 'Track09.mp3' && kept9.bytes instanceof Uint8Array && kept9.bytes.length === 64,
+  'the picked track is kept as it plays, under its number, with its name and bytes');
+audio.setMusicFiles([]);
+audio.stopMusic();
+await audio.playMusic(9);
+check(audio.music?.kind === 'track' && audio.music.src?.buffer?.bytes === 64 && store.size === 1, 'with no folder picked, the kept track plays from the store');
+await audio.playMusic(10);
+check(audio.music?.kind === 'synth' && store.size === 1, 'a track neither picked nor kept: the drone, and nothing kept');
+audio.setMusicMode('off');
 
 console.log(failed ? `${failed} failure(s)` : 'all good');
 process.exit(failed ? 1 : 0);

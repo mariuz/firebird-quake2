@@ -4,8 +4,9 @@
 // by the attenuation, ATTN_NONE heard everywhere). The looped sounds (a
 // rocket's flight, a moving door, a looped target_speaker) are mixed per
 // sound where their entities are each frame; the music is the CD track the
-// worldspawn names (music/trackNN.ogg|mp3, or a folder the player picks),
-// with a synthesised drone when no track file is available.
+// worldspawn names (music/trackNN.ogg|mp3, or a folder the player picks, whose
+// tracks are kept across reloads as they play), with a synthesised drone when
+// no track file is available.
 
 const SOUND_FULLVOLUME = 80;
 const LOOP_ATTN = 3;   // SOUND_LOOPATTENUATE: ATTN_STATIC
@@ -24,6 +25,7 @@ export class Q2Audio {
     this.listener = { x: 0, y: 0, z: 0, yaw: 0 };
     this.musicMode = 'tracks';   // 'off' | 'tracks' | 'synth'
     this.musicFiles = new Map(); // 'track06' → File, from a picked folder
+    this.musicStore = null;      // src/demostore.js's FileStore: a picked folder's tracks kept as they play, played at the next start
     this.music = null;
     this.track = 0;
   }
@@ -221,6 +223,9 @@ export class Q2Audio {
     if (this.track && this.ctx) this.playMusic(this.track);
   }
 
+  /** Where a picked folder's tracks are kept across reloads (get(key) → { name, bytes } | null, put(key, value)); null keeps none. */
+  setMusicStore(store) { this.musicStore = store; }
+
   setMusicFiles(files) {
     this.musicFiles.clear();
     for (const f of files) {
@@ -241,13 +246,19 @@ export class Q2Audio {
     this.music = token;
     let buf = null;
     if (this.musicMode === 'tracks') {
+      // the track: a picked folder's file, else the one kept from a folder picked before (src/demostore.js), else the
+      // site's music/ (which the service worker keeps in the data cache as it is fetched)
       const file = this.musicFiles.get(name);
-      const sources = file ? [file] : ['ogg', 'mp3'].map((ext) => new URL(`./music/${name}.${ext}`, location.href));
-      for (const srcUrl of sources) {
+      const kept = !file && this.musicStore ? await this.musicStore.get(`music/${name}`).catch(() => null) : null;
+      if (this.music !== token) return;
+      const sources = file ? [file] : kept ? [kept] : ['ogg', 'mp3'].map((ext) => new URL(`./music/${name}.${ext}`, location.href));
+      for (const src of sources) {
         try {
-          const data = srcUrl instanceof File ? await srcUrl.arrayBuffer() : await fetch(srcUrl).then((r) => (r.ok ? r.arrayBuffer() : null));
+          const data = src === file ? await src.arrayBuffer() : src === kept ? kept.bytes.buffer.slice(kept.bytes.byteOffset, kept.bytes.byteOffset + kept.bytes.byteLength) : await fetch(src).then((r) => (r.ok ? r.arrayBuffer() : null));
           if (!data) continue;
+          const keep = src === file && this.musicStore ? new Uint8Array(data.slice(0)) : null;   // (decoding detaches the buffer)
           buf = await this.ctx.decodeAudioData(data);
+          if (keep) this.musicStore.put(`music/${name}`, { name: file.name, bytes: keep }).catch((err) => console.warn('the track is not kept:', err?.message ?? err));
           break;
         } catch { /* try the next */ }
       }

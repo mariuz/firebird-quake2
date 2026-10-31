@@ -35,8 +35,9 @@
       </div>
       <div id="stats" class="stats">&nbsp;</div>
       <div class="controls">
-        <label>PAK <span id="pakname" class="pill">—</span>
-          <input id="pakfile" type="file" accept=".pak,.PAK"></label>
+        <label title="The Quake 2 demo's pak0.pak is downloaded; a pak picked here (a registered pak0.pak plays the full game's base unit) is kept in this browser and loads at the next start in its place, until the button forgets it">PAK <span id="pakname" class="pill">—</span>
+          <input id="pakfile" type="file" accept=".pak,.PAK">
+          <button id="pak-forget" type="button" hidden title="Forget the picked pak: the demo's pak0.pak loads now and at the next start">demo pak</button></label>
         <label>Map <select id="map"></select></label>
         <label title="The pak's recorded demos (demos/*.dm2), the ones recorded here (record name at the console; they are kept across reloads, deldemo name drops one) and a .dm2 file opened, played as the attract loop played them: the view and the entities are the recording's, the walls the database's; a key or a click brings the menu up over it, none again starts a game">Demo <select id="demo"><option value="">—</option></select>
           <input id="demo-file" type="file" accept=".dm2,.DM2" aria-label="Open a demo file"></label>
@@ -74,7 +75,7 @@
           <option value="sql">SQL projects every vertex</option>
         </select></label>
         <label title="Sound effects volume">Sound <input id="sfxvol" type="range" min="0" max="100" step="5"></label>
-        <label title="Quake 2's soundtrack was CD audio: put trackNN.ogg files in music/, or pick the folder">Music <select id="music">
+        <label title="Quake 2's soundtrack was CD audio: put trackNN.ogg files in music/, or pick the folder; a picked folder's tracks are kept in this browser as they play, for the next start">Music <select id="music">
           <option value="tracks">CD tracks (music/trackNN.ogg)</option>
           <option value="synth">Synth drone</option>
           <option value="off">Off</option>
@@ -104,7 +105,7 @@
         <kbd>Ctrl</kbd> or click fires · <kbd>Space</kbd> jumps · <kbd>C</kbd> crouches · <kbd>Shift</kbd> walks (or runs: the Run setting) ·
         <kbd>1</kbd>–<kbd>0</kbd> weapons · <kbd>G</kbd> hand grenades · <kbd>/</kbd> or wheel cycles · <kbd>Tab</kbd> inventory (<kbd>[</kbd> <kbd>]</kbd> select, <kbd>Enter</kbd> use) · <kbd>Q</kbd> quad · <kbd>I</kbd> invulnerability · <kbd>B</kbd> rebreather · <kbd>E</kbd> environment suit · <kbd>F1</kbd> help computer · <kbd>`</kbd> console (god, noclip, notarget, give, use, kill, map, skill 0–3: nightmare is 3, the console's alone) · <kbd>P</kbd> pause ·
         <kbd>Esc</kbd> menu (<kbd>F2</kbd> save, <kbd>F3</kbd> load, <kbd>F10</kbd> quit; the options' customize controls rebinds the movement, fire, inventory and help keys; multiplayer's player setup gives your name, for the obituaries and the score board, and your handedness: the shots come from the left or the centre and the gun is drawn so) · <kbd>F6</kbd> quick save · <kbd>F9</kbd> quick load (saves live in this browser; the Saves controls write the game as a file and play one back, so a game moves between browsers).
-        The page installs as an app and, once it has run, runs without a network ("offline ready").
+        The page installs as an app and, once it has run, runs without a network ("offline ready"); a pak picked from the PAK control is kept in this browser and loads at the next start (the button beside it goes back to the demo's), and a picked music folder's tracks are kept as they play.
         On touch screens the left half of the view moves, the right half looks, a tap fires, and the buttons fire, jump, change weapon and open the menu.
         A gamepad works too: left stick moves, right stick looks, RT fires, A jumps, B crouches, LB/RB change weapon, the d-pad selects (left/right) and uses (up) an inventory item, Y shows the inventory, Back the help computer, Start opens the menu (the d-pad, A and B drive it).
         With two to four players (coop, or deathmatch: the maps' deathmatch weapons and spots, no monsters, frags at the top right, <kbd>F1</kbd> the score board;
@@ -176,7 +177,7 @@
           alpha map, draws the MD2 models with Gouraud light sampled from the lightmap below them, the sky box, particles,
           and the status bar from pics/. Sounds are rows in <code>SOUND_EVENTS</code>, spatialised with the Web Audio API;
           the map's looped speakers play at their origins. The soundtrack was CD audio: drop <code>track02.ogg</code>…
-          into <code>music/</code> and each map plays its <code>worldspawn</code> track; without them a synthesised drone fills in.</li>
+          into <code>music/</code> (or pick the folder: its tracks are kept as they play) and each map plays its <code>worldspawn</code> track; without them a synthesised drone fills in.</li>
       </ul>
       <p>A port of <a href="https://github.com/mariuz/firebird-quake">Firebird Quake</a> to Quake 2. The engine is
         <a href="https://github.com/mariuz/electric-firebird">Electric Firebird</a> (<code>firebird-wasm</code>). The game

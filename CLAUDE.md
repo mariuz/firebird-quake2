@@ -218,7 +218,11 @@ short stories of what changed and what it measured; keep that.
 - A background tab is throttled and `document.hidden` pauses the loop; the stats line's fps is
   meaningless there. Read the tic / frame query / raster costs instead, or bring the tab to the
   front.
-- Nothing in the page needs sign-in or personal data; the only inputs are the pak and music files.
+- Nothing in the page needs sign-in or personal data; the only inputs are the pak and music files, which the
+  page keeps in IndexedDB (`src/demostore.js`, with the recordings): a picked pak loads at the next start
+  in place of the demo's until the "demo pak" button forgets it. A browser test that picks one uses a copy
+  of the demo's pak under another name, and the music control takes a folder path (Playwright's rule for a
+  `webkitdirectory` input), never a file buffer.
 - Each build stamps its files with a new `?v=` id, so a reload after a rebuild fetches the new bundle;
   a page left open from before still runs the old one until it is reloaded. The caching service worker
   (`public/sw.js`) serves a build's files from its own cache (`fbq2-build-<id>`) and the pak from `fbq2-data`:

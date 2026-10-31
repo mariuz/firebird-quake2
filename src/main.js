@@ -31,7 +31,7 @@ import { Input, GAME_KEYS, DEFAULT_BINDS, bindKey } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
 import { DemoRecorder } from './record.js';
-import { DemoStore } from './demostore.js';
+import { DemoStore, FileStore } from './demostore.js';
 import { ClipMap, pmove, stateFromRow } from './pmove.js';
 import { CinReader, CinPlayer, CIN_FPS } from './cinematic.js';
 import { loadSettings, saveSettings as saveSettingsTo, viewSize, OPTIONS_RESET, VIDEO_RESET } from './settings.js';
@@ -74,6 +74,10 @@ const recordings = new Map();   // the bytes of the recordings in hand this sess
 // IndexedDB; `kept` is their names, loaded at the start, their bytes read when one plays
 const demoStore = new DemoStore();
 const kept = new Set();
+// the player's files kept the same way: the pak picked from the file input (`pak`), which the next start loads in
+// place of the demo's download until the button beside it forgets it, and a picked folder's tracks as they play
+const fileStore = new FileStore();
+let pickedPak = null;    // the name of the picked pak in use, kept or just picked; null on the demo's
 let mapSetup = null;     // what session.startMap returned for the map in (the sky, the CD track: a recording's configstrings)
 /** The view's fov: the host's for a guest (the frustum is the host's), the setting otherwise. */
 const viewFov = () => (netGuest() && net.guest.map ? net.guest.map.view.fov : settings.fov);
@@ -89,6 +93,7 @@ const audio = new Q2Audio();
 audio.setVolume(settings.sfx / 100);
 audio.setMusicVolume(settings.music / 100);
 audio.musicMode = settings.musicMode;
+audio.setMusicStore(fileStore);
 for (const ev of ['keydown', 'pointerdown', 'touchstart']) window.addEventListener(ev, () => audio.unlock(), { capture: true });
 document.addEventListener('visibilitychange', () => audio.suspend(document.hidden));
 const perf = { tic: 0, faces: 0, draw: 0, rows: 0 };
@@ -1368,23 +1373,58 @@ async function boot() {
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, get paints() { return paints; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
-      demoStore,
+      demoStore, fileStore, get pickedPak() { return pickedPak; },
       get cinematic() { return cinematic ? { file: cinematic.file, frame: cinematic.frame, fps: CIN_FPS } : null; },
       // (the browser test's: a cinematic from bytes it made, the game going on after as it was)
       cinematicFrom: async (bytes, name = 'test') => { const was = running; await playCinematicFrom(Uint8Array.from(bytes), name); running = was; lastTic = performance.now(); },
       get prediction() { const p = guestPred; return p ? { seq: p.seq, pending: p.cmds.length, x: p.st?.x ?? null, y: p.st?.y ?? null, z: p.st?.z ?? null, error: p.error ? Math.hypot(p.error.dx, p.error.dy, p.error.dz) : 0, boxes: p.world?.boxes.length ?? 0 } : null; },
       sql: (q, p) => db.query(q, p).then((r) => r.rows) };
-    setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
-    const resp = await fetch(new URL('./pak/pak0.pak', location.href));
-    if (!resp.ok) throw new Error(`could not fetch pak0.pak (${resp.status}); pick a PAK file instead`);
-    const forCache = resp.clone();   // (the download goes into the data cache too, for the loads without a network)
-    await usePak(await resp.arrayBuffer(), 'pak0.pak');
+    const forCache = (await useKeptPak()) ? null : await downloadPak();
     nextFrame();
     offlineReady(forCache).catch((err) => console.warn('offline cache:', err.message));
   } catch (err) {
     console.error(err);
     setStatus(err.message, true);
   }
+}
+
+/** The demo's pak from the site (or the data cache): loaded; the response's clone, for the data cache. */
+async function downloadPak() {
+  setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
+  const resp = await fetch(new URL('./pak/pak0.pak', location.href));
+  if (!resp.ok) throw new Error(`could not fetch pak0.pak (${resp.status}); pick a PAK file instead`);
+  const forCache = resp.clone();   // (the download goes into the data cache too, for the loads without a network)
+  await usePak(await resp.arrayBuffer(), 'pak0.pak');
+  return forCache;
+}
+
+/** The pak picked at an earlier load, kept in the file store: loaded if there is one (true). One that fails to load is forgotten. */
+async function useKeptPak() {
+  const f = await fileStore.get('pak').catch((err) => { console.warn('the kept pak:', err.message); return null; });
+  if (!f) return false;
+  setStatus(`Loading ${f.name}, the pak picked before…`);
+  try {
+    await usePak(f.bytes.buffer.slice(f.bytes.byteOffset, f.bytes.byteOffset + f.bytes.byteLength), f.name);
+  } catch (err) {
+    console.warn(`the kept pak ${f.name} does not load (${err.message}); forgotten`);
+    await fileStore.remove('pak').catch(() => undefined);
+    return false;
+  }
+  showPickedPak(f.name);
+  return true;
+}
+
+/** The PAK controls say a picked pak is in use (the button to forget it shows), or the demo's. */
+function showPickedPak(name) {
+  pickedPak = name;
+  $('pak-forget').hidden = !name;
+}
+
+/** Forget the picked pak: dropped from the store, and the demo's pak loads now. */
+async function forgetPak() {
+  await fileStore.remove('pak').catch((err) => console.warn('the kept pak:', err.message));
+  showPickedPak(null);
+  await downloadPak();
 }
 
 // ── installable and offline: the service worker (public/sw.js) and the caches it serves from ─────────────
@@ -1411,9 +1451,17 @@ async function offlineReady(pakResponse) {
 
 $('pakfile').addEventListener('change', async (e) => {
   const f = e.target.files[0];
+  e.target.value = '';   // (the same file again is a change again)
   if (!f || !db) return;
-  try { await usePak(await f.arrayBuffer(), f.name); } catch (err) { setStatus(err.message, true); }
+  try {
+    const buffer = await f.arrayBuffer();
+    await usePak(buffer, f.name);
+    // kept for the next start (src/demostore.js); a browser without the store plays it for the page
+    showPickedPak(f.name);
+    fileStore.put('pak', { name: f.name, bytes: new Uint8Array(buffer) }).catch((err) => console.warn('the pak is not kept:', err.message));
+  } catch (err) { setStatus(err.message, true); }
 });
+$('pak-forget').addEventListener('click', () => forgetPak().catch((err) => setStatus(err.message, true)));
 $('map').addEventListener('change', (e) => { settings.map = e.target.value; saveSettings(); startMap(e.target.value, true).catch((err) => setStatus(err.message, true)); });
 $('save-download').addEventListener('click', () => downloadSave());
 $('save-file').addEventListener('change', async (e) => {
