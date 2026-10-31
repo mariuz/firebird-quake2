@@ -54,6 +54,17 @@ let last = null;         // last Q2_TIC row
 let running = false;
 let paused = false;
 let timeRefreshing = false;   // timerefresh's spin: the loop paints and tics nothing meanwhile
+let plaqueDrawn = false;      // whether the last paused paint drew the pause plaque (scr_showpause)
+let turtleDrawn = false;      // whether the last frame drew the turtle (scr_showturtle: three slow frames in a row)
+let lastDue = 0;              // cl_maxfps: when the last painted frame was due
+/** CL_Frame's cl_maxfps: a frame paints only once 1000/cl_maxfps ms have passed since the last painted (0: every animation frame). */
+function paintDue(now) {
+  const cap = Number(settings.clMaxfps) || 0;
+  if (cap <= 0) return true;
+  if (now - lastDue < 1000 / cap - 1) return false;
+  lastDue = now;
+  return true;
+}
 let rSpeedsAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
 let lastTic = 0;
 // src/net.js: a game shared over a data channel. The host runs the game here and sends the guest its frames
@@ -753,7 +764,7 @@ async function frame() {
     // (the menus and the pause take the whole screen, a split one too: one view, drawn again full size)
     if (renderer && renderer.views !== 1) renderer.setSize(viewWidth(), viewHeight(), 1);
     if (menu.active && renderer && last && !document.hidden) { drawFrame(0, last, null, [], new Float32Array(64), last.TIME_); menu.draw(renderer, performance.now()); renderer.present(); }
-    else if (paused && renderer && last) { drawFrame(0, last, null, [], new Float32Array(64), last.TIME_); hud.drawCenter(renderer, 'paused', 80); renderer.present(); }
+    else if (paused && renderer && last) { drawFrame(0, last, null, [], new Float32Array(64), last.TIME_); plaqueDrawn = hud.drawPause(renderer, settings.scrShowpause !== false); renderer.present(); }   // (SCR_DrawPause: the plaque, scr_showpause allowing)
     nextFrame();
     return;
   }
@@ -768,7 +779,7 @@ async function frame() {
     if (netGuest()) { guestFrame(now); nextFrame(); return; }
     if (demo) { await demoFrame(now); nextFrame(); return; }
     if (owed === 0) {
-      if (lerps[0].frame && settings.renderer !== 'sql' && !document.hidden) { paintFrames(now); overlayMenu(); }   // (the SQL-projecting mode paints a tic's frame as it is)
+      if (lerps[0].frame && settings.renderer !== 'sql' && !document.hidden && paintDue(now)) { paintFrames(now); overlayMenu(); }   // (the SQL-projecting mode paints a tic's frame as it is; cl_maxfps caps the rest)
       nextFrame();
       return;
     }
@@ -824,7 +835,7 @@ async function frame() {
     // this tic's frames become the current ones (the last tic's the previous), and are painted at the fraction gone by
     lerps[0].push(last, f);
     more.forEach((m, i) => lerps[i + 1].push(session.clients[i + 1] ?? last, m));
-    if (!document.hidden) { paintFrames(now); overlayMenu(); }   // (a shared game's host hidden tics on and paints nothing)
+    if (!document.hidden && (settings.renderer === 'sql' || paintDue(now))) { paintFrames(now); overlayMenu(); }   // (a shared game's host hidden tics on and paints nothing; cl_maxfps caps the fast mode)
     // the frame's spare time marks the cluster the player is heading into (premark_ahead), so the
     // crossing is a switch of slot and not a hitch; a call that finds nothing to do costs ~0.3 ms
     if (perf.tic + perf.faces + perf.draw < 30) await session.premark();
@@ -912,7 +923,7 @@ function guestFrame(now) {
     guestAck(got, now);
   }
   if (seq !== undefined) guestPredict(cmd, frameTics, seq);
-  if (lerps[0].frame) paintFrames(now);
+  if (lerps[0].frame && paintDue(now)) paintFrames(now);   // (cl_maxfps caps a guest's paints too)
 }
 /** Input.read's usercmd array as pmove's command. */
 const cmdOf = (c) => ({ fwd: c[1], side: c[2], yawd: c[3], pitchd: c[4], jump: c[6], run: c[7] });
@@ -1402,6 +1413,8 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   else if (last.INVINCIBLE) tint = [255, 255, 0, 0.3];
   else if (last.ENVIRO) tint = [0, 255, 0, 0.2];
   else if (last.WATERLEVEL >= 3) tint = last.WATERTYPE & 8 ? [255, 80, 0, 0.6] : last.WATERTYPE & 16 ? [0, 25, 5, 0.6] : [0, 40, 100, 0.4];
+  // SCR_DrawNet's turtle at the view's corner once three frames in a row took a tenth of a second or more (scr_showturtle), the first view's
+  if (which === 0) turtleDrawn = hud.drawTurtle(r, dt, !!settings.scrShowturtle, r.vr.x, r.vr.y);
   r.present(tint, null, which);
 }
 const gunPrev = perPlayer(null);     // each view's angles of the last frame (the gun's lag)
@@ -1767,7 +1780,7 @@ async function boot() {
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
-      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; },
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),

@@ -181,5 +181,23 @@ assert(inside(r) && textOverlaps(r) === 0 && !picAt(r, 'tag1') && textAt(r, 4) =
   assert(fills[1].h === (9 * 4) % GRAPH_HEIGHT, 'a value past the height wraps, as scr_graphscale could make one');
 }
 
+// the pause plaque (SCR_DrawPause: pics/pause.pcx centred a little under the middle, none with scr_showpause 0) and the turtle
+// (SCR_DrawNet's: pics/turtle.pcx at the view's corner from the third frame in a row of a tenth of a second or more, the count
+// starting over at a faster frame or with scr_showturtle off)
+{
+  const r = recorder(320, 240);
+  const pz = hud.pic('pause');
+  assert(hud.drawPause(r, true) === true && pz && picAt(r, 'pause') && picAt(r, 'pause').x === (320 - pz.w) >> 1 && picAt(r, 'pause').y === 120 + 8, 'the pause plaque is drawn centred, 8 under the middle');
+  const r2 = recorder(320, 240);
+  assert(hud.drawPause(r2, false) === false && r2.drawn.length === 0, 'scr_showpause 0 draws nothing');
+  const r3 = recorder(320, 240);
+  hud.slow = 0;
+  const seq = [hud.drawTurtle(r3, 0.05, true), hud.drawTurtle(r3, 0.1, true), hud.drawTurtle(r3, 0.2, true), hud.drawTurtle(r3, 0.1, true, 64, 48)];
+  assert(seq.join() === 'false,false,false,true' && picAt(r3, 'turtle') && picAt(r3, 'turtle').x === 64 && picAt(r3, 'turtle').y === 48, `the turtle is drawn at the corner given from the third slow frame in a row (${seq.join()})`);
+  const r4 = recorder(320, 240);
+  const seq2 = [hud.drawTurtle(r4, 0.05, true), hud.drawTurtle(r4, 0.1, true), hud.drawTurtle(r4, 0.1, true), hud.drawTurtle(r4, 0.1, false), hud.drawTurtle(r4, 0.1, true)];
+  assert(seq2.join() === 'false,false,false,false,false' && r4.drawn.length === 0, 'a fast frame starts the count over, and the switch off resets it and draws nothing');
+}
+
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
 console.log('all good');

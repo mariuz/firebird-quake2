@@ -10,6 +10,7 @@ export class Hud {
   constructor(pak) {
     this.pak = pak;
     this.cache = new Map();
+    this.slow = 0;   // SCR_DrawNet's count of frames in a row that took a tenth of a second or more (the turtle from the third)
     this.conchars = pic(pak, 'conchars');
     this.backtile = pic(pak, 'backtile');   // (Draw_TileClear's tile, around a view smaller than the screen: the viewsize cvar)
     this.nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => pic(pak, `num_${i}`));
@@ -261,6 +262,27 @@ export class Hud {
         y += 8;
       }
     }
+  }
+
+  /** SCR_DrawPause: the pause plaque (pics/pause.pcx) centred a little under the middle, as the screen drew it; nothing with scr_showpause 0 (`on` false). */
+  drawPause(r, on = true) {
+    if (!on) return false;
+    const p = this.pic('pause');
+    if (!p) { this.drawCenter(r, 'paused', 80); return true; }
+    r.drawPic(p, (r.w - p.w) >> 1, (r.h >> 1) + 8);
+    return true;
+  }
+
+  /**
+   * SCR_DrawNet's neighbour, the turtle (pics/turtle.pcx) at the view's corner once three frames in a row took a tenth of a second
+   * or more (`seconds` the frame's); a faster frame, or the switch off (scr_showturtle 0), starts the count over. Says whether it drew.
+   */
+  drawTurtle(r, seconds, on = true, x = 0, y = 0) {
+    if (!on || seconds < 0.1) { this.slow = 0; return false; }
+    if (++this.slow < 3) return false;
+    const p = this.pic('turtle');
+    if (p) r.drawPic(p, x, y);
+    return true;
   }
 }
 
