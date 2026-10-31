@@ -625,6 +625,22 @@ try {
       let gsaid = null;
       for (let i = 0; i < 20 && gsaid !== 'player 2: hi from the guest'; i++) { await sleep(250); gsaid = await page.evaluate(() => window.quake2.session.last.MSG).catch(() => null); }
       assert(gsaid === 'player 2: hi from the guest', `the guest's say reaches the host's message line by its client's name (${JSON.stringify(gsaid)})`);
+      // a shared game runs on under the host's menu and its pause key (Quake 2 paused single player alone): the host's
+      // frames and the guest's keep coming
+      await page.evaluate(() => document.exitPointerLock?.()); await sleep(300);
+      if ((await page.evaluate(() => window.quake2.menu.active).catch(() => false)) === false) await page.keyboard.press('Escape');
+      await sleep(400);
+      const guestFrames = () => gp.evaluate(() => window.quake2.net?.guest?.frames ?? 0).catch(() => 0);
+      const sm = await page.evaluate(() => window.quake2.menu.current?.id ?? null).catch(() => null);
+      const sh1 = await frames(page), sg1 = await guestFrames();
+      await sleep(700);
+      const sh2 = await frames(page), sg2 = await guestFrames();
+      await page.keyboard.press('Escape'); await sleep(300);
+      await page.keyboard.press('KeyP'); await sleep(300);
+      const sp = await page.evaluate(() => window.quake2.paused).catch(() => true);
+      const sh3 = await frames(page); await sleep(700); const sh4 = await frames(page);
+      assert(sm === 'main' && sh2 > sh1 && sg2 > sg1 && sp === false && sh4 > sh3,
+        `the host's menu and P do not stop the shared game: ${sh2 - sh1} host tics and ${sg2 - sg1} guest frames under the menu, ${sh4 - sh3} tics after P (paused: ${sp})`);
       const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
       await typeOn(page, 'rtc_signal none');

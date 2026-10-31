@@ -451,7 +451,7 @@ stand, not kept in a column: a bolt's `misc/lasfly.wav`, a rocket's `rockfly`, t
 fry, the railgun's or BFG's hum, the hyperblaster's or chaingun's firing loop, `player.weapon_sound`).
 The page mixes them as `S_AddLoopSounds` did: one looped channel per sound name, every entity with that
 sound adding its spatialised left and right at full volume and `ATTN_STATIC`, each side clamped.
-The loops fall silent while the game is paused or in a menu.
+The loops fall silent while the game is paused or in a menu (a game shared with guests runs on under both).
 Music was CD audio: `public/music/trackNN.ogg|mp3`, or a folder picked on the page, plays each map's
 `worldspawn` track; without them a synthesised drone fills in. A picked folder's track is kept as it plays
 (`setMusicStore`: the page's file store, under `music/trackNN` with the file's name and bytes) and plays from
@@ -746,7 +746,11 @@ angles are the current tic's plus the turn the input holds and has not yet sent 
 delta), so looking around never waits for a tic, as the client's own `cl.viewangles` did not. The
 SQL-projecting renderer mode cannot move its faces, projected at the tic's eye, so it paints a tic's frame
 as it is, once a tic. A guest's page does the same with the host's last two frames by the time since the
-last came. A hidden tab pauses the loop (`document.hidden`). The stats line shows the costs of the tic,
+last came. A hidden tab pauses the loop (`document.hidden`), as do the menus and `P`; a game shared with
+guests runs on under all three, as Quake 2 paused single player alone (`SV_Frame` ran the game frame unless
+paused with `maxclients 1`): the host's menu is drawn over the frame just painted, a hidden host's tab tics
+without painting as far as the browser's timers allow, `P` does nothing on a host with guests or on a guest,
+and a guest's connecting lifts a pause. The stats line shows the costs of the tic,
 the frame query and the raster. The SQL console runs any statement against the live game database.
 
 ## 9. Testing and measuring (`scripts/`)
