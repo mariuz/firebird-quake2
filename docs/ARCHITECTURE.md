@@ -739,7 +739,10 @@ frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_Re
 had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
 `vid_gamma` (the video menu's brightness as a cvar, the control's tenths from 1 to 1.8, a number between snapped and
 clamped to them, archived: the painter's light scale and the control follow through `setSetting`) and `vid_fullscreen` (the page's live fullscreen state shown, `isFullscreen`; 0 or 1 asks the page
-for it or leaves it, as the video menu's box does),
+for it or leaves it, as the video menu's box does), `help` (`Cmd_Help_f`: the help computer, or the score board in deathmatch, as
+F1 brings it, `toggleHelp`), `sv_gravity` (the game row's gravity for the game running, `gravity` and `setGravity`; a new map
+takes its worldspawn's again, and a joined page runs no server) and `hostname` (the host's name, archived as Quake's was,
+"noname" when empty: the serverinfo's, and the map message carries it so a joined page's stats line names the host),
 `serverinfo` (`SV_Serverinfo_f`: the game's cvars, `mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`,
 `cheats` and `skill`, as `Info_Print` listed them, the host's `serverInfo`; a joined page runs no server of its own),
 `userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:
