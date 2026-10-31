@@ -227,6 +227,31 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   await con.submit('players');
   check(status.at(-1)?.[0] === '1 player 1 (this page) · 2 player 2 (a pad)', 'a coop game at one page lists the pad\'s player');
   check(con.complete('pl') === 'play ' && con.complete('playe') === 'players ' && con.complete('ki') === 'kick ', 'Tab completes play, players and kick');
+  // dumpuser: SV_DumpUser_f's print of a client's userinfo as Info_Print laid it out, in the scrollback, the sum on the line
+  let dumped = null;
+  const printBefore = host.print;
+  host.print = (t) => { dumped = t; };
+  let users = 'none';
+  host.dumpUser = (n) => (typeof users === 'string' ? users : n < 1 || n > 4 ? 'slot' : users[n] ?? 'inactive');
+  await con.submit('dumpuser');
+  check(status.at(-1)?.[0] === 'Usage: dumpuser <userid>' && status.at(-1)?.[1] === true, 'dumpuser alone shows its usage');
+  await con.submit('dumpuser 1');
+  check(status.at(-1)?.[0] === 'dumpuser: no game is running' && status.at(-1)?.[1] === true && dumped === null, 'with no game it says so');
+  users = 'guest';
+  await con.submit('dumpuser 1');
+  check(status.at(-1)?.[0] === 'dumpuser: the host has the userinfos' && status.at(-1)?.[1] === true, 'a joined page is sent to the host');
+  users = { 1: { name: 'Ace', hand: 1, gender: 'female', msg: 1, fov: 90, spectator: 0 }, 2: { name: '', hand: 0 } };
+  await con.submit('dumpuser 1');
+  check(dumped === 'userinfo\n--------\nname                Ace\nhand                1\ngender              female\nmsg                 1\nfov                 90\nspectator           0'
+    && status.at(-1)?.[0] === 'client 1: name "Ace" · hand "1" · gender "female" · msg "1" · fov "90" · spectator "0"' && status.at(-1)?.[1] === false,
+    'dumpuser 1 prints the client\'s userinfo, each key on twenty characters, and sums it on the line');
+  await con.submit('dumpuser 2');
+  check(dumped === 'userinfo\n--------\nname                \nhand                0', 'a pad\'s player has its row\'s name and hand');
+  await con.submit('dumpuser 3');
+  check(status.at(-1)?.[0] === 'Client 3 is not active' && status.at(-1)?.[1] === true, 'a client not in the game is not active');
+  await con.submit('dumpuser 7');
+  check(status.at(-1)?.[0] === 'Bad client slot: 7' && status.at(-1)?.[1] === true && con.complete('dump') === 'dumpuser ', 'a number past the clients is a bad slot; Tab completes dumpuser');
+  host.print = printBefore; delete host.dumpUser;
   delete host.listPlayers; delete host.kick;
 }
 
@@ -381,7 +406,7 @@ host.gravity = async () => null;
 await con.submit('sv_gravity'); check(status.at(-1)?.[0] === 'sv_gravity: a joined page runs no server of its own, and a map must be running' && status.at(-1)?.[1] === true, 'sv_gravity on a joined page, or without a map, says so');
 // p_view.c's cvars on the game row (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed), as sv_gravity
 {
-  const gameRow = { bob_up: 0.005, bob_pitch: 0.002, bob_roll: 0.002, run_pitch: 0.002, run_roll: 0.005, sv_rollangle: 2, sv_rollspeed: 200, sv_maxvelocity: 2000, sv_airaccelerate: 0, g_select_empty: 0 };
+  const gameRow = { bob_up: 0.005, bob_pitch: 0.002, bob_roll: 0.002, run_pitch: 0.002, run_roll: 0.005, sv_rollangle: 2, sv_rollspeed: 200, sv_maxvelocity: 2000, sv_airaccelerate: 0, g_select_empty: 0, flood_msgs: 4, flood_persecond: 4, flood_waitdelay: 10 };
   host.gameCvar = async (col) => gameRow[col] ?? null;
   host.setGameCvar = async (col, n) => { gameRow[col] = n; };
   await con.submit('bob_up'); check(status.at(-1)?.[0] === '"bob_up" is "0.005"', 'bob_up shows the game row\'s 0.005');
@@ -393,6 +418,11 @@ await con.submit('sv_gravity'); check(status.at(-1)?.[0] === 'sv_gravity: a join
   await con.submit('sv_maxvelocity'); check(status.at(-1)?.[0] === '"sv_maxvelocity" is "2000"', 'sv_maxvelocity shows 2000');
   await con.submit('sv_airaccelerate 10'); await con.submit('g_select_empty 1'); await con.submit('sv_maxvelocity 500'); await con.submit('g_select_empty 2');
   check(gameRow.sv_airaccelerate === 10 && gameRow.g_select_empty === 1 && gameRow.sv_maxvelocity === 500 && status.at(-1)?.[0] === 'g_select_empty takes a number from 0 to 1, 0 as Quake had it' && status.at(-1)?.[1] === true, 'sv_airaccelerate, g_select_empty and sv_maxvelocity set on the game row, g_select_empty 2 refused');
+  await con.submit('flood_msgs'); check(status.at(-1)?.[0] === '"flood_msgs" is "4"', 'flood_msgs shows the game row\'s 4');
+  await con.submit('flood_waitdelay 20'); await con.submit('flood_persecond 2'); await con.submit('flood_msgs 11');
+  check(gameRow.flood_waitdelay === 20 && gameRow.flood_persecond === 2 && gameRow.flood_msgs === 4 && status.at(-1)?.[0] === 'flood_msgs takes a number from 0 to 10, 4 as Quake had it' && status.at(-1)?.[1] === true,
+    'flood_waitdelay and flood_persecond set on the game row, flood_msgs 11 refused (the ring holds ten)');
+  check(con.complete('flood_m') === 'flood_msgs ' && con.complete('flood_p') === 'flood_persecond ' && con.complete('flood_w') === 'flood_waitdelay ', 'Tab completes the three');
   host.gameCvar = async () => null;
   await con.submit('bob_up'); check(status.at(-1)?.[0] === 'bob_up: a joined page runs no server of its own, and a map must be running' && status.at(-1)?.[1] === true, 'on a joined page, or without a map, refused');
   // sv_maplist (a text on the game row) and sky (SCR_Sky_f: the sky box, the rotation and the axis through the page)

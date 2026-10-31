@@ -464,6 +464,18 @@ try {
       && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
+    // dumpuser 1 prints this page's client's userinfo in the scrollback as Info_Print laid it out; a client not in the game is not
+    // active; the flood cvars are on the game row (flood_waitdelay 20 reaches it)
+    await typeCommand('dumpuser 1');
+    const du = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(10) })).catch(() => ({}));
+    await typeCommand('dumpuser 3');
+    const du3 = await status();
+    await typeCommand('flood_waitdelay 20');
+    const fl = await page.evaluate(async () => (await window.quake2.sql('SELECT flood_msgs m, flood_waitdelay w FROM game'))[0]).catch(() => ({}));
+    await typeCommand('flood_waitdelay 10');
+    assert(/^client 1: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(du.line ?? '') && du.log?.includes('userinfo') && du.log?.includes('--------') && du.log?.some((l) => /^hand {16}0$/.test(l))
+      && du3 === 'Client 3 is not active' && fl?.M === 4 && fl?.W === 20,
+      `dumpuser 1 prints this page's userinfo in the scrollback and sums it on the line ("${du.line}"), client 3 is not active ("${du3}"), flood_waitdelay 20 reaches the game row (${JSON.stringify(fl)})`);
     // host_speeds 1 prints a frame's times on the line once a second as Qcommon_Frame did; m_filter reaches the settings
     await typeCommand('host_speeds 1'); await typeCommand('m_filter 1');
     let hs = null;

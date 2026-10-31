@@ -46,6 +46,11 @@ CREATE TABLE game (
   sv_maxvelocity DOUBLE PRECISION DEFAULT 2000 NOT NULL,
   sv_airaccelerate DOUBLE PRECISION DEFAULT 0 NOT NULL,
   g_select_empty SMALLINT DEFAULT 0 NOT NULL,
+  -- flood_msgs, flood_persecond and flood_waitdelay (Cmd_Say_f's flood protection in client_say: more than flood_msgs says in
+  -- flood_persecond seconds, and the client can't talk for flood_waitdelay seconds; flood_msgs 0, no protection; 4, 4 and 10 as Quake's)
+  flood_msgs     SMALLINT DEFAULT 4 NOT NULL,
+  flood_persecond DOUBLE PRECISION DEFAULT 4 NOT NULL,
+  flood_waitdelay DOUBLE PRECISION DEFAULT 10 NOT NULL,
   sv_maplist     VARCHAR(400) DEFAULT '' NOT NULL,     -- the sv_maplist cvar: the deathmatch rotation EndDMLevel follows, map names parted by spaces or commas
   sky            VARCHAR(32),                           -- worldspawn "sky": env/<sky>rt.pcx …
   cd_track       INTEGER DEFAULT 0 NOT NULL,
@@ -513,7 +518,9 @@ CREATE TABLE player (
   chase           SMALLINT DEFAULT 0 NOT NULL,            -- chase_target (3.20's g_chase.c): the client a watcher's view follows, 0 floating free
   fire_held       SMALLINT DEFAULT 0 NOT NULL,            -- latched_buttons' attack for a watcher: a press counts once (the next player chased)
   fov             DOUBLE PRECISION,                       -- the fov userinfo (ClientUserinfoChanged, 1..160): the client's own frustum; NULL, the view's
-  lastweapon      INTEGER DEFAULT 0 NOT NULL              -- pers.lastweapon (ChangeWeapon): the weapon bit held before the one in hand, weaplast's; 0 none yet
+  lastweapon      INTEGER DEFAULT 0 NOT NULL,             -- pers.lastweapon (ChangeWeapon): the weapon bit held before the one in hand, weaplast's; 0 none yet
+  flood_locktill  DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- flood_locktill (Cmd_Say_f): the level time the client may talk again from
+  flood_when      VARCHAR(100) DEFAULT '' NOT NULL        -- flood_when: the last ten says' times, each in hundredths of a second on ten characters, the newest last
 );
 
 -- client_respawn_t's coop_respawn: each client's persistent data as it was when the level began

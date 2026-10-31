@@ -85,14 +85,40 @@ BEGIN
 END^
 
 -- Cmd_Say_f: a client's words on every client's message line as "name: text" (PRINT_CHAT; say_team is say here, there
--- being no model or skin teams). The text as typed, 150 characters at most; nothing said prints nothing.
+-- being no model or skin teams). The text as typed, 150 characters at most; nothing said prints nothing. The flood
+-- protection first (flood_msgs, flood_persecond, flood_waitdelay on the game row): a client locked out is told how many more
+-- seconds; the say flood_msgs back (flood_when[flood_whenhead - flood_msgs + 1]: the last ten says' times on the player row,
+-- ten characters each) within flood_persecond seconds locks it out for flood_waitdelay seconds and says so; else the say
+-- is noted. flood_msgs 0 is no protection, as Quake had it.
 CREATE OR ALTER PROCEDURE client_say (client SMALLINT, text VARCHAR(150))
 AS
-DECLARE nm VARCHAR(40); DECLARE t VARCHAR(150);
+DECLARE nm VARCHAR(40); DECLARE t VARCHAR(150); DECLARE pe INTEGER; DECLARE now_ DOUBLE PRECISION; DECLARE locktill DOUBLE PRECISION;
+DECLARE whens VARCHAR(100); DECLARE msgs SMALLINT; DECLARE persec DOUBLE PRECISION; DECLARE waitd DOUBLE PRECISION; DECLARE back INTEGER; DECLARE t0 DOUBLE PRECISION;
 BEGIN
-  SELECT COALESCE(NULLIF(p.netname, ''), 'player ' || p.id) FROM player p WHERE p.id = :client INTO nm;
+  SELECT COALESCE(NULLIF(p.netname, ''), 'player ' || p.id), p.ent_id, p.flood_locktill, p.flood_when FROM player p WHERE p.id = :client INTO nm, pe, locktill, whens;
   t = TRIM(COALESCE(text, ''));
   IF (nm IS NULL OR t = '') THEN EXIT;
+  SELECT g.flood_msgs, g.flood_persecond, g.flood_waitdelay, g.time_ FROM game g WHERE g.id = 1 INTO msgs, persec, waitd, now_;
+  IF (msgs > 0) THEN
+  BEGIN
+    IF (now_ < locktill) THEN
+    BEGIN
+      EXECUTE PROCEDURE sprint(pe, 'You can''t talk for ' || CAST(FLOOR(locktill - now_) AS INTEGER) || ' more seconds', 2);   -- (PRINT_HIGH)
+      EXIT;
+    END
+    back = msgs * 10;
+    IF (CHAR_LENGTH(whens) >= back) THEN
+    BEGIN
+      t0 = CAST(SUBSTRING(whens FROM CHAR_LENGTH(whens) - back + 1 FOR 10) AS BIGINT) / 100.0;
+      IF (now_ - t0 < persec) THEN
+      BEGIN
+        UPDATE player p SET p.flood_locktill = :now_ + :waitd WHERE p.id = :client;
+        EXECUTE PROCEDURE sprint(pe, 'Flood protection:  You can''t talk for ' || CAST(FLOOR(waitd) AS INTEGER) || ' seconds.', 3);   -- (PRINT_CHAT)
+        EXIT;
+      END
+    END
+    UPDATE player p SET p.flood_when = RIGHT(p.flood_when || LPAD(CAST(FLOOR(:now_ * 100) AS BIGINT), 10, '0'), 100) WHERE p.id = :client;
+  END
   EXECUTE PROCEDURE sprint(NULL, nm || ': ' || t, 3);   -- (PRINT_CHAT)
 END^
 

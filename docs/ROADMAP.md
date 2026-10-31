@@ -1056,10 +1056,19 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   and connects, and joins an entry with its relay set; `test:settings` the book's check; `test:console` the two words;
   the browser test types an entry and sees it on the join menu, and the network game's join by code puts the relay and
   the code in the guest's book, on both builds.
-- **`dumpuser` and the chat's flood cvars**: `dumpuser <n>` prints a client's userinfo on the scrollback as
-  `SV_DumpUser_f` laid it out (the host's console), and `flood_msgs`, `flood_persecond` and `flood_waitdelay` are
-  `Cmd_Say_f`'s flood protection in `client_say`: more than `flood_msgs` (4) lines in `flood_persecond` (4) seconds
-  and the client "can't talk for N more seconds" (`flood_waitdelay`, 10).
+- **`dumpuser` and the chat's flood cvars**: done. `dumpuser <n>` is `SV_DumpUser_f`: a client's userinfo in the
+  scrollback as `Info_Print` laid it out (each key on twenty characters, its value after), the line summing it; this
+  page's, a guest's from its connect, a pad's player's name and hand from its row (the host's `dumpUser`); a joined
+  page is sent to the host, a client not in the game "is not active", a number past four "a bad client slot".
+  `flood_msgs`, `flood_persecond` and `flood_waitdelay` are game-row cvars (4, 4 and 10 as Quake's, set at the console
+  as the bob's): `client_say` is `Cmd_Say_f`'s flood protection first, the last ten says' times on the player row
+  (`flood_when`, ten characters each, `flood_locktill`): more than `flood_msgs` says in `flood_persecond` seconds and
+  the sayer alone is told "Flood protection:  You can't talk for N seconds.", saying again "You can't talk for N more
+  seconds", the lock lifting with the level clock; `flood_msgs 0` is no protection. `test:coop` says four times at
+  once, is refused the fifth and told the lock, told how many more seconds three seconds on, talks again past the
+  wait, and floods freely at 0; `test:console` the three cvars shown, set and refused, and dumpuser's usage, a joined
+  page, no game, a client's print and sum, a pad's, an inactive client and a bad slot; the browser test prints this
+  page's userinfo, asks for an inactive client and sets a flood cvar on the row, on both builds.
 - **`sw_mipcap`, `sw_mipscale` and `sw_stipplealpha`**: the painter's mip levels as `D_MipLevelForScale` scaled and
   capped them (the cap 0, the scale 1), and stippled translucency in place of the blend (`sw_stipplealpha 1`: every
   other pixel, as ref_soft drew water and glass without the alpha map).
