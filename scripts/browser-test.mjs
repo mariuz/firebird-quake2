@@ -422,6 +422,25 @@ try {
     assert(vs60.setting === 60 && vs60.vr?.w === 192 && vs60.vr?.h === 144 && vs60.vr?.x === 64 && vs60.vr?.y === 48 && vs60.sqlW === 192 && vs60.sqlH === 144 && vs60.tile
       && vs70.setting === 70 && vs70.vr?.w === 224 && vs80.setting === 80 && vs80.vr?.w === 256 && vs70b.setting === 70 && vs100.setting === 100 && vs100.vr?.w === 320 && vs100.vr?.x === 0 && vs100.sqlW === 320,
       `viewsize 60 draws the view in a 192×144 rectangle at 64,48 with the backtile around it and the SQL's frustum its size, sizeup and = step it up, - down, viewsize 100 is the whole screen again (${JSON.stringify({ vs60, vs70, vs80, vs70b, vs100 })})`);
+    // ref_soft's switches: r_novis marks every leaf (the frame has more faces), r_fullbright lights everything (the painter's flag, its
+    // surfaces built again), r_speeds prints the frame's figures on the console's line once a second; back to the defaults after
+    const facesNow = () => page.evaluate(() => window.quake2.sql('SELECT COUNT(*) c FROM frame_faces_fast').then((r) => r[0].C)).catch(() => -1);
+    const withPvs = await facesNow();
+    await typeCommand('r_novis 1'); await sleep(300);
+    const novis = await page.evaluate(() => window.quake2.sql('SELECT novis FROM viewcfg').then((r) => ({ novis: r[0].NOVIS, setting: window.quake2.settings.rNovis }))).catch(() => ({}));
+    const allFaces = await facesNow();
+    await typeCommand('r_novis 0');
+    await typeCommand('r_fullbright 1');
+    const fb1 = await page.evaluate(() => ({ flag: window.quake2.renderer.fullbright, setting: window.quake2.settings.rFullbright })).catch(() => ({}));
+    await typeCommand('r_fullbright 0');
+    await typeCommand('r_speeds 1');
+    let speeds = null;
+    for (let i = 0; i < 20 && !speeds; i++) { await sleep(200); speeds = await page.evaluate(() => window.quake2.notify.log(64).find((l) => / ms, \d+ wpoly \d+ epoly/.test(l)) ?? null).catch(() => null); }
+    await typeCommand('r_speeds 0');
+    const rDefaults = await page.evaluate(() => ({ fullbright: window.quake2.renderer.fullbright, novis: window.quake2.settings.rNovis, speeds: window.quake2.settings.rSpeeds, ents: window.quake2.settings.rDrawentities, world: window.quake2.settings.rDrawworld })).catch(() => ({}));
+    assert(novis.novis === 1 && novis.setting === true && allFaces > withPvs && fb1.flag === true && fb1.setting === true && typeof speeds === 'string'
+      && rDefaults.fullbright === false && rDefaults.novis === false && rDefaults.speeds === false && rDefaults.ents === true && rDefaults.world === true,
+      `r_novis 1 marks every leaf (${allFaces} faces against ${withPvs}), r_fullbright 1 sets the painter's flag, r_speeds 1 prints the frame's figures ("${speeds}"), and the switches come back (${JSON.stringify(rDefaults)})`);
     // writeconfig downloads config.cfg with the keys and the cvars; the settings put back, the file run through the Config
     // control (exec's picker) brings them again
     const [cfgDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('writeconfig')]);

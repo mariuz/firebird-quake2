@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_predict', 'cl_run', 'cl_showmiss', 'clear', 'cmdlist', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'screenshot', 'seed', 'sensitivity', 'set', 'sizedown', 'sizeup', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'version', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_predict', 'cl_run', 'cl_showmiss', 'clear', 'cmdlist', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'screenshot', 'seed', 'sensitivity', 'set', 'sizedown', 'sizeup', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'version', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -42,6 +42,14 @@ export const CVARS = {
   cl_showmiss: { key: 'clShowmiss', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   // SCR_CalcVrect's viewsize: the 3D view's share of the screen, 40 to 100 percent, the backtile around a smaller one (sizeup and sizedown step it by ten)
   viewsize: { key: 'viewsize', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.max(40, Math.min(100, Math.round(n))) : null; }, help: '40 to 100' },
+  // ref_soft's switches (none archived, as Quake's were not): r_fullbright 1 lights nothing, r_drawentities 0 and r_drawworld 0 leave
+  // the entities or the world out, r_lerpmodels 0 blends no poses, r_novis 1 marks every leaf, r_speeds 1 prints the frame's figures
+  r_fullbright: { key: 'rFullbright', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  r_drawentities: { key: 'rDrawentities', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  r_drawworld: { key: 'rDrawworld', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  r_lerpmodels: { key: 'rLerpmodels', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  r_novis: { key: 'rNovis', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  r_speeds: { key: 'rSpeeds', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
 };
 const HISTORY = 32;
 
@@ -237,7 +245,8 @@ export class Console {
         say((await h.dropAutoexec?.()) ? 'autoexec.cfg dropped' : 'no autoexec.cfg kept');
         return;
       case 'name': case 'hand': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume':
-      case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'netgraph': case 'cl_predict': case 'cl_showmiss': case 'viewsize': {
+      case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'netgraph': case 'cl_predict': case 'cl_showmiss': case 'viewsize':
+      case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': {
         // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
         // page's setSetting, so the menus and the page's controls agree; a word the cvar refuses leaves it
         const name = cmd.toLowerCase(), cv = CVARS[name];

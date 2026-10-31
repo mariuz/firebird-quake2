@@ -31,6 +31,7 @@ export class Renderer {
     this.sbarLines = 0;
     this.viewsize = 100;     // SCR_CalcVrect's viewsize: the 3D view's share of the screen, 40–100 percent (setViewSize)
     this.backtile = null;    // Draw_TileClear's backtile, the 64×64 picture tiled around a view smaller than the screen
+    this.fullbright = false; // r_fullbright: every surface and model at full light (the surface cache is cleared when it changes)
     this.sky = null;             // [6 × { w, h, data }]
     this.lightScale = 1.4;       // ref_gl's intensity: the software lightmaps are dim on their own
     this.dlights = [];           // this frame's dynamic lights: [{ x, y, z, r }] (V_AddLight)
@@ -264,7 +265,8 @@ export class Renderer {
     const lh = f.lightH;
     const ls = this.lightScale;
     const block = new Float32Array(lw * lh);
-    if (f.lightofs >= 0 && bsp.lightdata.length) {
+    if (this.fullbright) block.fill(255 * ls);   // r_fullbright: R_BuildLightMap's full light, no lightmap and no dynamic light
+    else if (f.lightofs >= 0 && bsp.lightdata.length) {
       const ld = bsp.lightdata;
       let off = f.lightofs;
       for (let i = 0; i < 4 && f.styles[i] !== 255; i++) {
@@ -278,7 +280,7 @@ export class Renderer {
     // R_AddDynamicLights: each sample within the light's reach of where it falls gains what is left of it
     // (distances in the octagonal measure sd + td/2, in whole units as the C had them; not scaled by the
     // brightness, which is the lightmaps' modulate)
-    if (lit) {
+    if (lit && !this.fullbright) {
       for (let j = 0; j < lit.length; j += 4) {
         const rad = lit[j], minlight = lit[j + 1], s0 = Math.trunc(lit[j + 2]), t0 = Math.trunc(lit[j + 3]);
         for (let t = 0; t < lh; t++) {
@@ -660,7 +662,7 @@ export class Renderer {
     // RF_MINLIGHT (the view weapon), pulsing by 0.1 sin(7t) for RF_GLOW (items) but not below 0.8 of itself;
     // then ambient at most 128, ambient and shade at most 192 together, ambient at least LIGHT_MIN 5, and the
     // light from (-1, 0, 0) in the world: a vertex gains shade by how far its normal faces +x
-    let l = opts.fullbright ? 255 : light * this.lightScale + (opts.dlight ?? 0);   // RF_FULLBRIGHT: light 1.0
+    let l = opts.fullbright || this.fullbright ? 255 : light * this.lightScale + (opts.dlight ?? 0);   // RF_FULLBRIGHT, or r_fullbright: light 1.0
     if (opts.minlight && l < 25.5) l = 25.5;
     if (opts.glow) l = Math.max(l * 0.8, l + 25.5 * Math.sin((opts.time ?? 0) * 7));
     const j = Math.trunc(l * 0.9999);

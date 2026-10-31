@@ -122,9 +122,12 @@ AS
 DECLARE world INTEGER; DECLARE eflood INTEGER;
 DECLARE bminx DOUBLE PRECISION; DECLARE bminy DOUBLE PRECISION; DECLARE bminz DOUBLE PRECISION;
 DECLARE bmaxx DOUBLE PRECISION; DECLARE bmaxy DOUBLE PRECISION; DECLARE bmaxz DOUBLE PRECISION;
-DECLARE i INTEGER; DECLARE len INTEGER; DECLARE d INTEGER; DECLARE k INTEGER; DECLARE c INTEGER; DECLARE sig VARCHAR(1000);
+DECLARE i INTEGER; DECLARE len INTEGER; DECLARE d INTEGER; DECLARE k INTEGER; DECLARE c INTEGER; DECLARE sig VARCHAR(1000); DECLARE nv SMALLINT;
 BEGIN
   DELETE FROM vis_sets s WHERE s.slot = :slot;
+  -- r_novis (R_MarkLeaves with r_novis): every leaf, the PVS and the area portals ignored
+  SELECT c.novis FROM viewcfg c WHERE c.id = 1 INTO nv;
+  IF (nv = 1) THEN pvs = '*';
   SELECT g.world_model FROM game g WHERE g.id = 1 INTO world;
   -- the areas the eye's area is connected to through open portals (CM_WriteAreaBits)
   SELECT f.flood FROM area_flood f WHERE f.area = :varea INTO eflood;
@@ -135,11 +138,11 @@ BEGIN
   -- the leaves in the PVS: its set bits, cluster by cluster through the cluster index (a scan of
   -- every leaf testing its bit cost three times as much); no PVS, every leaf
   DELETE FROM vis_leaves;
-  IF (pvs = '') THEN
+  IF (pvs = '' OR pvs = '*') THEN
     INSERT INTO vis_leaves (first_lf, num_lf)
     SELECT l.first_lf, l.num_lf FROM leaves l
      WHERE l.cluster >= 0 AND l.num_lf > 0
-       AND (:eflood IS NULL OR l.area IN (SELECT f.area FROM area_flood f WHERE f.flood = :eflood));
+       AND (:pvs = '*' OR :eflood IS NULL OR l.area IN (SELECT f.area FROM area_flood f WHERE f.flood = :eflood));
   ELSE
   BEGIN
     i = 1; len = CHAR_LENGTH(pvs);
