@@ -337,9 +337,10 @@ END^
 CREATE OR ALTER PROCEDURE player_impulse (pe INTEGER, imp SMALLINT)
 AS
 DECLARE have INTEGER; DECLARE w INTEGER; DECLARE i INTEGER; DECLARE ak SMALLINT; DECLARE cur INTEGER; DECLARE n INTEGER;
-DECLARE wname VARCHAR(20); DECLARE aname VARCHAR(10);
+DECLARE wname VARCHAR(20); DECLARE aname VARCHAR(10); DECLARE sel_empty SMALLINT;
 BEGIN
   SELECT p.weapons, p.weapon FROM player p WHERE p.ent_id = :pe INTO have, w;
+  SELECT g.g_select_empty FROM game g WHERE g.id = 1 INTO sel_empty;   -- (g_select_empty: a weapon with no ammo for it is taken, and the cycle visits it)
   cur = w;
   IF (imp = 99) THEN                                                     -- give all
   BEGIN
@@ -366,7 +367,7 @@ BEGIN
       IF (BIN_AND(have, w) <> 0) THEN
       BEGIN
         ak = weapon_ammo(w);
-        IF (w = 32 OR ak = 0 OR ammo_count(pe, ak) >= IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN LEAVE;
+        IF (sel_empty = 1 OR w = 32 OR ak = 0 OR ammo_count(pe, ak) >= IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN LEAVE;
       END
       i = i + 1;
     END
@@ -387,7 +388,7 @@ BEGIN
     END
     IF (w = cur) THEN EXIT;
     ak = weapon_ammo(w);
-    IF (ak > 0 AND w <> 32) THEN
+    IF (ak > 0 AND w <> 32 AND sel_empty = 0) THEN
     BEGIN
       n = ammo_count(pe, ak);
       aname = TRIM(CASE ak WHEN 1 THEN 'Shells' WHEN 2 THEN 'Bullets' WHEN 3 THEN 'Grenades' WHEN 4 THEN 'Rockets' WHEN 5 THEN 'Cells' ELSE 'Slugs' END);
@@ -700,6 +701,8 @@ BEGIN
   ELSE IF (cmd = 'invprev') THEN EXECUTE PROCEDURE inv_impulse(pe, 15);
   ELSE IF (cmd = 'invdrop') THEN EXECUTE PROCEDURE inv_impulse(pe, 23);
   ELSE IF (cmd = 'weaplast') THEN EXECUTE PROCEDURE weaplast_cmd(pe);
+  ELSE IF (cmd = 'weapnext') THEN EXECUTE PROCEDURE player_impulse(pe, 12);   -- (Cmd_WeapNext_f, Cmd_WeapPrev_f as words)
+  ELSE IF (cmd = 'weapprev') THEN EXECUTE PROCEDURE player_impulse(pe, 22);
   ELSE IF (cmd = 'wave') THEN EXECUTE PROCEDURE wave_cmd(pe, arg);
   ELSE msg = 'unknown command "' || cmd || '"';
   IF (msg <> '') THEN EXECUTE PROCEDURE sprint(pe, msg);
@@ -718,6 +721,7 @@ DECLARE rx DOUBLE PRECISION; DECLARE ry DOUBLE PRECISION;
 DECLARE cbu DOUBLE PRECISION; DECLARE cbp DOUBLE PRECISION; DECLARE cbr DOUBLE PRECISION; DECLARE crp DOUBLE PRECISION; DECLARE crr DOUBLE PRECISION;
 DECLARE cra DOUBLE PRECISION; DECLARE crs DOUBLE PRECISION; DECLARE bvz DOUBLE PRECISION; DECLARE rside DOUBLE PRECISION; DECLARE mroll DOUBLE PRECISION;
 DECLARE bobmove DOUBLE PRECISION;
+DECLARE cairacc DOUBLE PRECISION; DECLARE wcap DOUBLE PRECISION;
 DECLARE wx DOUBLE PRECISION; DECLARE wy DOUBLE PRECISION; DECLARE wz DOUBLE PRECISION; DECLARE wspd DOUBLE PRECISION; DECLARE maxspd DOUBLE PRECISION;
 DECLARE cur DOUBLE PRECISION; DECLARE add_ DOUBLE PRECISION; DECLARE acc DOUBLE PRECISION;
 DECLARE jr SMALLINT; DECLARE onground SMALLINT;
@@ -744,9 +748,9 @@ BEGIN
   -- (the player and ents rows are wide: what the think decides is written back once, at the end)
   SELECT p.jump_released, p.air_finished, p.dead_time, p.weapon, p.enviro_finished, p.breather_finished, p.next_drown_time, p.drown_dmg, p.pitch, p.stepz,
          p.ducked, p.bobtime, p.water_x, p.water_y, p.water_z, g.coop, g.deathmatch, g.dmflags,
-         g.bob_up, g.bob_pitch, g.bob_roll, g.run_pitch, g.run_roll, g.sv_rollangle, g.sv_rollspeed
+         g.bob_up, g.bob_pitch, g.bob_roll, g.run_pitch, g.run_roll, g.sv_rollangle, g.sv_rollspeed, g.sv_airaccelerate
     FROM player p CROSS JOIN game g WHERE p.ent_id = :pe AND g.id = 1 INTO jr, afin, deadt, w, enviro, breather, ndt, ddmg, ppitch, pstepz, pducked, pbobtime, wcx, wcy, wcz, coop, dm, dmf,
-         cbu, cbp, cbr, crp, crr, cra, crs;
+         cbu, cbp, cbr, crp, crr, cra, crs, cairacc;
   IF (jr IS NULL) THEN EXIT;
   SELECT e.deadflag, e.flags, e.waterlevel, e.watertype, e.yaw, e.health, e.z, e.max_health, e.x, e.y FROM ents e WHERE e.id = :pe
     INTO dead, flags, owl, wt, yaw, hp, oldz, mhp, oldx, oldy;
@@ -942,8 +946,9 @@ BEGIN
     wx = fx_ * fwd * maxspd + rx * side * maxspd; wy = fy * fwd * maxspd + ry * side * maxspd;
     wspd = vlen(wx, wy, 0);
     IF (wspd > maxspd) THEN BEGIN wx = wx * maxspd / wspd; wy = wy * maxspd / wspd; wspd = maxspd; END
-    -- PM_AirMove: no air control in single player (pm_airaccelerate 0)
-    IF (wspd > 0 AND onground = 1) THEN
+    -- PM_AirMove: on the ground (or wading) PM_Accelerate at pm_accelerate's 10; in the air PM_AirAccelerate with sv_airaccelerate on (the
+    -- wish speed capped at 30, the acceleration pm_accelerate's over the whole wish speed: a strafe jump), else PM_Accelerate at 1
+    IF (wspd > 0 AND (onground = 1 OR wl = 1)) THEN
     BEGIN
       cur = (vx * wx + vy * wy) / wspd;
       add_ = wspd - cur;
@@ -953,14 +958,14 @@ BEGIN
         vx = vx + acc * wx / wspd; vy = vy + acc * wy / wspd;
       END
     END
-    ELSE IF (wspd > 0 AND wl = 1) THEN
+    ELSE IF (wspd > 0) THEN
     BEGIN
-      -- wading: some control while the feet are wet
+      wcap = IIF(cairacc > 0, MINVALUE(wspd, 30), wspd);
       cur = (vx * wx + vy * wy) / wspd;
-      add_ = wspd - cur;
+      add_ = wcap - cur;
       IF (add_ > 0) THEN
       BEGIN
-        acc = MINVALUE(add_, 10 * wspd * dt);
+        acc = MINVALUE(add_, IIF(cairacc > 0, 10, 1) * wspd * dt);
         vx = vx + acc * wx / wspd; vy = vy + acc * wy / wspd;
       END
     END

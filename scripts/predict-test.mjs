@@ -135,21 +135,22 @@ check(!noclip.onground && near(noclip.vz, 300) && near(noclip.z, st0.z + 15) && 
 // ── p_view.c's cvars on the game row (bob_up, bob_pitch, bob_roll, run_pitch, run_roll): the JS bobs by the ones it is given, and
 // lands on the SQL's view with the same ones; the defaults are Quake's
 {
-  const view = { bobUp: 0.01, bobPitch: 0.004, bobRoll: 0.001, runPitch: 0.01, runRoll: 0.02 };
-  await db.exec(`UPDATE game SET bob_up = ${view.bobUp}, bob_pitch = ${view.bobPitch}, bob_roll = ${view.bobRoll}, run_pitch = ${view.runPitch}, run_roll = ${view.runRoll}`);
-  let worstV = 0, moved = 0;
+  const view = { bobUp: 0.01, bobPitch: 0.004, bobRoll: 0.001, runPitch: 0.01, runRoll: 0.02, airaccelerate: 10 };
+  await db.exec(`UPDATE game SET bob_up = ${view.bobUp}, bob_pitch = ${view.bobPitch}, bob_roll = ${view.bobRoll}, run_pitch = ${view.runPitch}, run_roll = ${view.runRoll}, sv_airaccelerate = ${view.airaccelerate}`);
+  let worstV = 0, moved = 0, airborne = 0;
   for (let i = 0; i < 16; i++) {
-    const c = { fwd: 1, side: i % 2 ? 1 : -1, yawd: 3, pitchd: 0, jump: 0, run: 1 };
+    const c = { fwd: 1, side: i % 2 ? 1 : -1, yawd: 3, pitchd: 0, jump: i === 2 ? 1 : 0, run: 1 };   // (a jump on the third tic: the air acceleration in play)
     const world = { solids: await solidsNow(), boxes: await boxesNow(), gravity: 800, view };
     const st = pmove(cm, stateFromRow(last), c, 0.05, world);
     const row = await session.tic([1, c.fwd, c.side, c.yawd, c.pitchd, 0, c.jump, c.run, 0]);
-    worstV = Math.max(worstV, Math.abs(st.view.viewZ - row.VIEW_Z), Math.abs(st.view.pitch - (row.PITCH - row.PUNCH)), Math.abs(st.view.roll - row.ROLL));
+    worstV = Math.max(worstV, Math.abs(st.view.viewZ - row.VIEW_Z), Math.abs(st.view.pitch - (row.PITCH - row.PUNCH)), Math.abs(st.view.roll - row.ROLL), Math.abs(st.vx - row.VX), Math.abs(st.vy - row.VY), Math.abs(st.view.x - row.PX), Math.abs(st.view.y - row.PY));
     moved = Math.max(moved, Math.abs(row.ROLL));
+    if (!row.ONGROUND) airborne++;
     last = row;
   }
-  check(worstV < 1e-6 && moved > 1, `with the game row's view cvars changed and given to the JS, the eye, the pitch and the roll agree to the number over 16 tics (the largest difference ${worstV.toExponential(1)}, a roll of ${moved.toFixed(2)})`);
-  check(VIEW_CVARS.bobUp === 0.005 && VIEW_CVARS.bobPitch === 0.002 && VIEW_CVARS.bobRoll === 0.002 && VIEW_CVARS.runPitch === 0.002 && VIEW_CVARS.runRoll === 0.005, 'the defaults are p_view.c\'s');
-  await db.exec('UPDATE game SET bob_up = 0.005, bob_pitch = 0.002, bob_roll = 0.002, run_pitch = 0.002, run_roll = 0.005');
+  check(worstV < 1e-6 && moved > 1 && airborne > 0, `with the game row's view cvars and sv_airaccelerate changed and given to the JS, the eye, the pitch, the roll, the origin and the speed agree to the number over 16 tics with ${airborne} in the air (the largest difference ${worstV.toExponential(1)}, a roll of ${moved.toFixed(2)})`);
+  check(VIEW_CVARS.bobUp === 0.005 && VIEW_CVARS.bobPitch === 0.002 && VIEW_CVARS.bobRoll === 0.002 && VIEW_CVARS.runPitch === 0.002 && VIEW_CVARS.runRoll === 0.005 && VIEW_CVARS.airaccelerate === 0, 'the defaults are p_view.c\'s, and no air acceleration');
+  await db.exec('UPDATE game SET bob_up = 0.005, bob_pitch = 0.002, bob_roll = 0.002, run_pitch = 0.002, run_roll = 0.005, sv_airaccelerate = 0');
 }
 
 await db.close();

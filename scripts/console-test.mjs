@@ -368,7 +368,7 @@ host.gravity = async () => null;
 await con.submit('sv_gravity'); check(status.at(-1)?.[0] === 'sv_gravity: a joined page runs no server of its own, and a map must be running' && status.at(-1)?.[1] === true, 'sv_gravity on a joined page, or without a map, says so');
 // p_view.c's cvars on the game row (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed), as sv_gravity
 {
-  const gameRow = { bob_up: 0.005, bob_pitch: 0.002, bob_roll: 0.002, run_pitch: 0.002, run_roll: 0.005, sv_rollangle: 2, sv_rollspeed: 200 };
+  const gameRow = { bob_up: 0.005, bob_pitch: 0.002, bob_roll: 0.002, run_pitch: 0.002, run_roll: 0.005, sv_rollangle: 2, sv_rollspeed: 200, sv_maxvelocity: 2000, sv_airaccelerate: 0, g_select_empty: 0 };
   host.gameCvar = async (col) => gameRow[col] ?? null;
   host.setGameCvar = async (col, n) => { gameRow[col] = n; };
   await con.submit('bob_up'); check(status.at(-1)?.[0] === '"bob_up" is "0.005"', 'bob_up shows the game row\'s 0.005');
@@ -377,9 +377,12 @@ await con.submit('sv_gravity'); check(status.at(-1)?.[0] === 'sv_gravity: a join
   await con.submit('sv_rollangle 4'); await con.submit('sv_rollspeed 100'); await con.submit('run_roll 0.01'); await con.submit('run_pitch x');
   check(gameRow.sv_rollangle === 4 && gameRow.sv_rollspeed === 100 && gameRow.run_roll === 0.01 && gameRow.run_pitch === 0.002 && status.at(-1)?.[1] === true, 'sv_rollangle, sv_rollspeed and run_roll set, run_pitch x refused');
   await con.submit('bob_pitch'); await con.submit('bob_roll'); check(status.at(-2)?.[0] === '"bob_pitch" is "0.002"' && status.at(-1)?.[0] === '"bob_roll" is "0.002"', 'bob_pitch and bob_roll show theirs');
+  await con.submit('sv_maxvelocity'); check(status.at(-1)?.[0] === '"sv_maxvelocity" is "2000"', 'sv_maxvelocity shows 2000');
+  await con.submit('sv_airaccelerate 10'); await con.submit('g_select_empty 1'); await con.submit('sv_maxvelocity 500'); await con.submit('g_select_empty 2');
+  check(gameRow.sv_airaccelerate === 10 && gameRow.g_select_empty === 1 && gameRow.sv_maxvelocity === 500 && status.at(-1)?.[0] === 'g_select_empty takes a number from 0 to 1, 0 as Quake had it' && status.at(-1)?.[1] === true, 'sv_airaccelerate, g_select_empty and sv_maxvelocity set on the game row, g_select_empty 2 refused');
   host.gameCvar = async () => null;
   await con.submit('bob_up'); check(status.at(-1)?.[0] === 'bob_up: a joined page runs no server of its own, and a map must be running' && status.at(-1)?.[1] === true, 'on a joined page, or without a map, refused');
-  check(con.complete('bob') === 'bob_pitch ' && con.complete('run_') === 'run_pitch ' && con.complete('sv_r') === 'sv_rollangle ', 'Tab completes them');
+  check(con.complete('bob') === 'bob_pitch ' && con.complete('run_') === 'run_pitch ' && con.complete('sv_r') === 'sv_rollangle ' && con.complete('sv_a') === 'sv_airaccelerate ' && con.complete('sv_m') === 'sv_maxvelocity ' && con.complete('g_') === 'g_select_empty ' && con.complete('weapn') === 'weapnext ' && con.complete('weapp') === 'weapprev ', 'Tab completes them, weapnext and weapprev too');
 }
 // deathmatch, coop and maxclients: the Players select's words, latched for the next game
 {

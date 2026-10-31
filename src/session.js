@@ -112,7 +112,7 @@ export class Session {
     if (!newGame && this.unitLevels.has(name)) await importLevel(this.db, this.unitLevels.get(name));
     await this.applyUserinfo();
     this.map = { name, bsp };
-    const g = (await this.db.query('SELECT sky, cd_track, gravity, bob_up, bob_pitch, bob_roll, run_pitch, run_roll FROM game')).rows[0];
+    const g = (await this.db.query('SELECT sky, cd_track, gravity, bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_airaccelerate FROM game')).rows[0];
     await this.loadStyleBase();
     const speakers = (await this.db.query("SELECT id, x, y, z, noise1, sounds FROM ents WHERE classname = 'target_speaker' AND BIN_AND(spawnflags, 3) <> 0 AND noise1 IS NOT NULL", [], ARR)).rows;
     await this.resetEvents();
@@ -120,7 +120,7 @@ export class Session {
     const ws = bsp.entities.find((e) => e.classname === 'worldspawn') ?? {};
     const skyAxis = ws.skyaxis ? ws.skyaxis.trim().split(/\s+/).map(Number).map((v) => (Number.isFinite(v) ? v : 0)) : [0, 0, 0];
     return { bsp, sky: g.SKY, cdTrack: Number(g.CD_TRACK ?? 0), skyRotate: Number(ws.skyrotate) || 0, skyAxis, speakers, gravity: Number(g.GRAVITY ?? 800),
-      viewCvars: { bobUp: Number(g.BOB_UP ?? 0.005), bobPitch: Number(g.BOB_PITCH ?? 0.002), bobRoll: Number(g.BOB_ROLL ?? 0.002), runPitch: Number(g.RUN_PITCH ?? 0.002), runRoll: Number(g.RUN_ROLL ?? 0.005) } };   // (p_view.c's cvars: a guest's prediction bobs by them)
+      viewCvars: { bobUp: Number(g.BOB_UP ?? 0.005), bobPitch: Number(g.BOB_PITCH ?? 0.002), bobRoll: Number(g.BOB_ROLL ?? 0.002), runPitch: Number(g.RUN_PITCH ?? 0.002), runRoll: Number(g.RUN_ROLL ?? 0.005), airaccelerate: Number(g.SV_AIRACCELERATE ?? 0) } };   // (p_view.c's cvars and sv_airaccelerate: a guest's prediction bobs and flies by them)
   }
 
   /**

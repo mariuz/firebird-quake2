@@ -40,6 +40,12 @@ CREATE TABLE game (
   run_roll       DOUBLE PRECISION DEFAULT 0.005 NOT NULL,
   sv_rollangle   DOUBLE PRECISION DEFAULT 2 NOT NULL,
   sv_rollspeed   DOUBLE PRECISION DEFAULT 200 NOT NULL,
+  -- sv_maxvelocity (SV_CheckVelocity's clamp on a tossed thing's or a monster's speed, 2000), sv_airaccelerate (pmove's air acceleration
+  -- on, 0: PM_Accelerate at 1 in the air; on, PM_AirAccelerate with the wish speed capped at 30) and g_select_empty (Use_Weapon takes
+  -- a weapon with no ammo for it, and the weapon cycle visits it)
+  sv_maxvelocity DOUBLE PRECISION DEFAULT 2000 NOT NULL,
+  sv_airaccelerate DOUBLE PRECISION DEFAULT 0 NOT NULL,
+  g_select_empty SMALLINT DEFAULT 0 NOT NULL,
   sky            VARCHAR(32),                           -- worldspawn "sky": env/<sky>rt.pcx …
   cd_track       INTEGER DEFAULT 0 NOT NULL,
   intermission_time DOUBLE PRECISION,                   -- set at a unit's end: the player watches from an info_player_intermission

@@ -767,7 +767,13 @@ takes its worldspawn's again, and a joined page runs no server), `bob_up`, `bob_
 the eye, the pitch and the roll by the first three a unit of speed, adds the velocity along the view's forward and right times
 `run_pitch` and `run_roll`, `SV_CalcViewOffset`, and rolls the player's model by `SV_CalcRoll` times four, `sv_rollangle` full at
 a sideways `sv_rollspeed`, what the other players and a recording see; `src/pmove.js` has the same from the map message, so a
-guest's prediction bobs by the host's, one changed at the host's console reaching it at the next map) and `hostname` (the host's name, archived as Quake's was,
+guest's prediction bobs by the host's, one changed at the host's console reaching it at the next map), `sv_maxvelocity`
+(`SV_CheckVelocity`: a tossed thing's or a falling monster's speed held within it, 2000, in `toss_move` and the monsters' step),
+`sv_airaccelerate` (pmove's air acceleration: 0, `PM_Accelerate` at 1 in the air, a little control as Quake had it; on,
+`PM_AirAccelerate` with the wish speed capped at 30 and the acceleration 10 over the whole of it, a strafe jump; `player_think` and
+`src/pmove.js` alike, a guest's from the map message) and `g_select_empty` (`Use_Weapon` takes a weapon with no ammo for it and the
+cycle visits it), all three on the game row as the bob's; `weapnext` and `weapprev` (`Cmd_WeapNext_f`, `Cmd_WeapPrev_f` as words, the
+impulses 12 and 22) and `hostname` (the host's name, archived as Quake's was,
 "noname" when empty: the serverinfo's, and the map message carries it so a joined page's stats line names the host),
 `deathmatch`, `coop` and `maxclients` (the Players select's words, latched as Quake latched them: the next game's mode and
 clients go to the settings and the select through `setGameMode`, "will be changed for next game." said, the game running

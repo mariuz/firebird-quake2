@@ -949,9 +949,17 @@ DECLARE f DOUBLE PRECISION; DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECI
 DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER; DECLARE sfl INTEGER;
 DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION; DECLARE cb SMALLINT;
 DECLARE backoff DOUBLE PRECISION; DECLARE grav DOUBLE PRECISION; DECLARE wl SMALLINT; DECLARE wt INTEGER; DECLARE owl SMALLINT;
+DECLARE mv DOUBLE PRECISION;
 BEGIN
   SELECT e.movetype, e.flags, e.vx, e.vy, e.vz, e.gravity, e.waterlevel FROM ents e WHERE e.id = :eid INTO mt, flags, vx, vy, vz, grav, owl;
   IF (BIN_AND(flags, 512) <> 0 AND mt <> 9) THEN EXIT;       -- resting on the ground
+  -- SV_CheckVelocity: each axis of the speed held within sv_maxvelocity (the game row's, 2000)
+  SELECT g.sv_maxvelocity FROM game g WHERE g.id = 1 INTO mv;
+  IF (mv IS NOT NULL AND mv > 0) THEN
+  BEGIN
+    vx = MAXVALUE(-mv, MINVALUE(mv, vx)); vy = MAXVALUE(-mv, MINVALUE(mv, vy)); vz = MAXVALUE(-mv, MINVALUE(mv, vz));
+    UPDATE ents e SET e.vx = :vx, e.vy = :vy WHERE e.id = :eid AND (e.vx <> :vx OR e.vy <> :vy);
+  END
   IF (mt IN (6, 10)) THEN vz = vz - (SELECT g.gravity FROM game g WHERE g.id = 1) * COALESCE(NULLIF(grav, 0), 1) * dt;   -- SV_AddGravity (toss, bounce)
   UPDATE ents e SET e.vz = :vz, e.yaw = MOD(e.yaw + e.avel_yaw * :dt + 360, 360) WHERE e.id = :eid;
   EXECUTE PROCEDURE push_entity(eid, vx * dt, vy * dt, vz * dt) RETURNING_VALUES f, nx, ny, nz, als, sts, hit, sfl;
