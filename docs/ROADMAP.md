@@ -386,10 +386,26 @@ The fourth list, from what the entries above and below still leave: in the order
   `test:coop` sees a marker a client where each stands, the second client out of sight of its marker drop
   another of its own with the first's trail untouched, and a monster pick the second's markers when it pursues
   the second and the first's when the first; `test:monsters`' pursuit is as it was.
-- **The actors as logic**: `misc_actor` and `target_actor` (m_actor.c) are the full game's: a marine with a
-  frame table (stand, walk, run, pain, death, flipoff, taunt, attack) who walks the `target_actor` path he
-  is given, waits, jumps and shoots as the corners say, and shoots back when hurt. The table is known, so he
-  can run on a model row without a mesh as the monsters do.
+- **The actors as logic**: done. `misc_actor` and `target_actor` (m_actor.c) were not spawned. The actor is
+  the monster `actor` now (`misc_actor` becomes `monster_actor` in `spawn_map_ents`; one without a target is
+  freed, as it was): a row of `monster_types` on the player's model, which the demo pak lacks, so he runs on a
+  model row without a mesh with m_actor.h's thirteen runs (133 frames: attack, two deaths, the flipoff, three
+  pains, push, run, stand, taunt, walk, jump), 100 health, gibbed at -80, a machine gun on the first two attack
+  frames (`actorMachineGun`), the male player's pain and death sounds. He stands where he is put until used
+  (`actor_use` starts him down his path, facing its first `target_actor`); the corners are triggers 16 across
+  (`SP_target_actor`), and the walk to path corners takes them too: reaching one (`target_actor_touch`) he
+  says its message to every client by name (`actor_names`: Hellrot, Tokay, Killme, Disruptor, Adrianator,
+  Rambear, Titus, Bitterman, by his entity number), a JUMP corner throws him along its angle at its speed and
+  up by its height, an ATTACK corner makes whatever its pathtarget names his enemy (held where he stands with
+  HOLD, run at otherwise), a corner neither SHOOT nor ATTACK fires its pathtarget, and the corner's target is
+  the next; with nowhere to go and no enemy he stands for good. `test:monsters` runs him through every
+  monster's checks (he sees the player, shoots with the machine gun, dies; he has no sight sound, which the
+  test now allows); `test:entities` spawns him with a path of three corners in the corridor east of the
+  yard and a soldier for the third's pathtarget, sees him stand until used, walk to the first and say its
+  message by name, be thrown up at the second, take the soldier for his enemy at the third and hold there,
+  and shoot at it. Found on the way: a monster holding its ground (`AI_STAND_GROUND`, a held `point_combat`) never
+  fired, the run state's held branch exiting on the attack check's word every think before the missile transition
+  could run; the attack states come first now, as `ai_run` took them.
 - **Spectating over the network**: a guest who only watches: a client that joins as a spectator (3.20's
   `spectator` userinfo: no model, nothing solid, no damage, a noclip move through the level), so a page can
   follow a game without a player in it.
@@ -691,8 +707,8 @@ picker). Missing for the rest of the game:
   `target_spawner` spawns its target's classname at its place through the map's own spawn function
   (`spawn_map_ents` with one row) and sets it off along its angle at its speed.
   `scripts/entities-test.mjs` adds them all to demo1's lump and checks them, the insane marines' three forms
-  and the commander's body too. Missing (checked against g_spawn.c's spawn table): `target_actor` /
-  `misc_actor`, which need the actor's model and animation table. `misc_bigviper` stands still, as in Quake 2. `func_group` is editor-only and correctly ignored;
+  and the commander's body too, and the actor with his `target_actor` path (see *Next*, the fourth list).
+  Nothing is missing from g_spawn.c's spawn table now. `misc_bigviper` stands still, as in Quake 2. `func_group` is editor-only and correctly ignored;
   `viewthing` is a debugging aid. (`target_mal_laser`, once listed here, is the first mission pack's.)
 - **Trains**: `func_train_find` put a train on its first corner and aimed it at the next; the port aimed
   it at the first again, so every train (and demo1's three strogg ships) began with that corner's wait
