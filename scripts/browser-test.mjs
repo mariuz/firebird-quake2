@@ -1289,6 +1289,17 @@ try {
       const rejoinedStats = await gstats();
       assert(again === offer && lastJoined === null && hr.role === 'host' && hr.guests?.length === 1 && gr.role === 'guest' && gr.frames > 20 && gr.map === 'demo1' && /joined Hal: \d+ frames/.test(rejoinedStats),
         `Host again publishes under the code the host had (${again}), and reconnect at the guest's console joins the game again (${JSON.stringify({ hr, gr })}), its stats line naming the host (${rejoinedStats})`);
+      // cl_timeout: the guest hearing nothing from the host that long leaves (CL_CheckTimeout: "Server connection timed out."); its page stands
+      // for a key as a kicked one does (the host's frames are dropped at the guest's link here, the host left as it was)
+      await typeOn(gp, 'cl_timeout 2');
+      await gp.evaluate(() => { window.quake2.net.guest.link.onMessage = () => {}; });
+      let tout = {};
+      for (let i = 0; i < 60 && tout.state !== 'kicked'; i++) { await sleep(250); tout = await gp.evaluate(() => ({ status: document.getElementById('status')?.textContent, state: document.getElementById('net-state')?.textContent, role: window.quake2?.net?.role })).catch(() => ({})); }
+      assert(tout.state === 'kicked' && tout.status === 'Server connection timed out. Press a key or click the view for a game of your own.' && tout.role === undefined,
+        `cl_timeout 2: the guest hearing nothing leaves with the reason (${JSON.stringify(tout)})`);
+      await gp.keyboard.press('Space');
+      for (let i = 0; i < 120 && (await gp.evaluate(() => document.getElementById('net-state')?.textContent === 'kicked').catch(() => true)); i++) await sleep(250);
+      await typeOn(gp, 'cl_timeout 120');
       await typeOn(gp, 'disconnect');
       for (let i = 0; i < 40 && (await hstate()).role !== undefined; i++) await sleep(250);
       for (const p of [page, gp]) await p.evaluate(() => { window.quake2.settings.rtcSignal = ''; }).catch(() => undefined);   // (the guest is back on the attract loop: no console there)

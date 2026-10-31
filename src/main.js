@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
-import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, iceServers, connectRefusal } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, iceServers, connectRefusal, silentPast } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
@@ -836,6 +836,8 @@ async function frame() {
         if (!row || !running) continue;
         const gf = await session.frame({ sqlRenderer: false, client: g.client, boxes: true });   // (the boxes about it: its prediction clips against them)
         const inv = g.host.wantInv ? await session.inventory(g.client) : null;
+        // SV_CheckTimeouts: a guest silent past the timeout cvar is dropped, every message line told ("timed out"), its page told the reason
+        if (silentPast(g.host, Number(settings.timeout) || 0)) { timedOut(g); continue; }
         if (g.host.open && last.TIC % 20 === 0) g.host.sendPing();   // (a ping a second: the round trip on the score board, as the server's ping was)
         if (g.host.open) g.host.sendFrame({ ...row, SCORES: scoreRows() }, gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
       }
@@ -913,6 +915,8 @@ function guestFrame(now) {
   const [cmd] = readInput(frameTics);
   const g = net?.guest;
   if (!g?.open) return;
+  // CL_CheckTimeout: the host silent past cl_timeout, this page leaves ("Server connection timed out.", as the kicked page stands for a key)
+  if (silentPast(g, Number(settings.clTimeout) || 0)) { g.kicked = 'Server connection timed out'; g.close(); return; }
   const seq = guestPred ? ++guestPred.seq : undefined;
   g.sendCommand(cmd, { inv: showInv[0], seq });
   if (net?.guest !== g) return;   // (a channel closing under the send closes the link at once, its close handler dropping the game: a kick, the host gone)
@@ -1597,6 +1601,15 @@ function kickGuest(n) {
   setTimeout(() => guestLeft(g), 300);   // (the reason first, the close a moment after: the guest's page reads it)
   if (map && running) db.query('EXECUTE PROCEDURE sprint(NULL, ?)', [`${name} was kicked`]).catch((err) => console.warn('kick:', err.message));   // (SV_BroadcastPrintf)
   return name;
+}
+/** SV_CheckTimeouts' drop: the guest told why, every message line told who, then its channel closed (its client stands, as a kicked guest's). */
+function timedOut(g) {
+  if (g.refused) return;
+  g.refused = true;
+  const name = session.clients.find((c) => c.CLIENT === g.client)?.NETNAME || `player ${g.client}`;
+  if (g.host.open) g.host.sendKick('Connection timed out');
+  setTimeout(() => guestLeft(g), 300);
+  if (map && running) db.query('EXECUTE PROCEDURE sprint(NULL, ?)', [`${name} timed out`]).catch((err) => console.warn('timeout:', err.message));
 }
 /** A guest leaves: its client stands (the next guest, or a pad, drives it); the last one gone, the page plays alone. */
 function guestLeft(g) {

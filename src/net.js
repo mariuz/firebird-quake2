@@ -101,11 +101,16 @@ export function connectRefusal(info, { password = '', spectatorPassword = '' } =
   return pw && given !== pw ? 'Password required or incorrect' : null;
 }
 
+/** SV_CheckTimeouts and CL_CheckTimeout: whether a link has been silent longer than `seconds` (0: never), by its clock. */
+export const silentPast = (link, seconds) => seconds > 0 && link.now() - link.heardAt > seconds * 1000;
+
 export class HostLink {
   constructor(link, { now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) } = {}) {
     this.link = link;
     this.pending = [];      // the guest's commands since the last tic
     this.last = null;       // the last command the tic ran
+    this.now = now;
+    this.heardAt = now();   // when the guest was last heard (SV_CheckTimeouts: silent past the timeout cvar, it is dropped)
     this.ack = -1;          // the sequence number of the newest command merged into a tic (the guest predicts past it)
     this.wantInv = false;   // the guest has its inventory screen up
     this.info = null;       // the guest's userinfo: { name, hand, spectator, fov, gender, msg, password }, as it last sent it (ClientUserinfoChanged)
@@ -119,6 +124,7 @@ export class HostLink {
     this.now = now;
     link.onMessage = (m) => {
       if (!m) return;
+      this.heardAt = this.now();
       if (m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; if (Number.isInteger(m.seq)) this.pendingSeq = m.seq; }
       else if (m.t === 'pong' && typeof m.at === 'number') this.ping = Math.max(0, Math.round(this.now() - m.at));
       else if (m.t === 'info') {
@@ -181,8 +187,10 @@ export class HostLink {
 
 // ── the guest: its commands out, the host's frames in ───────────────────────────────────────────────
 export class GuestLink {
-  constructor(link) {
+  constructor(link, { now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) } = {}) {
     this.link = link;
+    this.now = now;
+    this.heardAt = now();   // when the host was last heard (CL_CheckTimeout: silent past cl_timeout, the guest leaves)
     this.map = null;        // the last map message
     this.row = null;        // the guest's player row of the last frame
     this.frame = null;      // ... and its frame, unpacked
@@ -202,6 +210,7 @@ export class GuestLink {
   get open() { return this.link.open; }
   receive(m) {
     if (!m || typeof m !== 'object') return;
+    this.heardAt = this.now();
     switch (m.t) {
       case 'map': this.map = m; this.frame = null; this.fresh = false; this.onMap?.(m); break;
       case 'f':
