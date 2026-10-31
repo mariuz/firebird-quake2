@@ -315,6 +315,26 @@ for (const [name, key, dflt] of [['r_fullbright', 'rFullbright', false], ['r_dra
   await con.submit(`${name} ${dflt ? '1' : '0'}`);
   check(shown && flipped && refused && s[key] === dflt, `${name} shows ${dflt ? '1' : '0'} by default, takes the other through the page, refuses 2, and comes back`);
 }
+// serverinfo (SV_Serverinfo_f), userinfo (CL_Userinfo_f) and status (SV_Status_f): the server's cvars, this page's userinfo, the clients
+{
+  let printed = null;
+  host.print = (text) => { printed = text; };
+  host.serverInfo = async () => ({ mapname: 'demo1', deathmatch: 0, coop: 1, dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, skill: 2 });
+  host.userInfo = () => ({ name: 'Ace', hand: 1, fov: 90, spectator: 0 });
+  host.status = () => ({ map: 'demo1', rows: [{ num: 1, score: 3, ping: 0, name: 'Ace' }, { num: 2, score: 1, ping: 12, name: 'player 2' }] });
+  await con.submit('serverinfo');
+  check(status.at(-1)?.[0] === 'Server info settings: mapname "demo1" · deathmatch "0" · coop "1" · dmflags "0" · fraglimit "0" · timelimit "0" · cheats "0" · skill "2"', 'serverinfo lists the game\'s cvars as Info_Print listed them');
+  await con.submit('userinfo');
+  check(status.at(-1)?.[0] === 'User info settings: name "Ace" · hand "1" · fov "90" · spectator "0"', 'userinfo lists this page\'s userinfo');
+  await con.submit('status');
+  check(status.at(-1)?.[0] === 'map: demo1 · 2 clients: 1 Ace 3 frags, 0 ms · 2 player 2 1 frags, 12 ms' && printed === 'num score ping name\n  1     3    0 Ace\n  2     1   12 player 2',
+    'status says the map and the clients on the line, and prints them as SV_Status_f laid them out');
+  host.serverInfo = async () => null; host.status = () => null;
+  await con.submit('serverinfo');
+  check(status.at(-1)?.[0] === 'serverinfo: a joined page runs no server of its own' && status.at(-1)?.[1] === true, 'serverinfo on a joined page says so');
+  await con.submit('status');
+  check(status.at(-1)?.[0] === 'status: no game running' && status.at(-1)?.[1] === true, 'status without a game says so');
+}
 // viewsize (SCR_CalcVrect's cvar, 40 to 100), sizeup and sizedown (SCR_SizeUp_f, SCR_SizeDown_f: ten at a time, within the range)
 await con.submit('viewsize'); check(status.at(-1)?.[0] === '"viewsize" is "100"', 'viewsize shows 100 by default');
 await con.submit('viewsize 60'); check(s.viewsize === 60 && last() === 'set viewsize 60', 'viewsize 60 makes the view six tenths of the screen');

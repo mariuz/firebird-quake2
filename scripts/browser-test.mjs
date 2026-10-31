@@ -441,6 +441,17 @@ try {
     assert(novis.novis === 1 && novis.setting === true && allFaces > withPvs && fb1.flag === true && fb1.setting === true && typeof speeds === 'string'
       && rDefaults.fullbright === false && rDefaults.novis === false && rDefaults.speeds === false && rDefaults.ents === true && rDefaults.world === true,
       `r_novis 1 marks every leaf (${allFaces} faces against ${withPvs}), r_fullbright 1 sets the painter's flag, r_speeds 1 prints the frame's figures ("${speeds}"), and the switches come back (${JSON.stringify(rDefaults)})`);
+    // serverinfo, userinfo and status: the game's cvars, this page's userinfo and the clients, on the line (status's lines in the scrollback too)
+    await typeCommand('serverinfo');
+    const svInfo = await status();
+    await typeCommand('userinfo');
+    const usInfo = await status();
+    await typeCommand('status');
+    const stLine = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(8) })).catch(() => ({}));
+    assert(/^Server info settings: mapname "demo1" · deathmatch "0" · coop "0" · dmflags "\d+" · fraglimit "\d+" · timelimit "\d+" · cheats "\d" · skill "\d"$/.test(svInfo)
+      && /^User info settings: name "[^"]*" · hand "0" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
+      && stLine.log?.includes('num score ping name'),
+      `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
     // writeconfig downloads config.cfg with the keys and the cvars; the settings put back, the file run through the Config
     // control (exec's picker) brings them again
     const [cfgDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('writeconfig')]);
@@ -909,6 +920,12 @@ try {
       await typeOn(page, 'putaway');
       const sc3 = await page.evaluate(() => window.quake2.screens).catch(() => ({}));
       assert(sc2.scores === true && sc3.scores === false && !sc3.help && !sc3.inventory, `score shows the shared game's score board and putaway puts it away (${JSON.stringify(sc2)} → ${JSON.stringify(sc3)})`);
+      // status on the joined page lists the shared game's two clients from its row; serverinfo there says a joined page runs no server
+      await typeOn(gp, 'status');
+      const gStatus = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      await typeOn(gp, 'serverinfo');
+      const gSv = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      assert(/^map: demo1 · 2 clients: 1 .+ · 2 .+ ms$/.test(gStatus) && /runs no server of its own/.test(gSv), `status on the joined page lists both clients ("${gStatus}"), serverinfo says it runs no server ("${gSv}")`);
       const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
       await typeOn(page, 'rtc_signal none');

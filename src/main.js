@@ -294,6 +294,14 @@ const con = new Console({
   toggleInventory: () => toggleScreen(0, 'inventory'),
   toggleScores: () => toggleScreen(0, 'scores'),                      // (score: Cmd_Score_f, the score board in a game of more than one client)
   putAway: () => { showHelp[0] = false; showInv[0] = false; showScores[0] = false; },   // (putaway: Cmd_PutAway_f)
+  // SV_Serverinfo_f: the game's cvars as the serverinfo (a joined page runs no server); CL_Userinfo_f: this page's userinfo; SV_Status_f: the clients
+  serverInfo: async () => {
+    if (netGuest() || !db || !map) return null;
+    const g = (await db.query('SELECT map_name, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill FROM game')).rows[0];
+    return g ? { mapname: g.MAP_NAME, deathmatch: g.DEATHMATCH, coop: g.COOP, dmflags: g.DMFLAGS, fraglimit: g.FRAGLIMIT, timelimit: g.TIMELIMIT, cheats: g.CHEATS, skill: g.SKILL } : null;
+  },
+  userInfo: () => ({ name: settings.name, hand: settings.hand, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 }),
+  status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}` })) } : null),
   isRunning: () => running,
   // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
   setCvar: async (name, value) => { session.cvars[name] = value; if (map && !netGuest()) await db.exec(`UPDATE game SET ${name} = ${value} WHERE id = 1`); },

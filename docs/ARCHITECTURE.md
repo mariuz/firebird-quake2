@@ -735,7 +735,11 @@ skipped) and `r_drawworld` (0: the world's faces left out), `r_lerpmodels` (0: n
 `r_novis` (`viewcfg.novis`: `build_vis_set` marks every leaf, the PVS and the area portals ignored as `R_MarkLeaves` did
 with it, the kept sets dropped with the switch; a guest paints the host's frames as they are) and `r_speeds` (the
 frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame),
-`timedemo` (above) and
+`serverinfo` (`SV_Serverinfo_f`: the game's cvars, `mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`,
+`cheats` and `skill`, as `Info_Print` listed them, the host's `serverInfo`; a joined page runs no server of its own),
+`userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:
+the map and the clients with their frags, pings and names, a line each in the scrollback and the sum on the line,
+`status` over the score board's rows, a joined page's from its row), `timedemo` (above) and
 `screenshot` (the view downloaded as `quakeNN.png`, as
 `SCR_ScreenShot_f` wrote `quakeNN.pcx`), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the
