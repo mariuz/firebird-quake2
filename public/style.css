@@ -94,6 +94,22 @@ kbd {
   outline: none;
 }
 .cmdline[hidden] { display: none; }
+.conlog {
+  position: absolute;
+  inset: 46px 12px auto 12px;
+  margin: 0;
+  padding: 6px 10px;
+  max-height: 45%;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.85);
+  color: #c8c0a8;
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+.conlog[hidden] { display: none; }
 .status[hidden] { display: none; }
 
 .stats { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 6px 0; min-height: 1.5em; }

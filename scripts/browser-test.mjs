@@ -331,6 +331,17 @@ try {
     const it2 = await items();
     assert(it0.SILENCER_SHOTS === 0 && it1.SILENCER_SHOTS === 30 && it1.INV_SILENCER === it0.INV_SILENCER - 1 && it0.POWER_ARMOR === 0 && it2.POWER_ARMOR === 1,
       `l uses the silencer (${it0.SILENCER_SHOTS} → ${it1.SILENCER_SHOTS} silenced shots) and h the power shield (on: ${it2.POWER_ARMOR})`);
+    // the notify lines (src/notify.js): the game's answer to `use nosuch` ("unknown item: nosuch", a print) is drawn at the
+    // top for three seconds; the console opened again shows its scrollback with the line typed and the print, and hides
+    // it when it closes
+    await typeCommand('use nosuch');
+    const nl = await page.evaluate(() => { const q = window.quake2; return { lines: q.notify.lines(q.session.last.TIME_), log: q.notify.log(6) }; }).catch(() => ({}));
+    await page.keyboard.press('Backquote'); await sleep(200);
+    const opened = await page.evaluate(() => ({ shown: !document.getElementById('conlog').hidden, text: document.getElementById('conlog').textContent })).catch(() => ({}));
+    await page.keyboard.press('Escape'); await sleep(200);
+    const closed = await page.evaluate(() => document.getElementById('conlog').hidden).catch(() => false);
+    assert(nl.lines?.includes('unknown item: nosuch') && nl.log?.includes(']use nosuch') && opened.shown && /\]use nosuch\nunknown item: nosuch/.test(opened.text ?? '') && closed,
+      `the print is drawn in the notify lines and kept in the scrollback after the line typed, which the console shows and hides (${JSON.stringify({ lines: nl.lines, log: nl.log })})`);
     // rtc_ice: the ICE server for the network game, kept in the settings and shown; cleared again before the network
     // section below (a relay that is not there would hold each offer three seconds)
     await typeCommand('rtc_ice turn:relay.example.org:3478 ace secret');

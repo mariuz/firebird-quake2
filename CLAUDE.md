@@ -13,7 +13,7 @@ by the same author (mariuz), which live next to this repository under `C:\fbq\`.
 https://mariuz.github.io/firebird-quake2/ by the Pages workflow on every push to `main`.
 
 Layout: `sql/` (schema, physics, game, weapons, monsters, render — loaded in that order),
-`src/` (pak/bsp/md2 parsers, loader, session, net, pmove, demo, record, demostore, cinematic, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
+`src/` (pak/bsp/md2 parsers, loader, session, net, pmove, demo, record, demostore, cinematic, lerp, effects, renderer, hud, notify, audio, main), `scripts/` (tests, benchmarks,
 tools), `public/` (page, the manifest and icons, the caching service worker `sw.js`, the retired `coi-serviceworker.js`,
 the pak goes in `public/pak/`), `docs/`.
 
