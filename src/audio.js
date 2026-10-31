@@ -26,6 +26,9 @@ export class Q2Audio {
     this.loopRows = [];
     this.listener = { x: 0, y: 0, z: 0, yaw: 0 };
     this.musicMode = 'tracks';   // 'off' | 'tracks' | 'synth'
+    this.loopCount = 4;          // cd_loopcount: a map's track played this many times, then the loop track (CDAudio_Update)
+    this.loopTrack = 11;         // cd_looptrack: the track played over and over after them
+    this.nocd = false;           // cd_nocd: no music at all
     this.musicFiles = new Map(); // 'track06' → File, from a picked folder
     this.musicStore = null;      // src/demostore.js's FileStore: a picked folder's tracks kept as they play, played at the next start
     this.music = null;
@@ -259,14 +262,14 @@ export class Q2Audio {
     if (this.track && this.ctx) { this.stopMusic(); this.playMusic(this.track); }
   }
 
-  /** Start the CD track of the map (worldspawn "sounds"). */
-  async playMusic(track) {
+  /** Start the CD track of the map (worldspawn "sounds"); `plays` how many times it has played already (the loop's count). */
+  async playMusic(track, plays = 0) {
     this.track = track;
-    if (!this.ctx || this.musicMode === 'off' || !track) { this.stopMusic(); return; }
+    if (!this.ctx || this.musicMode === 'off' || this.nocd || !track) { this.stopMusic(); return; }
     if (this.music && this.music.track === track) return;
     this.stopMusic();
     const name = `track${String(track).padStart(2, '0')}`;
-    const token = { track };
+    const token = { track, plays };
     this.music = token;
     let buf = null;
     if (this.musicMode === 'tracks') {
@@ -291,7 +294,13 @@ export class Q2Audio {
     if (buf) {
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
-      src.loop = true;
+      // CDAudio_Update's loop: the track over again until it has played cd_loopcount times, then cd_looptrack over and over
+      src.onended = () => {
+        if (this.music !== token) return;
+        const n = token.plays + 1;
+        this.music = null;
+        this.playMusic(n >= this.loopCount ? this.loopTrack : track, n);
+      };
       src.connect(this.musicGain);
       src.start();
       token.src = src;
@@ -300,6 +309,13 @@ export class Q2Audio {
       token.kind = 'synth';
       token.stop = this.startDrone(track);
     }
+  }
+
+  /** cd_nocd: on, the music stops and none plays; off again, the map's track. */
+  setNocd(on) {
+    this.nocd = !!on;
+    if (this.nocd) this.stopMusic();
+    else if (this.track && this.ctx) this.playMusic(this.track);
   }
 
   stopMusic() {

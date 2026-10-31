@@ -191,12 +191,29 @@ const wav = new File([new Uint8Array(64)], 'Track09.mp3');
 audio.setMusicFiles([wav, new File([new Uint8Array(8)], 'readme.txt')]);
 await tick(); await tick(); await tick();
 check(audio.musicFiles.size === 1 && audio.musicFiles.has('track09'), 'a picked folder: trackNN files by number, case aside, the rest ignored');
-const track = sources().find((n) => n.loop && n.to === audio.musicGain && n.started && !n.stopped);
-check(audio.music?.kind === 'track' && !!track, 'the track file plays looped into the music gain');
+const track = sources().find((n) => !n.loop && n.to === audio.musicGain && n.started && !n.stopped);
+check(audio.music?.kind === 'track' && !!track && typeof track.onended === 'function', 'the track file plays into the music gain, its end the loop\'s (CDAudio_Update)');
+// cd_loopcount and cd_looptrack: the track over again at its end until it has played that many times, then the loop track (no file for
+// it here: the drone stands in, as track 11); cd_nocd stops the music and plays none until it is off again
+const settle = async () => { for (let i = 0; i < 12; i++) await tick(); };
+const ended = (n) => { n.stopped = true; n.onended(); };   // (a source at its end: done, as the browser has it)
+audio.loopCount = 2;
+ended(track); await settle();
+const second = sources().filter((n) => n.to === audio.musicGain && n.started && !n.stopped);
+check(audio.music?.kind === 'track' && audio.music.track === 9 && audio.music.plays === 1 && second.length === 1 && second[0] !== track, 'at its end the track plays again (the first of cd_loopcount 2)');
+ended(second[0]); await settle();
+check(audio.music?.kind === 'synth' && audio.music.track === 11 && audio.music.plays === 2, 'at the second end the loop track plays (11, the drone standing in)');
+audio.setNocd(true);
+check(audio.music === null && audio.nocd, 'cd_nocd 1 stops the music');
+audio.setNocd(false); await settle();
+check(audio.music?.track === 11, 'cd_nocd 0 plays the track again');
+audio.loopCount = 4;
+await audio.playMusic(9); await settle();
+const track2 = sources().find((n) => n.to === audio.musicGain && n.started && !n.stopped);
 audio.setMusicVolume(0.25);
 check(audio.musicGain.gain.value === 0.25, 'the music volume moves the music gain');
 audio.setMusicMode('off');
-check(track.stopped && audio.music === null, 'music off stops the track');
+check(track2?.stopped && audio.music === null, 'music off stops the track');
 // a picked folder's track is kept as it plays (src/demostore.js's file store at the page; a map here), and plays from
 // there at the next start, when no folder is picked; a track neither picked nor kept falls to the drone
 const store = new Map();

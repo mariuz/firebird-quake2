@@ -464,6 +464,13 @@ try {
       && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
+    // cd_nocd 1 stops the music and cd_loopcount, cd_looptrack reach the audio; off again, the map's track plays
+    await typeCommand('cd_loopcount 2'); await typeCommand('cd_looptrack 3'); await typeCommand('cd_nocd 1'); await sleep(300);
+    const cd1 = await page.evaluate(() => ({ count: window.quake2.audio.loopCount, loop: window.quake2.audio.loopTrack, nocd: window.quake2.audio.nocd, music: window.quake2.audio.music?.kind ?? null })).catch(() => ({}));
+    await typeCommand('cd_nocd 0'); await typeCommand('cd_loopcount 4'); await typeCommand('cd_looptrack 11'); await sleep(500);
+    const cd0 = await page.evaluate(() => ({ count: window.quake2.audio.loopCount, loop: window.quake2.audio.loopTrack, nocd: window.quake2.audio.nocd, music: window.quake2.audio.music?.kind ?? null })).catch(() => ({}));
+    assert(cd1.count === 2 && cd1.loop === 3 && cd1.nocd === true && cd1.music === null && cd0.nocd === false && cd0.count === 4 && cd0.loop === 11 && cd0.music !== null,
+      `cd_loopcount and cd_looptrack reach the audio, cd_nocd 1 stops the music and 0 plays it again (${JSON.stringify(cd1)} → ${JSON.stringify(cd0)})`);
     // ref_soft's sw_ switches reach the painter: sw_drawflat the flat faces (the surfaces built again), sw_clearcolor the clear's colour, sw_waterwarp the settings
     await typeCommand('sw_drawflat 1'); await typeCommand('sw_clearcolor 2'); await typeCommand('sw_waterwarp 0'); await sleep(300);
     const sw1 = await page.evaluate(() => ({ flat: window.quake2.renderer.drawflat, cc: window.quake2.renderer.clearColor, warp: window.quake2.settings.swWaterwarp })).catch(() => ({}));
@@ -857,6 +864,7 @@ try {
     for (let i = 0; i < 80 && !(ms.kind === 'track' && ms.file); i++) { await sleep(250); ms = await musicState(); }
     assert(onDemo1.map === 'demo1' && ms.kind === 'track' && ms.track === 9 && ms.file === 'track09.wav' && ms.kept?.join() === 'autoexec,music/track09,pak',   // (the autoexec kept above is there too)
       `on demo1 the picked folder's track plays and is kept as it plays (${JSON.stringify(ms)})`);
+    await typeCommand('cd_loopcount 99');   // (the half-second track would reach cd_looptrack in two seconds: kept playing for the reload's check below)
 
     // without a network: the page reloads from the service worker's caches (the page, the build's files, the pak)
     // and the game runs as before; then the network is back
@@ -899,6 +907,7 @@ try {
       let km = {};
       for (let i = 0; i < 80 && !(km.kind === 'track'); i++) { await sleep(250); km = await musicState(); }
       assert(km.kind === 'track' && km.track === 9 && km.file === 'track09.wav', `and the kept track plays, no folder picked (${JSON.stringify(km)})`);
+      await typeCommand('cd_loopcount 4');
       await page.click('#pak-forget');
       let fp = {};
       for (let i = 0; i < 480 && !(fp.name === 'pak0.pak' && fp.demo); i++) { await sleep(250); fp = await pakState(); }

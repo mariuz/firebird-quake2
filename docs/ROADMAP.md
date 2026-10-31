@@ -1005,9 +1005,13 @@ own words with the demo pak. In the order they are to be taken.
   builds a flat surface and another face's in another colour, textured again after, and clears to the index;
   `test:console` the three cvars, `cvarlist` with them; the browser test flips them and reads the painter and the
   settings on both builds.
-- **`cd_loopcount`, `cd_looptrack` and `cd_nocd`**: the music as `CDAudio_Play` looped it: a map's track played
-  `cd_loopcount` times (4), then `cd_looptrack` (11) over and over, with the page's folder tracks and the synth;
-  `cd_nocd 1` plays none.
+- **`cd_loopcount`, `cd_looptrack` and `cd_nocd`**: done. The music loops as `CDAudio_Update` looped it: a map's
+  track plays over again at its end until it has played `cd_loopcount` times (4), then `cd_looptrack` (11) over and
+  over (`Q2Audio.playMusic`'s `onended`, the track's play count on the music token; the drone that stands in for a
+  track with no file is one endless track); `cd_nocd 1` stops the music and plays none until it is off again
+  (archived, as Quake's was; the two counts not). `test:audio` ends a track twice under `cd_loopcount 2` and sees it
+  again, then the loop track, and the music stopped and back with `cd_nocd`; `test:console` the three cvars,
+  `cvarlist` with them; the browser test reads the audio's counts and the music stopped and back, on both builds.
 - **`m_filter` and `host_speeds`**: the mouse averaged over the last two samples (`CL_MouseMove` with `m_filter`),
   and `host_speeds 1` printing a frame's times on the line as `Qcommon_Frame` did ("all, sv, gm, cl, rf": here the
   tic, the game logic in it, the frame query and the raster).

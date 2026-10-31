@@ -7,7 +7,7 @@ import { ACTIONS, DEFAULT_BINDS, DEFAULT_LINES, defaultBinds, defaultLines, norm
 
 export const KEY = 'firebird-quake2:settings';
 
-export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
+export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1,
   crosshair: 1, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0,
   mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '',
@@ -34,6 +34,7 @@ const CHECK = {
   detail: oneOf(...Object.keys(DETAIL)),
   sfx: int(0, 100), music: int(0, 100),
   musicMode: oneOf('tracks', 'synth', 'off'),
+  cdLoopcount: int(1, 99), cdLooptrack: int(0, 99), cdNocd: bool,   // the music's loop (CDAudio_Update: the map's track that many times, then the loop track), and no music
   skill: oneOf(0, 1, 2, 3),   // 3 is nightmare: the console's alone (skill 3), the menus and the select stop at hard
   fov: int(1, 160),
   renderer: oneOf('fast', 'sql'),

@@ -109,6 +109,7 @@ const audio = new Q2Audio();
 audio.setVolume(settings.sfx / 100);
 audio.setMusicVolume(settings.music / 100);
 audio.musicMode = settings.musicMode;
+audio.loopCount = Number(settings.cdLoopcount) || 4; audio.loopTrack = Number(settings.cdLooptrack) || 0; audio.nocd = !!settings.cdNocd;   // (cd_loopcount, cd_looptrack, cd_nocd)
 audio.setMusicStore(fileStore);
 for (const ev of ['keydown', 'pointerdown', 'touchstart']) window.addEventListener(ev, () => audio.unlock(), { capture: true });
 document.addEventListener('visibilitychange', () => audio.suspend(document.hidden));
@@ -256,6 +257,9 @@ function setSetting(k, v) {
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
   if (k === 'swDrawflat' && renderer) { renderer.drawflat = !!v; renderer.surfCache.clear(); }   // (sw_drawflat: the surfaces built again flat, or textured)
   if (k === 'swClearcolor' && renderer) renderer.clearColor = Number(v) || 0;   // (sw_clearcolor: the next frame's clear)
+  if (k === 'cdLoopcount') audio.loopCount = Number(v) || 4;   // (cd_loopcount, cd_looptrack: the music's loop; cd_nocd: none)
+  if (k === 'cdLooptrack') audio.loopTrack = Number(v) || 0;
+  if (k === 'cdNocd') audio.setNocd(!!v);
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
   if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
