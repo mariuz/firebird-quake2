@@ -925,9 +925,15 @@ client's events among them. In the order they are to be taken.
   second as `Com_Printf("%f seconds (%f fps)")` said them; a joined page, a demo or the menu up refuse it.
   `test:console` reads the line's whole numbers, the two ways and the refusals, and Tab; the browser test types
   both, reads the position, the timing, and the game going on after, on both builds.
-- **`play`, `stopsound` and `soundinfo`**: `play <sound>` plays a pak sound at the ear (`S_Play`: `play
-  weapons/blastf1a` or with `.wav`), `stopsound` cuts every channel and loop (`S_StopAllSounds`), and `soundinfo`
-  says the mix's figures (`S_SoundInfo_f`: the rate, the channels, the sounds decoded).
+- **`play`, `stopsound` and `soundinfo`**: done. `play <sound> …` is `S_Play`: each word a pak sound played at the
+  ear (`.wav` added to one without a dot, lower-cased; one the pak lacks is named), `stopsound` is
+  `S_StopAllSounds` (every one-shot cut, `Q2Audio.playing` tracks them, the channels and the loops cleared, a
+  cinematic's samples too; the next frame's rows start the loops again), and `soundinfo` is `S_SoundInfo_f`: the
+  mix's rate, stereo, the sounds decoded, the ones playing and looping, a line each on the scrollback as it laid
+  them out and the sum on the line, "sound system not started" before the first click or key makes the context.
+  `test:audio` plays one at the ear, reads the figures and cuts everything; `test:console` the words with `.wav`
+  added, a missing one named, the lines laid out, the not-started line and Tab (`play` comes before `players`
+  now); the browser test plays a sound, reads the figures and stops, on both builds.
 - **Footsteps and `cl_footsteps`**: `EV_FOOTSTEP` as pmove set it (the bob cycle's half turned on the ground past
   225 units a second) with `player/step1-4.wav` at the entity as `CL_EntityEvent` played them, in a frame's events,
   a recording's and a demo's, for the other players too; `cl_footsteps 0` plays none.

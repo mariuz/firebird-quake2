@@ -486,6 +486,12 @@ try {
     const tAfter = await page.evaluate(() => window.quake2.session.last.TIME_).catch(() => null);
     assert(/^\(-?\d+ -?\d+ -?\d+\) : -?\d+$/.test(vpos) && /^\d+\.\d{6} seconds \(\d+\.\d{6} fps\)$/.test(tref) && tAfter > tBefore,
       `viewpos says the eye and the yaw (${vpos}), timerefresh times a full turn (${tref}) and the game goes on (${tBefore} → ${tAfter})`);
+    // play plays a pak sound at the ear, soundinfo says the mix's figures (the context exists: the page was clicked), stopsound cuts every sound
+    await typeCommand('play weapons/blastf1a'); const played = await status();
+    await typeCommand('soundinfo'); const sinfo = await status();
+    await typeCommand('stopsound'); const sstop = await status();
+    assert(played === 'playing weapons/blastf1a.wav' && /^sound: \d+ Hz (stereo|mono), \d+ decoded, \d+ playing, \d+ looping$/.test(sinfo) && sstop === 'sounds stopped',
+      `play plays a pak sound (${played}), soundinfo says the figures (${sinfo}), stopsound cuts them (${sstop})`);
     // p_view.c's cvars reach the game row (bob_up, sv_rollangle), and the defaults come back
     await typeCommand('bob_up 0'); await typeCommand('sv_rollangle 4');
     const pv = await page.evaluate(async () => (await window.quake2.sql('SELECT bob_up, sv_rollangle FROM game'))[0]).catch(() => ({}));

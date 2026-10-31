@@ -306,6 +306,10 @@ const con = new Console({
   },
   userInfo: () => ({ name: settings.name, hand: settings.hand, gender: settings.gender, msg: settings.msg, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 }),
   isFullscreen: () => !!document.fullscreenElement,   // (vid_fullscreen: the page's live state; setSetting('fullscreen', …) asks for it)
+  // play, stopsound and soundinfo (S_Play, S_StopAllSounds, S_SoundInfo_f): a pak sound at the ear, every sound cut, the mix's figures
+  playSound: (name) => { if (!pak?.has(`sound/${name}`)) return false; audio.playLocal(name); return true; },
+  stopSounds: () => audio.stopAll(),
+  soundInfo: () => audio.info(),
   // viewpos: the first view's eye and yaw, from the last tic row (a guest's: the host's frame row)
   viewPos: () => (running && last ? { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW } : null),
   // timerefresh (SCR_TimeRefresh_f): the view spun a full turn in 128 frames, the player's yaw set on its row for each frame's query and
