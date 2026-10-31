@@ -268,6 +268,8 @@ const con = new Console({
   // the skill (latched: the next map's): the select shows it, nightmare through its hidden option
   setSkill: (n) => { $('skill').value = String(n); },
   playDemo: (name) => playDemo(name),
+  timedemo: (name) => playDemo(name, { timedemo: true }),
+  screenshot: () => screenshot(),
   hasDemo: (name) => recordings.has(name) || kept.has(name) || pak.has(`demos/${name}.dm2`),
   listDemos: () => ({ pak: pakDemos(), kept: [...new Set([...kept, ...recordings.keys()])].sort() }),
   dropDemo: (name) => dropRecording(name),
@@ -355,11 +357,26 @@ function downloadSlot(i) {
   setTimeout(() => { if (statusEl.textContent.startsWith(`Slot ${i} saved`)) setStatus(''); }, 2000);
 }
 /** A text downloaded under a name. */
-function downloadText(name, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+const downloadText = (name, text) => downloadBlob(name, new Blob([text], { type: 'text/plain' }));
+function downloadBlob(name, blob) {
+  const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+// SCR_ScreenShot_f: the view as it stands, downloaded as quakeNN.png, the number counting up this session (Quake took the
+// first free name in the screenshots directory, which a download cannot ask for)
+let shots = 0;
+function screenshot() {
+  if (!renderer) return;
+  const name = `quake${String(shots++).padStart(2, '0')}.png`;
+  canvas.toBlob((blob) => {
+    if (!blob) { setStatus('screenshot: the view could not be read', true); return; }
+    downloadBlob(name, blob);
+    setStatus(`Wrote ${name}`);
+    notify.add(`Wrote ${name}`, gameClock(), { show: false });
+    setTimeout(() => { if (statusEl.textContent === `Wrote ${name}`) setStatus(''); }, 2000);
+  }, 'image/png');
 }
 async function loadSaveFile(file) {
   if (!file || guestNotice()) return;
@@ -856,7 +873,10 @@ async function demoBytes(name) {
  * frames. `withMenu` brings the main menu up over it (the attract loop at the start, and the menu kept across the
  * loop's next demo). A key, a click or the pad brings the menu up; the demo's end plays the pak's next.
  */
-async function playDemo(name, { withMenu = false } = {}) {
+const DEMO_FRAME = 0.1;   // a recording's frames are a tenth of a second apart (the server's 10 Hz)
+let lastTimedemo = null;  // { frames, seconds, report }: the last timedemo's figures
+/** The demo played, with the main menu over it (the attract loop), or as a timedemo (CL_Timedemo_f: a frame a painted frame, the figures at the end). */
+async function playDemo(name, { withMenu = false, timedemo = false } = {}) {
   const bytes = await demoBytes(name);
   if (!bytes) { setStatus(`no demo "${name}" in this pak`, true); setTimeout(() => setStatus(''), 2500); return; }
   const parsed = parseDemo(bytes);
@@ -870,8 +890,8 @@ async function playDemo(name, { withMenu = false } = {}) {
   await session.demoBegin();
   // (a brush model's sounds come from its box's middle, as the client placed them: the map's bounds for its '*N')
   const player = new DemoPlayer(parsed, { modelId: (n) => res.byName.get(n), brushBounds: (n) => map.bsp.models[Number(n.slice(1))] ?? null });
-  demo = { name, player, time: 0, at: performance.now(), frames: parsed.frames.length, cprint: null, msg: null };
-  $('mapname').textContent = `${mapName} (demo ${name})`;
+  demo = { name, player, time: 0, at: performance.now(), frames: parsed.frames.length, cprint: null, msg: null, timedemo: timedemo ? { start: performance.now(), frames: 0 } : null };
+  $('mapname').textContent = `${mapName} (${timedemo ? 'timedemo' : 'demo'} ${name})`;
   if ([...$('demo').options].some((o) => o.value === name)) $('demo').value = name;
   setStatus('');
   running = true;
@@ -893,6 +913,15 @@ function nextDemo() {
   const next = demos[(demos.indexOf(d.name) + 1) % demos.length];
   playDemo(next, { withMenu: menu.active }).catch((err) => setStatus(err.message, true));
 }
+/** A timedemo's end (CL_DemoCompleted): the frames painted and the seconds they took reported, a new game as after a demo stopped. */
+function timedemoDone(d) {
+  const seconds = (performance.now() - d.timedemo.start) / 1000;
+  const report = `${d.timedemo.frames} frames, ${seconds.toFixed(1)} seconds: ${(d.timedemo.frames / Math.max(seconds, 1e-3)).toFixed(1)} fps`;
+  lastTimedemo = { frames: d.timedemo.frames, seconds, report };
+  demo = null;
+  $('demo').value = '';
+  startMap(session.firstMap(), true).then(() => { setStatus(report); notify.add(report, gameClock(), { show: false }); }).catch((err) => setStatus(err.message, true));
+}
 /** The Demo select put back to none: the demo gives way to a new game. */
 function stopDemo() {
   if (!demo) return;
@@ -907,11 +936,15 @@ function stopDemo() {
  */
 async function demoFrame(now) {
   const d = demo;
-  const dt = Math.min(0.2, Math.max(0, now - d.at) / 1000);
+  // a timedemo steps a frame of the recording a painted frame, whatever the wall clock says (CL_Timedemo_f's cl.time)
+  const dt = d.timedemo ? (d.timedemo.frames ? DEMO_FRAME : 0) : Math.min(0.2, Math.max(0, now - d.at) / 1000);
   d.at = now;
   d.time += dt;
+  if (d.timedemo) d.timedemo.frames++;
   const st = d.player.at(d.time);
-  if (d.player.finished && st.frac >= 1) { nextDemo(); return; }
+  // the end: the last frame reached and the clock past it (the fraction past the last frame is 0, never 1: the old
+  // test stood on the last frame for ever, and the attract loop never went on to the next demo)
+  if (d.player.finished && d.time >= d.player.duration) { if (d.timedemo) timedemoDone(d); else nextDemo(); return; }
   const pad = input.pollPad();
   if (pad && pad.pressed.size && !menu.active) { openMenu(() => menu.main()); return; }
   let t = performance.now();
@@ -1447,7 +1480,8 @@ async function boot() {
     session = new Session(db, storage);
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
-      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, get paints() { return paints; },
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; },
+      get lastTimedemo() { return lastTimedemo; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
       demoStore, fileStore, get pickedPak() { return pickedPak; },

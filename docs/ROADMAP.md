@@ -508,9 +508,20 @@ The fifth list, from what the entries above and below still leave: in the order 
   `test:console` holds the lines to their seconds, count and order, the hidden lines to the scrollback, the
   keep; the browser test sees the game's answer to `use nosuch` drawn in the notify lines and kept in the
   scrollback after the line typed, the console show it and hide it as it closes.
-- **`timedemo` and `screenshot`**: `timedemo <demo>` plays a recording as fast as the page paints, no pacing,
-  and reports frames and seconds as `CL_Timedemo_f` did; `screenshot` saves the view as a PNG download
-  (`SCR_ScreenShot_f` wrote `quake00.pcx`).
+- **`timedemo` and `screenshot`**: done. `timedemo <demo>` plays a recording of the pak or the page's own a
+  frame of the recording a painted frame, whatever the wall clock says (`CL_Timedemo_f`'s `cl.time` stepped
+  per frame; the map name says `timedemo`), counts the frames painted and, at its end, reports them with the
+  seconds they took and the frames a second as `CL_DemoCompleted` did (on the status line and in the
+  console's scrollback), a new game starting as after a demo stopped. `screenshot` downloads the view as it
+  stands as `quakeNN.png`, the number counting up this session (`SCR_ScreenShot_f` took the first free
+  `quakeNN.pcx`, which a download cannot ask for). `test:console` sees both commands reach the page and the
+  refusals; the browser test runs the recording it made as a timedemo (the pak's would take minutes at a
+  headless page's rate) and reads its figures, a frame of the recording a painted frame, with the game
+  starting again, and downloads a screenshot that is a PNG of the view's size. Found on the way: a demo's
+  end never came. The end was the last frame reached with the fraction past it at 1, and past the last frame
+  the player's fraction is 0, so every demo stood on its last frame for ever and the attract loop never went on
+  to the pak's next; the end is the last frame reached with the clock past it now, and the browser test sees a
+  recording's end bring the pak's demo on.
 
 ## Playing the demo
 

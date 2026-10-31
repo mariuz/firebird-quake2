@@ -97,6 +97,19 @@ check(status.at(-1)?.[0] === 'You must be in a level to record.' && last() === '
 running = true;
 await con.submit('demomap mine');
 check(last() === 'playDemo mine', 'demomap plays a demo recorded this session, which the host knows by name');
+// timedemo and screenshot: CL_Timedemo_f's and SCR_ScreenShot_f's words
+host.timedemo = async (name) => calls.push(['timedemo', name]);
+host.screenshot = () => calls.push(['screenshot']);
+await con.submit('timedemo Q2Demo1.dm2');
+check(last() === 'timedemo q2demo1', 'timedemo plays a demo as a timedemo (the name lower-cased, .dm2 off)');
+await con.submit('timedemo nosuch');
+check(status.at(-1)?.[0] === 'no demo "nosuch" in this pak' && status.at(-1)?.[1] === true && last() === 'timedemo q2demo1', 'a demo not to be had is refused');
+await con.submit('screenshot');
+check(last() === 'screenshot', 'screenshot takes the view');
+running = false;
+await con.submit('screenshot');
+check(last() === 'screenshot' && status.at(-1)?.[0] === 'screenshot: nothing is on the view' && status.at(-1)?.[1] === true, 'with nothing on the view it is refused');
+running = true;
 // demos and deldemo: the page's own, for the recordings kept across reloads (src/demostore.js)
 const keptDemos = ['mine', 'run'];
 host.listDemos = () => ({ pak: ['q2demo1'], kept: [...keptDemos] });
