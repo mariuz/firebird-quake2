@@ -433,6 +433,9 @@ async function loadSaved(save) {
     setStatus('Loading the saved game…');
     // the map's geometry and models afresh, then the saved rows, then the unit's other levels as the save left them
     const setup = await session.loadSave(save, { skill: settings.skill, faceVerts: settings.renderer === 'sql' });
+    // hosting: the guests keep their clients whatever the save had (the game coop again for a save played alone, a
+    // client the save lacks put in at the level's spot), and mapLoaded sends each the map as it is, as a level change does
+    if (netHost()) await session.ensureClients(net.guests.map((g) => g.client));
     await mapLoaded(setup);
     const loaded = setup.saveNote ? `Game loaded (${setup.saveNote})` : 'Game loaded';
     setStatus(loaded);

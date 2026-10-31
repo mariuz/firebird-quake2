@@ -512,5 +512,37 @@ check(session.clients.length === 3, 'the host\'s game goes on with its clients')
   check(session.coop && !session.deathmatch && (await q('SELECT COUNT(*) n FROM ents WHERE mtype IS NOT NULL'))[0].N > 0, 'and a coop game again has its monsters');
 }
 
+// ── the host's save and load with a guest connected: the guest's client is kept whatever the save had (ensureClients, as
+// the page's load calls it with the guests' clients): a save of a game played alone makes the game coop again and puts
+// the client in at the level's spot with its name and hand, a coop save keeps it as saved, and the frames go on ──
+{
+  const [sa, sb] = Loopback.pair();
+  const shost = new HostLink(new Link(sa)), sguest = new GuestLink(new Link(sb));
+  await session.setUserinfo(2, { name: 'Holly', hand: 1 });
+  await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: false, deathmatch: false });
+  const solo = await session.unpackText(await session.packGame('alone'));
+  await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, players: 2 });
+  for (let i = 0; i < 10; i++) { sguest.sendCommand([1, 1, 0, 0, 0, 0, 0, 1, 0]); await session.tic(idle, shost.takeCommand()); }
+  const coopSave = await session.unpackText(await session.packGame('together'));
+  const walked = (await q('SELECT e.x, e.y FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0];
+  await session.loadSave(solo, { skill: 2 });
+  const alone = (await q('SELECT COUNT(*) n FROM player'))[0].N;
+  const added = await session.ensureClients([2]);
+  const back = (await q("SELECT p.id, p.netname, p.hand, e.x, e.y, e.health FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2"))[0];
+  check(alone === 1 && added.join() === '2' && session.coop && session.nclients === 2 && (await q('SELECT coop FROM game'))[0].COOP === 1 && back?.NETNAME === 'Holly' && back.HAND === 1 && back.HEALTH === 100,
+    `a save played alone loaded while hosting: the game is coop again and the guest's client is put in afresh with its name and hand (${JSON.stringify(back)})`);
+  const last2 = await session.tic(idle, shost.takeCommand());
+  shost.sendFrame(session.clients.find((r) => r.CLIENT === 2), await session.frame({ client: 2, sqlRenderer: false }), { dt: 0.05 });
+  check(session.clients.length === 2 && sguest.take()?.row.CLIENT === 2 && last2.CLIENT === 1, 'the tics run two clients again and the guest gets its frame');
+  await session.loadSave(coopSave, { skill: 2 });
+  const kept = await session.ensureClients([2]);
+  const asSaved = (await q('SELECT e.x, e.y FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0];
+  check(kept.length === 0 && session.coop && session.nclients === 2 && Math.abs(asSaved.X - walked.X) < 1e-6 && Math.abs(asSaved.Y - walked.Y) < 1e-6,
+    `a coop save loaded keeps the guest's client as saved, where it walked to (${asSaved.X.toFixed(0)},${asSaved.Y.toFixed(0)})`);
+  check((await session.ensureClients([1, 5, 2])).length === 0 && session.nclients === 2, 'the first client, one past four and one the game has are left alone');
+  sguest.close();
+  await session.setUserinfo(2, { name: '', hand: 0 });
+}
+
 console.log(failures ? `${failures} failure(s)` : 'all good');
 process.exit(failures ? 1 : 0);
