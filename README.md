@@ -66,7 +66,9 @@ guest's player in it, each page painting its own view, the guest's from the fram
 WebRTC data channel, its own move predicted ahead of them as the Quake 2 client predicted (the player's move and
 the traces have a JS twin, `src/pmove.js`, held to the SQL's numbers). Host again while hosting makes an offer
 for the next player, who joins the game as it runs, a channel each; a joined page that ticks "spectate" only
-watches, with no body in the game. There is no signalling server on a static site, so the texts go by hand.
+watches, with no body in the game. There is no signalling server on a static site, so the texts go by hand;
+two players whose networks a STUN server cannot cross (symmetric NATs) give both pages a TURN relay with
+`rtc_ice turn:host:3478 user pass` at the console, kept in the settings.
 
 The page opens as Quake 2 did, on the attract loop: the recording the pak ships plays with the main menu
 over it (Escape puts the menu away, a key brings it back), and a new game starts from the menu, the Map

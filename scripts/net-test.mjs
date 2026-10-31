@@ -11,7 +11,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, packSignal, unpackSignal, CHUNK, BACKLOG } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, Peer, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG } from '../src/net.js';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -266,6 +266,24 @@ check((await unpackSignal(JSON.stringify(desc))).sdp === desc.sdp, 'a plain JSON
 let threw = false;
 try { await unpackSignal('hello'); } catch { threw = true; }
 check(threw, 'anything else is refused');
+
+// the ICE servers: the STUN always, and the rtc_ice setting's server after it (a TURN relay with its user and
+// password, for the networks a STUN cannot cross); the setting parsed, rubbish refused; the Peer made with them
+check(parseIceServer('') === null && parseIceServer('  ') === null && iceServers('').length === 1 && iceServers('')[0].urls === 'stun:stun.l.google.com:19302',
+  'no setting: the STUN server alone');
+const turn = parseIceServer('turn:relay.example.org:3478 ace secret');
+check(turn.urls === 'turn:relay.example.org:3478' && turn.username === 'ace' && turn.credential === 'secret', 'a TURN url with a user and a password parses as RTCIceServer takes it');
+check(parseIceServer('turns:relay.example.org:5349?transport=tcp').urls === 'turns:relay.example.org:5349?transport=tcp' && !('username' in parseIceServer('stun:stun.example.org')), 'a url alone, turns or stun, has no user');
+const refused = ['turn:relay user', 'http://relay', 'turn:re lay', 'stun:stun.example.org u p', 'turn:relay u p extra'].map((t) => { try { parseIceServer(t); return false; } catch { return true; } });
+check(refused.every(Boolean), 'two words, another scheme, a space in the url, a STUN with a user, four words: refused');
+const servers = iceServers('turn:relay.example.org:3478 ace secret');
+check(servers.length === 2 && servers[0].urls.startsWith('stun:') && servers[1].urls === 'turn:relay.example.org:3478', 'the servers for a Peer: the STUN first, the setting\'s after');
+let madeWith = null;
+class FakeRTC { constructor(cfg) { madeWith = cfg; this.connectionState = 'new'; this.iceGatheringState = 'new'; } }
+new Peer({ iceServers: servers, RTC: FakeRTC });
+check(madeWith?.iceServers === servers, 'the Peer gives them to its RTCPeerConnection');
+new Peer({ RTC: FakeRTC });
+check(madeWith?.iceServers.length === 1 && madeWith.iceServers[0].urls.startsWith('stun:'), 'and the STUN alone when given none');
 
 // ── a second guest, into the game running: its own channel and HostLink, the third client put in by ClientBegin
 // (session.addClient), the map as it is sent to it, its commands the third client's and its frames its own ──

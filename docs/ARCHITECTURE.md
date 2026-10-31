@@ -536,8 +536,10 @@ models into `res` with no database), so it runs no game logic and its own Firebi
 at a unit's end is sent too. The wire is JSON in chunks of 16,000 characters over one ordered data channel
 (`Link`), a frame of demo1 being 10–30 KB; the two sides know nothing of WebRTC and the network test runs
 them over `Loopback.pair()` in one process. `Peer` holds the `RTCPeerConnection`: the host makes an offer,
-gathers its candidates (at most three seconds for the STUN server; one machine or one network needs none)
-and shows the description as a text (`packSignal`: gzipped and base64'd, some six hundred characters), the
+gathers its candidates (at most three seconds for the ICE servers: a STUN server always, and the server the
+`rtc_ice` setting names after it, `parseIceServer` and `iceServers` in `src/net.js`, a TURN relay with its
+user and password for the networks a STUN cannot cross, two symmetric NATs never meeting without one; one
+machine or one network needs none) and shows the description as a text (`packSignal`: gzipped and base64'd, some six hundred characters), the
 guest answers it the same way, the host accepts the answer, and `ready` resolves with the Link when the
 channel opens. The guest predicts its own move, as `CL_PredictMovement` did with the client's pmove:
 `src/pmove.js` is the JS twin of `player_think`'s movement and of the traces in `sql/physics.sql` (`ClipMap`
@@ -621,7 +623,7 @@ fetched demo), creates the schema and resources, and starts the map. A picked pa
 loaded at the next start in its place (`useKeptPak`; one that fails to load is forgotten and the demo's
 downloads), and the "demo pak" button beside the control, shown while a picked pak is in use, forgets it and
 loads the demo's now (`forgetPak`). Settings (map, skill, detail: 160×120, 320×240 or 640×480,
-brightness, renderer mode, sound, music) persist in `localStorage`. Input (`src/input.js`, an `Input`
+brightness, renderer mode, sound, music, the binds, the player setup, the ICE server) persist in `localStorage`. Input (`src/input.js`, an `Input`
 the page attaches to the canvas and reads each tic as the usercmd, the page keeping the keys that
 are its own): WASD/arrows, or whatever the keys menu bound (`settings.binds`), mouse look under pointer lock; on a touch screen the view's left half moves and its right half looks, a tap
 fires, and on-screen buttons (shown where the browser reports touch points) fire and jump while

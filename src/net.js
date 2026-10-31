@@ -213,16 +213,39 @@ export async function unpackSignal(text) {
   return d;
 }
 
+// ── the ICE servers: a STUN server always, and the one the player set (rtc_ice at the console) ────────────
+const STUN = 'stun:stun.l.google.com:19302';
+/**
+ * The rtc_ice setting parsed: `<url>` or `<url> <user> <pass>`, the url a stun:, stuns:, turn: or turns: one, as
+ * RTCIceServer takes it ({ urls, username, credential }); null for an empty setting. Throws on anything else.
+ */
+export function parseIceServer(text) {
+  const words = String(text ?? '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  if (words.length !== 1 && words.length !== 3) throw new Error('rtc_ice takes a url, or a url, a user and a password');
+  const [url, username, credential] = words;
+  if (!/^(stuns?|turns?):[^\s@]+$/i.test(url)) throw new Error('the url is stun:host[:port], turn:host[:port] or turns:host[:port]');
+  if (username && /^stuns?:/i.test(url)) throw new Error('a STUN server takes no user and password');
+  return username ? { urls: url, username, credential } : { urls: url };
+}
+/** What a Peer is made with: the STUN server, and the server the setting names after it. */
+export function iceServers(setting) {
+  const own = parseIceServer(setting);
+  return own ? [{ urls: STUN }, own] : [{ urls: STUN }];
+}
+
 /**
  * A peer connection with one data channel, driven by hand: the host makes an offer text, the guest answers
  * it with a text of its own, the host accepts that; `ready` resolves to the Link when the channel opens.
  * The ICE candidates are gathered before a text is made (the texts are passed once), waiting at most
- * `gatherMs` for the STUN server; a connection on one machine or one network needs none.
+ * `gatherMs` for the STUN server (and the TURN server the setting names, for the networks a STUN cannot cross:
+ * two players behind symmetric NATs never meet without a relay); a connection on one machine or one network
+ * needs none.
  */
 export class Peer {
-  constructor({ iceServers = [{ urls: 'stun:stun.l.google.com:19302' }], gatherMs = 3000, RTC = globalThis.RTCPeerConnection } = {}) {
+  constructor({ iceServers: servers = iceServers(''), gatherMs = 3000, RTC = globalThis.RTCPeerConnection } = {}) {
     if (!RTC) throw new Error('WebRTC is not available here');
-    this.pc = new RTC({ iceServers });
+    this.pc = new RTC({ iceServers: servers });
     this.gatherMs = gatherMs;
     this.link = null;
     this.ready = new Promise((resolve, reject) => { this.resolveReady = resolve; this.rejectReady = reject; });

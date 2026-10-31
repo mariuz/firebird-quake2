@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
-import { HostLink, GuestLink, Peer } from './net.js';
+import { HostLink, GuestLink, Peer, iceServers } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
@@ -1167,7 +1167,7 @@ async function hostGame() {
   try {
     netState('making the offer…');
     net?.offer?.peer.close();
-    const peer = new Peer();
+    const peer = new Peer({ iceServers: iceServers(settings.rtcIce) });
     if (net) net.offer = { peer }; else net = { role: 'host', guests: [], offer: { peer } };
     const offer = await peer.offer();
     if (net?.offer?.peer !== peer) return;
@@ -1226,7 +1226,7 @@ async function netGo() {
       }
     } else if (netStage === 'join') {
       netState('answering…');
-      const peer = new Peer();
+      const peer = new Peer({ iceServers: iceServers(settings.rtcIce) });
       net = { role: 'guest', peer, guest: null };
       const answer = await peer.answer(text);
       if (net?.peer !== peer) return;

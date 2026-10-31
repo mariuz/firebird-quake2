@@ -308,6 +308,14 @@ try {
     const it2 = await items();
     assert(it0.SILENCER_SHOTS === 0 && it1.SILENCER_SHOTS === 30 && it1.INV_SILENCER === it0.INV_SILENCER - 1 && it0.POWER_ARMOR === 0 && it2.POWER_ARMOR === 1,
       `l uses the silencer (${it0.SILENCER_SHOTS} → ${it1.SILENCER_SHOTS} silenced shots) and h the power shield (on: ${it2.POWER_ARMOR})`);
+    // rtc_ice: the ICE server for the network game, kept in the settings and shown; cleared again before the network
+    // section below (a relay that is not there would hold each offer three seconds)
+    await typeCommand('rtc_ice turn:relay.example.org:3478 ace secret');
+    const ice = await page.evaluate(() => ({ setting: window.quake2.settings.rtcIce, stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).rtcIce, status: document.getElementById('status')?.textContent })).catch(() => ({}));
+    await typeCommand('rtc_ice none');
+    const iceOff = await page.evaluate(() => window.quake2.settings.rtcIce).catch(() => null);
+    assert(ice.setting === 'turn:relay.example.org:3478 ace secret' && ice.stored === ice.setting && /rtc_ice: turn:relay.example.org:3478 for the next network game/.test(ice.status ?? '') && iceOff === '',
+      `rtc_ice keeps a TURN server in the settings for the next network game, and none clears it (${JSON.stringify(ice)})`);
 
     // a recording: `record run` at the console writes the game from then on as a demo (src/record.js: the stats line
     // counts its frames), `stop` downloads it as run.dm2 (parsed here as the page parses the pak's: every block read

@@ -128,6 +128,22 @@ check(spectating === 1 && status.at(-1)?.[0] === 'spectator takes 0 or 1' && sta
 await con.submit('spectator 0');
 check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'spectator 0 plays again');
 
+// rtc_ice: the ICE server for the next network game, kept in the settings; shown, set, refused, cleared
+host.settings.rtcIce = '';
+await con.submit('rtc_ice');
+check(status.at(-1)?.[0] === '"rtc_ice" is "none"', 'rtc_ice alone shows none');
+await con.submit('rtc_ice turn:relay.example.org:3478   ace secret');
+check(host.settings.rtcIce === 'turn:relay.example.org:3478 ace secret' && last() === 'saveSettings' && status.at(-1)?.[0] === 'rtc_ice: turn:relay.example.org:3478 for the next network game',
+  'rtc_ice <url> <user> <pass> keeps the server in the settings, the words one space apart');
+await con.submit('rtc_ice');
+check(status.at(-1)?.[0] === '"rtc_ice" is "turn:relay.example.org:3478 ace secret"', 'and shows it');
+await con.submit('rtc_ice turn:relay.example.org:3478 ace');
+check(host.settings.rtcIce === 'turn:relay.example.org:3478 ace secret' && status.at(-1)?.[0] === 'rtc_ice: rtc_ice takes a url, or a url, a user and a password' && status.at(-1)?.[1] === true, 'a url with a user and no password is refused, the setting as it was');
+await con.submit('rtc_ice http://relay');
+check(host.settings.rtcIce === 'turn:relay.example.org:3478 ace secret' && status.at(-1)?.[1] === true, 'another scheme is refused');
+await con.submit('rtc_ice none');
+check(host.settings.rtcIce === '' && status.at(-1)?.[0] === 'rtc_ice: the STUN server alone', 'rtc_ice none clears it');
+
 // the history: not twice in a row, 32 at most, up and down through it, the empty line past the newest
 const h = new Console(host);
 await h.submit('god'); await h.submit('god'); await h.submit('noclip'); await h.submit('   ');
