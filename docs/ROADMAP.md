@@ -934,9 +934,15 @@ client's events among them. In the order they are to be taken.
   `test:audio` plays one at the ear, reads the figures and cuts everything; `test:console` the words with `.wav`
   added, a missing one named, the lines laid out, the not-started line and Tab (`play` comes before `players`
   now); the browser test plays a sound, reads the figures and stops, on both builds.
-- **Footsteps and `cl_footsteps`**: `EV_FOOTSTEP` as pmove set it (the bob cycle's half turned on the ground past
-  225 units a second) with `player/step1-4.wav` at the entity as `CL_EntityEvent` played them, in a frame's events,
-  a recording's and a demo's, for the other players too; `cl_footsteps 0` plays none.
+- **Footsteps and `cl_footsteps`**: done. `G_SetClientEvent`'s `EV_FOOTSTEP` in `player_think`: on the ground past
+  225 units a second, each time the bob cycle's next step turns its whole number, `player/step1-4.wav` is queued on
+  the body channel at the player as `CL_EntityEvent` played it, so every page hears its own and the others' and a
+  recording carries them as sounds. A demo's entity events (`entity_event_t` on the states: a footstep, a short
+  landing, a fall and a far one, an item respawning, a teleport) come with the frames reached and play through
+  `DemoPlayer.soundRows` as the client played them. `cl_footsteps 0` drops the footsteps at the page
+  (`Q2Audio.footsteps`, the demo's too); not archived, as Quake's was not. The smoke test counts the steps queued
+  running and none walking at 200; `test:demo` finds the events in the pak's demo and the rows they make, none with
+  the switch off; `test:audio` the switch; `test:console` the cvar; the browser test flips it on both builds.
 - **`scr_showpause`, `scr_showturtle` and `cl_maxfps`**: the pause plaque drawn as `pics/pause.pcx` in place of
   the word (`SCR_DrawPause`, off with `scr_showpause 0`), the turtle (`pics/turtle.pcx`) at the view's corner
   when a frame takes longer than a tic (`SCR_DrawNet`'s neighbour, `scr_showturtle`), and the paint rate capped

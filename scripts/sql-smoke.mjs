@@ -506,6 +506,13 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   for (let i = 0; i < 12; i++) { r = await tic([1, 1, 0, 0, 0, 0, 0, 1, 0]); maxBob = Math.max(maxBob, r.VIEW_Z - r.PZ - 22); }
   m = await me();
   assert(m.BOBTIME > 0.5 && maxBob > 0.5 && maxBob <= 6.0001, `walking runs the bob cycle (bobtime ${m.BOBTIME.toFixed(2)}) and bobs the eye up to ${maxBob.toFixed(1)} units`);
+  // footsteps (G_SetClientEvent's EV_FOOTSTEP, played as CL_EntityEvent played it: player/step1-4.wav on the body channel): one each
+  // time the bob cycle's next step turns its whole number, running past 225 units a second; none walking at 200
+  const steps = async () => (await one("SELECT COUNT(*) c FROM sound_events WHERE snd LIKE 'player/step%' AND chan = 3")).C;
+  const stepsRun = await steps();
+  assert(stepsRun >= 1, `running, the bob cycle's steps queue player/step1-4.wav on the body channel (${stepsRun} in 12 tics)`);
+  for (let i = 0; i < 12; i++) r = await tic([1, 1, 0, 0, 0, 0, 0, 0, 0]);
+  assert((await steps()) === stepsRun, `walking at 200 units a second, under EV_FOOTSTEP's 225, none (${await steps()})`);
   for (let i = 0; i < 12; i++) r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
   m = await me();
   assert(m.BOBTIME === 0 && m.BOB_Z === 0 && Math.abs(r.VIEW_Z - r.PZ - 22) < 0.01, `... and standing still stops it (bobtime ${m.BOBTIME}, xy speed ${r.XYSPEED?.toFixed(1)}, flags ${m.FLAGS}, water ${r.WATERLEVEL})`);

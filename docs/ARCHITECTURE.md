@@ -749,7 +749,10 @@ kept within 1; none archived, as Quake's were not),
 `gun_x`, `gun_y` and `gun_z` (`SV_CalcGunOffset`'s development tools, 0: the view weapon drawn moved along the view's right,
 forward and down, `drawFrame`'s) and `scr_centertime` (`SCR_DrawCenterString`: a centre print drawn 2.5 seconds from when it came,
 `CenterPrint` in `src/notify.js`, a view each, whatever the row carries it for: the SQL keeps it three seconds, a demo's frames
-as written; none archived, as Quake's were not),
+as written; none archived, as Quake's were not), `cl_footsteps` (0: no footstep played, `Q2Audio.footsteps`; the footsteps
+are `G_SetClientEvent`'s `EV_FOOTSTEP` in `player_think`, a `player/step1-4.wav` on the body channel each time the bob cycle's
+next step turns its whole number running past 225 units a second, as `CL_EntityEvent` played it; a demo's entity events, the
+footsteps, the landings, the falls, an item respawning and a teleport, play through `DemoPlayer.soundRows` the same way),
 `vid_gamma` (the video menu's brightness as a cvar, the control's tenths from 1 to 1.8, a number between snapped and
 clamped to them, archived: the painter's light scale and the control follow through `setSetting`) and `vid_fullscreen` (the page's live fullscreen state shown, `isFullscreen`; 0 or 1 asks the page
 for it or leaves it, as the video menu's box does), `help` (`Cmd_Help_f`: the help computer, or the score board in deathmatch, as

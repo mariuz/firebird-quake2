@@ -309,17 +309,19 @@ export class DemoPlayer {
   /**
    * At `t`: { i, frac, ps, view: { x, y, z, viewZ, yaw, pitch, roll, fov, blend, rdflags, gunindex, gunframe, stats },
    * ents: decodeFrame's entity rows for the alias models and sprites in view, brushes: [{ name, origin, angles, frame }],
-   * loops: [name, x, y, z], lights: Float32Array(64), events: { sounds, fx, prints, centerprints, flashes } of the frames reached }.
+   * loops: [name, x, y, z], lights: Float32Array(64), events: { sounds, fx, prints, centerprints, flashes, entityEvents } of the frames reached }.
    */
   at(t) {
     const { i, frac } = this.index(t);
     const f = this.frames[i], g = this.frames[i + 1] ?? f;
     const ps = f.ps, qs = g.ps;
     // the events of every frame reached since the last call: played once
-    const events = { sounds: [], fx: [], prints: [], centerprints: [], flashes: [], configs: [] };
+    const events = { sounds: [], fx: [], prints: [], centerprints: [], flashes: [], configs: [], entityEvents: [] };
     for (let k = this.played + 1; k <= i; k++) {
       const fr = this.frames[k];
-      for (const key of Object.keys(events)) events[key].push(...fr[key]);
+      for (const key of Object.keys(events)) if (key !== 'entityEvents') events[key].push(...fr[key]);
+      // the entities' events of the frame (entity_event_t: a footstep, a landing, a fall, an item respawning, a teleport), with the state they came on
+      for (const [num, es] of fr.ents) if (es.event) events.entityEvents.push({ ent: num, event: es.event, state: es });
       for (const [idx, s] of fr.configs) if (idx >= CS.LIGHTS && idx < CS.LIGHTS + 256) this.lightsAt[idx - CS.LIGHTS] = s;
     }
     this.played = Math.max(this.played, i);
@@ -360,9 +362,11 @@ export class DemoPlayer {
    * The sounds of the events as audio.playEvents' rows ([id, 0, ent, chan, name, vol, attn, x, y, z]): a sound with no
    * position plays where its entity is (the frame's state, a brush model's from its box's middle, or the view for the
    * player); a muzzle flash is its weapon's sound at the entity, and a light for the frame (fx 15).
+   * The entities' events play as CL_EntityEvent played them (below); `footsteps` false drops the footsteps (cl_footsteps 0).
    */
-  soundRows(events, frame, view, random = Math.random) {
+  soundRows(events, frame, view, random = Math.random, footsteps = true) {
     const rows = [], fx = [];
+    const self = this.demo.playernum + 1;
     const where = (ent) => {
       if (ent === this.demo.playernum + 1) return [view.x, view.y, view.z];
       const s = frame.ents.get(ent); return s ? this.soundOrigin(s) : [view.x, view.y, view.z];
@@ -379,6 +383,17 @@ export class DemoPlayer {
       const name = m.monster ? mz2Sound(m.flash, random) : MZ_SOUND[m.weapon & 127] ?? null;
       if (name) rows.push([0, 0, m.ent, 1, name, silenced ? 0.2 : 1, 1, p[0], p[1], p[2]]);
       fx.push([0, 15, p[0], p[1], p[2] + 16, 0, 0, 0, (silenced ? 100 : 200) + Math.floor(random() * 32)]);
+    }
+    // CL_EntityEvent: the entities' events as the sounds the client played for them: an item respawning (1, items/respawn1.wav, idle
+    // attenuation on the weapon channel), a footstep (2, player/step1-4.wav on the body channel, none with cl_footsteps off), a short
+    // landing (3, player/land1.wav), a fall (4, *fall2.wav, the male's here) and a far one (5, *fall1.wav), a teleport (6, misc/tele1.wav)
+    for (const e of events.entityEvents ?? []) {
+      const name = e.event === 1 ? 'items/respawn1.wav' : e.event === 2 ? (footsteps ? `player/step${1 + Math.floor(random() * 4)}.wav` : null)
+        : e.event === 3 ? 'player/land1.wav' : e.event === 4 ? 'player/male/fall2.wav' : e.event === 5 ? 'player/male/fall1.wav' : e.event === 6 ? 'misc/tele1.wav' : null;
+      if (!name) continue;
+      const p = e.ent === self ? [view.x, view.y, view.z] : this.soundOrigin(e.state);
+      const idle = e.event === 1 || e.event === 6;
+      rows.push([0, 0, e.ent, e.event === 2 ? 3 : idle ? 1 : 0, name, 1, idle ? 2 : 1, p[0], p[1], p[2]]);
     }
     return { rows, fx };
   }
