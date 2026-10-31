@@ -504,7 +504,9 @@ than a second left beside it, to go when it would have run out; `drop_item` is `
 (`set_respawn`: no model, not solid, a think) and `item_respawn` brings it back after `respawn_delay`'s
 seconds with the sound and the particles (fx 17), the mega health through `mega_think`; `item_pickup`
 has the deathmatch rules (weapons stay, a new one raised only over the blaster, instant items, no powerup
-limit) and `player_fire` spends no ammo with `DF_INFINITE_AMMO`. The frags are `client_obituary`'s on
+limit) and `player_fire` spends no ammo with `DF_INFINITE_AMMO`; `god`, `notarget`, `noclip` and `give` are
+refused in a deathmatch unless `game.cheats` is on (`cheats 1` at the console, a deathmatch cvar like
+`dmflags`), as `CheatsOk` refused them. The frags are `client_obituary`'s on
 `player.score`, in the tic's row (`score`, with `deathmatch`) for the status bar's top right and the score
 board (`Hud.drawScores`, F1 in place of the help computer and at the intermission); `changelevel` kills the
 client at an exit unless `DF_ALLOW_EXIT`, `check_dm_rules` (each tic, exiting at once outside a deathmatch)

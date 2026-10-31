@@ -9,7 +9,7 @@ export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, crosshair: 1, coop: false, deathmatch: false,
-  dmflags: 0, fraglimit: 0, timelimit: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, rtcIce: '', rtcSignal: '', netgraph: false });
+  dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, rtcIce: '', rtcSignal: '', netgraph: false });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1 });
@@ -39,6 +39,7 @@ const CHECK = {
   coop: bool,            // a new game with two players: the view split, the gamepad the second's
   deathmatch: bool,      // ... against each other (deathmatch wins over coop)
   dmflags: int(0, 65535), fraglimit: int(0, 999), timelimit: int(0, 999),   // the deathmatch cvars
+  cheats: int(0, 1),     // the cheats cvar: god, notarget, noclip and give in a deathmatch only with it (CheatsOk)
   players: int(2, 4),    // how many at this page in coop or deathmatch (the view split in two or four)
   binds: checkBinds,     // the key bindings: action → at most two key codes
   lines: checkLines,     // the keys bound to command lines (bind k god): key code → the line (default.cfg's END centerview until changed)

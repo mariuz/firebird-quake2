@@ -24,7 +24,7 @@
         <canvas id="screen" width="320" height="240" tabindex="0" aria-label="Quake 2 view rendered from Firebird query results"></canvas>
         <div id="status" class="status">Loading…</div>
         <input id="cmdline" class="cmdline" type="text" autocomplete="off" spellcheck="false" hidden
-               placeholder="god · noclip · notarget · god; noclip · alias both &quot;god; noclip&quot; · wait · give all|health|weapons|ammo|armor|keys · kill · map demo2 · save · load · record name · stop · demos · deldemo name · timedemo q2demo1 · screenshot · say hello · name Ace · sensitivity 7 · cvarlist · writeconfig · exec · timescale 0.5 · bind k +attack · bind t &quot;say hello&quot; · bind F4 menu_options · unbind k · bindlist · spectator · chase 1 · netgraph 1 · players · kick 2 · connect K9H2 · disconnect · reconnect · rtc_ice turn:host:3478 user pass · rtc_signal http://host:8787 · dmflags · fraglimit · timelimit" aria-label="Console">
+               placeholder="god · noclip · notarget · god; noclip · alias both &quot;god; noclip&quot; · wait · give all|health|weapons|ammo|armor|keys · kill · map demo2 · save · load · record name · stop · demos · deldemo name · timedemo q2demo1 · screenshot · say hello · name Ace · sensitivity 7 · cvarlist · writeconfig · exec · timescale 0.5 · bind k +attack · bind t &quot;say hello&quot; · bind F4 menu_options · unbind k · bindlist · spectator · chase 1 · netgraph 1 · players · kick 2 · connect K9H2 · disconnect · reconnect · rtc_ice turn:host:3478 user pass · rtc_signal http://host:8787 · dmflags · fraglimit · timelimit · cheats 1" aria-label="Console">
         <pre id="conlog" class="conlog" hidden aria-label="The console's last lines"></pre>
         <!-- on-screen buttons, shown on touch screens: the halves of the view move and look, these fire and jump -->
         <div id="touch" class="touch" hidden>
@@ -48,7 +48,7 @@
           <option value="2">Hard</option>
           <option value="3" hidden>Nightmare</option>
         </select></label>
-        <label title="Two to four players share the game: the view is split in two or four, the keyboard and mouse are the first player's, the gamepads the others'; in deathmatch against each other, with the maps' deathmatch items and no monsters (dmflags, fraglimit and timelimit at the console)">Players <select id="players">
+        <label title="Two to four players share the game: the view is split in two or four, the keyboard and mouse are the first player's, the gamepads the others'; in deathmatch against each other, with the maps' deathmatch items and no monsters (dmflags, fraglimit, timelimit and cheats at the console: god, noclip, notarget and give need cheats 1 in a deathmatch)">Players <select id="players">
           <option value="1">One</option>
           <option value="2">Two (coop)</option>
           <option value="3">Three (coop)</option>
@@ -114,7 +114,7 @@
         On touch screens the left half of the view moves, the right half looks, a tap fires, and the buttons fire, jump, change weapon and open the menu.
         A gamepad works too: left stick moves, right stick looks, RT fires, A jumps, B crouches, LB/RB change weapon, the d-pad selects (left/right) and uses (up) an inventory item, Y shows the inventory, Back the help computer, Start opens the menu (the d-pad, A and B drive it).
         With two to four players (coop, or deathmatch: the maps' deathmatch weapons and spots, no monsters, frags at the top right, <kbd>F1</kbd> the score board, with each player's ping over the network;
-        <code>dmflags</code>, <code>fraglimit</code> and <code>timelimit</code> at the console) the view is split in two or four, the keyboard and mouse are the first player's and the gamepads the others' (640×480 gives four views of 320×240).
+        <code>dmflags</code>, <code>fraglimit</code>, <code>timelimit</code> and <code>cheats</code> at the console) the view is split in two or four, the keyboard and mouse are the first player's and the gamepads the others' (640×480 gives four views of 320×240).
         Over the network: one page hosts (Host makes an offer to send to the other player), the other joins (Join takes the offer and makes an answer to send back),
         and the host's game runs with the guest's player in it (coop, or a deathmatch when the host's Players select says so), each page its own view; Host again while hosting makes an offer for a third and a fourth player, who join the game as it runs;
         a joined page that ticks spectate (or <code>spectator 1</code> at its console) only watches: no body, a noclip move through the level, nothing hurts it and the monsters ignore it, its attack key chases a player (3.20's chase cam: the view behind that player's), jump lets go, <code>chase n</code> at its console picks one; its console's game commands (god, give, kill…) run at the host for its player; at the host's console <code>players</code> lists the clients and what drives each and <code>kick n</code> drops a guest;

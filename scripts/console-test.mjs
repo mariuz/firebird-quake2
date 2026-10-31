@@ -309,6 +309,26 @@ await con.submit('cvarlist');
 check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · netgraph "0" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
 Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50, netgraph: false });
 
+// the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
+{
+  const set = [];
+  host.setCvar = async (name, value) => set.push(`${name}=${value}`);
+  host.settings.dmflags = 0; host.settings.cheats = 0;
+  await con.submit('cheats');
+  check(status.at(-1)?.[0] === '"cheats" is "0"', 'cheats shows 0 by default');
+  await con.submit('cheats 1');
+  check(host.settings.cheats === 1 && set.at(-1) === 'cheats=1', 'cheats 1 turns the cheats on for a deathmatch, through the host');
+  await con.submit('cheats 5');
+  check(host.settings.cheats === 1 && set.at(-1) === 'cheats=1', 'cheats takes 0 or 1');
+  await con.submit('cheats 0');
+  await con.submit('dmflags 70000');
+  check(host.settings.cheats === 0 && host.settings.dmflags === 65535 && set.at(-1) === 'dmflags=65535', 'cheats 0 puts them off; dmflags clamps to 65535');
+  await con.submit('dmflags x');
+  check(status.at(-1)?.[0] === '"dmflags" is "65535"', 'a word shows the value');
+  host.settings.dmflags = 0;
+  delete host.setCvar;
+}
+
 // timescale: the game's clock against the wall's, shown, set within 0.1..10, refused at 0 or for a word, a guest told
 {
   let scale = 1, guest = false;

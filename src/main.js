@@ -591,7 +591,7 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   // they drive, in deathmatch when the select says so and coop otherwise) and the deathmatch cvars, a level change keeps
   // the game's
   const modes = newGame ? { coop: netHost() ? !settings.deathmatch : settings.coop, deathmatch: settings.deathmatch, players: netHost() ? hostClients() : settings.players,
-    cvars: { dmflags: settings.dmflags, fraglimit: settings.fraglimit, timelimit: settings.timelimit } } : {};
+    cvars: { dmflags: settings.dmflags, fraglimit: settings.fraglimit, timelimit: settings.timelimit, cheats: settings.cheats } } : {};
   await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...modes }));
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);
   setStatus('');
