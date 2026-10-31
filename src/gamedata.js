@@ -247,12 +247,45 @@ export const MONSTERS = [
     name: 'insane', model: 'models/monsters/insane/tris.md2', skin: 0, health: 100, gib_health: -50, mass: 300,
     run_speed: 0, walk_speed: 2.5, yaw_speed: 20,
     anims: [['stand', 40], ['stand_pain', 5], ['stand_die', 2], ['stand_insane', 30], ['walk', 20], ['run', 7], ['pain', 5], ['death', 1], ['crawl', 20], ['crawl_pain', 5], ['crawl_death', 2], ['cross', 16], ['struggle', 15], ['cross_death', 2]],
-    // the insane marines neither attack nor move toward anyone: they stand and rave (the crawling and crucified ones are not here yet)
-    stand_anim: 'stand_insane', walk_anim: 'walk', run_anim: 'stand_insane', pain_anims: 'pain', death_anims: 'death',
+    // the insane marines never attack (m_insane.c has no attack): the standing one raves and, roused, runs about
+    // (insane_run); misc_insane's spawnflags pick its form, a type each below (4 CRAWL, 8 CRUCIFIED), skin rand() % 3
+    stand_anim: 'stand_insane', walk_anim: 'walk', run_anim: 'run', pain_anims: 'pain,stand_pain', death_anims: 'death,stand_die',
     attack_chance: 0, pain_chance: 1,
     sight_snd: 'insane/insane3.wav', idle_snd: 'insane/insane7.wav', search_snd: 'insane/insane7.wav', pain_snd: 'insane/insane4.wav',
     death_snd: 'insane/insane5.wav',
   },
+  {
+    // the crawling marine (misc_insane with CRAWL): on its knees for good, its stand, walk and run the crawl frames
+    // (insane_move_down, insane_move_crawl, insane_move_runcrawl), the crawl's pain and death
+    name: 'insane_crawl', model: 'models/monsters/insane/tris.md2', skin: 0, health: 100, gib_health: -50, mass: 300,
+    run_speed: 9, walk_speed: 2, yaw_speed: 20,
+    anims: [['stand', 40], ['stand_pain', 5], ['stand_die', 2], ['stand_insane', 30], ['walk', 20], ['run', 7], ['pain', 5], ['death', 1], ['crawl', 20], ['crawl_pain', 5], ['crawl_death', 2], ['cross', 16], ['struggle', 15], ['cross_death', 2]],
+    stand_anim: 'crawl', walk_anim: 'crawl', run_anim: 'crawl', pain_anims: 'crawl_pain', death_anims: 'crawl_death',
+    attack_chance: 0, pain_chance: 1,
+    sight_snd: 'insane/insane3.wav', idle_snd: 'insane/insane7.wav', search_snd: 'insane/insane7.wav', pain_snd: 'insane/insane4.wav',
+    death_snd: 'insane/insane5.wav',
+  },
+  {
+    // the crucified marine (misc_insane with CRUCIFIED): on the wall (FL_FLY, a box 8 deep: it never drops or moves,
+    // AI_STAND_GROUND), hanging through the cross frames, struggling when hurt (insane_move_struggle_cross), dying on
+    // the cross and staying there (insane_dead keeps FL_FLY)
+    name: 'insane_cross', model: 'models/monsters/insane/tris.md2', skin: 0, health: 100, gib_health: -50, mass: 300, flags: 1,
+    minx: -16, miny: 0, minz: 0, maxx: 16, maxy: 8, maxz: 32,
+    run_speed: 0, walk_speed: 0, yaw_speed: 0,
+    anims: [['stand', 40], ['stand_pain', 5], ['stand_die', 2], ['stand_insane', 30], ['walk', 20], ['run', 7], ['pain', 5], ['death', 1], ['crawl', 20], ['crawl_pain', 5], ['crawl_death', 2], ['cross', 16], ['struggle', 15], ['cross_death', 2]],
+    stand_anim: 'cross', walk_anim: 'cross', run_anim: 'cross', pain_anims: 'struggle', death_anims: 'cross_death',
+    attack_chance: 0, pain_chance: 1,
+    sight_snd: 'insane/insane3.wav', idle_snd: 'insane/insane7.wav', search_snd: 'insane/insane7.wav', pain_snd: 'insane/insane4.wav',
+    death_snd: 'insane/insane5.wav',
+  },
+];
+/**
+ * The full game's decorations with a model the demo pak lacks: a model row without a mesh and its frame runs, as the
+ * monsters above get, so their logic runs here (the painter skips them). The commander's body (monster_commander_body,
+ * g_misc.c): its 24 frames lie still, and sit up when it is used.
+ */
+export const DECORATIONS = [
+  { model: 'models/monsters/commandr/tris.md2', anims: [['sit', 24]], minx: -32, miny: -32, minz: 0, maxx: 32, maxy: 32, maxz: 48 },
 ];
 /** The full game's monsters: those with a frame table of their own (their models are not in the demo pak). */
 export const FULL_GAME_MONSTERS = MONSTERS.filter((m) => m.anims).map((m) => m.name);

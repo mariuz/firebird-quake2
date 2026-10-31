@@ -1284,6 +1284,12 @@ BEGIN
     END
     ELSE IF (tcls = 'misc_viper_bomb') THEN EXECUTE PROCEDURE viper_bomb_use(t, activator);
     ELSE IF (tcls = 'misc_blackhole') THEN DELETE FROM ents e WHERE e.id = :t;     -- misc_blackhole_use
+    ELSE IF (tcls = 'monster_commander_body') THEN
+    BEGIN
+      -- commander_body_use: it sits up, a frame a tenth of a second, with the tank's pain sound
+      UPDATE ents e SET e.think = 'commander_think', e.nextthink = now_() + 0.1e0 WHERE e.id = :t;
+      EXECUTE PROCEDURE snd(t, 2, 'tank/pain.wav', 1, 1);
+    END
     ELSE IF (tcls = 'target_spawner') THEN EXECUTE PROCEDURE target_spawner_use(t);
     ELSE IF (tcls = 'target_string') THEN EXECUTE PROCEDURE target_string_use(t);
     ELSE IF (tcls = 'func_clock') THEN EXECUTE PROCEDURE clock_use(t, activator);
@@ -2283,6 +2289,7 @@ BEGIN
     END
   END
 
+  IF (cls <> 'player' AND BIN_AND(flags, 16) <> 0) THEN EXIT;           -- FL_GODMODE on anything else (the commander's body): the knockback, no harm
   save = 0;
   IF (cls = 'player') THEN
   BEGIN
@@ -3054,8 +3061,10 @@ BEGIN
     IF (dm = 1) THEN BEGIN IF (BIN_AND(sf, 2048) <> 0) THEN CONTINUE; END
     ELSE IF (BIN_AND(sf, skillbit) <> 0) THEN CONTINUE;            -- not on this skill
     sf = BIN_AND(sf, BIN_NOT(7936));
-    -- (every monster's spawn function freed itself in deathmatch)
-    IF (dm = 1 AND cls LIKE 'monster_%') THEN CONTINUE;
+    -- SP_misc_insane: the marine's form is its spawnflags' (4 CRAWL, 8 CRUCIFIED), a monster type each; the rest stand
+    IF (cls = 'misc_insane') THEN cls = TRIM(CASE WHEN BIN_AND(sf, 8) <> 0 THEN 'monster_insane_cross' WHEN BIN_AND(sf, 4) <> 0 THEN 'monster_insane_crawl' ELSE 'monster_insane' END);
+    -- (every monster's spawn function freed itself in deathmatch; the commander's body is a decoration)
+    IF (dm = 1 AND cls LIKE 'monster_%' AND cls <> 'monster_commander_body') THEN CONTINUE;
     -- "angles" overrides "angle"
     IF (ay IS NOT NULL AND ang IS NULL) THEN ang = ay;
     IF (cls IN ('info_player_deathmatch', 'info_player_coop', 'info_player_intermission', 'func_group')) THEN CONTINUE;
@@ -3450,6 +3459,16 @@ BEGIN
         ncubes = ncubes + 1;
       END
     END
+    -- ── the commander's body (SP_monster_commander_body, g_misc.c): a decoration that lies there, drops to the floor
+    -- half a second in (commander_body_drop) and sits up when used; shots hit it but never hurt it (FL_GODMODE) ──
+    ELSE IF (cls = 'monster_commander_body') THEN
+    BEGIN
+      EXECUTE PROCEDURE set_model(eid, 'models/monsters/commandr/tris.md2');
+      UPDATE ents e SET e.solid = 2, e.movetype = 0, e.takedamage = 1, e.health = 1000, e.max_health = 1000, e.flags = BIN_OR(e.flags, 16), e.frame = 0,
+             e.minx = -32, e.miny = -32, e.minz = 0, e.maxx = 32, e.maxy = 32, e.maxz = 48,
+             e.think = 'commander_drop', e.nextthink = :t0 + 0.5e0 WHERE e.id = :eid;
+      EXECUTE PROCEDURE link_ent(eid);
+    END
     -- ── monsters ──
     ELSE IF (cls LIKE 'monster_%') THEN
     BEGIN
@@ -3464,6 +3483,9 @@ BEGIN
              e.st = 'stand', e.anim = :stand, e.anim_frame = FLOOR(rnd() * 4), e.ideal_yaw = e.yaw,
              e.think = 'monster_think', e.nextthink = :t0 + 0.1e0 + rnd() * 0.5e0 WHERE e.id = :eid;
       UPDATE game g SET g.total_monsters = g.total_monsters + 1 WHERE g.id = 1;
+      -- an insane marine: one of three skins, and STAND_GROUND (16) holds it where it is, as the cross does the crucified
+      IF (mname STARTING WITH 'insane') THEN
+        UPDATE ents e SET e.skin = IIF(:mname = 'insane_cross', 0, FLOOR(rnd() * 3)), e.aiflags = BIN_OR(e.aiflags, IIF(BIN_AND(:sf, 16) <> 0 OR :mname = 'insane_cross', 1, 0)) WHERE e.id = :eid;
       IF (BIN_AND(sf, 2) <> 0) THEN
         -- TRIGGER_SPAWN: nowhere until used
         UPDATE ents e SET e.solid = 0, e.alpha = 1, e.st = 'asleep', e.nextthink = NULL, e.takedamage = 0 WHERE e.id = :eid;

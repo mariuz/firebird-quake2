@@ -380,6 +380,43 @@ for (const m of MONSTERS) {
   await db.exec(`UPDATE game SET killed = 0; UPDATE ents SET flags = BIN_OR(flags, 16) WHERE id = ${pe}`);
 }
 
+// the insane marines' forms (m_insane.c): the crawling one comes on its knees, the crucified one hangs on its cross,
+// struggles when hurt and stays there dead; neither ever attacks
+if (!only || only.has('insane_crawl') || only.has('insane_cross')) {
+  console.log('── the insane marines\' forms');
+  await teleport(128, -320, 32, 135);
+  await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16), health = 100 WHERE id = ${pe}`);
+  const crawler = (await q1("SELECT * FROM spawn_monster('insane_crawl', 300)")).ID;
+  const c0 = await q1(`SELECT x, y, z, anim, st FROM ents WHERE id = ${crawler}`);
+  let seen = null;
+  for (let i = 0; i < 60 && !seen; i++) { await tic(); const e = await q1(`SELECT st, anim, enemy_id FROM ents WHERE id = ${crawler}`); if (e.ENEMY_ID === pe) seen = e; }
+  await run(40);
+  const c1 = await q1(`SELECT x, y, z, anim, st FROM ents WHERE id = ${crawler}`);
+  const crawled = Math.hypot(c1.X - c0.X, c1.Y - c0.Y);
+  assert(c0.ANIM === 'crawl' && seen && c1.ANIM === 'crawl' && c1.ST === 'run' && crawled > 30 && crawled < 250,
+    `the crawling marine waits on its knees, sees the player and comes on in the crawl frames (${crawled.toFixed(0)} units in two seconds, ${c1.ST})`);
+  await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL");
+  // the crucified one, put on a wall's height: it never moves, holds its ground; hurt, it struggles; killed, it stays
+  const cross = (await q1("SELECT * FROM spawn_monster('insane_cross', 200)")).ID;
+  await db.exec(`UPDATE ents SET z = z + 40 WHERE id = ${cross}; EXECUTE PROCEDURE link_ent(${cross})`);
+  const x0 = await q1(`SELECT x, y, z, anim, flags, aiflags, movetype, miny, maxy FROM ents WHERE id = ${cross}`);
+  await run(40);
+  const x1 = await q1(`SELECT x, y, z, anim, st, enemy_id FROM ents WHERE id = ${cross}`);
+  assert((x0.FLAGS & 1) && (x0.AIFLAGS & 1) && x0.MOVETYPE === 5 && x0.MINY === 0 && x0.MAXY === 8 && x1.X === x0.X && x1.Y === x0.Y && x1.Z === x0.Z && x1.ANIM === 'cross',
+    `the crucified marine hangs where it was put (flying, a box 8 deep) and stays through two seconds in the cross frames (${x1.ST}, ${x1.ENEMY_ID === pe ? 'the player in sight' : 'no one in sight'}; ${JSON.stringify({ from: [x0.X, x0.Y, x0.Z], to: [x1.X, x1.Y, x1.Z], anim: x1.ANIM })})`);
+  await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE t_damage(${cross}, ${pe}, ${pe}, 10, 0, 0); END`);
+  await tic();
+  const hurt = await q1(`SELECT st, anim, x, y, z FROM ents WHERE id = ${cross}`);
+  assert(hurt.ST === 'pain' && hurt.ANIM === 'struggle' && hurt.Z === x0.Z, `hurt, it struggles on the cross (${hurt.ANIM}) and does not fall`);
+  await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE t_damage(${cross}, ${pe}, ${pe}, 100, 0, 0); END`);   // (more than its 90 left, less than would gib it: insane_die gibs at -50)
+  let dead = null;
+  for (let i = 0; i < 60 && !dead; i++) { await tic(); const e = await q1(`SELECT st, anim, x, y, z, movetype, flags, minz, maxz FROM ents WHERE id = ${cross}`); if (e?.ST === 'dead') dead = e; }
+  assert(dead && dead.ANIM === 'cross_death' && dead.Z === x0.Z && dead.MOVETYPE === 0 && (dead.FLAGS & 1) && dead.MINZ === 0 && dead.MAXZ === 32,
+    `killed, it dies on the cross and stays there (${dead?.ANIM}, z ${dead?.Z?.toFixed(0)} as it was, its box as it was)`);
+  await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL OR classname IN ('gib', 'bolt')");
+  await db.exec(`UPDATE game SET killed = 0; UPDATE ents SET flags = BIN_OR(flags, 16) WHERE id = ${pe}`);
+}
+
 // the player's trail and a monster's pursuit when it loses sight (p_trail.c, ai_run)
 {
   console.log('── pursuit');

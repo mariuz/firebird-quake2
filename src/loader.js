@@ -16,7 +16,7 @@
 import { Bsp, parseVec, SURF } from './bsp.js';
 import { Md2, Sp2 } from './md2.js';
 import { loadPcx } from './pak.js';
-import { MONSTERS, LIGHTSTYLES, EXTRA_ANIMS } from './gamedata.js';
+import { MONSTERS, DECORATIONS, LIGHTSTYLES, EXTRA_ANIMS } from './gamedata.js';
 
 const BATCH = 8192;   // rows per execBatch call: one transaction, a buffer of a few hundred KB
 
@@ -114,7 +114,7 @@ export async function loadResources(db, pak, { width = 320, height = 200, fov = 
   // the full game's monsters without their models (the demo pak): a model row with no mesh, its frame runs from
   // the monster's table (m_*.h), so the logic animates, attacks and dies as it would; the painter skips a model
   // it has no mesh for. A pak that has the model (a registered one) uses the MD2 and its own frames instead.
-  for (const m of MONSTERS) {
+  for (const m of [...MONSTERS, ...DECORATIONS]) {
     if (!m.anims || res.byName.has(m.model)) continue;
     const id = res.nextModel++;
     const total = m.anims.reduce((n, [, c]) => n + c, 0);

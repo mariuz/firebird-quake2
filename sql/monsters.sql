@@ -830,9 +830,13 @@ BEGIN
   WHILE (i > 0) DO BEGIN p = POSITION(',', anims, p) + 1; i = i - 1; END
   q = POSITION(',', anims, p);
   pick = IIF(q = 0, SUBSTRING(anims FROM p), SUBSTRING(anims FROM p FOR q - p));
-  -- the corpse: a flat box, toss movetype, only shots clip against it
-  UPDATE ents e SET e.st = 'die', e.movetype = 6, e.vx = 0, e.vy = 0, e.flags = BIN_AND(e.flags, BIN_NOT(1 + 2)), e.deadflag = 1,
-         e.minz = -24, e.maxz = -8, e.takedamage = 1 WHERE e.id = :eid;
+  -- the corpse: a flat box, toss movetype, only shots clip against it; a crucified marine stays on its cross
+  -- (insane_dead keeps FL_FLY and the box)
+  IF (mt = 'insane_cross') THEN
+    UPDATE ents e SET e.st = 'die', e.movetype = 0, e.vx = 0, e.vy = 0, e.deadflag = 1, e.takedamage = 1 WHERE e.id = :eid;
+  ELSE
+    UPDATE ents e SET e.st = 'die', e.movetype = 6, e.vx = 0, e.vy = 0, e.flags = BIN_AND(e.flags, BIN_NOT(1 + 2)), e.deadflag = 1,
+           e.minz = -24, e.maxz = -8, e.takedamage = 1 WHERE e.id = :eid;
   EXECUTE PROCEDURE set_anim(eid, pick);
 END^
 
@@ -1231,6 +1235,7 @@ BEGIN
          e.movetype = IIF(BIN_AND(:mflags, 3) <> 0, 5, 4), e.clipmask = 33685507, e.flags = BIN_OR(32, :mflags), e.yaw_speed = :mys, e.yaw = anglemod(:yaw),
          e.minx = :a, e.miny = :b, e.minz = :c, e.maxx = :d, e.maxy = :e_, e.maxz = :f, e.viewheight = :f - 8,
          e.st = 'stand', e.anim = :stand, e.ideal_yaw = e.yaw, e.spawn_x = e.x, e.spawn_y = e.y, e.spawn_z = e.z,
+         e.aiflags = IIF(:mname = 'insane_cross', 1, 0),   -- (a crucified marine holds its ground, as insane_stand set)
          e.think = 'monster_think', e.nextthink = now_() + 0.1e0 WHERE e.id = :id;
   UPDATE game g SET g.total_monsters = g.total_monsters + 1 WHERE g.id = 1;
   IF (BIN_AND(mflags, 3) = 0) THEN EXECUTE PROCEDURE drop_to_floor(id); ELSE EXECUTE PROCEDURE link_ent(id);
@@ -1447,6 +1452,14 @@ BEGIN
   -- the decorations' frame runs (misc_blackhole_think and the Easter ones): dstx..dsty-1, every 0.1 s
   ELSE IF (think = 'frame_cycle') THEN UPDATE ents e SET e.frame = IIF(e.frame + 1 < e.dsty, e.frame + 1, e.dstx), e.nextthink = e.nextthink + 0.1e0 WHERE e.id = :eid;
   ELSE IF (think = 'clock_think') THEN EXECUTE PROCEDURE clock_think(eid);
+  -- commander_body_drop: the body, placed a little up, is let fall to the floor as a toss
+  ELSE IF (think = 'commander_drop') THEN UPDATE ents e SET e.movetype = 6, e.z = e.z + 2 WHERE e.id = :eid;
+  -- commander_body_think: the next frame of 24 every 0.1 s, the thud at the twenty-second, still at the last
+  ELSE IF (think = 'commander_think') THEN
+  BEGIN
+    UPDATE ents e SET e.frame = e.frame + 1, e.nextthink = IIF(e.frame + 1 < 23, now_() + 0.1e0, NULL) WHERE e.id = :eid;
+    IF ((SELECT e.frame FROM ents e WHERE e.id = :eid) = 22) THEN EXECUTE PROCEDURE snd(eid, 2, 'tank/thud.wav', 1, 1);
+  END
   ELSE IF (think = 'turret_breach_init') THEN EXECUTE PROCEDURE turret_breach_init(eid);
   ELSE IF (think = 'turret_breach_think') THEN EXECUTE PROCEDURE turret_breach_think(eid);
   ELSE IF (think = 'turret_driver_link') THEN EXECUTE PROCEDURE turret_driver_link(eid);
