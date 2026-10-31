@@ -31,6 +31,7 @@ import { Input, GAME_KEYS, DEFAULT_BINDS, bindKey } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
 import { DemoRecorder } from './record.js';
+import { DemoStore } from './demostore.js';
 import { ClipMap, pmove, stateFromRow } from './pmove.js';
 import { CinReader, CinPlayer, CIN_FPS } from './cinematic.js';
 import { loadSettings, saveSettings as saveSettingsTo, viewSize, OPTIONS_RESET, VIDEO_RESET } from './settings.js';
@@ -68,7 +69,11 @@ let cinematic = null;    // src/cinematic.js: { file, player: CinPlayer, frame, 
 // src/record.js: the game being written as a demo (`record <name>` at the console, `stop` or the level's end ends
 // it), and the demos recorded this session by name, which the Demo select and `demomap` play like the pak's
 let recorder = null;     // { name, rec: DemoRecorder }
-const recordings = new Map();
+const recordings = new Map();   // the bytes of the recordings in hand this session, by name
+// src/demostore.js: the recordings kept across reloads (a recording made here, or a .dm2 opened from a file) in
+// IndexedDB; `kept` is their names, loaded at the start, their bytes read when one plays
+const demoStore = new DemoStore();
+const kept = new Set();
 let mapSetup = null;     // what session.startMap returned for the map in (the sky, the CD track: a recording's configstrings)
 /** The view's fov: the host's for a guest (the frustum is the host's), the setting otherwise. */
 const viewFov = () => (netGuest() && net.guest.map ? net.guest.map.view.fov : settings.fov);
@@ -233,7 +238,9 @@ const con = new Console({
   // the skill (latched: the next map's): the select shows it, nightmare through its hidden option
   setSkill: (n) => { $('skill').value = String(n); },
   playDemo: (name) => playDemo(name),
-  hasDemo: (name) => recordings.has(name) || pak.has(`demos/${name}.dm2`),
+  hasDemo: (name) => recordings.has(name) || kept.has(name) || pak.has(`demos/${name}.dm2`),
+  listDemos: () => ({ pak: pakDemos(), kept: [...new Set([...kept, ...recordings.keys()])].sort() }),
+  dropDemo: (name) => dropRecording(name),
   record: (name) => startRecording(name),
   stopRecord: () => stopRecording(),
   isRecording: () => !!recorder,
@@ -738,8 +745,7 @@ function stopRecording() {
   if (!r) return;
   recorder = null;
   const bytes = r.rec.finish();
-  recordings.set(r.name, bytes);
-  if (![...$('demo').options].some((o) => o.value === r.name)) { $('demo').append(new Option(`${r.name} (recorded)`, r.name)); $('demo').parentElement.hidden = false; }
+  keepRecording(r.name, bytes);
   try {
     const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
     const a = Object.assign(document.createElement('a'), { href: url, download: `${r.name}.dm2` });
@@ -751,17 +757,53 @@ function stopRecording() {
   setTimeout(() => { if (statusEl.textContent.startsWith('Recorded ')) setStatus(''); }, 3000);
 }
 
+/**
+ * A recording is in hand (just made, or opened from a file): into the Demo select, and kept across reloads where
+ * there is an IndexedDB (src/demostore.js), the same name replacing the earlier one.
+ */
+function keepRecording(name, bytes) {
+  recordings.set(name, bytes);
+  kept.add(name);
+  if (![...$('demo').options].some((o) => o.value === name)) { $('demo').append(new Option(`${name} (recorded)`, name)); $('demo').parentElement.hidden = false; }
+  demoStore.put(name, bytes).catch((err) => console.warn('the recording is not kept:', err.message));
+}
+/** A recording dropped (`deldemo <name>`): from the select, this session and the store; the pak's demos stay. */
+async function dropRecording(name) {
+  if (!recordings.has(name) && !kept.has(name)) return false;
+  recordings.delete(name);
+  kept.delete(name);
+  await demoStore.remove(name).catch((err) => console.warn('demostore:', err.message));
+  if (!pak.has(`demos/${name}.dm2`)) { [...$('demo').options].find((o) => o.value === name)?.remove(); if (demo?.name === name) $('demo').value = ''; }
+  return true;
+}
+/** A .dm2 opened from a file: read as the pak's are, kept under the file's name (cleaned as `record` cleans one), and played. */
+async function openDemoFile(file) {
+  if (!file) return;
+  const name = file.name.toLowerCase().replace(/\.dm2$/, '').replace(/[^a-z0-9_-]/g, '') || 'demo';
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const parsed = parseDemo(bytes);   // (throws on anything that is not a demo)
+  if (!parsed.frames.length) throw new Error(`${file.name} has no frames`);
+  keepRecording(name, bytes);
+  await playDemo(name);
+}
 /** The pak's demos (demos/*.dm2) by name: the demo pak's q2demo1, the full game's three. */
 const pakDemos = () => pak.list('demos/', '.dm2').map((n) => n.slice(6, -4));
-/** A demo's bytes: one recorded this session by that name, else the pak's. */
-const demoBytes = (name) => recordings.get(name) ?? (pak.has(`demos/${name}.dm2`) ? pak.get(`demos/${name}.dm2`) : null);
+/** A demo's bytes: one in hand by that name, else one kept from an earlier load (read now), else the pak's. */
+async function demoBytes(name) {
+  if (recordings.has(name)) return recordings.get(name);
+  if (kept.has(name)) {
+    const bytes = await demoStore.get(name).catch((err) => { console.warn('demostore:', err.message); return null; });
+    if (bytes) { recordings.set(name, bytes); return bytes; }
+  }
+  return pak.has(`demos/${name}.dm2`) ? pak.get(`demos/${name}.dm2`) : null;
+}
 /**
  * Play `demos/<name>.dm2`: its map loaded as for a new game, the game's own models hidden, then the recording's
  * frames. `withMenu` brings the main menu up over it (the attract loop at the start, and the menu kept across the
  * loop's next demo). A key, a click or the pad brings the menu up; the demo's end plays the pak's next.
  */
 async function playDemo(name, { withMenu = false } = {}) {
-  const bytes = demoBytes(name);
+  const bytes = await demoBytes(name);
   if (!bytes) { setStatus(`no demo "${name}" in this pak`, true); setTimeout(() => setStatus(''), 2500); return; }
   const parsed = parseDemo(bytes);
   const mapName = parsed.map.replace(/^maps\//, '').replace(/\.bsp$/, '');
@@ -1290,7 +1332,15 @@ async function usePak(buffer, label) {
   $('map').innerHTML = maps.map((m) => `<option>${m}</option>`).join('');
   const demos = pakDemos();
   $('demo').innerHTML = ['<option value="">—</option>', ...demos.map((m) => `<option>${m}</option>`)].join('');
-  $('demo').parentElement.hidden = !demos.length;
+  // the recordings kept from earlier loads (src/demostore.js), listed after the pak's; their bytes come when one plays
+  kept.clear();
+  for (const name of await demoStore.list().catch((err) => { console.warn('demostore:', err.message); return []; })) {
+    if (recordings.has(name) || pak.has(`demos/${name}.dm2`)) { kept.add(name); continue; }
+    kept.add(name);
+    $('demo').append(new Option(`${name} (recorded)`, name));
+  }
+  for (const name of recordings.keys()) if (!demos.includes(name)) $('demo').append(new Option(`${name} (recorded)`, name));
+  $('demo').parentElement.hidden = false;
   $('pakname').textContent = label;
   // the attract loop: the pak's demo with the main menu over it, as Quake 2 opened (a new game from the menu, the
   // Map select or the console starts playing); the Map select shows the game's first map meanwhile
@@ -1307,7 +1357,8 @@ async function boot() {
     window.quake2 = { db, session, audio, menu, input, settings, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames } : null; }, get paints() { return paints; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
-      recordings: (name) => (name ? recordings.get(name) ?? null : [...recordings.keys()]),
+      recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
+      demoStore,
       get cinematic() { return cinematic ? { file: cinematic.file, frame: cinematic.frame, fps: CIN_FPS } : null; },
       // (the browser test's: a cinematic from bytes it made, the game going on after as it was)
       cinematicFrom: async (bytes, name = 'test') => { const was = running; await playCinematicFrom(Uint8Array.from(bytes), name); running = was; lastTic = performance.now(); },
@@ -1361,6 +1412,12 @@ $('save-file').addEventListener('change', async (e) => {
   try { await loadSaveFile(f); } catch (err) { console.error(err); setStatus(`Load failed: ${err.message}`, true); }
 });
 $('demo').addEventListener('change', (e) => { if (e.target.value) playDemo(e.target.value).catch((err) => setStatus(err.message, true)); else if (demo) stopDemo(); });
+$('demo-file').addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  e.target.value = '';   // (the same file again is a change again)
+  if (!res) return;
+  try { await openDemoFile(f); } catch (err) { console.error(err); setStatus(`${f?.name ?? 'the file'} is not a demo: ${err.message}`, true); }
+});
 $('detail').value = settings.detail;
 $('detail').addEventListener('change', async (e) => {
   settings.detail = e.target.value; saveSettings();

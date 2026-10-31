@@ -38,7 +38,7 @@ npm run test:base2     # the same on the Installation (demo2)
 npm run test:base3     # and on demo3
 npm run test:monsters  # every monster, the demo's and the full game's: spawned, it sees the player, attacks, and dies
 npm run test:save      # save, play on, load: the game comes back exactly and keeps running
-# in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, skill 0-3, save, load, record …, stop); F1 the help computer
+# in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, skill 0-3, save, load, record …, stop, demos, deldemo …); F1 the help computer
 npm run serve          # http://localhost:8080/ (as Pages serves it); add -- --coi for the threaded engine
 npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs demo1 --at=x,y,z,yaw)
 npm run bench          # where a tic and a frame spend their time
@@ -74,7 +74,9 @@ q2demo1` at the console) plays a recording too: the view and the entities are th
 the server's messages as the client read them, and the walls are the database's, asked for that view each
 frame; at its end the pak's next plays. `record <name>` at the console writes the game from then on as a
 demo of its own, the frames' rows as the server's messages; `stop` (or the level's end) downloads it as
-`<name>.dm2`, which the Demo select plays here and Quake 2 plays itself, with the same pak. A level exit
+`<name>.dm2`, which the Demo select plays here and Quake 2 plays itself, with the same pak; the recordings
+are kept across reloads (`demos` lists them, `deldemo <name>` drops one), and a `.dm2` of your own opens from
+the file button beside the select. A level exit
 that names a cinematic plays it from the pak's `video/` (the demo pak has none; the full game's intro and
 unit transitions play as `cl_cin.c` played them).
 

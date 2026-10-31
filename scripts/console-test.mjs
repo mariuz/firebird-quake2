@@ -95,6 +95,20 @@ check(status.at(-1)?.[0] === 'You must be in a level to record.' && last() === '
 running = true;
 await con.submit('demomap mine');
 check(last() === 'playDemo mine', 'demomap plays a demo recorded this session, which the host knows by name');
+// demos and deldemo: the page's own, for the recordings kept across reloads (src/demostore.js)
+const keptDemos = ['mine', 'run'];
+host.listDemos = () => ({ pak: ['q2demo1'], kept: [...keptDemos] });
+host.dropDemo = async (name) => { calls.push(['dropDemo', name]); const i = keptDemos.indexOf(name); if (i < 0) return false; keptDemos.splice(i, 1); return true; };
+await con.submit('demos');
+check(status.at(-1)?.[0] === 'demos: q2demo1; recorded: mine, run' && status.at(-1)?.[1] === false, 'demos lists the pak\'s and the recordings kept');
+await con.submit('deldemo');
+check(status.at(-1)?.[0] === 'deldemo <demoname>' && status.at(-1)?.[1] === true, 'deldemo alone asks for a name');
+await con.submit('deldemo Run.dm2');
+check(last() === 'dropDemo run' && keptDemos.join() === 'mine' && status.at(-1)?.[0] === 'run dropped', 'deldemo <name> drops a kept recording (the name lower-cased, .dm2 off)');
+await con.submit('deldemo run');
+check(status.at(-1)?.[0] === 'no recording "run"' && status.at(-1)?.[1] === true, 'one not kept is refused');
+await con.submit('demos');
+check(status.at(-1)?.[0] === 'demos: q2demo1; recorded: mine', 'and the list says so');
 host.db.query = async () => { throw new Error('boom'); };
 await con.submit('kill');
 check(status.at(-1)?.[0] === 'kill: boom' && status.at(-1)?.[1] === true, 'an error from the game is shown with the command');

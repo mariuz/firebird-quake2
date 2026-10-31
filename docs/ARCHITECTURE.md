@@ -27,6 +27,7 @@ src/net.js     a game shared over a data channel: host, guest, the texts (no DOM
 src/pmove.js   the player's move and the traces in JS: a guest's prediction, the SQL's twin (no DOM)
 src/demo.js    a .dm2 read as the server's messages, played between frames (no DOM)
 src/record.js  a game written as a .dm2: the tics' rows as the server's messages (no DOM)
+src/demostore.js  the recordings kept across reloads, by name in IndexedDB (no DOM)
 src/cinematic.js  a .cin read as cl_cin.c read it: the Huffman trees, a frame at a time, its sound (no DOM)
 src/lerp.js    the frames between tics: the last two tics' frames moved by the fraction (no DOM)
 src/effects.js  explosions, beams, flashes, lights (no DOM)
@@ -593,10 +594,15 @@ it over). The entities are the frame's rows: the player is 1 (the first client's
 and the brush models (by their inline names, from the table's rows) take compact numbers as they first show,
 a looped sound's carrier out of view is a model-less entity with the sound. A block stays under `MAX_MSGLEN`
 (1400 bytes, the client's demo buffer): an entity that does not fit a frame stands as it was, or waits for the
-next. The file downloads as `<name>.dm2` and stays in the Demo select for this session (`demomap <name>` too):
-the page plays its own recordings as the pak's, and Quake 2 plays them with the same pak (a model, sound or
-image past the protocol's 255 is dropped; an explosion's sound plays twice there, once as the game's sound
-and once as the client's for the temporary entity).
+next. The file downloads as `<name>.dm2` and goes into the Demo select (`demomap <name>` too): the page plays
+its own recordings as the pak's, and Quake 2 plays them with the same pak (a model, sound or image past the
+protocol's 255 is dropped; an explosion's sound plays twice there, once as the game's sound and once as the
+client's for the temporary entity). The recordings are kept across reloads (`src/demostore.js`: a `.dm2` by
+name in IndexedDB, which takes the bytes as they are where localStorage's quota would not; a browser without
+it keeps them for the page): the select lists the kept names at the start, after the pak's, and reads one's
+bytes when it plays; a `.dm2` opened from the file input beside the select (one made here and downloaded, or
+Quake 2's own) is parsed, kept under its name cleaned as `record` cleans one, and played; `demos` at the
+console lists the pak's and the kept, `deldemo <name>` drops a kept one from the select and the store.
 
 Boot opens `memory://quake2` through the Worker, loads the pak (the fetched demo or a user-picked
 `pak0.pak`), creates the schema and resources, and starts the map. Settings (map, skill, detail: 160×120, 320×240 or 640×480,
@@ -714,7 +720,7 @@ the frame query and the raster. The SQL console runs any statement against the l
 | `save-test.mjs` | save, play on, load: every entity, mover and light style back as it was; the game keeps running with fresh ids |
 | `input-test.mjs` | the page's input read as Quake's usercmd (`src/input.js`): keys, Shift and the Run setting, the impulses once per press, the mouse, drags and taps on the view's halves, the on-screen buttons; and the gamepad's reading (`src/gamepad.js`): dead zones, the run at the stick's edge, a press counted once, the weapon impulses, the menu driven by d-pad, stick, A and B |
 | `hud-test.mjs` | the status bar (`src/hud.js`) laid out to a view's width against a renderer that records what is drawn: at 320 and wider `single_statusbar`'s one layout, centred (the health, ammo, armour and item icons at 50, 150, 250 and 296 along the bottom; the pickup, the help icon at 148 and the timer at 262 above); at 240, 160 and 80 the parts in rows from the bottom up, as many a row as fit, the pickup line and the help icon after the rest, every picture and character inside the view and none over another; the crosshair centred, the frags at the top right, the health red when low or just hit; a centre print's lines centred at 320 and wrapped at their spaces at 160 |
-| `console-test.mjs` | the console line headless (`src/console.js`): `map`, `fov`, `seed`, `skill` (shown, set for the next game, clamped to 0..3), `save`, `load`, `inven` reach the page's host, the rest reach `player_command`, the history steps and forgets as `Key_Console`'s did, Tab completes |
+| `console-test.mjs` | the console line headless (`src/console.js`): `map`, `fov`, `seed`, `skill` (shown, set for the next game, clamped to 0..3), `save`, `load`, `inven` reach the page's host, the rest reach `player_command`, the history steps and forgets as `Key_Console`'s did, Tab completes; `demos` listing the pak's and the kept recordings, `deldemo` dropping one (the name cleaned), one not kept refused |
 | `session-test.mjs` | the game as the page plays it, without the page (`src/session.js`): a map started, tics, the frame decoded (the sounds each once, the speakers every tenth frame, both renderer modes the same world faces), a slot saved, listed and loaded back exactly, levels left and come back to as left, a save carrying them, a unit's end and a new game forgetting them, the death screen's load request taken once, no storage no saves |
 | `golden-test.mjs` | the painter's look: the twelve docs screenshots (three maps, four shots each) rendered again by `screenshot.mjs` and compared to `docs/` pixel for pixel, with the count and the box of what differs; the painter is deterministic, so a difference is a change, regenerated with the shots when it is meant |
 | `coop-test.mjs` | a coop game headless, through a `Session`: two clients, the second at its `info_player_coop`; each one's usercmd, row from the tic, view and inventory; the sight client alternating and passing over notarget; a monster hunting the sight client and, that one dead, the other; a death that ends nothing, the respawn a second later at the spot with the level-start pers and the body left (and gibbed); a weapon and a key that stay for the other client; the obituaries, with the players' names once set and the rows carrying the names and hands; the muzzle 8 to the right, the left or the centre by the hand; a centerprint to one client; a save and a level change (there and back) with both; single player with one row; with `DF_NO_FRIENDLY_FIRE` a client's hit on the other doing nothing, the world's hurting, and without it the hit hurting |

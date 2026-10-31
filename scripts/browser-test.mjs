@@ -307,6 +307,16 @@ try {
     let rd = {};
     for (let i = 0; i < 240 && !(rd.demo?.name === 'run' && rd.demo.frame > 3); i++) { await sleep(250); rd = await page.evaluate(() => ({ demo: window.quake2?.demo, map: document.getElementById('mapname')?.textContent })).catch(() => ({})); }
     assert(rd.demo?.name === 'run' && rd.demo.frame > 3 && rd.demo.frames === parsed?.frames.length && /demo1 \(demo run\)/.test(rd.map ?? ''), `the select plays the recording over its map: frame ${rd.demo?.frame} of ${rd.demo?.frames}, ${rd.map}`);
+    // the recording is kept across reloads (src/demostore.js: IndexedDB), and a .dm2 file opens from the select's file
+    // input, kept under its name and played; `demos` lists them; the reload below finds them again
+    const stored = await page.evaluate(() => window.quake2.demoStore.list()).catch(() => null);
+    assert(Array.isArray(stored) && stored.includes('run'), `the recording is in the store (${JSON.stringify(stored)})`);
+    if (dm2) {
+      await page.setInputFiles('#demo-file', { name: 'My Copy.dm2', mimeType: 'application/octet-stream', buffer: dm2 });
+      let od = {};
+      for (let i = 0; i < 240 && !(od.demo?.name === 'mycopy' && od.demo.frame > 3); i++) { await sleep(250); od = await page.evaluate(() => ({ demo: window.quake2?.demo, list: window.quake2?.recordings(), options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({})); }
+      assert(od.demo?.name === 'mycopy' && od.demo.frame > 3 && od.list?.includes('mycopy') && od.options?.includes('mycopy'), `a .dm2 file opened from the input plays under its cleaned name and is listed (${JSON.stringify({ demo: od.demo?.name, list: od.list })})`);
+    }
 
     // a cinematic (src/cinematic.js): the demo pak has none, so one made here (twenty frames of 64×48 with a palette and
     // sound) plays through the page's SCR_PlayCinematic: the frames come at fourteen a second with the game stopped, it
@@ -351,6 +361,14 @@ try {
     let stopped = {};
     for (let i = 0; i < 240 && !(stopped.demo === null && stopped.running === true && /^demo1$/.test(stopped.map ?? '')); i++) { await sleep(250); stopped = await demoState(); }
     assert(stopped.demo === null && stopped.running === true && stopped.map === 'demo1' && stopped.menu === null, `the select put back to none starts a new game on the first map (${JSON.stringify({ demo: stopped.demo, map: stopped.map })})`);
+    // (a game running: the console takes `demos` and `deldemo`; a click during a demo would bring the menu up instead)
+    if (dm2) {
+      await typeCommand('demos');
+      assert(/recorded: mycopy, run/.test(await page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '')), 'demos lists the recordings kept');
+      await typeCommand('deldemo mycopy');
+      const dropped = await page.evaluate(async () => ({ list: window.quake2.recordings(), stored: await window.quake2.demoStore.list(), options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({}));
+      assert(!dropped.list?.includes('mycopy') && !dropped.stored?.includes('mycopy') && !dropped.options?.includes('mycopy') && dropped.stored?.includes('run'), `deldemo drops it from the list, the select and the store, the other staying (${JSON.stringify(dropped)})`);
+    }
 
     // without a network: the page reloads from the service worker's caches (the page, the build's files, the pak)
     // and the game runs as before; then the network is back
@@ -364,6 +382,21 @@ try {
     assert(offReady, `offline, the page loads from the caches and the game runs (${await stats()})`);
     assert(engines.has(want), 'on the same engine build');
     await page.context().setOffline(false);
+    // the reload found the recording kept before it: listed in the select, and it plays from the store
+    if (offReady) {
+      const back = await page.evaluate(() => ({ list: window.quake2?.recordings(), options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({}));
+      assert(back.list?.includes('run') && back.options?.includes('run') && !back.options?.includes('mycopy'), `after the reload the recording kept is listed again, the dropped one not (${JSON.stringify(back)})`);
+      await page.selectOption('#demo', 'run');
+      let kd = {};
+      for (let i = 0; i < 240 && !(kd.demo?.name === 'run' && kd.demo.frame > 3); i++) { await sleep(250); kd = await page.evaluate(() => ({ demo: window.quake2?.demo })).catch(() => ({})); }
+      assert(kd.demo?.name === 'run' && kd.demo.frame > 3, `and it plays from the store (frame ${kd.demo?.frames ? kd.demo.frame : '?'} of ${kd.demo?.frames})`);
+      await page.selectOption('#demo', '');   // (a game again: the console takes a command; a click during a demo brings the menu up)
+      let again = {};
+      for (let i = 0; i < 240 && !(again.demo === null && again.running === true); i++) { await sleep(250); again = await page.evaluate(() => ({ demo: window.quake2?.demo, running: window.quake2?.running })).catch(() => ({})); }
+      await typeCommand('deldemo run');
+      const gone = await page.evaluate(async () => ({ stored: await window.quake2.demoStore.list(), options: [...document.querySelectorAll('#demo option')].map((o) => o.value) })).catch(() => ({}));
+      assert(!gone.stored?.includes('run') && !gone.options?.includes('run'), `deldemo drops it after the reload too (${JSON.stringify(gone)})`);
+    }
   }
 
   // two pages over WebRTC: this one hosts, a second joins with the texts passed between them (the offer and
