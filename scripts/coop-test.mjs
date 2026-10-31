@@ -124,6 +124,33 @@ check(session.clients[1].DEAD === 0 && session.clients[1].HEALTH === 100, 'its r
 await db.exec(`EXECUTE PROCEDURE t_damage(${body.ID}, ${p1.ENT_ID}, ${p1.ENT_ID}, 200, 0, 0)`);
 check(!(await one(`SELECT id FROM ents WHERE id = ${body.ID}`)), 'the body gibs when hurt enough (body_die)');
 
+// ── the trail is each client's own (p_trail.c kept the one player's): a marker a client, and a monster pursuing the
+// second client follows the second's markers, not the first's ──
+{
+  await db.exec("DELETE FROM player_trail; UPDATE player SET trail_x = 1e30, trail_y = 1e30, trail_z = 1e30");
+  await place(p1.ENT_ID, 128, -320, 32, 135);
+  await place(p2.ENT_ID, 32, -224, 32, 135);
+  await db.exec('EXECUTE PROCEDURE player_trail_check');
+  const trail = () => q('SELECT client, seq, x, y FROM player_trail ORDER BY client, seq');
+  let tr = await trail();
+  check(tr.length === 2 && tr[0].CLIENT === 1 && tr[1].CLIENT === 2 && tr[0].X === 128 && tr[1].X === 32,
+    `the first check drops a marker for each client where it stands (${tr.map((m) => `client ${m.CLIENT} at ${m.X.toFixed(0)}`).join(', ')})`);
+  await db.exec('UPDATE player_trail SET z = z - 4000 WHERE client = 2');   // (the second's marker sunk out of its sight)
+  await place(p2.ENT_ID, 72, -224, 32, 135);
+  await db.exec('EXECUTE PROCEDURE player_trail_check');
+  tr = await trail();
+  check(tr.filter((m) => m.CLIENT === 2).length === 2 && tr.filter((m) => m.CLIENT === 1).length === 1, 'the second client, out of sight of its marker, drops another of its own; the first\'s trail is untouched');
+  const hunter = (await one("SELECT * FROM spawn_monster('soldier', 200)")).ID;
+  await db.exec(`UPDATE ents SET enemy_id = ${p2.ENT_ID}, trail_time = 0 WHERE id = ${hunter}`);
+  const pick2 = await one(`SELECT x, y FROM trail_pick(${hunter}, 0, 0)`);
+  await db.exec(`UPDATE ents SET enemy_id = ${p1.ENT_ID} WHERE id = ${hunter}`);
+  const pick1 = await one(`SELECT x, y FROM trail_pick(${hunter}, 0, 0)`);
+  check(pick2 && Math.abs(pick2.X - 32) < 1e-6 && pick1 && Math.abs(pick1.X - 128) < 1e-6, `a monster pursuing the second client picks the second's markers (at ${pick2?.X}), pursuing the first the first's (at ${pick1?.X})`);
+  await db.exec(`UPDATE ents SET enemy_id = NULL WHERE id = ${hunter}`);
+  check(!(await one(`SELECT x FROM trail_pick(${hunter}, 0, 0)`)), 'with no client for an enemy, no trail to follow');
+  await db.exec(`DELETE FROM ents WHERE id = ${hunter}; DELETE FROM player_trail`);
+}
+
 // ── the obituaries (ClientObituary, coop only): every client's message line says who died of what ──
 const msgs = async () => (await q('SELECT msg FROM player ORDER BY id')).map((r) => r.MSG);
 const respawn = async () => { for (let i = 0; i < 22; i++) await session.tic(idle, idle); await session.tic(idle, cmd({ jump: 1 })); };

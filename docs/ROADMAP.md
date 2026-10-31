@@ -375,6 +375,34 @@ The third list, from what is left in the entries above and below: in the order t
   looped in q2demo1 and sees its loop come from the middle of its box with the bounds and from the origin without,
   and a one-shot sound at a brush model placed the same way.
 
+The fourth list, from what the entries above and below still leave: in the order they are to be taken.
+
+- **The trail per client in coop**: done. `p_trail.c` kept one trail, the player's; here it followed the first
+  client, so a monster that lost sight of the second client followed the first's markers. A marker belongs to
+  the client that dropped it now (`player_trail.client`, the key with `seq`; an older save's markers load as
+  the first's), `player_trail_check` looks at every client each time and drops one for each that has moved out
+  of sight of its last marker (eight kept a client, `trail_add`), and a monster pursuing a client picks that
+  client's markers (`trail_pick` by the client its enemy is; an enemy that is no client has no trail).
+  `test:coop` sees a marker a client where each stands, the second client out of sight of its marker drop
+  another of its own with the first's trail untouched, and a monster pick the second's markers when it pursues
+  the second and the first's when the first; `test:monsters`' pursuit is as it was.
+- **The actors as logic**: `misc_actor` and `target_actor` (m_actor.c) are the full game's: a marine with a
+  frame table (stand, walk, run, pain, death, flipoff, taunt, attack) who walks the `target_actor` path he
+  is given, waits, jumps and shoots as the corners say, and shoots back when hurt. The table is known, so he
+  can run on a model row without a mesh as the monsters do.
+- **Spectating over the network**: a guest who only watches: a client that joins as a spectator (3.20's
+  `spectator` userinfo: no model, nothing solid, no damage, a noclip move through the level), so a page can
+  follow a game without a player in it.
+- **The picked pak and the music tracks in the data cache**: a pak the player picked and the music folder
+  are the player's files and are not cached, so the page offline runs the demo pak only. The picked pak
+  kept in IndexedDB as the recordings are, offered at the next load, and the tracks cached as they play.
+- **A slot downloaded from the load menu, and keys for the silencer and the power shield**: Download
+  writes the game as it stands; a slot of the load menu cannot be written to a file. And the silencer and
+  the power shield have no key of their own (`s` and `p` are the page's back and pause): a binding each.
+- **A TURN server for the networks a STUN cannot cross**: `Peer` asks one STUN server; two players behind
+  symmetric NATs never connect. An ICE server setting (`rtc_ice <url> [user pass]` at the console, kept in
+  the settings) given to the peer connection.
+
 ## Playing the demo
 
 - **Save and load**: done as Quake 2 had them in single player: fifteen slots in the load and save menus
@@ -705,9 +733,8 @@ picker). Missing for the rest of the game:
   inventory's count) and marks which (`cube_mask`, pers.power_cubes), so in coop a client takes each cube
   once and the cube stays for the other; a `trigger_key` wanting one spends the activator's first cube
   (`trigger_key_touch`), in coop the same cube from every client that has it, and the key bit goes with
-  the last cube; another key in coop is taken from every client. Left: the trail (`p_trail.c` is single
-  player's: it follows the first client). Coop over the network, more than two local players and
-  deathmatch are under *Next*.
+  the last cube; another key in coop is taken from every client. The trail is each client's own (see *Next*,
+  the fourth list). Coop over the network, more than two local players and deathmatch are under *Next*.
 
 ## Engineering
 
