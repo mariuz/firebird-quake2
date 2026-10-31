@@ -31,6 +31,7 @@ import { Input, GAME_KEYS, DEFAULT_BINDS, MOUSE_KEYS, bindKey, boundLine } from 
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
 import { Notify } from './notify.js';
+import { Netgraph } from './netgraph.js';
 import { DemoRecorder } from './record.js';
 import { DemoStore, FileStore } from './demostore.js';
 import { ClipMap, pmove, stateFromRow } from './pmove.js';
@@ -609,6 +610,8 @@ const lerps = perPlayer(() => new FrameLerp());
 let lastPaint = 0;
 let paints = 0;          // frames painted (the tics are session.frameNo)
 let guestGotAt = 0, guestDt = 0.05, guestSentAt = 0;   // a guest: when the host's last frame came and how long it stands for
+const netgraph = new Netgraph();   // the netgraph cvar's graph (SCR_DebugGraph): a column a host frame on a joined page
+let guestLastTic = null;           // the tic of the host's last frame, for the frames that never came between two
 // a guest's prediction (src/pmove.js, CL_PredictMovement): the map's clip data, the commands sent and not yet taken by a
 // host tic (each numbered), the state run from the last frame's row through them, and the error the last frame corrected
 let guestPred = null;   // { cm, seq, cmds: [{ seq, cmd, dt }], st, world, gravity, modelOfFace, error: { dx, dy, dz, at } | null }
@@ -786,6 +789,14 @@ function guestFrame(now) {
     if (showInv[0]) invItems[0] = got.inv;
     lerps[0].push(last, f);
     if (recorder) recordFrame(last, f);   // (a recording on a joined page: the host's frames as the client recorded the server's)
+    // CL_AddNetgraph: a column a frame (the tics the host skipped between two are the frames dropped, one that came past
+    // twice its time is late, the ping the column's height), when the netgraph cvar is on
+    if (settings.netgraph) {
+      const tics = Math.round(guestDt / 0.05) || 1;
+      const dropped = guestLastTic != null && Number.isFinite(last.TIC) ? Math.max(0, last.TIC - guestLastTic - tics) : 0;
+      netgraph.frame({ dropped, late: guestGotAt > 0 && now - guestGotAt > 2 * guestDt * 1000 + 50, ping: ownPing() ?? 0 });
+    }
+    guestLastTic = Number.isFinite(last.TIC) ? last.TIC : null;
     guestGotAt = now; guestDt = got.dt || 0.05;
     perf.tic = 0; perf.faces = 0; perf.rows = f.faces.length;
     guestAck(got, now);
@@ -1250,6 +1261,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   if (which === 0) { noteMessage(last); notify.lines(last.TIME_).forEach((s, i) => r.drawString(hud.conchars, s, 8, 8 + i * 8)); }
   else if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
   if (last.DEAD) hud.drawCenter(r, session.twoPlayers || net ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
+  if (which === 0 && settings.netgraph && netGuest()) netgraph.draw(r);   // SCR_DrawDebugGraph: the netgraph cvar's band along the bottom of a joined page's view
   // the palette blend: damage, bonus, powerups, water (a demo's row carries the server's ps.blend as it was)
   let tint = null;
   const since = time - last.DMG_TIME;
@@ -1625,6 +1637,7 @@ async function boot() {
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
       demoStore, fileStore, get pickedPak() { return pickedPak; }, get autoexec() { return autoexec ? { ...autoexec } : null; },
+      get netgraph() { return { added: netgraph.added, last: netgraph.added ? { value: netgraph.values[(netgraph.current + netgraph.n - 1) % netgraph.n], colour: netgraph.colours[(netgraph.current + netgraph.n - 1) % netgraph.n] } : null }; },
       get cinematic() { return cinematic ? { file: cinematic.file, frame: cinematic.frame, fps: CIN_FPS } : null; },
       // (the browser test's: a cinematic from bytes it made, the game going on after as it was)
       cinematicFrom: async (bytes, name = 'test') => { const was = running; await playCinematicFrom(Uint8Array.from(bytes), name); running = was; lastTic = performance.now(); },

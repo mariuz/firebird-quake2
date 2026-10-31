@@ -676,8 +676,14 @@ The eighth list: what a game shared over the network and the console still lack,
   them as saved), and `mapLoaded` sends each guest the map as it is, as at a level change. `test:net` loads a
   save played alone and a coop save over a loopback, the browser test has the host press F6 and F9 with the
   guest connected and sees its frames come on.
-- **`netgraph`**: nothing shows a guest's dropped or late frames but the stats line's count. `netgraph 1`
-  draws the frames' arrival and the drops in the view's corner as `SCR_DrawNet` and `netgraph` did.
+- **`netgraph`**: done. Nothing showed a guest's dropped or late frames but the stats line's count. `netgraph 1`
+  (a cvar, kept with the settings, not written to config.cfg as Quake's was not) draws cl_scrn.c's debug graph
+  along the bottom of a joined page's view (`src/netgraph.js`: `SCR_DebugGraph`'s ring of columns and
+  `SCR_DrawDebugGraph`'s band 32 high, the newest column at the right), a column a frame from the host as
+  `CL_AddNetgraph` added them: a tall red one for each tic the host skipped between two frames, a tall orange
+  one for a frame that came past twice its time, and one as high as the ping is long in thirtieths of a
+  millisecond. `test:hud` draws the graph against a recorder, `test:console` the cvar, the browser test
+  turns it on at the joined page's console and sees the columns come.
 - **The menus from the console**: `menu_main`, `menu_game`, `menu_loadgame`, `menu_savegame`, `menu_options`,
   `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits` and `menu_quit` open the
   menus as `M_Init` registered them, so a key bound to one (`bind F4 menu_options`) opens it.

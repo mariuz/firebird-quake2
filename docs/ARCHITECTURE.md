@@ -27,6 +27,7 @@ src/net.js     a game shared over a data channel: host, guest, the texts (no DOM
 src/pmove.js   the player's move and the traces in JS: a guest's prediction, the SQL's twin (no DOM)
 src/demo.js    a .dm2 read as the server's messages, played between frames (no DOM)
 src/record.js  a game written as a .dm2: the tics' rows as the server's messages (no DOM)
+src/netgraph.js  the netgraph cvar's graph: a column a frame from the host, as cl_scrn.c drew them (no DOM)
 src/demostore.js  the recordings, the picked pak and a picked folder's tracks kept across reloads in IndexedDB (no DOM)
 src/cinematic.js  a .cin read as cl_cin.c read it: the Huffman trees, a frame at a time, its sound (no DOM)
 src/lerp.js    the frames between tics: the last two tics' frames moved by the fraction (no DOM)
@@ -678,9 +679,10 @@ loading plaque. `F1` toggles the help computer (`HelpComputer`): skill, level na
 The console: the backquote opens a command line over the view. `map <name>`, `save`, `load`, `fov`,
 `seed` and `skill` are the page's (`skill 0`–`3`: the next map's skill, 3 the nightmare the menus stop short
 of, latched as the cvar was: "skill will be changed for next game."), as are the settings as cvars (`name`,
-`hand`, `sensitivity`, `cl_run`, `m_pitch`, `crosshair`, `s_volume`, `cd_volume`: shown alone, set with a
-word through the page's `setSetting` so its controls, the menus and the userinfo follow; `cvarlist`; `set <cvar>
-<value>` as config.cfg sets one), `writeconfig` (the binds and the cvars as `config.cfg`, downloaded, as
+`hand`, `sensitivity`, `cl_run`, `m_pitch`, `crosshair`, `s_volume`, `cd_volume`, and `netgraph`, cl_scrn.c's
+debug graph along the bottom of a joined page's view, a column a frame from the host, `src/netgraph.js`, not
+archived: shown alone, set with a word through the page's `setSetting` so its controls, the menus and the
+userinfo follow; `cvarlist`; `set <cvar> <value>` as config.cfg sets one), `writeconfig` (the binds and the cvars as `config.cfg`, downloaded, as
 `Key_WriteBindings` and `Cvar_WriteVariables` wrote them) and `exec` (the Config control's picker; the file
 runs line by line through `Console.execText`; `exec autoexec` the kept autoexec.cfg, `unautoexec` dropping
 it), and `bind`, `unbind`, `unbindall` and
