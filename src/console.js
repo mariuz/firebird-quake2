@@ -6,13 +6,13 @@
 // Nothing here touches the DOM: the page wires the input element to historyStep(), complete() and
 // submit(), and gives a host with what the commands act on, so the tests can drive it with a fake one.
 
-export const COMMANDS = ['demomap', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'save', 'seed', 'skill', 'stop', 'timelimit', 'use'];
+export const COMMANDS = ['deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'save', 'seed', 'skill', 'stop', 'timelimit', 'use'];
 const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
  *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
- *         hasDemo(name), record(name), stopRecord(), isRecording() }
+ *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording() }
  */
 export class Console {
   constructor(host) {
@@ -65,6 +65,20 @@ export class Console {
         const has = h.hasDemo ? h.hasDemo(name) : h.pak.has(`demos/${name}.dm2`);
         if (!name || !has) { say(`no demo "${name}" in this pak`, true); return; }
         await h.playDemo?.(name);
+        return;
+      }
+      case 'demos': {
+        // the page's own: the pak's demos and the recordings kept (this session's, and the earlier ones' from the store)
+        const d = h.listDemos?.() ?? { pak: [], kept: [] };
+        say(`demos: ${d.pak.length ? d.pak.join(', ') : 'none in the pak'}; recorded: ${d.kept.length ? d.kept.join(', ') : 'none'}`, false, 5000);
+        return;
+      }
+      case 'deldemo': {
+        // the page's own: a kept recording dropped, from the select and the store; the pak's demos are not the page's to drop
+        const name = arg.toLowerCase().replace(/\.dm2$/, '');
+        if (!name) { say('deldemo <demoname>', true); return; }
+        if (!(await h.dropDemo?.(name))) { say(`no recording "${name}"`, true); return; }
+        say(`${name} dropped`);
         return;
       }
       case 'record': {

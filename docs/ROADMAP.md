@@ -320,10 +320,19 @@ The third list, from what is left in the entries above and below: in the order t
   far ones not, the first client's among them), the guest walk into the first client and the prediction meet
   its box at the tic the host does and slide along it, exactly, where without the boxes it would have walked
   on; the forty-tic walk still matches to the last digit.
-- **A recording played from a file, and recordings kept**: the Demo select plays the pak's demos and this
-  session's recordings; a `.dm2` of the player's own (one made here and downloaded, or Quake 2's) cannot be
-  opened, and a recording is gone with the page. A file input beside the select, and the recordings kept in
-  IndexedDB as the saves are, with a way to drop them.
+- **A recording played from a file, and recordings kept**: done. The Demo select played the pak's demos and
+  this session's recordings; a `.dm2` of the player's own could not be opened, and a recording was gone with
+  the page. Now the recordings are kept across reloads (`src/demostore.js`: a `.dm2` by name in IndexedDB,
+  which takes the bytes as they are where localStorage's quota would not; a browser without it keeps them for
+  the page): a recording made here goes in as `stop` ends it, the select lists the kept names at the start
+  after the pak's, and one's bytes are read when it plays. A `.dm2` opened from the file input beside the
+  select (one made here and downloaded, or Quake 2's own) is parsed, kept under its name cleaned as `record`
+  cleans one, and played. `demos` at the console lists the pak's and the kept, `deldemo <name>` drops a kept
+  one from the select and the store (the pak's are not the page's to drop). `test:console` checks the two
+  commands against a host; the browser test sees a recording in the store, a `.dm2` file opened from the input
+  play under its cleaned name and listed, `demos` listing both, `deldemo` dropping one from the list, the
+  select and the store, the kept one listed again after the page's reload and playing from the store, and
+  dropped after it.
 - **The help computer, the inventory and the score board to a narrow view**: the status bar lays itself out
   to the view (the second list's entry); these are 256- and 320-wide pictures and layouts and still clip in a
   quarter view. The inventory and the score board are text and could lay out to the width as the bar does;

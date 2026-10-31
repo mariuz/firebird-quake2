@@ -13,7 +13,7 @@ by the same author (mariuz), which live next to this repository under `C:\fbq\`.
 https://mariuz.github.io/firebird-quake2/ by the Pages workflow on every push to `main`.
 
 Layout: `sql/` (schema, physics, game, weapons, monsters, render — loaded in that order),
-`src/` (pak/bsp/md2 parsers, loader, session, net, pmove, demo, record, cinematic, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
+`src/` (pak/bsp/md2 parsers, loader, session, net, pmove, demo, record, demostore, cinematic, lerp, effects, renderer, hud, audio, main), `scripts/` (tests, benchmarks,
 tools), `public/` (page, the manifest and icons, the caching service worker `sw.js`, the retired `coi-serviceworker.js`,
 the pak goes in `public/pak/`), `docs/`.
 
@@ -31,7 +31,7 @@ npm run test:walkthrough              # every trigger the player can walk into f
 npm run test:entities                 # the full game's entities, added to demo1: secret doors, earthquake, elevator, viper, clock, turret
 npm run test:replay                   # the same seed and inputs give the same game twice; a save carries the chances on
 npm run test:input                    # the page's input as the usercmd: keys, mouse, touches, buttons, a gamepad
-npm run test:console                  # the console line headless: the page's commands, player_command, history, Tab
+npm run test:console                  # the console line headless: the page's commands (demos and deldemo among them), player_command, history, Tab
 npm run test:settings                 # the settings: defaults, storage round trip, bad stored values back to defaults
 npm run test:session                  # the game without the page: maps, tics, the frame, slots, levels left and come back to
 npm run test:effects                  # the temporary entities: explosions, beams, the tongue, flashes, their lights and how they draw
