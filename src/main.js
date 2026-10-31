@@ -126,11 +126,13 @@ function toggleScreen(p, which) {
   else if (which === 'help') { showHelp[p] = !showHelp[p]; showInv[p] = false; showScores[p] = false; if (row) helpSeen[p] = row.HELP_CHANGED ?? 0; }
   else { showInv[p] = !showInv[p]; showHelp[p] = false; showScores[p] = false; }
 }
-/** The score board's rows: every client's frags (a guest's come with its row). */
+/** The score board's rows: every client's frags and, over the network, its ping (a guest's come with its row). */
 function scoreRows() {
-  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, name: last?.NETNAME, score: last?.SCORE ?? 0 }];
-  return session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0 }));
+  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, name: last?.NETNAME, score: last?.SCORE ?? 0, ping: 0 }];
+  return session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0, ping: net?.guests?.find((g) => g.client === c.CLIENT)?.host.ping ?? 0 }));
 }
+/** A joined page's own round trip, as the host measured it and sent it with the score board's rows; null before one came. */
+const ownPing = () => (netGuest() ? last?.SCORES?.find((s) => s.id === last.CLIENT)?.ping ?? null : null);
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
   if (anyKey && !e.repeat) { e.preventDefault(); const go = anyKey; anyKey = null; go(); return; }
@@ -687,6 +689,7 @@ async function frame() {
         if (!row || !running) continue;
         const gf = await session.frame({ sqlRenderer: false, client: g.client, boxes: true });   // (the boxes about it: its prediction clips against them)
         const inv = g.host.wantInv ? await session.inventory(g.client) : null;
+        if (g.host.open && last.TIC % 20 === 0) g.host.sendPing();   // (a ping a second: the round trip on the score board, as the server's ping was)
         if (g.host.open) g.host.sendFrame({ ...row, SCORES: scoreRows() }, gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
       }
     }
@@ -1266,7 +1269,7 @@ function updateStats() {
   const now = performance.now();
   if (now - fpsT > 500) { fps = (fpsN * 1000) / (now - fpsT); fpsT = now; fpsN = 0; }
   const sum = (k) => net.guests.reduce((n, g) => n + g.host[k], 0);
-  const link = netGuest() ? ` · joined: ${net.guest.frames} frames from the host`
+  const link = netGuest() ? ` · joined: ${net.guest.frames} frames from the host${ownPing() != null ? `, ping ${ownPing()} ms` : ''}`
     : netHost() ? ` · hosting: ${sum('sentFrames')} frames sent${net.guests.length > 1 ? ` to ${net.guests.length} guests` : ''}${sum('droppedFrames') ? `, ${sum('droppedFrames')} dropped` : ''}`
     : demo ? ` · demo ${demo.name}: frame ${demo.player.played + 1} of ${demo.frames}` : '';
   const rec = recorder ? ` · recording ${recorder.name}: ${recorder.rec.frames} frames (${(recorder.rec.size / 1024).toFixed(0)} KB)` : '';
@@ -1377,7 +1380,7 @@ function listPlayers() {
   return session.clients.map((c) => {
     const g = net?.guests?.find((x) => x.client === c.CLIENT);
     const kind = c.CLIENT === 1 ? 'page' : g ? 'guest' : c.CLIENT <= local ? 'pad' : 'standing';
-    return { num: c.CLIENT, name: c.NETNAME || `player ${c.CLIENT}`, kind, sent: g?.host.sentFrames ?? 0, dropped: g?.host.droppedFrames ?? 0, spectator: !!g?.host.info?.spectator };
+    return { num: c.CLIENT, name: c.NETNAME || `player ${c.CLIENT}`, kind, sent: g?.host.sentFrames ?? 0, dropped: g?.host.droppedFrames ?? 0, spectator: !!g?.host.info?.spectator, ping: g?.host.ping ?? null };
   });
 }
 /**

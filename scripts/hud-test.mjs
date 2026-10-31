@@ -141,11 +141,12 @@ assert(panel?.scaled && panel.w === 128 && inside(r) && textOverlaps(r) === 0 &&
 assert(invLines.length === 12 && invLines[invLines.length - 1] + 8 <= 120 && r.drawn.filter((d) => d.kind === 'char').every((d) => d.x + 8 <= 160), 'as many lines as the height holds, each cut to the width');
 assert(r.drawn.some((d) => d.kind === 'char' && d.n === 15 && d.x === 2) && r.drawn.some((d) => d.kind === 'char' && d.n < 128 && d.y > 18), 'the selected item in the plain font with its cursor at the left');
 // the score board
-const scores = [{ id: 1, name: 'Rimmer', score: 5, time: 0 }, { id: 2, name: 'Lister', score: 7, time: 30 }, { id: 3, name: '', score: 0, time: 0 }, { id: 4, name: 'Kryten', score: 2, time: 0 }];
+const scores = [{ id: 1, name: 'Rimmer', score: 5, time: 0 }, { id: 2, name: 'Lister', score: 7, ping: 37, time: 30 }, { id: 3, name: '', score: 0, ping: 1234.6, time: 0 }, { id: 4, name: 'Kryten', score: 2, time: 0 }];
 r = recorder(320, 240);
 hud.drawScores(r, scores, 2, 120);
 assert(picAt(r, 'tag1')?.x === 32 && picAt(r, 'tag1').y === 32 && textAt(r, 32) === 'Lister' && textAt(r, 64) === 'Rimmer' && textAt(r, 40) === 'Score:7' && inside(r),
   'at 320 the score board is as it was: the clients by score down a column, the tag at 32,32, four lines each');
+assert(textAt(r, 48) === 'Ping:37' && textAt(r, 80) === 'Ping:0' && textAt(r, 144) === 'Ping:999', 'the ping line is each client\'s round trip, 0 for none, whole and at most 999');
 r = recorder(160, 120);
 hud.drawScores(r, scores, 2, 120);
 const scoreLines = [...new Set(r.drawn.filter((d) => d.kind === 'char').map((d) => d.y))].sort((a, b) => a - b);

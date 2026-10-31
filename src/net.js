@@ -87,7 +87,7 @@ export function unpackFrame(p, sounds = [], fx = []) {
 
 // ── the host: the guest's commands in, its frames out ───────────────────────────────────────────────
 export class HostLink {
-  constructor(link) {
+  constructor(link, { now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) } = {}) {
     this.link = link;
     this.pending = [];      // the guest's commands since the last tic
     this.last = null;       // the last command the tic ran
@@ -100,9 +100,12 @@ export class HostLink {
     this.onClose = null;
     this.sentFrames = 0;
     this.droppedFrames = 0;
+    this.ping = null;       // the guest's round trip in whole milliseconds, from its last pong (null until one came)
+    this.now = now;
     link.onMessage = (m) => {
       if (!m) return;
       if (m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; if (Number.isInteger(m.seq)) this.pendingSeq = m.seq; }
+      else if (m.t === 'pong' && typeof m.at === 'number') this.ping = Math.max(0, Math.round(this.now() - m.at));
       else if (m.t === 'info') { this.info = { name: typeof m.name === 'string' ? m.name.slice(0, 15) : '', hand: [0, 1, 2].includes(m.hand) ? m.hand : 0, spectator: m.spectator ? 1 : 0 }; this.onInfo?.(this.info); }
       else if (m.t === 'say' && typeof m.text === 'string') { const text = m.text.replace(/[\r\n]+/g, ' ').trim().slice(0, 150); if (text) this.onSay?.(text); }
       else if (m.t === 'con' && typeof m.cmd === 'string') { const cmd = m.cmd.trim().slice(0, 32), arg = String(m.arg ?? '').trim().slice(0, 64); if (cmd) this.onConsole?.(cmd, arg); }
@@ -137,6 +140,8 @@ export class HostLink {
   sendCin(file) { this.link.send({ t: 'cin', file }); }
   /** SV_Kick_f: the guest is told it was kicked (its page says so), then the channel closes. */
   sendKick(reason = 'kicked') { this.link.send({ t: 'kick', reason: String(reason ?? '').slice(0, 80) }); }
+  /** A ping (the host's clock in it): the guest answers with a pong carrying it back, and `ping` is the round trip (the score board's). */
+  sendPing() { this.link.send({ t: 'ping', at: this.now() }); }
   /**
    * The guest's frame: its player row, its frame's rows (packed), the tic's sounds and effects (they come with
    * the host's own frame query, the first of the tic), the tic's length, the newest command the tic took (`ack`:
@@ -185,6 +190,7 @@ export class GuestLink {
       case 'pic': this.onPic?.(m.file); break;
       case 'cin': this.onCin?.(m.file); break;
       case 'kick': this.kicked = String(m.reason ?? 'kicked'); this.onKick?.(this.kicked); break;
+      case 'ping': if (typeof m.at === 'number') this.link.send({ t: 'pong', at: m.at }); break;   // (answered at once: the host's clock goes back as it came)
       default: break;
     }
   }

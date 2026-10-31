@@ -59,7 +59,7 @@ parts stack in rows from the bottom so none leaves it, and the help computer, th
 board lay their text out to the view's width over their panel scaled to it).
 Or against each other: the select's deathmatch choices play the maps as deathmatch had them, their
 deathmatch-only weapons and spots in and the monsters out, items that come back after they are taken, frags on
-the status bar and the score board on F1 (`dmflags`, `fraglimit` and `timelimit` at the console).
+the status bar and the score board on F1, with each player's ping over the network (`dmflags`, `fraglimit` and `timelimit` at the console).
 Or two to four pages, over the network: one hosts (Host makes an offer, a short text to send to the other
 player), the other joins (Join takes it and makes an answer to send back), and the host's game runs with the
 guest's player in it (coop, or a deathmatch when the host's Players select says so: the frags on every page's
