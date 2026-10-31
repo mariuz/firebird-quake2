@@ -555,7 +555,7 @@ async function frame() {
       for (const g of [...net.guests]) {   // (a guest may leave during a query: the list is this frame's)
         const row = session.clients.find((c) => c.CLIENT === g.client);
         if (!row || !running) continue;
-        const gf = await session.frame({ sqlRenderer: false, client: g.client });
+        const gf = await session.frame({ sqlRenderer: false, client: g.client, boxes: true });   // (the boxes about it: its prediction clips against them)
         const inv = g.host.wantInv ? await session.inventory(g.client) : null;
         if (g.host.open) g.host.sendFrame({ ...row, SCORES: scoreRows() }, gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
       }
@@ -655,8 +655,8 @@ const cmdOf = (c) => ({ fwd: c[1], side: c[2], yawd: c[3], pitchd: c[4], jump: c
 /**
  * CL_PredictMovement: a host frame came with the newest command its tic took. The commands up to it are done
  * with; the state is the frame's row run through the ones after it (the host's brush models where the frame
- * has them: the faces' entities and their origins, the angles the frame carries; the monsters are not clipped
- * against, as the frame carries no box for them). Where the new state lands away from where the prediction
+ * has them: the faces' entities and their origins, the angles the frame carries; the box entities about the
+ * guest, the monsters and the other clients, as the frame carries them). Where the new state lands away from where the prediction
  * had it, the difference is the prediction error, faded out over the next tenth of a second
  * (CL_CheckPredictionError, V_CalcRefdef's prediction_error) so the correction glides instead of snapping.
  * A dead or frozen player is painted where the host has it.
@@ -675,7 +675,7 @@ function guestAck(got, now) {
     const mi = p.modelOfFace[r[0]];
     if (mi > 0) solids.push({ model: mi, origin: [r[2], r[3], r[4]], angles: got.frame.brushAngles.get(r[1]) ?? [0, 0, 0] });
   }
-  p.world = { solids, boxes: [], gravity: p.gravity };
+  p.world = { solids, boxes: got.frame.boxes ?? [], gravity: p.gravity };
   const st = stateFromRow(row);
   for (const c of p.cmds) pmove(p.cm, st, c.cmd, c.dt, p.world);
   p.st = p.cmds.length ? st : null;
@@ -1311,7 +1311,7 @@ async function boot() {
       get cinematic() { return cinematic ? { file: cinematic.file, frame: cinematic.frame, fps: CIN_FPS } : null; },
       // (the browser test's: a cinematic from bytes it made, the game going on after as it was)
       cinematicFrom: async (bytes, name = 'test') => { const was = running; await playCinematicFrom(Uint8Array.from(bytes), name); running = was; lastTic = performance.now(); },
-      get prediction() { const p = guestPred; return p ? { seq: p.seq, pending: p.cmds.length, x: p.st?.x ?? null, y: p.st?.y ?? null, z: p.st?.z ?? null, error: p.error ? Math.hypot(p.error.dx, p.error.dy, p.error.dz) : 0 } : null; },
+      get prediction() { const p = guestPred; return p ? { seq: p.seq, pending: p.cmds.length, x: p.st?.x ?? null, y: p.st?.y ?? null, z: p.st?.z ?? null, error: p.error ? Math.hypot(p.error.dx, p.error.dy, p.error.dz) : 0, boxes: p.world?.boxes.length ?? 0 } : null; },
       sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     setStatus('Downloading pak0.pak (the Quake 2 demo, 50 MB)…');
     const resp = await fetch(new URL('./pak/pak0.pak', location.href));

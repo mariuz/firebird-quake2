@@ -56,7 +56,7 @@ const hostTic = async (cmd1 = idle) => {
   const cmd2 = host.takeCommand();
   const last = await session.tic(cmd1, cmd2);
   const f = await session.frame({ client: 1 });
-  const gf = await session.frame({ client: 2, sqlRenderer: false });
+  const gf = await session.frame({ client: 2, sqlRenderer: false, boxes: true });
   const sent = host.sendFrame(session.clients[1], gf, { sounds: f.sounds, fx: f.fx, dt: 0.05, inv: host.wantInv ? await session.inventory(2) : null });
   return { last, f, gf, cmd2, sent };
 };
@@ -125,6 +125,9 @@ check(!host.wantInv, '... and stop when it is put away');
 
 // ── the guest's prediction (src/pmove.js): each command numbered, the frame acks the newest its tic took, and the
 // frame's row run through the commands after it lands where the host's next frame lands ──
+// (the map afresh: the guest at its spot, the first client 96 away in x and in y)
+sendMap('demo1', await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true }));
+await hostTic(); guest.take();
 guest.sendCommand(idle, { seq: 100 }); guest.sendCommand(idle, { seq: 101 });
 r = await hostTic();
 got = guest.take();
@@ -141,14 +144,51 @@ const solidsOf = (frame) => {
   for (const row of frame.faces) { if (row.length !== 5 || !row[1] || seen.has(row[1])) continue; seen.add(row[1]); const mi = modelOfFace[row[0]]; if (mi > 0) out.push({ model: mi, origin: [row[2], row[3], row[4]], angles: frame.brushAngles.get(row[1]) ?? [0, 0, 0] }); }
   return out;
 };
-// (the other player's box, which the page does not know: here from the host's tables, so the match can be exact)
-const boxes = async () => (await db.query("SELECT e.x + e.minx, e.y + e.miny, e.z + e.minz, e.x + e.maxx, e.y + e.maxy, e.z + e.maxz FROM ents e WHERE e.solid IN (2, 3) AND e.id <> (SELECT p.ent_id FROM player p WHERE p.id = 2)", [], { rowMode: 'array' })).rows
-  .map(([x1, y1, z1, x2, y2, z2]) => ({ mins: [x1, y1, z1], maxs: [x2, y2, z2], contents: 33554432 }));
+// the box entities about the guest come with its frame (the other client's, a monster's: what trace_move clips its
+// move against), so the prediction clips against them as the host does
+const boxesNow = async () => (await db.query("SELECT e.id, e.x + e.minx, e.y + e.miny, e.z + e.minz, e.x + e.maxx, e.y + e.maxy, e.z + e.maxz, IIF(e.st IN ('die', 'dead') OR e.health <= 0, 67108864, 33554432) FROM ents e WHERE e.solid IN (2, 3) AND e.id <> (SELECT p.ent_id FROM player p WHERE p.id = 2) ORDER BY e.id", [], { rowMode: 'array' })).rows;
+{
+  await hostTic(); got = guest.take();   // (the frame and the tables of the same tic)
+  const all = await boxesNow(), inFrame = got.frame.boxes;
+  const p1 = (await q('SELECT ent_id FROM player WHERE id = 1'))[0].ENT_ID;
+  check(Array.isArray(inFrame) && inFrame.length > 0 && inFrame.some((b) => b.id === p1) && inFrame.every((b) => b.mins.length === 3 && b.maxs.length === 3 && [33554432, 67108864].includes(b.contents)),
+    `the frame carries the box entities about the guest, the first client's among them (${inFrame?.length} boxes)`);
+  const asHost = (b) => { const w = all.find((a) => a[0] === b.id); return w && w.slice(1, 7).every((v, i) => v === [...b.mins, ...b.maxs][i]) && w[7] === b.contents; };
+  const within = (w) => w[1] <= got.row.PX + 384 && w[4] >= got.row.PX - 384 && w[2] <= got.row.PY + 384 && w[5] >= got.row.PY - 384 && w[3] <= got.row.VIEW_Z + 384 && w[6] >= got.row.VIEW_Z - 384;
+  const same = inFrame.every(asHost), complete = all.filter(within).every((w) => inFrame.some((b) => b.id === w[0]));
+  check(same && complete && inFrame.length < all.length,
+    `each as the host's tables have it (${same}), every one within 384 of the eye there (${complete}) and the far ones not (${all.length} box entities in the map)`);
+}
 const cmdOf = (c) => ({ fwd: c[1], side: c[2], yawd: c[3], pitchd: c[4], jump: c[6], run: c[7] });
+// the guest walks into the first client: the prediction stops at its box where the host stops it (without the
+// frame's boxes it would walk on, to be put back by the next frame)
+{
+  const c1 = session.clients[0];
+  const toward = (Math.atan2(c1.PY - got.row.PY, c1.PX - got.row.PX) * 180) / Math.PI;
+  const turn = ((((toward - got.row.YAW) % 360) + 540) % 360) - 180;
+  let err = 0, free = null, hit = null, hitAt = null;
+  for (let i = 0; i < 12; i++) {
+    const c = [1, 1, 0, i === 0 ? turn : 0, 0, 0, 0, 1, 0];
+    const world = { solids: solidsOf(got.frame), gravity: 800 };
+    const st = pmove(cm, stateFromRow(got.row), cmdOf(c), 0.05, { ...world, boxes: got.frame.boxes });
+    const unclipped = pmove(cm, stateFromRow(got.row), cmdOf(c), 0.05, { ...world, boxes: [] });
+    guest.sendCommand(c, { seq: 300 + i });
+    await hostTic();
+    got = guest.take();
+    err = Math.max(err, Math.hypot(st.x - got.row.PX, st.y - got.row.PY, st.z - got.row.PZ));
+    if (free === null && Math.hypot(unclipped.x - st.x, unclipped.y - st.y) > 1) free = i;
+    if (hit === null && Math.max(Math.abs(got.row.PX - c1.PX), Math.abs(got.row.PY - c1.PY)) <= 32.01) { hit = i; hitAt = Math.max(Math.abs(got.row.PX - c1.PX), Math.abs(got.row.PY - c1.PY)).toFixed(1); }
+  }
+  check(err < 1e-6 && free !== null && free < 10 && hit !== null,
+    `walking into the first client, the prediction meets its box as the host does (at tic ${hit}, ${hitAt} from its centre, and slides along it; the largest difference ${err.toExponential(1)}; without the boxes it would walk on from tic ${free})`);
+}
+
+// (the walk ended in the wall past the first client: about turn first)
+guest.sendCommand([1, 0, 0, 180, 0, 0, 0, 1, 0]); await hostTic(); got = guest.take();
 let predErr = 0, acks = 0, walked = 0;
 for (let i = 0; i < 40; i++) {
   const c = [1, 1, 0, i < 15 ? 3 : i < 30 ? -4 : 0, 0, 0, i === 5 || i === 25 ? 1 : 0, 1, 0];
-  const st = pmove(cm, stateFromRow(got.row), cmdOf(c), 0.05, { solids: solidsOf(got.frame), boxes: await boxes(), gravity: 800 });
+  const st = pmove(cm, stateFromRow(got.row), cmdOf(c), 0.05, { solids: solidsOf(got.frame), boxes: got.frame.boxes, gravity: 800 });
   guest.sendCommand(c, { seq: 200 + i });
   await hostTic();
   const was = got.row;
@@ -160,7 +200,6 @@ for (let i = 0; i < 40; i++) {
 check(acks === 40 && walked > 200, `forty commands, each acked by the frame of its tic, walk the guest ${walked.toFixed(0)} units with turns and two jumps`);
 check(predErr < 1e-6, `the guest's own move run ahead from each frame's row lands where the host's next frame lands (the largest difference ${predErr.toExponential(1)})`);
 check(typeof got.row.VX === 'number' && typeof got.row.ONGROUND === 'number', 'the row the frame carries has the move\'s state the prediction starts from');
-
 // a message longer than a channel message goes in chunks and arrives whole
 const [c, d] = Loopback.pair();
 const big = new Link(c), bigIn = new Link(d);
@@ -179,7 +218,7 @@ a.bufferedAmount = 0;
 // a level change: the next map's message, then frames from it
 await session.leave('demo2$base1');
 sendMap('demo2', await session.startMap('demo2', { spawnpoint: 'base1' }));
-check(maps === 2 && guest.map.name === 'demo2', 'a level change sends the next map');
+check(maps === 3 && guest.map.name === 'demo2', 'a level change sends the next map');
 loadMapModels(pak, gres, guest.map.name, { faceVerts: false });
 await hostTic();
 got = guest.take();

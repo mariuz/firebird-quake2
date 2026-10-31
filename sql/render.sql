@@ -415,7 +415,9 @@ SET TERM ^ ;
 --   6 brush-model pose (i1 ent, i2 frame, i3 effects: the EF_ANIM ones cycle the frame on the page, d1..3 angles)
 --   7 the looped speakers that are on (lst their ids), when want_speakers = 1
 --   9 an entity's looped sound (s.sound: i1 ent, d3..5 at, s name)
-CREATE OR ALTER PROCEDURE frame_all (mode SMALLINT, last_sound INTEGER, last_fx INTEGER, want_speakers SMALLINT, client SMALLINT = 1)
+--  10 a box entity near the client, when with_boxes = 1 (i1 ent, i2 contents, d1..3 absmin, d4..6 absmax): what a
+--     page predicting this client's move clips against (src/pmove.js), as trace_move clips the client's own
+CREATE OR ALTER PROCEDURE frame_all (mode SMALLINT, last_sound INTEGER, last_fx INTEGER, want_speakers SMALLINT, client SMALLINT = 1, with_boxes SMALLINT = 0)
 RETURNS (kind SMALLINT, i1 INTEGER, i2 INTEGER, i3 INTEGER, i4 INTEGER, i5 INTEGER,
          d1 DOUBLE PRECISION, d2 DOUBLE PRECISION, d3 DOUBLE PRECISION, d4 DOUBLE PRECISION, d5 DOUBLE PRECISION,
          d6 DOUBLE PRECISION, d7 DOUBLE PRECISION, d8 DOUBLE PRECISION, s VARCHAR(64),
@@ -608,6 +610,22 @@ BEGIN
   DO
     IF (s IS NOT NULL) THEN SUSPEND;
   s = NULL;
+  -- the box entities about the client (the monsters, the other clients, the barrels: SV_ClipMoveToEntities' boxes),
+  -- for a page that predicts this client's move away from the game: within 384 of its eye, with the contents
+  -- trace_move gives them (CONTENTS_MONSTER alive, CONTENTS_DEADMONSTER a corpse), its own missiles left out as
+  -- trace_move leaves an entity's own out
+  IF (with_boxes = 1) THEN
+  BEGIN
+    kind = 10;
+    FOR SELECT e.id, IIF(e.st IN ('die', 'dead') OR e.health <= 0, 67108864, 33554432),
+               e.x + e.minx, e.y + e.miny, e.z + e.minz, e.x + e.maxx, e.y + e.maxy, e.z + e.maxz
+          FROM ents e
+         WHERE e.solid IN (2, 3) AND e.id <> :pe AND (e.owner_id IS NULL OR e.owner_id <> :pe)
+           AND e.x + e.maxx >= :ex - 384 AND e.x + e.minx <= :ex + 384 AND e.y + e.maxy >= :ey - 384 AND e.y + e.miny <= :ey + 384
+           AND e.z + e.maxz >= :ez - 384 AND e.z + e.minz <= :ez + 384
+          INTO i1, i2, d1, d2, d3, d4, d5, d6 DO SUSPEND;
+    i2 = NULL; d1 = NULL; d2 = NULL; d3 = NULL; d4 = NULL; d5 = NULL; d6 = NULL;
+  END
   IF (want_speakers = 1) THEN
   BEGIN
     kind = 7; i1 = NULL; i2 = NULL; d1 = NULL; d2 = NULL; d3 = NULL; d4 = NULL; d5 = NULL;

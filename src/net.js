@@ -8,7 +8,8 @@
 // guest's page loads the pak for the textures, models and pictures and the map's geometry for the painter
 // (loadMapModels), and runs no game logic but its own move: each command carries a sequence number, each
 // frame the newest the tic took (`ack`), and the guest runs the commands past it through src/pmove.js from
-// the frame's row (CL_PredictMovement), so its own move shows at once and not a round trip late.
+// the frame's row (CL_PredictMovement), so its own move shows at once and not a round trip late; the frame
+// carries the box entities about the guest (the monsters, the other clients) for it to clip against.
 //
 // The wire is JSON over a data channel, in chunks a channel is sure to take (16 KB); a frame of demo1 is
 // 10–30 KB, one or two chunks, twenty times a second. Signalling is by hand: Pages is static, so the offer
@@ -76,11 +77,11 @@ export class Loopback {
 /** decodeFrame's object as JSON carries it (the typed array and the maps as arrays). */
 export function packFrame(f) {
   return { faces: f.faces, ents: f.ents, loops: f.loops, styles: Array.from(f.styles), speakers: f.speakers,
-    brushFrames: [...f.brushFrames], brushAngles: [...f.brushAngles] };
+    brushFrames: [...f.brushFrames], brushAngles: [...f.brushAngles], boxes: f.boxes ?? [] };
 }
 export function unpackFrame(p, sounds = [], fx = []) {
   return { faces: p.faces, ents: p.ents, sounds, fx, loops: p.loops, styles: Float32Array.from(p.styles), speakers: p.speakers,
-    brushFrames: new Map(p.brushFrames), brushAngles: new Map(p.brushAngles) };
+    brushFrames: new Map(p.brushFrames), brushAngles: new Map(p.brushAngles), boxes: Array.isArray(p.boxes) ? p.boxes : [] };
 }
 
 // ── the host: the guest's commands in, its frames out ───────────────────────────────────────────────

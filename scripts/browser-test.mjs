@@ -413,14 +413,15 @@ try {
       await gp.keyboard.down('w');
       // the guest predicts its own move (src/pmove.js): while walking, its predicted origin runs ahead of the row the
       // host last sent, by at most a few tics' worth
-      let ahead = 0, samples = 0, farthest = 0;
+      let ahead = 0, samples = 0, farthest = 0, boxed = 0;
       for (let i = 0; i < 12; i++) {
         await sleep(100);
-        const s = await gp.evaluate(() => { const p = window.quake2?.prediction, r = window.quake2?.net?.guest?.row; return p && r && p.x != null ? { d: Math.hypot(p.x - r.PX, p.y - r.PY), pending: p.pending, seq: p.seq } : null; }).catch(() => null);
+        const s = await gp.evaluate(() => { const p = window.quake2?.prediction, r = window.quake2?.net?.guest?.row; return p && r && p.x != null ? { d: Math.hypot(p.x - r.PX, p.y - r.PY), pending: p.pending, seq: p.seq, boxes: p.boxes } : null; }).catch(() => null);
         if (!s) continue;
         samples++;
         if (s.d > 0.5) ahead++;
         farthest = Math.max(farthest, s.d);
+        boxed = Math.max(boxed, s.boxes ?? 0);
       }
       await gp.keyboard.up('w');
       await sleep(300);
@@ -428,6 +429,7 @@ try {
       const moved = Math.hypot(x1 - x0, y1 - y0);
       assert(moved > 50, `the guest's W walks its player at the host (${moved.toFixed(0)} units)`);
       assert(samples > 5 && ahead > 0 && farthest < 120, `the guest's own move is predicted ahead of the host's frames (${ahead} of ${samples} samples ahead, at most ${farthest.toFixed(1)} units)`);
+      assert(boxed > 0, `the prediction clips against the box entities the frames carry (${boxed} about the guest)`);
       // a third page joins the game running: Host makes another offer while hosting, the third answers it, and the
       // host's game gets a third client (ClientBegin) that the third page drives, each guest sent its own frames
       const tctx = await browser.newContext({ viewport: { width: 960, height: 720 } });

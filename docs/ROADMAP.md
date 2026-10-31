@@ -233,8 +233,8 @@ The second list, from what the entries above and below left: in the order they a
   `view`), the frame's entities still lerped. Where a frame's correction lands the state away from where the
   prediction had it, the difference fades over the next tenth of a second (`CL_CheckPredictionError`,
   `prediction_error`); a teleport (more than 640 units) snaps. The brush models come from the frame (its
-  faces name them with their origins, the angles ride along); the monsters are not clipped against (the
-  frame carries no box for them: a guest walking into one is put back by the next frame, smoothly), and a
+  faces name them with their origins, the angles ride along), and so do the box entities about the guest (the
+  third list's second entry; a guest walking into a monster used to be put back by the next frame), and a
   dead or frozen player is painted where the host has it. `test:predict` runs the JS beside the SQL over
   two hundred tics of walking, turning, jumping, crouching, strafing, stairs and a wall on demo1, each tic
   from the SQL's row, and gets the same numbers every tic (the largest difference 0), the traces agreeing
@@ -309,10 +309,17 @@ The third list, from what is left in the entries above and below: in the order t
   with its client standing); the browser test joins a third page to the running game with a second offer, sees
   the third client put in and painted, the first guest's frames going on, the stats line counting both, and the
   pages leaving one by one.
-- **The guest clipped against the monsters**: the frame carries no box for them, so a guest walking into one is
-  put back by the next frame. The frame's entity rows could carry the solid ones' boxes (`mins`, `maxs` of
-  `solid` 2 and 3, as the player's box test takes them), and `pmove` clip against them as against the other
-  player, so a guest stops at a monster where the host stops it.
+- **The guest clipped against the monsters**: done. The frame carried no box for them, so a guest walking
+  into one was put back by the next frame. Now a guest's frame carries the box entities about it (`frame_all`'s
+  kind 10, asked for with `with_boxes`, `Session.frame`'s `boxes`: the entities of `solid` 2 and 3 within 384
+  of its eye but its own and its own missiles, as `trace_move` clips the client's move, each with its absolute
+  box and the contents `trace_move` gives it, `CONTENTS_MONSTER` alive and `CONTENTS_DEADMONSTER` a corpse),
+  the host's own frame none; `packFrame` carries them over the wire and the guest's `pmove` clips against
+  them as against the brush models, so the guest stops at a monster, another client or a barrel where the
+  host stops it. `test:net` sees the frame's boxes match the host's tables (every one within 384 there, the
+  far ones not, the first client's among them), the guest walk into the first client and the prediction meet
+  its box at the tic the host does and slide along it, exactly, where without the boxes it would have walked
+  on; the forty-tic walk still matches to the last digit.
 - **A recording played from a file, and recordings kept**: the Demo select plays the pak's demos and this
   session's recordings; a `.dm2` of the player's own (one made here and downloaded, or Quake 2's) cannot be
   opened, and a recording is gone with the page. A file input beside the select, and the recordings kept in
