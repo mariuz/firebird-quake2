@@ -204,7 +204,7 @@ const menu = new Menu({
 });
 /** A setting changed from a menu: through the page's own control where there is one, so both agree. */
 function setSetting(k, v) {
-  const control = { sfx: ['sfxvol', 'input'], musicMode: ['music', 'change'], alwaysRun: ['run', 'change'], renderer: ['renderer', 'change'],
+  const control = { sfx: ['sfxvol', 'input'], music: ['musicvol', 'input'], musicMode: ['music', 'change'], alwaysRun: ['run', 'change'], renderer: ['renderer', 'change'],
     detail: ['detail', 'change'], brightness: ['brightness', 'change'], players: ['players', 'change'] }[k];
   if (control) {
     const el = $(control[0]);
@@ -272,6 +272,7 @@ const con = new Console({
   timedemo: (name) => playDemo(name, { timedemo: true }),
   screenshot: () => screenshot(),
   say: (text) => sayText(text),
+  setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
   hasDemo: (name) => recordings.has(name) || kept.has(name) || pak.has(`demos/${name}.dm2`),
   listDemos: () => ({ pak: pakDemos(), kept: [...new Set([...kept, ...recordings.keys()])].sort() }),
   dropDemo: (name) => dropRecording(name),

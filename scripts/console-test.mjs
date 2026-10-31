@@ -14,7 +14,8 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90, skill: 1, binds: defaultBinds() },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 },
+  setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
   setStatus: (msg, isError = false) => status.push([msg, isError]),
@@ -181,6 +182,39 @@ await con.submit('rtc_signal ws://relay');
 check(host.settings.rtcSignal === 'http://relay.example.org:8787' && status.at(-1)?.[0] === "rtc_signal takes the relay's http(s) url" && status.at(-1)?.[1] === true, 'another scheme is refused, the setting as it was');
 await con.submit('rtc_signal none');
 check(host.settings.rtcSignal === '' && status.at(-1)?.[0] === 'rtc_signal: the offer and the answer as texts', 'rtc_signal none clears it');
+
+// the settings as cvars (Cvar_Command): shown alone, set with a word through the page's setSetting, refused with the range
+const s = host.settings;
+await con.submit('sensitivity');
+check(status.at(-1)?.[0] === '"sensitivity" is "7"', 'sensitivity alone shows it');
+await con.submit('sensitivity 5.5');
+check(s.sensitivity === 5.5 && last() === 'set sensitivity 5.5' && status.at(-1)?.[0] === '"sensitivity" is "5.5"', 'sensitivity 5.5 sets it through the page, shown back');
+await con.submit('sensitivity 99');
+check(s.sensitivity === 20, 'clamped to 20');
+await con.submit('sensitivity x');
+check(s.sensitivity === 20 && status.at(-1)?.[0] === 'sensitivity takes 1 to 20' && status.at(-1)?.[1] === true, 'a word that is no number is refused with the range');
+await con.submit('name Ace Rimmer');
+check(s.name === 'Ace Rimmer' && last() === 'set name Ace Rimmer' && status.at(-1)?.[0] === '"name" is "Ace Rimmer"', 'name takes the words, case and spaces kept');
+await con.submit('name sixteen chars...!');
+check(s.name === 'Ace Rimmer' && status.at(-1)?.[1] === true, 'a name past fifteen characters is refused');
+await con.submit('name ""');
+check(s.name === '', 'name "" clears it');
+await con.submit('hand 2'); check(s.hand === 2, 'hand 2 is centre-handed');
+await con.submit('hand 3'); check(s.hand === 2 && status.at(-1)?.[0] === 'hand takes 0 right, 1 left, 2 center', 'hand 3 is refused');
+await con.submit('cl_run 0'); check(s.alwaysRun === false && status.at(-1)?.[0] === '"cl_run" is "0"', 'cl_run 0 walks');
+await con.submit('cl_run 1'); check(s.alwaysRun === true, 'cl_run 1 runs');
+await con.submit('m_pitch'); check(status.at(-1)?.[0] === '"m_pitch" is "0.022"', 'm_pitch shows 0.022 with the mouse not inverted');
+await con.submit('m_pitch -0.022'); check(s.invertMouse === true && status.at(-1)?.[0] === '"m_pitch" is "-0.022"', 'a negative m_pitch inverts the mouse');
+await con.submit('m_pitch 0.022'); check(s.invertMouse === false, 'a positive one puts it back');
+await con.submit('m_pitch 0'); check(s.invertMouse === false && status.at(-1)?.[1] === true, 'm_pitch 0 is refused');
+await con.submit('crosshair 3'); check(s.crosshair === 3, 'crosshair 3');
+await con.submit('crosshair 4'); check(s.crosshair === 3 && status.at(-1)?.[1] === true, 'crosshair 4 is refused');
+await con.submit('s_volume'); check(status.at(-1)?.[0] === '"s_volume" is "0.70"', 's_volume shows the effects volume as 0..1');
+await con.submit('s_volume 0.25'); check(s.sfx === 25 && last() === 'set sfx 25', 's_volume 0.25 sets it as a percentage through the page');
+await con.submit('cd_volume 2'); check(s.music === 100 && status.at(-1)?.[0] === '"cd_volume" is "1.00"', 'cd_volume clamps to 1');
+await con.submit('cvarlist');
+check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 });
 
 // bind and its kin: Key_Bind_f, Key_Unbind_f, Key_Unbindall_f and Key_Bindlist_f over the keys menu's binds
 const binds = host.settings.binds;
