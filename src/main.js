@@ -259,6 +259,8 @@ function setSetting(k, v) {
   if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
   if (k === 'scrCentertime') for (const c of centerPrints) c.seconds = Number(v) || 0;   // (scr_centertime: a centre print's seconds)
   if (k === 'clFootsteps') audio.footsteps = v !== false;   // (cl_footsteps 0: the footsteps dropped)
+  // dmflags from the deathmatch options menu: the next game's, and the game running (as the console's dmflags word sets the cvar)
+  if (k === 'dmflags' && session) { session.cvars.dmflags = v; if (map && db && !netGuest()) db.exec(`UPDATE game SET dmflags = ${Number(v) || 0} WHERE id = 1`).catch((err) => console.warn('dmflags:', err.message)); }
 }
 /**
  * The player setup's name and hand as this client's userinfo (ClientUserinfoChanged): to the game's first client,
@@ -427,7 +429,7 @@ const con = new Console({
   // M_Init's menu_* commands: the menu opens over the view as the key or the menu's item would open it
   openMenu: (name) => {
     const open = { main: () => menu.main(), game: () => menu.game(), loadgame: () => menu.loadMenu(), savegame: () => menu.saveMenu(), options: () => menu.options(), keys: () => menu.keysMenu(),
-      video: () => menu.video(), multiplayer: () => menu.multiplayer(), playerconfig: () => menu.playerConfig(), credits: () => menu.credits(), quit: () => menu.quitMenu() }[name];
+      video: () => menu.video(), multiplayer: () => menu.multiplayer(), playerconfig: () => menu.playerConfig(), credits: () => menu.credits(), quit: () => menu.quitMenu(), dmoptions: () => menu.dmOptions() }[name];
     if (!open || !res) return false;
     openMenu(open);
     return true;

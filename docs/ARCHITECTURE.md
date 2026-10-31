@@ -825,9 +825,12 @@ both agree. The game menu's `credits` scrolls
 menu.c's `idcredits` (`src/credits.js`) up the screen as `M_Credits_MenuDraw` did: a line every ten
 pixels rising a pixel every 40 ms, the `+` lines in the highlighted font, round again once the last is off
 the top, Escape to leave. The console's `menu_main`, `menu_game`, `menu_loadgame`, `menu_savegame`,
-`menu_options`, `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits` and
-`menu_quit` open the menus as `M_Init` registered them (the host's `openMenu`), so a key bound to one opens
-it. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
+`menu_options`, `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits`, `menu_quit` and
+`menu_dmoptions` open the menus as `M_Init` registered them (the host's `openMenu`), so a key bound to one opens
+it. The multiplayer menu's `deathmatch options` is `M_Menu_DMOptions_f`: the dmflags as thirteen yes/no rows (the "no" flags
+inverted, as `DMOptions_MenuInit` showed them; no teamplay row, there being no model or skin teams here), each turn writing the
+page's `dmflags` setting as `DMFlagCallback` wrote the cvar, the next game's and the game running's, the status bar saying the
+value. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
 high for each of the twenty-six bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
 centre view, "drop item" (`invdrop`, BACKSPACE by default) and "mouse look" among them (`+mlook`, `\` by default: held, the mouse
 looks with free look off, `CL_MouseMove`'s switch; let go with lookspring on, the view levelled, `IN_MLookUp`) (`centerview` is a game word, END's by default as a command line, `DEFAULT_LINES`), with sidestep (`+strafe`, ALT: held, the turning keys step sideways) and keyboard look (`+klook`, INS: held, the walking keys look up and down) as `CL_BaseMove` read them, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
