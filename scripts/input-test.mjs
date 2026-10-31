@@ -149,7 +149,7 @@ check(readPad(null) === null, 'no pad reads as null');
   check(c[1] === 0 && c[4] === 10, 'S looks down, scaled with the tics');
   inp.clear(); inp.key('KeyW'); c = cmd();
   check(c[1] === 1 && c[4] === 0, 'let go, W walks again');
-  check(GAME_KEYS.has('AltLeft') && GAME_KEYS.has('Insert') && GAME_KEYS.has('End') && DEFAULT_LINES.End === 'centerview' && keyName('End') === 'END' && keyName('Insert') === 'INS',
+  check(GAME_KEYS.has('AltLeft') && GAME_KEYS.has('Insert') && GAME_KEYS.has('End') && DEFAULT_LINES.End === 'centerview' && DEFAULT_LINES.Minus === 'sizedown' && DEFAULT_LINES.Equal === 'sizeup' && GAME_KEYS.has('Minus') && GAME_KEYS.has('Equal') && keyName('End') === 'END' && keyName('Insert') === 'INS',
     'Alt, Insert and End are game keys, END bound to centerview by default, named as Quake named them');
   // the browser events wired by attach: a button under the lock is a key down and up, the wheel a notch, a button outside the lock nothing
   {

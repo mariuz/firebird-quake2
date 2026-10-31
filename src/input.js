@@ -15,7 +15,7 @@ export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'Ar
   'BracketLeft', 'BracketRight', 'Enter',
   'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
   'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'KeyL', 'KeyH', 'KeyT', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash',
-  'AltLeft', 'AltRight', 'Insert', 'End', 'Backspace', 'Backslash']);
+  'AltLeft', 'AltRight', 'Insert', 'End', 'Backspace', 'Backslash', 'Minus', 'Equal']);
 
 // default.cfg: 1-5 blaster to chaingun, 6 grenade launcher … 0 BFG10K, G "use grenades"
 // (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher; 12 and 22 the
@@ -47,8 +47,8 @@ export const ACTIONS = [
   // bindnames' mouse look (+mlook: held, the mouse looks with free look off, as CL_MouseMove read it); default.cfg's \
   { id: 'mlook', name: 'mouse look', cmd: '+mlook' },
 ];
-/** default.cfg's keys bound to command lines rather than actions (centerview, IN_CenterView: END levels the view). */
-export const DEFAULT_LINES = Object.freeze({ End: 'centerview' });
+/** default.cfg's keys bound to command lines rather than actions (centerview, IN_CenterView: END levels the view; sizedown and sizeup, SCR_SizeDown_f and SCR_SizeUp_f: - and = the view's size). */
+export const DEFAULT_LINES = Object.freeze({ End: 'centerview', Minus: 'sizedown', Equal: 'sizeup' });
 /** A fresh copy of the default lines. */
 export const defaultLines = () => ({ ...DEFAULT_LINES });
 /** The action whose `bind` command this is (`+attack`, `weapnext`, `use silencer`…, case and spacing aside), or null. */

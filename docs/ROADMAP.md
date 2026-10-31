@@ -786,8 +786,41 @@ pak. In the order they are to be taken.
   them and leaves them out of config.cfg; the browser test, on the joined page of both builds, turns the
   prediction off and sees no state ahead of the frames while its keys still reach the host as its command,
   the misses counted.
-- **`viewsize`, `sizeup` and `sizedown`**: the view at 40 to 100 percent of the screen within the backtile, as
-  `SCR_CalcVrect` laid it, `-` and `=` default.cfg's keys for them, the status bar staying where it is.
+- **`viewsize`, `sizeup` and `sizedown`**: done. The painter draws the 3D view in `SCR_CalcVrect`'s rectangle
+  now (`Renderer.setViewSize`: `viewsize` percent of the view, 40 to 100, the width a multiple of 8 and the
+  height of 2, centred), the backtile tiled around it (`tileClear`, `Draw_TileClear`'s `pics/backtile.pcx`)
+  and the status bar, the notify lines and the menus where they were: the projection's centre and scale are
+  the rectangle's, every span, triangle and particle clips to it, and the SQL-projecting mode's points move
+  with it; the SQL's frustum (`viewcfg`) is the rectangle's size, so a smaller view culls like one. `viewsize`
+  is a cvar kept with the settings (archived, as Quake's was), `sizeup` and `sizedown` step it by ten
+  (`SCR_SizeUp_f`, `SCR_SizeDown_f`), `=` and `-` their keys by default as default.cfg bound them (default
+  lines beside END's centerview); a guest's rectangle lies within the host's frustum. `test:painter` paints a
+  view at 60 and finds the backtile outside the rectangle and the world inside, the whole at 100 as before;
+  `test:console` the cvar, its range and the two words; `test:settings` and `test:input` the default lines;
+  the browser test types `viewsize 60` and reads the rectangle, the tile and the SQL's frustum, `sizeup`, `=`
+  and `-` stepping it, `viewsize 100` the whole again; the golden screenshots and the pixel comparison hold at
+  100.
+
+The eleventh list: what the console still lacks of Quake 2's own words with the demo pak, the painter's and
+the server's among them. In the order they are to be taken.
+
+- **`r_fullbright`, `r_drawentities`, `r_drawworld`, `r_lerpmodels`, `r_novis` and `r_speeds`**: ref_soft's
+  switches at the console: the world unlit, the entities or the world left out, the poses unblended, the
+  PVS ignored, and `r_speeds` printing the frame's figures (the faces, the entities, the tic's and the
+  raster's times) as `R_RenderFrame` printed them.
+- **`serverinfo`, `userinfo` and `status`**: the server's words: `serverinfo` prints the game's cvars
+  (`mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`, `cheats`, `skill`), `userinfo` this
+  client's (`name`, `hand`, `fov`, `spectator`), `status` the clients with their frags, pings and names as
+  `SV_Status_f` listed them.
+- **`m_yaw`, `cl_gun` and `con_notifytime`**: three small cvars: the turn a mouse count (`m_yaw`, 0.022),
+  the view weapon drawn or not (`cl_gun 0`), and the notify lines' seconds (`con_notifytime`, 3).
+- **`vid_gamma` and `vid_fullscreen`**: the video menu's words: the brightness and fullscreen settings as
+  cvars, as `vid_gamma` and `vid_fullscreen` were.
+- **`help`, `sv_gravity` and `hostname`**: `help` as a word (`Cmd_Help_f`, F1's), `sv_gravity` the level's
+  gravity for the game running (`sv_gravity 300` floats), `hostname` the host's name a guest sees on its
+  score board and the relay's room.
+- **`deathmatch`, `coop` and `maxclients` as cvars**: the Players select's words for the next game
+  (`deathmatch 1`, `coop 1`, `maxclients 4`), latched as Quake latched them ("will be changed for next game").
 
 ## Playing the demo
 

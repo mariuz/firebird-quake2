@@ -18,7 +18,7 @@ import { createSchema, loadResources, loadMapModels, setView } from './loader.js
 import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, iceServers } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
-import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
+import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
 import { Effects } from './effects.js';
 import { Hud, viewFrameLerp } from './hud.js';
 import { Menu, saveComment } from './menu.js';
@@ -239,6 +239,7 @@ function setSetting(k, v) {
     else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   } else { settings[k] = v; saveSettings(); }
   if (k === 'name' || k === 'hand') applyUserinfo();
+  if (k === 'viewsize') applyView().catch((err) => console.warn('viewsize:', err.message));   // (the 3D view's rectangle, the SQL's frustum with it)
 }
 /**
  * The player setup's name and hand as this client's userinfo (ClientUserinfoChanged): to the game's first client,
@@ -547,14 +548,16 @@ function readInput(tics) {
 async function applyView(fov = settings.fov) {
   if (netGuest()) {
     const v = net.guest.map?.view;
-    if (v && renderer) renderer.setSize(v.w, v.h, 1);
+    if (v && renderer) { renderer.setSize(v.w, v.h, 1); renderer.backtile = hud?.backtile ?? null; renderer.setViewSize(settings.viewsize); }   // (the viewsize's rectangle within the host's frustum)
     applyUserinfo();   // (the fov is the guest's own: the host's frame for it at the fov it paints with)
     return;
   }
   const views = localViews();
   const cols = views > 2 ? 2 : 1, rows = views > 1 ? 2 : 1;
-  await setView(db, Math.floor(viewWidth() / cols), Math.floor(viewHeight() / rows), fov);
-  if (renderer) renderer.setSize(viewWidth(), viewHeight(), views);
+  // the SQL's frustum is the 3D view's rectangle (SCR_CalcVrect: viewsize percent of the view), the painter's the view with the rectangle in it
+  const [vw, vh] = vrectSize(Math.floor(viewWidth() / cols), Math.floor(viewHeight() / rows), settings.viewsize);
+  await setView(db, vw, vh, fov);
+  if (renderer) { renderer.setSize(viewWidth(), viewHeight(), views); renderer.backtile = hud?.backtile ?? null; renderer.setViewSize(settings.viewsize); }
 }
 /** The views this page paints: one per client of its own game, one when it hosts (the guest paints its own). */
 const localViews = () => (session?.twoPlayers && !netHost() ? session.nclients : 1);

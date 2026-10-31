@@ -51,9 +51,9 @@ fresh.binds.attack.push('KeyZ');
 check(DEFAULTS.binds.attack.length === 2, 'editing a loaded bind leaves the defaults alone');
 // the keys bound to command lines (bind k god): key code → the line, each checked; a key an action holds runs no line
 const lines = loadSettings(store(JSON.stringify({ binds: { attack: ['KeyK'] }, lines: { KeyK: 'god', KeyJ: 'say hello', AltLeft: 'kill', 'Key J': 'x', KeyL: 'bad\nline', KeyM: 'x'.repeat(129), KeyN: 7, KeyO: '  give all  ' } }))).lines;
-check(JSON.stringify(lines) === JSON.stringify({ KeyJ: 'say hello', KeyO: 'give all' }) && JSON.stringify(DEFAULTS.lines) === '{"End":"centerview"}',
-  `the lines come back checked: a key an action holds (ALT, sidestep's) drops its line, a bad code, a control character, a line past 128 characters or a number is skipped, the rest trimmed; END centerview alone by default, as default.cfg had it (${JSON.stringify(lines)})`);
-check(JSON.stringify(loadSettings(store(JSON.stringify({ lines: ['god'] }))).lines) === '{"End":"centerview"}' && JSON.stringify(loadSettings(store(JSON.stringify({ lines: 'god' }))).lines) === '{"End":"centerview"}' && JSON.stringify(loadSettings(store(JSON.stringify({ lines: {} }))).lines) === '{}',
+check(JSON.stringify(lines) === JSON.stringify({ KeyJ: 'say hello', KeyO: 'give all' }) && JSON.stringify(DEFAULTS.lines) === '{"End":"centerview","Minus":"sizedown","Equal":"sizeup"}',
+  `the lines come back checked: a key an action holds (ALT, sidestep's) drops its line, a bad code, a control character, a line past 128 characters or a number is skipped, the rest trimmed; END centerview, - sizedown and = sizeup by default, as default.cfg had them (${JSON.stringify(lines)})`);
+check(JSON.stringify(loadSettings(store(JSON.stringify({ lines: ['god'] }))).lines) === '{"End":"centerview","Minus":"sizedown","Equal":"sizeup"}' && JSON.stringify(loadSettings(store(JSON.stringify({ lines: 'god' }))).lines) === '{"End":"centerview","Minus":"sizedown","Equal":"sizeup"}' && JSON.stringify(loadSettings(store(JSON.stringify({ lines: {} }))).lines) === '{}',
   'lines that are not an object are the default, an empty object none (END unbound stays so)');
 fresh.lines.KeyZ = 'god';
 check(!('KeyZ' in DEFAULTS.lines) && !('KeyZ' in loadSettings(store()).lines), 'editing loaded lines leaves the defaults alone');

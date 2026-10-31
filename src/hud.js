@@ -11,6 +11,7 @@ export class Hud {
     this.pak = pak;
     this.cache = new Map();
     this.conchars = pic(pak, 'conchars');
+    this.backtile = pic(pak, 'backtile');   // (Draw_TileClear's tile, around a view smaller than the screen: the viewsize cvar)
     this.nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => pic(pak, `num_${i}`));
     this.anums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => pic(pak, `anum_${i}`));
     this.numMinus = pic(pak, 'num_minus');
