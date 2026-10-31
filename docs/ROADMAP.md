@@ -772,8 +772,12 @@ pak. In the order they are to be taken.
   ducked, none over a jump, a pain, an attack or a death. The smoke test taunts and sees the frames set under
   the wave priority, the word said, a flipoff over the taunt, and none over a pain or ducked; `test:coop`
   sees a client's taunt step a frame a tic where the other client sees it.
-- **`score` and `putaway`**: `Cmd_Score_f` (the score board by a word, toggled, in coop and deathmatch) and
-  `Cmd_PutAway_f` (the help computer, the inventory and the score board closed by a word).
+- **`score` and `putaway`**: done. `score` is `Cmd_Score_f`: the score board toggled in a game of more than
+  one client (coop, deathmatch or a shared game), the inventory and the help put away either way, nothing in
+  single player (`toggleScreen`'s 'scores' kind, the host's `toggleScores`); `putaway` is `Cmd_PutAway_f`: the
+  help computer, the inventory and the score board put away (`putAway`). `test:console` sees `score` reach the
+  host in a game running and not without one, and `putaway` reach it; the browser test types `score` in single
+  player and sees no board, then at the host of a shared game sees the board up and `putaway` take it down.
 - **`cl_predict` and `cl_showmiss`**: a guest's prediction switched off (its view then the host's frames as they
   come), and the prediction's misses counted and printed on its line as `CL_CheckPredictionError` printed them.
 - **`viewsize`, `sizeup` and `sizedown`**: the view at 40 to 100 percent of the screen within the backtile, as

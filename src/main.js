@@ -120,10 +120,18 @@ let showInv = perPlayer(false);
 let showScores = perPlayer(false);   // the deathmatch score board (Cmd_Help_f shows it in place of the help computer)
 let invItems = perPlayer(() => []);  // the inventory's rows: [itemlist index, count]
 let helpSeen = perPlayer(0);         // the help_changed count each player has looked at
-/** The help computer (the score board in deathmatch) or the inventory toggled for player `p` (0 or 1), the other screen put away. */
+/**
+ * The help computer (the score board in deathmatch) or the inventory toggled for player `p` (0 or 1), the other screen put
+ * away; 'scores' is Cmd_Score_f: the score board toggled in a game of more than one client (coop, deathmatch, a shared game),
+ * the other screens put away either way.
+ */
 function toggleScreen(p, which) {
   const row = netGuest() ? last : (session?.clients[p] ?? last);
-  if (which === 'help' && row?.DEATHMATCH) { showScores[p] = !showScores[p]; showInv[p] = false; showHelp[p] = false; }
+  if (which === 'scores') {
+    showInv[p] = false; showHelp[p] = false;
+    if (row?.DEATHMATCH || netGuest() || netHost() || (session?.clients.length ?? 1) > 1) showScores[p] = !showScores[p];
+  }
+  else if (which === 'help' && row?.DEATHMATCH) { showScores[p] = !showScores[p]; showInv[p] = false; showHelp[p] = false; }
   else if (which === 'help') { showHelp[p] = !showHelp[p]; showInv[p] = false; showScores[p] = false; if (row) helpSeen[p] = row.HELP_CHANGED ?? 0; }
   else { showInv[p] = !showInv[p]; showHelp[p] = false; showScores[p] = false; }
 }
@@ -279,6 +287,8 @@ const con = new Console({
   setView: (fov) => applyView(fov),
   saveGame: () => saveGame(), loadGame: () => loadGame(),
   toggleInventory: () => toggleScreen(0, 'inventory'),
+  toggleScores: () => toggleScreen(0, 'scores'),                      // (score: Cmd_Score_f, the score board in a game of more than one client)
+  putAway: () => { showHelp[0] = false; showInv[0] = false; showScores[0] = false; },   // (putaway: Cmd_PutAway_f)
   isRunning: () => running,
   // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
   setCvar: async (name, value) => { session.cvars[name] = value; if (map && !netGuest()) await db.exec(`UPDATE game SET ${name} = ${value} WHERE id = 1`); },
@@ -1649,6 +1659,7 @@ async function boot() {
     session = new Session(db, storage);
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
+      get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
