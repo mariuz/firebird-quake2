@@ -86,7 +86,8 @@ the server's messages as the client read them, and the walls are the database's,
 frame; at its end the pak's next plays (`timedemo q2demo1` plays it as fast as the page paints and reports
 the frames a second, `screenshot` downloads the view as `quake00.png`). `record <name>` at the console writes the game from then on as a
 demo of its own, the frames' rows as the server's messages; `stop` (or the level's end) downloads it as
-`<name>.dm2`, which the Demo select plays here and Quake 2 plays itself, with the same pak; the recordings
+`<name>.dm2`, which the Demo select plays here and Quake 2 plays itself, with the same pak (a joined page
+records the frames the host sends it the same way); the recordings
 are kept across reloads (`demos` lists them, `deldemo <name>` drops one), and a `.dm2` of your own opens from
 the file button beside the select. A level exit
 that names a cinematic plays it from the pak's `video/` (the demo pak has none; the full game's intro and

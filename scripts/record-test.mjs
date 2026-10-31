@@ -17,6 +17,7 @@ import { Session } from '../src/session.js';
 import { parseDemo, DemoPlayer, CS } from '../src/demo.js';
 import { DemoRecorder, Writer, writeDeltaEntity, md4hex, blockChecksum, dirToByte, PROTOCOL, MAX_MSGLEN, STATUSBAR } from '../src/record.js';
 import { Renderer, lightPoint, entityFrame } from '../src/renderer.js';
+import { Link, Loopback, HostLink, GuestLink } from '../src/net.js';
 import { ITEMS } from '../src/gamedata.js';
 import { ANORMS } from '../src/md2.js';
 
@@ -212,6 +213,44 @@ const seenBack = new Set([...d2.frames.flatMap((f) => [...f.ents.keys()])]);
 check(seenBack.size >= 8, `and every one came in a later frame (${seenBack.size} entities over ${d2.frames.length} frames)`);
 const removed = d2.frames.some((f, i) => i && [...d2.frames[i - 1].ents.keys()].some((n) => !f.ents.has(n)));
 check(removed, 'an entity gone from the frame is removed from the recording (U_REMOVE)');
+
+// ── a joined page's recording: the frames the host sends it (HostLink → GuestLink, as the page gets them), the brush
+// models named by their faces, its own entity in no frame; the view and the level's name as the host's rows and map
+// message had them ──
+{
+  const [la, lb] = Loopback.pair();
+  const host = new HostLink(new Link(la)), guest = new GuestLink(new Link(lb));
+  const modelOfFace = new Int32Array(setup.bsp.faces.length).fill(-1);
+  setup.bsp.models.forEach((bm, mi) => { for (let fi = bm.firstFace; fi < bm.firstFace + bm.numFaces; fi++) modelOfFace[fi] = mi; });
+  await session.startMap('demo1', { newGame: true, skill: 2, seed: 1 });
+  const grec = new DemoRecorder({ map: 'demo1', res, bsp: setup.bsp, mapBytes, setup: { sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack }, playerEnt: 0, levelname, fov: 90, netname: 'guest' });
+  const rows = [], brushSeen = new Set();
+  for (let i = 0; i < 40; i++) {
+    const row = await session.tic(cmd({ fwd: 1, fire: i % 8 === 0 ? 1 : 0, yaw: i > 20 ? 4 : 0 }));
+    const f = await session.frame({ client: 1, sqlRenderer: false, boxes: true });
+    host.sendFrame(row, f, { sounds: f.sounds, fx: f.fx, dt: 0.05 });
+    const got = guest.take();
+    for (const face of got.frame.faces) if (face.length === 5 && face[1] && !grec.brushNames.has(face[1]) && modelOfFace[face[0]] > 0) { grec.brushNames.set(face[1], `*${modelOfFace[face[0]]}`); brushSeen.add(face[1]); }
+    grec.frame(got.row, got.frame);
+    rows.push(got.row);
+  }
+  const gbytes = grec.finish();
+  const gdemo = parseDemo(gbytes);
+  const gwritten = rows.filter((r, i) => i === 0 || Math.floor(Math.round(r.TIME_ * 20) / 2) > Math.floor(Math.round(rows[i - 1].TIME_ * 20) / 2));
+  check(gdemo.frames.length === grec.frames && grec.frames === gwritten.length && grec.frames >= 19 && grec.oversize === 0,
+    `a guest's recording from the host's frames reads back whole: ${gdemo.frames.length} frames of 40 tics, every block under the limit`);
+  check(gdemo.levelname === levelname && gdemo.configstrings[CS.SKY] === setup.sky && gdemo.configstrings[CS.CDTRACK] === String(setup.cdTrack) && gdemo.configstrings[CS.PLAYERSKINS] === 'guest\\male/grunt' && gdemo.configstrings[CS.MAPCHECKSUM] === String(blockChecksum(mapBytes)),
+    'its header has the level\'s name and the sky from the map message, the guest\'s name, the map\'s checksum');
+  const gview = gwritten.every((r, i) => near(gdemo.frames[i].ps.origin[0], r.PX, COORD) && near(gdemo.frames[i].ps.origin[1], r.PY, COORD) && nearAngle(gdemo.frames[i].ps.viewangles[1], r.YAW, ANGLE16) && gdemo.frames[i].ps.stats[1] === r.HEALTH);
+  check(gview, 'every frame\'s player state is the row the host sent: the origin, the yaw, the health');
+  const gbrush = new Set([...gdemo.frames.flatMap((f) => [...f.ents.values()])].map((s) => gdemo.models[s.modelindex]).filter((n) => n && n[0] === '*'));
+  check(gbrush.size > 0 && gbrush.size === brushSeen.size && [...gbrush].every((n) => [...grec.brushNames.values()].includes(n)), `the brush models the frames showed are in it by their inline names, named by their faces (${gbrush.size})`);
+  const gmodels = new Set([...gdemo.frames.flatMap((f) => [...f.ents.values()])].map((s) => gdemo.models[s.modelindex]).filter((n) => n && n[0] !== '*'));
+  check(gmodels.size > 0 && [...gmodels].every((n) => pak.has(n)) && gdemo.frames.every((f) => f.ents.get(1) && !near(f.ents.get(1).origin[0], 0) && f.sounds.every((s) => s.ent !== 1 || gdemo.sounds[s.num])),
+    `the models the host's frames carried are entities of the recording (${gmodels.size} models), the player entity 1 at the row's origin`);
+  const gsounds = gdemo.frames.flatMap((f) => f.sounds);
+  check(gsounds.length > 2 && gsounds.some((s) => gdemo.sounds[s.num] === 'weapons/blastf1a.wav'), `the sounds the frames carried are in it, the blaster's shots among them (${gsounds.length})`);
+}
 
 // ── played back: DemoPlayer over the map, a frame painted ──
 const player = new DemoPlayer(demo, { modelId: (n) => res.byName.get(n) });

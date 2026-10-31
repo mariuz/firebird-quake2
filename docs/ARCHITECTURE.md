@@ -613,7 +613,12 @@ it over). The entities are the frame's rows: the player is 1 (the first client's
 and the brush models (by their inline names, from the table's rows) take compact numbers as they first show,
 a looped sound's carrier out of view is a model-less entity with the sound. A block stays under `MAX_MSGLEN`
 (1400 bytes, the client's demo buffer): an entity that does not fit a frame stands as it was, or waits for the
-next. The file downloads as `<name>.dm2` and goes into the Demo select (`demomap <name>` too): the page plays
+next. A joined page records the frames the host sends it the same way, as the client recorded the server's
+messages: the recorder is set up from the map message (the sky, the track, the level's name), each brush model
+is named by its faces the first time they show (`modelOfFace`, kept for the prediction), and the guest's own
+entity is in no frame (the view's client is left out of its frame), so the player is entity 1 from the row
+alone; the recording ends with `stop`, a map change, the host leaving or the page leaving the game.
+The file downloads as `<name>.dm2` and goes into the Demo select (`demomap <name>` too): the page plays
 its own recordings as the pak's, and Quake 2 plays them with the same pak (a model, sound or image past the
 protocol's 255 is dropped; an explosion's sound plays twice there, once as the game's sound and once as the
 client's for the temporary entity). The recordings are kept across reloads (`src/demostore.js`: a `.dm2` by

@@ -613,8 +613,15 @@ Quake: in the order they are to be taken.
   began with `unbindall`) and a key the menu binds to an action loses its line. `test:console`, `test:input`
   and `test:settings` cover the words, the helpers and the round trip; the browser test binds K to `god` at
   the console and presses it.
-- **Recording on a joined page**: `record` is refused on a guest. The frames the host sends are what a
-  recording writes: a guest records its own view as the host's client did.
+- **Recording on a joined page**: done. `record` was refused on a guest. The frames the host sends are what
+  its recording writes now, as the client recorded the server's messages: the recorder is set up from the map
+  message (the sky, the track, the level's name, which the message carries now), the brush models are named by
+  their faces as the frames show them (`modelOfFace`, which the prediction keeps), and its own entity is in no
+  frame, so none is named; `stop`, a map change, the host leaving or the page leaving the game downloads it and
+  keeps it as the page's own. `test:record` records a guest's frames over a loopback and reads them back (the
+  level's name and the sky from the map message, every frame's player state the row the host sent, the brush
+  models by their inline names, the models and sounds the frames carried); the browser test records on the
+  joined page, parses the download and finds it kept.
 - **An autoexec.cfg kept in the browser**: a config file picked runs once. Kept in IndexedDB as the pak is
   (the Config control's "keep", or `exec` with `autoexec`), it runs at every start as `autoexec.cfg` did;
   `unautoexec` drops it.
