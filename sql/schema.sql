@@ -542,10 +542,12 @@ CREATE TABLE usercmd (
 CREATE SEQUENCE sound_seq;
 -- p_trail.c: the player's trail, the last eight spots it moved out of sight of the one before (seq oldest first)
 CREATE TABLE player_trail (
-  seq  INTEGER NOT NULL PRIMARY KEY,
+  client SMALLINT DEFAULT 1 NOT NULL,       -- the client that dropped it (p_trail.c kept one trail, the player's; here one a client)
+  seq  INTEGER NOT NULL,
   x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION,
   yaw  DOUBLE PRECISION,                    -- from the marker before to this one
-  ts   DOUBLE PRECISION                     -- level time it was dropped
+  ts   DOUBLE PRECISION,                    -- level time it was dropped
+  PRIMARY KEY (client, seq)
 );
 
 CREATE TABLE sound_events (

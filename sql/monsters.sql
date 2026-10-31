@@ -257,50 +257,57 @@ END^
 
 -- p_trail.c: PlayerTrail_PickFirst (first = 1) and PlayerTrail_PickNext: the oldest marker dropped after the
 -- monster's trail_time (all older: round to the oldest, as the ring did); PickFirst takes the one before it
--- instead when only that one is in sight. Nothing while the trail is empty.
+-- instead when only that one is in sight. The trail is the monster's enemy's own (one a client here, where
+-- p_trail.c kept the one player's); nothing while it is empty, or the enemy is not a client.
 CREATE OR ALTER PROCEDURE trail_pick (eid INTEGER, first SMALLINT, tt DOUBLE PRECISION)
 RETURNS (x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION, yaw DOUBLE PRECISION, ts DOUBLE PRECISION)
 AS
 DECLARE sq INTEGER; DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
-DECLARE pyaw DOUBLE PRECISION; DECLARE pts DOUBLE PRECISION;
+DECLARE pyaw DOUBLE PRECISION; DECLARE pts DOUBLE PRECISION; DECLARE cl SMALLINT;
 BEGIN
-  SELECT FIRST 1 m.seq, m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m WHERE m.ts > :tt ORDER BY m.seq INTO sq, x, y, z, yaw, ts;
-  IF (sq IS NULL) THEN SELECT FIRST 1 m.seq, m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m ORDER BY m.seq INTO sq, x, y, z, yaw, ts;
+  SELECT p.id FROM player p WHERE p.ent_id = (SELECT e.enemy_id FROM ents e WHERE e.id = :eid) INTO cl;
+  IF (cl IS NULL) THEN EXIT;
+  SELECT FIRST 1 m.seq, m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m WHERE m.client = :cl AND m.ts > :tt ORDER BY m.seq INTO sq, x, y, z, yaw, ts;
+  IF (sq IS NULL) THEN SELECT FIRST 1 m.seq, m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m WHERE m.client = :cl ORDER BY m.seq INTO sq, x, y, z, yaw, ts;
   IF (sq IS NULL) THEN EXIT;
   IF (first = 1 AND visible_point(eid, x, y, z) = 0) THEN
   BEGIN
-    SELECT FIRST 1 m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m WHERE m.seq < :sq ORDER BY m.seq DESC INTO px, py, pz, pyaw, pts;
-    IF (px IS NULL) THEN SELECT FIRST 1 m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m ORDER BY m.seq DESC INTO px, py, pz, pyaw, pts;
+    SELECT FIRST 1 m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m WHERE m.client = :cl AND m.seq < :sq ORDER BY m.seq DESC INTO px, py, pz, pyaw, pts;
+    IF (px IS NULL) THEN SELECT FIRST 1 m.x, m.y, m.z, m.yaw, m.ts FROM player_trail m WHERE m.client = :cl ORDER BY m.seq DESC INTO px, py, pz, pyaw, pts;
     IF (visible_point(eid, px, py, pz) = 1) THEN BEGIN x = px; y = py; z = pz; yaw = pyaw; ts = pts; END
   END
   SUSPEND;
 END^
 
--- PlayerTrail_Add: a marker where the player was, turned from the last marker toward it; eight kept
-CREATE OR ALTER PROCEDURE trail_add (x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION)
+-- PlayerTrail_Add: a marker where the client was, turned from its last marker toward it; eight kept a client
+CREATE OR ALTER PROCEDURE trail_add (cl SMALLINT, x DOUBLE PRECISION, y DOUBLE PRECISION, z DOUBLE PRECISION)
 AS
 DECLARE sq INTEGER; DECLARE lx DOUBLE PRECISION; DECLARE ly DOUBLE PRECISION;
 BEGIN
-  SELECT FIRST 1 m.seq, m.x, m.y FROM player_trail m ORDER BY m.seq DESC INTO sq, lx, ly;
+  SELECT FIRST 1 m.seq, m.x, m.y FROM player_trail m WHERE m.client = :cl ORDER BY m.seq DESC INTO sq, lx, ly;
   sq = COALESCE(sq, 0) + 1;
-  INSERT INTO player_trail (seq, x, y, z, yaw, ts) VALUES (:sq, :x, :y, :z, IIF(:lx IS NULL, 0, vectoyaw(:x - :lx, :y - :ly)), now_());
-  DELETE FROM player_trail m WHERE m.seq <= :sq - 8;
+  INSERT INTO player_trail (client, seq, x, y, z, yaw, ts) VALUES (:cl, :sq, :x, :y, :z, IIF(:lx IS NULL, 0, vectoyaw(:x - :lx, :y - :ly)), now_());
+  DELETE FROM player_trail m WHERE m.client = :cl AND m.seq <= :sq - 8;
 END^
 
--- ClientBeginServerFrame's trail: a spot is dropped where the player was when the last marker is out of its
--- sight. (Asked at 10 Hz, the server's rate, and only when the player has moved since it was last asked.)
+-- ClientBeginServerFrame's trail, for every client: a spot is dropped where the client was when its last marker
+-- is out of its sight. (Asked at 10 Hz, the server's rate, and only for a client that has moved since it was last asked.)
 CREATE OR ALTER PROCEDURE player_trail_check
 AS
-DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
+DECLARE cl SMALLINT; DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
 DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION;
 DECLARE mx DOUBLE PRECISION; DECLARE my DOUBLE PRECISION; DECLARE mz DOUBLE PRECISION;
 BEGIN
-  SELECT p.ent_id, e.x, e.y, e.z, p.trail_x, p.trail_y, p.trail_z FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1 INTO pe, x, y, z, ox, oy, oz;
-  IF (pe IS NULL OR (x = ox AND y = oy AND z = oz)) THEN EXIT;
-  SELECT FIRST 1 m.x, m.y, m.z FROM player_trail m ORDER BY m.seq DESC INTO mx, my, mz;
-  IF (mx IS NULL OR visible_point(pe, mx, my, mz) = 0) THEN
-    EXECUTE PROCEDURE trail_add(IIF(ox > 1e29, x, ox), IIF(ox > 1e29, y, oy), IIF(ox > 1e29, z, oz));
-  UPDATE player p SET p.trail_x = :x, p.trail_y = :y, p.trail_z = :z WHERE p.id = 1;
+  FOR SELECT p.id, p.ent_id, e.x, e.y, e.z, p.trail_x, p.trail_y, p.trail_z FROM player p JOIN ents e ON e.id = p.ent_id ORDER BY p.id
+        INTO cl, pe, x, y, z, ox, oy, oz DO
+  BEGIN
+    IF (x = ox AND y = oy AND z = oz) THEN CONTINUE;
+    mx = NULL;
+    SELECT FIRST 1 m.x, m.y, m.z FROM player_trail m WHERE m.client = :cl ORDER BY m.seq DESC INTO mx, my, mz;
+    IF (mx IS NULL OR visible_point(pe, mx, my, mz) = 0) THEN
+      EXECUTE PROCEDURE trail_add(cl, IIF(ox > 1e29, x, ox), IIF(ox > 1e29, y, oy), IIF(ox > 1e29, z, oz));
+    UPDATE player p SET p.trail_x = :x, p.trail_y = :y, p.trail_z = :z WHERE p.id = :cl;
+  END
 END^
 
 -- ai_run with the enemy out of sight: where to head (gx, gy), facing iy, this far. Run to where it was last seen,
