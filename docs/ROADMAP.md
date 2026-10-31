@@ -954,10 +954,17 @@ client's events among them. In the order they are to be taken.
   plaque and not, and the turtle from the third slow frame, reset by a fast one or the switch; `test:console`
   the three cvars, `cvarlist` with them; the browser test pauses and reads the plaque drawn and not, counts the
   paints a second under `cl_maxfps 10`, and reads the turtle's switch, on both builds.
-- **`sv_maxvelocity`, `sv_airaccelerate` and `g_select_empty`**: the velocity clamp (`SV_CheckVelocity`, 2000),
-  the air acceleration (`pm_airaccelerate`, 0: with it, strafe jumps, in `player_think` and the prediction's twin),
-  and the weapon cycle visiting weapons with no ammo (`Cmd_WeapNext_f` with `g_select_empty`), `weapnext` and
-  `weapprev` as the console's words too.
+- **`sv_maxvelocity`, `sv_airaccelerate` and `g_select_empty`**: done. Three more of the game's cvars on the game row,
+  set at the console as the bob's. `sv_maxvelocity` is `SV_CheckVelocity`'s clamp (2000): a tossed thing's speed in
+  `toss_move`, a falling monster's in the step. `sv_airaccelerate` is pmove's air acceleration: 0 gives
+  `PM_Accelerate` at 1 in the air (a little control, as Quake had it; the port had none), on it is `PM_AirAccelerate`
+  with the wish speed capped at 30 and the acceleration 10 over the whole of it, a strafe jump, in `player_think` and
+  `src/pmove.js` alike (a guest's from the map message with the bob's). `g_select_empty` lets `Use_Weapon` take a
+  weapon with no ammo for it and the cycle visit it. `weapnext` and `weapprev` are words at the console too. The
+  smoke test takes the empty shotgun and cycles to it with `g_select_empty 1`, not without, and clamps a rocket's 500
+  to 100 under `sv_maxvelocity 100`; `test:predict` holds the JS to the SQL's origin, speed and view over a jump with
+  `sv_airaccelerate 10`; `test:console` the three on the game row and Tab; the browser test sets two on the row and
+  cycles the weapons by the words, on both builds.
 - **`sv_maplist` and `sky`**: the deathmatch rotation (`EndDMLevel`: the next map of the list at the exit, the
   fraglimit or the timelimit, round again from the end), and `sky <name> [rotate] [axis x y z]` (`SCR_Sky_f`: the
   sky box changed and spun for the map running; the demo pak has `unit1_`).

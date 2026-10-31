@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundinfo', 'soundlist', 'spectator', 'status', 'stop', 'stopsound', 'sv_gravity', 'sv_rollangle', 'sv_rollspeed', 'timedemo', 'timelimit', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundinfo', 'soundlist', 'spectator', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maxvelocity', 'sv_rollangle', 'sv_rollspeed', 'timedemo', 'timelimit', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -102,7 +102,10 @@ export function dirList(names, filter) {
 // p_view.c's cvars on the game row for the game running (SV_CalcViewOffset, SV_CalcRoll), as sv_gravity: Quake's default, the least and
 // the most taken. bob_up, bob_pitch and bob_roll are the bob's height, pitch and roll a unit of speed, run_pitch and run_roll the pitch
 // and roll from the velocity along the view, sv_rollangle the player model's roll, full at a sideways speed of sv_rollspeed
-export const GAME_CVARS = Object.freeze({ bob_up: [0.005, 0, 1], bob_pitch: [0.002, -1, 1], bob_roll: [0.002, -1, 1], run_pitch: [0.002, -1, 1], run_roll: [0.005, -1, 1], sv_rollangle: [2, -90, 90], sv_rollspeed: [200, 0, 10000] });
+// and sv_maxvelocity (SV_CheckVelocity's clamp, 2000), sv_airaccelerate (0: PM_Accelerate at 1 in the air; on, PM_AirAccelerate: strafe jumps) and
+// g_select_empty (1: a weapon with no ammo is taken and the cycle visits it)
+export const GAME_CVARS = Object.freeze({ bob_up: [0.005, 0, 1], bob_pitch: [0.002, -1, 1], bob_roll: [0.002, -1, 1], run_pitch: [0.002, -1, 1], run_roll: [0.005, -1, 1], sv_rollangle: [2, -90, 90], sv_rollspeed: [200, 0, 10000],
+  sv_maxvelocity: [2000, 0, 100000], sv_airaccelerate: [0, 0, 100], g_select_empty: [0, 0, 1] });
 const HISTORY = 32;
 
 /**
@@ -120,7 +123,7 @@ const HISTORY = 32;
  *         viewPos() → the first view's { x, y, z, yaw } (viewpos), timeRefresh(flip) → { seconds, fps } after a full turn in 128 frames, null without a game of this page's own (timerefresh), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
  *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
  *         toggleHelp() (help: the help computer, F1's), gravity() → the game's gravity, null on a joined page or without a map, setGravity(n) (sv_gravity),
- *         gameCvar(col) → the game row's column, null on a joined page or without a map, setGameCvar(col, n) (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed: GAME_CVARS),
+ *         gameCvar(col) → the game row's column, null on a joined page or without a map, setGameCvar(col, n) (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed, sv_maxvelocity, sv_airaccelerate, g_select_empty: GAME_CVARS),
  *         setGameMode({ coop, deathmatch, players }) (deathmatch, coop, maxclients: the next game's, latched; the Players select follows),
  *         execConfig() (exec: the page's file picker, whose file runs through execText),
  *         execAutoexec() → the lines run, or null when none is kept (exec autoexec), dropAutoexec() → true when one was kept (unautoexec),
@@ -527,7 +530,8 @@ export class Console {
         say(`"sv_gravity" is "${n}"`);
         return;
       }
-      case 'bob_up': case 'bob_pitch': case 'bob_roll': case 'run_pitch': case 'run_roll': case 'sv_rollangle': case 'sv_rollspeed': {
+      case 'bob_up': case 'bob_pitch': case 'bob_roll': case 'run_pitch': case 'run_roll': case 'sv_rollangle': case 'sv_rollspeed':
+      case 'sv_maxvelocity': case 'sv_airaccelerate': case 'g_select_empty': {
         // p_view.c's cvars on the game row for the game running (GAME_CVARS), as sv_gravity: shown, or set within their range
         const name = cmd.toLowerCase(), [dflt, lo, hi] = GAME_CVARS[name];
         const v = await h.gameCvar?.(name);

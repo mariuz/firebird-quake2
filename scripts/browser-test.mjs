@@ -492,6 +492,13 @@ try {
     await typeCommand('stopsound'); const sstop = await status();
     assert(played === 'playing weapons/blastf1a.wav' && /^sound: \d+ Hz (stereo|mono), \d+ decoded, \d+ playing, \d+ looping$/.test(sinfo) && sstop === 'sounds stopped',
       `play plays a pak sound (${played}), soundinfo says the figures (${sinfo}), stopsound cuts them (${sstop})`);
+    // sv_airaccelerate and g_select_empty reach the game row; weapnext and weapprev are words: the shotgun next (give all was typed), the blaster back
+    await typeCommand('sv_airaccelerate 10'); await typeCommand('g_select_empty 1'); await typeCommand('use blaster'); await typeCommand('weapnext'); await sleep(300);
+    const wn = await page.evaluate(async () => (await window.quake2.sql('SELECT g.sv_airaccelerate a, g.g_select_empty s, p.weapon w FROM game g CROSS JOIN player p WHERE p.id = 1'))[0]).catch(() => ({}));
+    await typeCommand('weapprev'); await sleep(300);
+    const wp = await page.evaluate(async () => (await window.quake2.sql('SELECT weapon w FROM player WHERE id = 1'))[0]?.W).catch(() => null);
+    await typeCommand('sv_airaccelerate 0'); await typeCommand('g_select_empty 0');
+    assert(wn?.A === 10 && wn?.S === 1 && wn?.W === 2 && wp === 1, `sv_airaccelerate and g_select_empty reach the game row, weapnext takes the shotgun and weapprev the blaster back (${JSON.stringify(wn)} → ${wp})`);
     // the pause plaque: paused, the page draws pics/pause.pcx (scr_showpause 1) and nothing with scr_showpause 0; cl_maxfps 10 caps the
     // paints in a second, 90 back; scr_showturtle reaches the settings (the turtle needs three slow frames in a row)
     await typeCommand('pause'); await sleep(400);

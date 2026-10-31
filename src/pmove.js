@@ -361,11 +361,11 @@ export function stateFromRow(row) {
 /**
  * ClientThink's move for one tic of `dt` seconds (player_think's movement, PM_* in pmove.c): `st` is changed in
  * place and returned. `cmd` is the usercmd's { fwd, side, yawd, pitchd, jump (1 up, -1 crouch), run }; `world`
- * the solids and boxes to clip against (see trace), `gravity` the map's, `view` the game row's bob and run cvars. The view the state gives is in
+ * the solids and boxes to clip against (see trace), `gravity` the map's, `view` the game row's bob and run cvars and sv_airaccelerate. The view the state gives is in
  * `view`: { x, y, z, viewZ, yaw, pitch, roll } with the bob and the step smoothing in (SV_CalcViewOffset).
  */
 /** p_view.c's view cvars as the game row has them by default (bob_up, bob_pitch, bob_roll, run_pitch, run_roll); a guest's come with the map message. */
-export const VIEW_CVARS = Object.freeze({ bobUp: 0.005, bobPitch: 0.002, bobRoll: 0.002, runPitch: 0.002, runRoll: 0.005 });
+export const VIEW_CVARS = Object.freeze({ bobUp: 0.005, bobPitch: 0.002, bobRoll: 0.002, runPitch: 0.002, runRoll: 0.005, airaccelerate: 0 });
 
 export function pmove(cm, st, cmd, dt, { solids = [], boxes = [], gravity = 800, view = VIEW_CVARS } = {}) {
   const world = { solids, boxes };
@@ -435,11 +435,17 @@ export function pmove(cm, st, cmd, dt, { solids = [], boxes = [], gravity = 800,
     let wx = fx * fwd * maxspd + rx * side * maxspd, wy = fy * fwd * maxspd + ry * side * maxspd;
     let wspd = vlen(wx, wy, 0);
     if (wspd > maxspd) { wx = wx * maxspd / wspd; wy = wy * maxspd / wspd; wspd = maxspd; }
-    // PM_AirMove: no air control in single player; wading gives some
+    // PM_AirMove: on the ground (or wading) PM_Accelerate at 10; in the air PM_AirAccelerate with sv_airaccelerate on (the wish speed
+    // capped at 30, the acceleration 10 over the whole wish speed), else PM_Accelerate at 1
     if (wspd > 0 && (onground || wl === 1)) {
       const cur = (st.vx * wx + st.vy * wy) / wspd;
       const add = wspd - cur;
       if (add > 0) { const acc = Math.min(add, 10 * wspd * dt); st.vx += acc * wx / wspd; st.vy += acc * wy / wspd; }
+    } else if (wspd > 0) {
+      const air = (view.airaccelerate ?? 0) > 0;
+      const cur = (st.vx * wx + st.vy * wy) / wspd;
+      const add = (air ? Math.min(wspd, 30) : wspd) - cur;
+      if (add > 0) { const acc = Math.min(add, (air ? 10 : 1) * wspd * dt); st.vx += acc * wx / wspd; st.vy += acc * wy / wspd; }
     }
   }
   // gravity; on the ground no vertical speed at all

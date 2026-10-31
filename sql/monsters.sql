@@ -1567,8 +1567,8 @@ BEGIN
   BEGIN
     IF (mt IN (4, 5)) THEN
     BEGIN
-      -- SV_Physics_Step: a monster that is not on the ground falls
-      UPDATE ents e SET e.vz = e.vz - (SELECT g.gravity FROM game g WHERE g.id = 1) * :dt WHERE e.id = :eid;
+      -- SV_Physics_Step: a monster that is not on the ground falls (SV_CheckVelocity: no faster than sv_maxvelocity)
+      UPDATE ents e SET e.vz = MAXVALUE(-(SELECT g.sv_maxvelocity FROM game g WHERE g.id = 1), e.vz - (SELECT g.gravity FROM game g WHERE g.id = 1) * :dt) WHERE e.id = :eid;
       EXECUTE PROCEDURE fly_move(eid, dt) RETURNING_VALUES wl, tid;
       IF (wl = 3) THEN UPDATE ents e SET e.flags = BIN_OR(e.flags, 512) WHERE e.id = :eid;   -- could not move at all: it is standing in the floor
       IF (EXISTS (SELECT 1 FROM ents e WHERE e.id = :eid AND BIN_AND(e.flags, 512) <> 0)) THEN

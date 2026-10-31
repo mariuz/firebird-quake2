@@ -559,6 +559,23 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert(u.WEAPON === 1 && u.MSG === 'No Shells for Shotgun.', `no shells, no shotgun (${u.MSG})`);
   await db.exec('UPDATE player SET msglevel = 1, msg = NULL WHERE id = 1'); u = await use(2);
   assert(u.WEAPON === 1 && u.MSG === null, `at msg 1 the print stays off the line (${u.MSG})`);
+  // g_select_empty: the shotgun with no shells is taken (Use_Weapon skips the ammo check), and weapnext visits it; off again, refused
+  await db.exec('UPDATE game SET g_select_empty = 1'); u = await use(2);
+  assert(u.WEAPON === 2, `g_select_empty 1 takes the shotgun with no shells (${u.WEAPON})`);
+  u = await use(1); u = await use(12);
+  assert(u.WEAPON === 2, `and the weapon cycle visits it (${u.WEAPON})`);
+  await db.exec('UPDATE game SET g_select_empty = 0'); u = await use(1); u = await use(2);
+  assert(u.WEAPON === 1, 'g_select_empty 0 refuses it again');
+  // sv_maxvelocity: SV_CheckVelocity holds a tossed thing's speed within it (a rocket at 500 under a cap of 100 flies at 100)
+  {
+    const pl = await one('SELECT e.x, e.y, e.z FROM ents e JOIN player p ON p.ent_id = e.id WHERE p.id = 1');
+    await db.exec('UPDATE game SET sv_maxvelocity = 100');
+    const rk = (await one(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('rocket', ${pl.X}, ${pl.Y}, ${pl.Z + 40}) RETURNING_VALUES id; UPDATE ents e SET e.vx = 500, e.vy = 0, e.vz = 0, e.movetype = 9 WHERE e.id = :id; SUSPEND; END`)).ID;
+    await db.exec(`EXECUTE PROCEDURE toss_move(${rk}, 0.05)`);
+    const v = await one(`SELECT vx, vy, vz FROM ents WHERE id = ${rk}`);
+    assert(v && v.VX === 100 && v.VY === 0 && v.VZ === 0, `sv_maxvelocity 100 clamps the rocket's 500 to 100 (${JSON.stringify(v)})`);
+    await db.exec(`DELETE FROM ents WHERE id = ${rk}; UPDATE game SET sv_maxvelocity = 2000`);
+  }
   await db.exec('UPDATE player SET weapons = 1 + 4 + 8 WHERE id = 1');
   u = await use(2);
   assert(u.WEAPON === 1 && u.MSG === 'Out of item: Shotgun', `a weapon not held is out of item (${u.MSG})`);
