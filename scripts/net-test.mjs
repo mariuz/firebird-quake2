@@ -114,6 +114,12 @@ check(host.info.gender === 'female' && (await q('SELECT gender FROM player WHERE
 guest.sendInfo({ name: 'x', hand: 0 });
 await session.setUserinfo(2, host.info);
 check(host.info.gender === 'male' && (await q('SELECT gender FROM player WHERE id = 2'))[0].GENDER === 0, 'none given is male');
+guest.sendInfo({ name: 'x', hand: 0, msg: 2 });
+await session.setUserinfo(2, host.info);
+check(host.info.msg === 2 && (await q('SELECT msglevel FROM player WHERE id = 2'))[0].MSGLEVEL === 2, 'the msg userinfo reaches the host and its row');
+guest.sendInfo({ name: 'x', hand: 0, msg: 7 });
+await session.setUserinfo(2, host.info);
+check(host.info.msg === 1 && (await q('SELECT msglevel FROM player WHERE id = 2'))[0].MSGLEVEL === 1, 'a level past 3, or none, is 1');
 check(host.info.hand === 0 && host.info.spectator === 0 && host.info.fov === null, 'a hand that is not 0, 1 or 2 is right-handed; a guest plays unless it says it watches; no fov given is the view\'s');
 // the fov userinfo: the guest's own, clamped as ClientUserinfoChanged clamped it, on its row, and its frame at that fov
 // (fewer faces in a narrow view than in a wide one at the same eye)

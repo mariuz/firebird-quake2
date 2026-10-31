@@ -461,7 +461,7 @@ try {
     await typeCommand('status');
     const stLine = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(8) })).catch(() => ({}));
     assert(/^Server info settings: mapname "demo1" · deathmatch "0" · coop "0" · dmflags "\d+" · fraglimit "\d+" · timelimit "\d+" · cheats "\d" · skill "\d" · hostname "noname"$/.test(svInfo)
-      && /^User info settings: name "[^"]*" · hand "0" · gender "male" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
+      && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
     // m_yaw, cl_gun and con_notifytime reach the settings, con_notifytime the notify's seconds; back to the defaults after
@@ -484,6 +484,12 @@ try {
     await typeCommand('gender male');
     const genBack = await page.evaluate(() => window.quake2.settings.gender).catch(() => null);
     assert(gen.g === 'female' && /· gender "female" ·/.test(gen.line ?? '') && genBack === 'male', `gender reaches the settings and the userinfo (${JSON.stringify(gen)} → ${genBack})`);
+    // the msg userinfo: the level reaches the settings, the userinfo line and the player's row, and 1 comes back
+    await typeCommand('msg 0'); await typeCommand('userinfo');
+    const mlv = await page.evaluate(async () => ({ m: window.quake2.settings.msg, line: document.getElementById('status').textContent, row: (await window.quake2.sql('SELECT msglevel FROM player WHERE id = 1'))[0]?.MSGLEVEL })).catch(() => ({}));
+    await typeCommand('msg 1');
+    const mlvBack = await page.evaluate(async () => (await window.quake2.sql('SELECT msglevel FROM player WHERE id = 1'))[0]?.MSGLEVEL).catch(() => null);
+    assert(mlv.m === 0 && /· msg "0" ·/.test(mlv.line ?? '') && mlv.row === 0 && mlvBack === 1, `msg reaches the settings, the userinfo and the row (${JSON.stringify(mlv)} → ${mlvBack})`);
     // gun_z and scr_centertime reach the settings (the gun drawn lower, a centre print's seconds) and the defaults come back
     await typeCommand('gun_z 10'); await typeCommand('scr_centertime 1');
     const gun = await page.evaluate(() => ({ z: window.quake2.settings.gunZ, ct: window.quake2.settings.scrCentertime })).catch(() => ({}));

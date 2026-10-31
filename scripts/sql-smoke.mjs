@@ -528,11 +528,14 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert(u.WEAPON === 32, 'impulse 6 (the page\'s G, "use grenades") raises the hand grenades');
   u = await use(11);
   assert(u.WEAPON === 1024, 'impulse 11 (the page\'s 0) raises the BFG10K');
-  await db.exec('UPDATE player SET cells = 10, shells = 0 WHERE id = 1');
+  // (the "No ammo" prints are PRINT_LOW, off the line at the msg userinfo's default 1 as SV_ClientPrintf dropped them: msg 0 to read them)
+  await db.exec('UPDATE player SET cells = 10, shells = 0, msglevel = 0 WHERE id = 1');
   u = await use(1); u = await use(11);
   assert(u.WEAPON === 1 && u.MSG === 'Not enough Cells for BFG10K.', `too few cells keep the BFG down (${u.MSG})`);
   u = await use(2);
   assert(u.WEAPON === 1 && u.MSG === 'No Shells for Shotgun.', `no shells, no shotgun (${u.MSG})`);
+  await db.exec('UPDATE player SET msglevel = 1, msg = NULL WHERE id = 1'); u = await use(2);
+  assert(u.WEAPON === 1 && u.MSG === null, `at msg 1 the print stays off the line (${u.MSG})`);
   await db.exec('UPDATE player SET weapons = 1 + 4 + 8 WHERE id = 1');
   u = await use(2);
   assert(u.WEAPON === 1 && u.MSG === 'Out of item: Shotgun', `a weapon not held is out of item (${u.MSG})`);

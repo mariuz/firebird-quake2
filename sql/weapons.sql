@@ -391,8 +391,8 @@ BEGIN
     BEGIN
       n = ammo_count(pe, ak);
       aname = TRIM(CASE ak WHEN 1 THEN 'Shells' WHEN 2 THEN 'Bullets' WHEN 3 THEN 'Grenades' WHEN 4 THEN 'Rockets' WHEN 5 THEN 'Cells' ELSE 'Slugs' END);
-      IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'No ' || aname || ' for ' || wname || '.'); EXIT; END
-      IF (n < IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'Not enough ' || aname || ' for ' || wname || '.'); EXIT; END
+      IF (n <= 0) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'No ' || aname || ' for ' || wname || '.', 0); EXIT; END   -- (PRINT_LOW: off the line at the msg userinfo's 1)
+      IF (n < IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'Not enough ' || aname || ' for ' || wname || '.', 0); EXIT; END
     END
   END
   -- ChangeWeapon: the one in hand becomes pers.lastweapon (weaplast's)

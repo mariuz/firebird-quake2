@@ -492,6 +492,7 @@ CREATE TABLE player (
   netname         VARCHAR(16),                            -- pers.netname (the userinfo's name): the obituaries and the score board; empty, "player N"
   hand            SMALLINT DEFAULT 0 NOT NULL,            -- pers.hand: 0 right, 1 left, 2 centre (P_ProjectSource moves the shots, the client the gun)
   gender          SMALLINT DEFAULT 0 NOT NULL,            -- the gender userinfo (IsFemale, IsNeutral): 0 male, 1 female, 2 neutral (the obituaries' pronouns, the sexed sounds)
+  msglevel        SMALLINT DEFAULT 1 NOT NULL,            -- the msg userinfo (SV_ClientPrintf drops a print below it): 0 low, 1 medium, 2 high, 3 chat; 1 as Quake's cvar had it
   spectator       SMALLINT DEFAULT 0 NOT NULL,            -- pers.spectator (3.20's userinfo): a watcher with no body, noclipping through the level
   chase           SMALLINT DEFAULT 0 NOT NULL,            -- chase_target (3.20's g_chase.c): the client a watcher's view follows, 0 floating free
   fire_held       SMALLINT DEFAULT 0 NOT NULL,            -- latched_buttons' attack for a watcher: a press counts once (the next player chased)
