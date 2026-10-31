@@ -943,10 +943,17 @@ client's events among them. In the order they are to be taken.
   (`Q2Audio.footsteps`, the demo's too); not archived, as Quake's was not. The smoke test counts the steps queued
   running and none walking at 200; `test:demo` finds the events in the pak's demo and the rows they make, none with
   the switch off; `test:audio` the switch; `test:console` the cvar; the browser test flips it on both builds.
-- **`scr_showpause`, `scr_showturtle` and `cl_maxfps`**: the pause plaque drawn as `pics/pause.pcx` in place of
-  the word (`SCR_DrawPause`, off with `scr_showpause 0`), the turtle (`pics/turtle.pcx`) at the view's corner
-  when a frame takes longer than a tic (`SCR_DrawNet`'s neighbour, `scr_showturtle`), and the paint rate capped
-  (`cl_maxfps`, 90 as Quake had it; 0 the display's).
+- **`scr_showpause`, `scr_showturtle` and `cl_maxfps`**: done. Paused, the page draws `pics/pause.pcx` centred a
+  little under the middle as `SCR_DrawPause` did (`Hud.drawPause`; the word "paused" went), nothing with
+  `scr_showpause 0`. `Hud.drawTurtle` is `SCR_DrawNet`'s turtle: `pics/turtle.pcx` at the view's corner from the
+  third frame in a row that took a tenth of a second or more, the count starting over at a faster one, with
+  `scr_showturtle 1` (0 by default, as Quake's). `cl_maxfps` is `CL_Frame`'s cap: a frame paints once
+  1000/cl_maxfps ms have passed since the last painted (`paintDue`, 90 as Quake had it; 0 every animation frame,
+  else 5 to 1000), the tics running as the wall clock owes them either way, a guest's paints capped too; the
+  SQL-projecting mode paints a tic's frame as it is. None archived, as Quake's were not. `test:hud` draws the
+  plaque and not, and the turtle from the third slow frame, reset by a fast one or the switch; `test:console`
+  the three cvars, `cvarlist` with them; the browser test pauses and reads the plaque drawn and not, counts the
+  paints a second under `cl_maxfps 10`, and reads the turtle's switch, on both builds.
 - **`sv_maxvelocity`, `sv_airaccelerate` and `g_select_empty`**: the velocity clamp (`SV_CheckVelocity`, 2000),
   the air acceleration (`pm_airaccelerate`, 0: with it, strafe jumps, in `player_think` and the prediction's twin),
   and the weapon cycle visiting weapons with no ammo (`Cmd_WeapNext_f` with `g_select_empty`), `weapnext` and

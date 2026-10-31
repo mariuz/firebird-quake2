@@ -492,6 +492,22 @@ try {
     await typeCommand('stopsound'); const sstop = await status();
     assert(played === 'playing weapons/blastf1a.wav' && /^sound: \d+ Hz (stereo|mono), \d+ decoded, \d+ playing, \d+ looping$/.test(sinfo) && sstop === 'sounds stopped',
       `play plays a pak sound (${played}), soundinfo says the figures (${sinfo}), stopsound cuts them (${sstop})`);
+    // the pause plaque: paused, the page draws pics/pause.pcx (scr_showpause 1) and nothing with scr_showpause 0; cl_maxfps 10 caps the
+    // paints in a second, 90 back; scr_showturtle reaches the settings (the turtle needs three slow frames in a row)
+    await typeCommand('pause'); await sleep(400);
+    const plaqueOn = await page.evaluate(() => ({ paused: window.quake2.paused, plaque: window.quake2.plaque })).catch(() => ({}));
+    await typeCommand('scr_showpause 0'); await sleep(400);
+    const plaqueOff = await page.evaluate(() => ({ paused: window.quake2.paused, plaque: window.quake2.plaque })).catch(() => ({}));
+    await typeCommand('scr_showpause 1'); await typeCommand('pause'); await sleep(200);
+    await typeCommand('cl_maxfps 10'); await sleep(300);
+    const paints0 = await page.evaluate(() => window.quake2.paints).catch(() => null);
+    await sleep(1000);
+    const capped = (await page.evaluate(() => window.quake2.paints).catch(() => null)) - paints0;
+    await typeCommand('cl_maxfps 90'); await typeCommand('scr_showturtle 1');
+    const turtle = await page.evaluate(() => ({ s: window.quake2.settings.scrShowturtle, t: window.quake2.turtle, fps: window.quake2.settings.clMaxfps, paused: window.quake2.paused })).catch(() => ({}));
+    await typeCommand('scr_showturtle 0');
+    assert(plaqueOn.paused === true && plaqueOn.plaque === true && plaqueOff.paused === true && plaqueOff.plaque === false && capped >= 1 && capped <= 14 && turtle.s === true && typeof turtle.t?.slow === 'number' && turtle.fps === 90 && turtle.paused === false,
+      `paused, the plaque is drawn (${JSON.stringify(plaqueOn)}) and not with scr_showpause 0 (${JSON.stringify(plaqueOff)}); cl_maxfps 10 caps the paints (${capped} in a second); scr_showturtle reaches the settings (${JSON.stringify(turtle)})`);
     // cl_footsteps 0 reaches the settings and the audio's switch, 1 puts it back
     await typeCommand('cl_footsteps 0');
     const fs0 = await page.evaluate(() => ({ s: window.quake2.settings.clFootsteps, a: window.quake2.audio?.footsteps ?? null })).catch(() => ({}));
