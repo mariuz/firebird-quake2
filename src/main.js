@@ -292,6 +292,8 @@ const con = new Console({
   // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)
   setTimescale: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; timescale = n; lastTic = performance.now(); } return timescale; },
   execConfig: () => $('cfg-file').click(),              // (exec: the Config control's picker; its file runs through execText)
+  execAutoexec: () => execAutoexec(),                    // (exec autoexec: the kept autoexec.cfg run again; null when none is kept)
+  dropAutoexec: () => dropAutoexec(),                    // (unautoexec: the kept one dropped; false when none was)
   hasDemo: (name) => recordings.has(name) || kept.has(name) || pak.has(`demos/${name}.dm2`),
   listDemos: () => ({ pak: pakDemos(), kept: [...new Set([...kept, ...recordings.keys()])].sort() }),
   dropDemo: (name) => dropRecording(name),
@@ -1540,6 +1542,7 @@ async function usePak(buffer, label) {
   const first = maps.includes(settings.map) ? settings.map : maps.includes('demo1') ? 'demo1' : maps.includes('base1') ? 'base1' : maps[0];
   if (!demos.length) await startMap(first, true);
   else { await attract(); $('map').value = first; }
+  await runAutoexec();   // (once a start: the kept autoexec.cfg, as Quake ran it once the game was up)
 }
 
 async function boot() {
@@ -1552,12 +1555,13 @@ async function boot() {
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
-      demoStore, fileStore, get pickedPak() { return pickedPak; },
+      demoStore, fileStore, get pickedPak() { return pickedPak; }, get autoexec() { return autoexec ? { ...autoexec } : null; },
       get cinematic() { return cinematic ? { file: cinematic.file, frame: cinematic.frame, fps: CIN_FPS } : null; },
       // (the browser test's: a cinematic from bytes it made, the game going on after as it was)
       cinematicFrom: async (bytes, name = 'test') => { const was = running; await playCinematicFrom(Uint8Array.from(bytes), name); running = was; lastTic = performance.now(); },
       get prediction() { const p = guestPred; return p ? { seq: p.seq, pending: p.cmds.length, x: p.st?.x ?? null, y: p.st?.y ?? null, z: p.st?.z ?? null, error: p.error ? Math.hypot(p.error.dx, p.error.dy, p.error.dz) : 0, boxes: p.world?.boxes.length ?? 0 } : null; },
       sql: (q, p) => db.query(q, p).then((r) => r.rows) };
+    syncAutoexecBox().catch(() => undefined);
     const forCache = (await useKeptPak()) ? null : await downloadPak();
     nextFrame();
     offlineReady(forCache).catch((err) => console.warn('offline cache:', err.message));
@@ -1648,13 +1652,54 @@ $('cfg-download').addEventListener('click', () => con.submit('writeconfig'));
 $('cfg-file').addEventListener('change', async (e) => {
   const f = e.target.files?.[0];
   e.target.value = '';   // (the same file again is a change again)
-  if (!f) return;
+  if (!f) { syncAutoexecBox().catch(() => undefined); return; }   // (the picker cancelled: the box says what is kept)
   try {
-    const n = await con.execText(await f.text());
-    setStatus(`${f.name}: ${n} line${n === 1 ? '' : 's'} run`);
+    const text = await f.text();
+    const n = await con.execText(text);
+    // the box ticked: the file is kept as autoexec.cfg, run at every start (the pak's and the tracks' store, under `autoexec`)
+    let kept = '';
+    if ($('cfg-keep').checked) {
+      await fileStore.put('autoexec', { name: f.name, bytes: new TextEncoder().encode(text) });
+      kept = ', kept as autoexec.cfg';
+    }
+    setStatus(`${f.name}: ${n} line${n === 1 ? '' : 's'} run${kept}`);
     setTimeout(() => { if (statusEl.textContent.startsWith(`${f.name}:`)) setStatus(''); }, 2500);
   } catch (err) { console.error(err); setStatus(`${f.name}: ${err.message}`, true); }
 });
+// the autoexec box: ticked, the next config picked is kept and run at every start (ticked with none kept, the picker
+// opens); unticked, the kept one is dropped
+$('cfg-keep').addEventListener('change', async (e) => {
+  if (e.target.checked) { if (!(await fileStore.get('autoexec').catch(() => null))) $('cfg-file').click(); return; }
+  if (await dropAutoexec()) { setStatus('autoexec.cfg dropped'); setTimeout(() => { if (statusEl.textContent === 'autoexec.cfg dropped') setStatus(''); }, 2500); }
+});
+let autoexec = null;   // the autoexec.cfg run at this start: { name, lines }
+/** The box ticked when an autoexec.cfg is kept. */
+async function syncAutoexecBox() { $('cfg-keep').checked = !!(await fileStore.get('autoexec').catch(() => null)); }
+/** The kept autoexec.cfg run through the console (exec autoexec): the lines run, or null when none is kept. */
+async function execAutoexec() {
+  const f = await fileStore.get('autoexec').catch((err) => { console.warn('autoexec:', err.message); return null; });
+  if (!f) return null;
+  return con.execText(new TextDecoder().decode(f.bytes));
+}
+/** Cmd_Exec_f's autoexec.cfg: the kept config run once at the start, after the attract loop is up (as Quake ran it after config.cfg). */
+async function runAutoexec() {
+  if (autoexec) return;
+  const f = await fileStore.get('autoexec').catch(() => null);
+  if (!f) return;
+  try {
+    const n = await con.execText(new TextDecoder().decode(f.bytes));
+    autoexec = { name: f.name, lines: n };
+    setStatus(`execing ${f.name}: ${n} line${n === 1 ? '' : 's'} run`);
+    setTimeout(() => { if (statusEl.textContent.startsWith('execing ')) setStatus(''); }, 2500);
+  } catch (err) { console.error(err); setStatus(`${f.name}: ${err.message}`, true); }
+}
+/** The kept autoexec.cfg dropped (unautoexec, the box unticked): true when there was one. */
+async function dropAutoexec() {
+  const had = !!(await fileStore.get('autoexec').catch(() => null));
+  if (had) await fileStore.remove('autoexec').catch((err) => console.warn('autoexec:', err.message));
+  $('cfg-keep').checked = false;
+  return had;
+}
 $('save-file').addEventListener('change', async (e) => {
   const f = e.target.files?.[0];
   e.target.value = '';   // (the same file again is a change again)

@@ -629,7 +629,10 @@ Quake 2's own) is parsed, kept under its name cleaned as `record` cleans one, an
 console lists the pak's and the kept, `deldemo <name>` drops a kept one from the select and the store.
 The same database keeps the player's files in a second object store (`FileStore`, `files`; both stores are
 a `KeptStore` over the one database, version 2): the pak picked from the PAK control under `pak`, with its
-name and bytes, and a picked music folder's tracks under `music/trackNN` as they play.
+name and bytes, a picked music folder's tracks under `music/trackNN` as they play, and the config picked
+with the Config control's autoexec box ticked under `autoexec`, which `runAutoexec` runs through the console
+once a start, after the attract loop is up, as Quake ran `autoexec.cfg` (`exec autoexec` runs it again,
+`unautoexec` or the box unticked drops it).
 
 Boot opens `memory://quake2` through the Worker, loads the pak (the pak kept from an earlier pick, else the
 fetched demo), creates the schema and resources, and starts the map. A picked pak is kept as it is picked and
@@ -669,7 +672,8 @@ of, latched as the cvar was: "skill will be changed for next game."), as are the
 word through the page's `setSetting` so its controls, the menus and the userinfo follow; `cvarlist`; `set <cvar>
 <value>` as config.cfg sets one), `writeconfig` (the binds and the cvars as `config.cfg`, downloaded, as
 `Key_WriteBindings` and `Cvar_WriteVariables` wrote them) and `exec` (the Config control's picker; the file
-runs line by line through `Console.execText`), and `bind`, `unbind`, `unbindall` and
+runs line by line through `Console.execText`; `exec autoexec` the kept autoexec.cfg, `unautoexec` dropping
+it), and `bind`, `unbind`, `unbindall` and
 `bindlist` over the keys menu's binds (`bind k +attack`: the key by the name the menu shows, `keyCode` being
 `Key_StringToKeynum`, the action by bindnames' command, `actionOfCommand`; `bind k` shows `"k" = "+attack"`
 as `Key_Bind_f` did) and over the keys bound to command lines (`bind k god`, `bind t "say hello"`: any other

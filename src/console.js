@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unbind', 'unbindall', 'use', 'writeconfig'];
+export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -34,6 +34,7 @@ const HISTORY = 32;
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
  *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), setSetting(key, value) (the cvars: through the page's controls and the userinfo),
  *         download(name, text) (writeconfig), execConfig() (exec: the page's file picker, whose file runs through execText),
+ *         execAutoexec() → the lines run, or null when none is kept (exec autoexec), dropAutoexec() → true when one was kept (unautoexec),
  *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
  *         forward(cmd, arg) → true when the command went to the host (a joined page), false to run it here }
  */
@@ -143,10 +144,22 @@ export class Console {
         h.download?.('config.cfg', writeConfig(h.settings));
         say('config.cfg written');
         return;
-      case 'exec':
+      case 'exec': {
         // Cmd_Exec_f: a config file run line by line; the file comes from the Config control's picker (a page cannot
-        // read a file by name), which exec opens
+        // read a file by name), which exec opens; `exec autoexec` runs the autoexec.cfg kept in the browser (the
+        // control's box), which runs at every start as autoexec.cfg did
+        if (/^autoexec(\.cfg)?$/i.test(arg.trim())) {
+          const n = await h.execAutoexec?.();
+          if (n == null) { say('no autoexec.cfg kept: tick the Config control\'s autoexec and pick one', true); return; }
+          say(`execing autoexec.cfg: ${n} line${n === 1 ? '' : 's'} run`);
+          return;
+        }
         h.execConfig?.();
+        return;
+      }
+      case 'unautoexec':
+        // the kept autoexec.cfg dropped
+        say((await h.dropAutoexec?.()) ? 'autoexec.cfg dropped' : 'no autoexec.cfg kept');
         return;
       case 'name': case 'hand': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume': {
         // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
