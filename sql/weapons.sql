@@ -555,6 +555,13 @@ BEGIN
   SELECT e.flags, e.movetype, e.health FROM ents e WHERE e.id = :pe INTO fl, mt, hp;
   IF (hp IS NULL) THEN BEGIN msg = 'no player'; SUSPEND; EXIT; END
   msg = '';
+  -- CheatsOk: in a deathmatch the cheats run only with the cheats cvar on (a game played alone, or coop, keeps them)
+  IF (cmd IN ('god', 'notarget', 'noclip', 'give') AND EXISTS (SELECT 1 FROM game g WHERE g.id = 1 AND g.deathmatch = 1 AND g.cheats = 0)) THEN
+  BEGIN
+    msg = 'You must run the server with ''+set cheats 1'' to enable this command.';
+    EXECUTE PROCEDURE sprint(pe, msg);
+    SUSPEND; EXIT;
+  END
   IF (cmd = 'god') THEN
   BEGIN
     UPDATE ents e SET e.flags = BIN_XOR(e.flags, 16) WHERE e.id = :pe;

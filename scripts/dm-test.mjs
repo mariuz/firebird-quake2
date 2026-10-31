@@ -101,7 +101,24 @@ check((await players())[0].SHELLS === shells, 'and one already held is left, its
 await place(p1.ENT_ID, p1.X, p1.Y, p1.Z);
 await db.exec('UPDATE game SET dmflags = 0 WHERE id = 1');
 
+// ── CheatsOk: in a deathmatch god, notarget, noclip and give are refused unless the cheats cvar is on; kill is no cheat ──
+{
+  const flags = async () => (await one(`SELECT e.flags, e.movetype FROM ents e WHERE e.id = ${p2.ENT_ID}`));
+  const before = await flags();
+  const refused = [];
+  for (const c of ['god', 'notarget', 'noclip', 'give']) refused.push((await one(`SELECT msg FROM player_command('${c}', '', 2)`)).MSG);
+  const after = await flags();
+  check(refused.every((m) => m === "You must run the server with '+set cheats 1' to enable this command.") && after.FLAGS === before.FLAGS && after.MOVETYPE === before.MOVETYPE && (await one('SELECT cheats FROM game')).CHEATS === 0,
+    `with cheats 0 the cheats are refused as CheatsOk refused them, the client untouched (${refused[0]})`);
+  check((await one('SELECT p.msg FROM player p WHERE p.id = 2')).MSG === "You must run the server with '+set cheats 1' to enable this command.", 'the refusal is on the client\'s message line');
+  await db.exec('UPDATE game SET cheats = 1 WHERE id = 1');
+  check((await one("SELECT msg FROM player_command('god', '', 2)")).MSG === 'godmode ON' && ((await flags()).FLAGS & 16) !== 0, 'with cheats 1 they run');
+  await q("SELECT msg FROM player_command('god', '', 2)");
+  await db.exec('UPDATE game SET cheats = 0 WHERE id = 1');
+}
+
 // ── the frags: a kill, a suicide, the weapon tossed at death ──
+await db.exec('UPDATE game SET cheats = 1 WHERE id = 1');   // (the gifts below are cheats)
 await q("SELECT msg FROM player_command('give', 'shotgun', 2)");
 await q("SELECT msg FROM player_command('give', 'shells 10', 2)");
 await db.exec('UPDATE player SET weapon = 2 WHERE id = 2');
@@ -179,7 +196,8 @@ ps = await players();
 check(session.deathmatch && !session.coop && ps.length === 2 && ps[1].SCORE === 4 && (await game()).DEATHMATCH === 1, 'a loaded save brings the deathmatch back with its frags');
 
 // ── the other dmflags: no health or armour spawned, infinite ammo, no falling damage, instant items, spawn farthest ──
-await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, deathmatch: true, cvars: { dmflags: 1 + 2048 + 8192, fraglimit: 0, timelimit: 0 } });
+await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, deathmatch: true, cvars: { dmflags: 1 + 2048 + 8192, fraglimit: 0, timelimit: 0, cheats: 1 } });   // (cheats: the gifts below)
+check((await one('SELECT cheats FROM game')).CHEATS === 1, 'the cheats cvar given to the map load is on the game row');
 check((await game()).DMFLAGS === 1 + 2048 + 8192 && session.cvars.dmflags === 1 + 2048 + 8192, 'the cvars reach the game row through the session');
 const left = await q("SELECT classname, COUNT(*) n FROM ents WHERE classname LIKE 'item_health%' OR classname LIKE 'item_armor%' OR classname LIKE 'ammo_%' GROUP BY classname");
 check(left.length === 0, 'no health, no armour and no ammo spawn with DF_NO_HEALTH, DF_NO_ARMOR and DF_INFINITE_AMMO');

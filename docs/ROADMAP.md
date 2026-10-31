@@ -710,9 +710,13 @@ The ninth list: what the console and a shared game still lack of Quake 2's own w
   default line: the keys menu's reset puts it back, `unbindall` takes it off). `test:input` runs the keys,
   `test:coop` the word for one client alone, `test:settings` the default line, the browser test the mouse
   pitching the view down and End levelling it.
-- **The `cheats` cvar**: `god`, `noclip`, `notarget` and `give` run in a deathmatch for anyone. `CheatsOk`
-  refused them unless `cheats 1` at the host ("You must run the server with '+set cheats 1' to enable this
-  command."); a game played alone keeps them.
+- **The `cheats` cvar**: done. `god`, `noclip`, `notarget` and `give` ran in a deathmatch for anyone.
+  `player_command` refuses them in a deathmatch unless the game's `cheats` is on, as `CheatsOk` did ("You must
+  run the server with '+set cheats 1' to enable this command.", on the client's message line too); a game
+  played alone or in coop keeps them. `cheats 0|1` at the console is a deathmatch cvar like `dmflags` (kept
+  with the settings, given to each map load, the game running taking it at once; the host's, a guest's going
+  to the host as its other words do). `test:dm` sees the four refused with the client untouched and run with
+  cheats on, `test:console` the word.
 - **A guest's own fov**: a guest sees the host's fov (the map message's view). The guest's `fov` goes with
   its userinfo, as the fov userinfo did (`ClientUserinfoChanged`), and the host's frame for it is at that fov
   (`viewcfg` per client).

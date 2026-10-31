@@ -43,7 +43,8 @@ CREATE TABLE game (
   dmflags        INTEGER DEFAULT 0 NOT NULL,            -- the dmflags cvar (g_local.h): 1 no health 2 no items 4 weapons stay 8 no falling 16 instant items 32 same level
                                                         --   512 spawn farthest 1024 force respawn 2048 no armor 4096 allow exit 8192 infinite ammo
   fraglimit      INTEGER DEFAULT 0 NOT NULL,            -- the fraglimit and timelimit (minutes) cvars: 0 is none (CheckDMRules)
-  timelimit      INTEGER DEFAULT 0 NOT NULL
+  timelimit      INTEGER DEFAULT 0 NOT NULL,
+  cheats         SMALLINT DEFAULT 0 NOT NULL            -- the cheats cvar: god, notarget, noclip and give in a deathmatch only with it (CheatsOk)
 );
 
 -- which cluster and area each kept slot of VIS_FACES (render.sql) holds, when it was last used, and the

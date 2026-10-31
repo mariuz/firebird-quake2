@@ -61,7 +61,7 @@ export class Session {
     this.coop = false;
     this.deathmatch = false;
     this.players = 2;           // the clients a coop game or a deathmatch has (two to four)
-    this.cvars = { dmflags: 0, fraglimit: 0, timelimit: 0 };   // the deathmatch cvars, given to each map load
+    this.cvars = { dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0 };   // the deathmatch cvars (and cheats), given to each map load
     this.userinfo = {};         // each client's userinfo (ClientUserinfoChanged): { name, hand } by client number, written after every load
     this.lastSoundId = 0;
     this.lastFxId = 0;
