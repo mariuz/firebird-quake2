@@ -23,7 +23,7 @@ const cache = new Map();
 const hud = { conchars: pic(pak, 'conchars'), pic: (n) => (cache.has(n) ? cache.get(n) : (cache.set(n, pic(pak, n)), cache.get(n))) };
 const host = {
   hud, playing: () => true, slots: () => slots,
-  newGame: (s) => calls.push(`new ${s}`), loadSlot: (i) => calls.push(`load ${i}`), saveSlot: (i) => calls.push(`save ${i}`),
+  newGame: (s) => calls.push(`new ${s}`), loadSlot: (i) => calls.push(`load ${i}`), saveSlot: (i) => calls.push(`save ${i}`), downloadSlot: (i) => calls.push(`download ${i}`),
   get: (k) => settings[k], set: (k, v) => { settings[k] = v; },
   resetDefaults: () => calls.push('defaults'), resetVideo: () => calls.push('video defaults'),
   bind: (a, code) => bindKey(settings.binds, a, code), unbind: (a) => { settings.binds[a] = []; }, credits: () => CREDITS,
@@ -77,10 +77,18 @@ assert(calls.includes('new 1') && !menu.active, 'medium starts a new game at ski
 menu.mainCursor = 0; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
 assert(menu.current.id === 'load', 'load game opens the fifteen slots');
 draw();
-const lines = drawn.filter(([k]) => k === 'str').map(([, s, , y]) => [s, y]);
+const lines = drawn.filter(([k, s]) => k === 'str' && !s.startsWith('enter loads')).map(([, s, , y]) => [s, y]);   // (the slots, the status bar aside)
 assert(lines.length === 15 && lines[0][0] === 'ENTERING Outer Base' && lines[1][0] === '<EMPTY>' && lines[1][1] - lines[0][1] === 20 && lines[2][1] - lines[1][1] === 10,
   'the autosave first, ten units further apart than the rest, the empty slots <EMPTY>');
-keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
+// this port's d: a slot with a game is written as a file, the menu staying up; an empty slot gives nothing
+keys('ArrowDown', 'KeyD');
+assert(!calls.some((c) => c.startsWith('download')) && menu.current.id === 'load', 'd on an empty slot writes nothing');
+keys('ArrowDown', 'ArrowDown');
+draw();
+assert(drawn.some(([k, s]) => k === 'str' && s === 'enter loads, d writes the game as a file'), 'on a slot with a game the status bar offers d');
+keys('KeyD');
+assert(calls.includes('download 3') && menu.current.id === 'load' && menu.current.cursor === 3, 'd on it writes the slot as a file and the menu stays up');
+keys('Enter');
 assert(calls.includes('load 3') && !menu.active, 'a slot with a game loads it');
 menu.mainCursor = 0; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
 assert(menu.current.id === 'save' && menu.current.items.length === 14 && menu.current.cursor === 2, `save game lists slots 1-14, its cursor following the load menu's (${menu.current.cursor})`);
@@ -108,7 +116,7 @@ assert(calls.includes('defaults') && calls.includes('console') && !menu.active, 
 menu.mainCursor = 0; menu.main(); keys('ArrowDown', 'ArrowDown', 'Enter');
 for (let i = 0; i < 6; i++) keys('ArrowDown');
 keys('Enter');
-assert(menu.current.id === 'keys' && menu.current.items.length === 18, `customize controls opens the keys menu with its ${menu.current?.items.length} actions`);
+assert(menu.current.id === 'keys' && menu.current.items.length === 20, `customize controls opens the keys menu with its ${menu.current?.items.length} actions`);
 draw();
 let rows = drawn.filter(([k]) => k === 'str');
 const attack = rows.find(([, s]) => s === 'attack'), ctrl = rows.find(([, s]) => s === 'CTRL'), or = rows.find(([, s]) => s === 'or'), f = rows.find(([, s]) => s === 'f');

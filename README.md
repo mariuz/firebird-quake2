@@ -219,7 +219,8 @@ an autosave as each map starts; `F6` quick-saves and `F9` quick-loads. A save is
 reloads the map's geometry and puts the rows back, remapping model ids by name and restarting the entity
 id sequence above the highest saved id (`src/savegame.js`). It takes about a fifth of a second. The Saves
 controls write the game as a file (`<map>-<time>.q2sav`: a slot's text) and play one back, so a game moves
-between browsers, which `localStorage` does not.
+between browsers, which `localStorage` does not; `D` on a slot of the load menu writes that slot as it is
+stored (`save<n>-<map>.q2sav`).
 
 Sound: `sound_events` rows are played with the Web Audio API, attenuated and panned from where they
 happened. The map's looped `target_speaker`s play at their origins and follow their on/off state in the

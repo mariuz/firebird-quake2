@@ -429,9 +429,16 @@ The fourth list, from what the entries above and below still leave: in the order
   to the drone; the browser test picks a copy of the pak under another name and a folder with demo1's track
   made as a WAV, reloads offline and finds the picked pak loaded from the store and the track playing with no
   folder picked, then forgets the pak and sees the demo's load with the track still kept.
-- **A slot downloaded from the load menu, and keys for the silencer and the power shield**: Download
-  writes the game as it stands; a slot of the load menu cannot be written to a file. And the silencer and
-  the power shield have no key of their own (`s` and `p` are the page's back and pause): a binding each.
+- **A slot downloaded from the load menu, and keys for the silencer and the power shield**: done. `d` on a
+  slot of the load menu writes it as a file as it is stored (`Session.slotText`, `save<n>-<map>.q2sav`, the
+  page's `downloadSlot`), the menu staying up and its status bar offering it on a slot with a game; an
+  empty slot gives nothing. The silencer and the power shield are bindable actions (`ACTIONS`: impulses 18
+  and 21, which the game took already), `l` and `h` by default since default.cfg's `s` and `p` are the
+  page's back and pause, in the keys menu with the rest. `test:input` sees the keys send their impulses and
+  the twenty actions with their defaults; `test:menu` d on an empty slot do nothing, the status bar offer it
+  on a slot with a game and d there write it with the menu up; the browser test saves slot 1 from the save
+  menu, opens the load menu on it and finds d's file the slot's text under its name, and with everything
+  given sees l silence thirty shots and h turn the power shield on.
 - **A TURN server for the networks a STUN cannot cross**: `Peer` asks one STUN server; two players behind
   symmetric NATs never connect. An ICE server setting (`rtc_ice <url> [user pass]` at the console, kept in
   the settings) given to the peer connection.

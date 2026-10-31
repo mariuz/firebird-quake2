@@ -184,6 +184,7 @@ const menu = new Menu({
   slots: () => session?.slots() ?? [],
   loadSlot: (i) => loadGame(SLOT_KEY(i)),
   saveSlot: (i) => saveGame(SLOT_KEY(i)),
+  downloadSlot: (i) => downloadSlot(i),
   get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : k === 'players' ? PLAYER_CHOICES.indexOf(playersValue()) : settings[k]),
   set: (k, v) => setSetting(k, v),
   // ControlsResetDefaultsFunc ran default.cfg: the options and the keys go back
@@ -309,7 +310,8 @@ async function loadGame(key = QUICK_KEY) {
 /**
  * The game as a file, and a file as the game: a save file is what a slot stores (src/savestore.js: the header
  * line, the JSON gzipped and base64'd), so a game moves between browsers, which `localStorage` does not.
- * Download writes the game as it stands, named with the map and the time; Load takes a file and plays it.
+ * Download writes the game as it stands, named with the map and the time; Load takes a file and plays it. A slot
+ * of the load menu is written as it is stored (`d` on it), named with the slot and its map.
  */
 async function downloadSave() {
   if (!running || !map || guestNotice()) return;
@@ -317,13 +319,25 @@ async function downloadSave() {
   try {
     const text = await session.packGame(saveComment(await session.levelName(), false));
     const stamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const a = Object.assign(document.createElement('a'), { href: url, download: `${map.name}-${stamp}.q2sav` });
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    downloadText(`${map.name}-${stamp}.q2sav`, text);
     setStatus(`Game saved as a file (${map.name}, ${(text.length / 1024).toFixed(0)} KB)`);
     setTimeout(() => { if (statusEl.textContent.startsWith('Game saved')) setStatus(''); }, 2000);
   } catch (err) { console.error(err); setStatus(`Save failed: ${err.message}`, true); }
+}
+function downloadSlot(i) {
+  if (guestNotice()) return;
+  const slot = session.slotText(i);
+  if (!slot) { setStatus('No saved game', true); setTimeout(() => setStatus(''), 2000); return; }
+  downloadText(`save${i}-${slot.header.map}.q2sav`, slot.text);
+  setStatus(`Slot ${i} saved as a file (${slot.header.map}, ${(slot.text.length / 1024).toFixed(0)} KB)`);
+  setTimeout(() => { if (statusEl.textContent.startsWith(`Slot ${i} saved`)) setStatus(''); }, 2000);
+}
+/** A text downloaded under a name. */
+function downloadText(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 async function loadSaveFile(file) {
   if (!file || guestNotice()) return;

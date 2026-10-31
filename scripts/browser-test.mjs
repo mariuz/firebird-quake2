@@ -223,6 +223,18 @@ try {
     await page.setInputFiles('#save-file', { name: 'junk.q2sav', mimeType: 'text/plain', buffer: Buffer.from('not a save') });
     await sleep(500);
     assert(/is not a saved game/.test(await status()), `a file that is no save is refused: ${JSON.stringify(await status())}`);
+    // a slot of the load menu as a file: F2 Enter saves slot 1, F3 opens the load menu on it, d writes it as it is stored
+    await page.keyboard.press('F2'); await sleep(300); await page.keyboard.press('Enter');
+    let slotSaved = '';
+    for (let i = 0; i < 20 && !/Game saved/.test(slotSaved); i++) { await sleep(250); slotSaved = await status(); }
+    await page.keyboard.press('F3'); await sleep(300);
+    const loadMenu = await page.evaluate(() => ({ id: window.quake2?.menu?.current?.id ?? null, cursor: window.quake2?.menu?.current?.cursor, slot1: localStorage.getItem('firebird-quake2:save:save1') })).catch(() => ({}));
+    const [dl3] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), page.keyboard.press('KeyD')]);
+    const dl3Text = dl3 ? fs.readFileSync(await dl3.path(), 'utf8') : '';
+    const stillLoad = await page.evaluate(() => window.quake2?.menu?.current?.id ?? null).catch(() => null);
+    assert(/Game saved/.test(slotSaved) && loadMenu.id === 'load' && loadMenu.cursor === 1 && dl3 && dl3.suggestedFilename() === 'save1-demo1.q2sav' && dl3Text === loadMenu.slot1 && stillLoad === 'load',
+      `F2 Enter saves slot 1, the load menu opens on it, and d writes the slot as a file, as stored (${dl3?.suggestedFilename()}, ${(dl3Text.length / 1024).toFixed(0)} KB), the menu staying up`);
+    await page.keyboard.press('Escape'); await sleep(300);
     await sleep(1500);
     assert(/q2_tic \d+ ms/.test(await stats()), `the game runs on after the file load: ${await stats()}`);
 
@@ -285,6 +297,17 @@ try {
     await typeCommand('skill 1');
     const md = await skillState();
     assert(md.setting === 1 && md.select === '1' && md.shown === 'Medium', `skill 1 puts medium back (${JSON.stringify({ setting: md.setting, shown: md.shown })})`);
+    // the silencer's and the power shield's keys (l and h: default.cfg's s and p are the page's back and pause): with
+    // everything given, l silences thirty shots and h turns the power shield on
+    await typeCommand('give all');
+    const items = () => page.evaluate(() => window.quake2.sql('SELECT silencer_shots, power_armor, inv_silencer FROM player').then((r) => r[0])).catch(() => ({}));
+    const it0 = await items();
+    await page.keyboard.press('KeyL'); await sleep(300);
+    const it1 = await items();
+    await page.keyboard.press('KeyH'); await sleep(300);
+    const it2 = await items();
+    assert(it0.SILENCER_SHOTS === 0 && it1.SILENCER_SHOTS === 30 && it1.INV_SILENCER === it0.INV_SILENCER - 1 && it0.POWER_ARMOR === 0 && it2.POWER_ARMOR === 1,
+      `l uses the silencer (${it0.SILENCER_SHOTS} → ${it1.SILENCER_SHOTS} silenced shots) and h the power shield (on: ${it2.POWER_ARMOR})`);
 
     // a recording: `record run` at the console writes the game from then on as a demo (src/record.js: the stats line
     // counts its frames), `stop` downloads it as run.dm2 (parsed here as the page parses the pak's: every block read
