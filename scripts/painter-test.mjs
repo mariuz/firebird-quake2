@@ -87,6 +87,23 @@ r.fullbright = false; r.surfCache.clear(); r.dlights = [];
 const again = r.surface(id, styles, 0, 0);
 assert(lum(bright) >= lum(lit) && lum(bright) > lum(plain) + 1 && Math.abs(lum(again) - lum(plain)) < 1e-9,
   `r_fullbright builds the surface at full light (${lum(bright).toFixed(0)} against ${lum(plain).toFixed(0)} plain, ${lum(lit).toFixed(0)} lit), and off again it is as it was (${lum(again).toFixed(0)})`);
+// sw_drawflat: the surface one colour of its own, no texture, no light, cached apart; off again, as it was. sw_clearcolor: the clear
+// fills the view with the palette index (0 by default, as the goldens are painted)
+{
+  r.drawflat = true; r.surfCache.clear();
+  const flat = r.surface(id, styles, 0, 0);
+  const c0 = flat.data[0];
+  const other = (() => { for (const fid of r.faceInfo.keys()) if (fid !== id) return r.surface(fid, styles, 0, 0); return null; })();
+  r.drawflat = false; r.surfCache.clear();
+  const textured = r.surface(id, styles, 0, 0);
+  assert(flat.w === plain.w && flat.h === plain.h && flat.data.every((v) => v === c0) && other && other.data[0] !== c0 && other.data.every((v) => v === other.data[0]) && Math.abs(lum(textured) - lum(plain)) < 1e-9,
+    `sw_drawflat builds the surface in one colour (${c0}), another face in another (${other?.data[0]}), and off again it is textured as it was`);
+  r.clearColor = 2; r.setSize(32, 24); r.tileClear();
+  const cleared = r.fb.every((v) => v === 2);
+  r.clearColor = 0; r.tileClear();
+  assert(cleared && r.fb.every((v) => v === 0), 'sw_clearcolor fills the clear with the palette index, 0 again after');
+  r.setSize(320, 240);
+}
 // a frame from the start: the near walls at mip 0, the far ones at higher levels
 const last = (await db.query('SELECT * FROM q2_tic(1, 0, 0, 0, 0, 0, 0, 1, 0)', [], { rowMode: 'object' })).rows[0];
 const rows = (await db.query('SELECT * FROM frame_faces_fast', [], { rowMode: 'array' })).rows;

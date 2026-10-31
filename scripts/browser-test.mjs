@@ -464,6 +464,12 @@ try {
       && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
+    // ref_soft's sw_ switches reach the painter: sw_drawflat the flat faces (the surfaces built again), sw_clearcolor the clear's colour, sw_waterwarp the settings
+    await typeCommand('sw_drawflat 1'); await typeCommand('sw_clearcolor 2'); await typeCommand('sw_waterwarp 0'); await sleep(300);
+    const sw1 = await page.evaluate(() => ({ flat: window.quake2.renderer.drawflat, cc: window.quake2.renderer.clearColor, warp: window.quake2.settings.swWaterwarp })).catch(() => ({}));
+    await typeCommand('sw_drawflat 0'); await typeCommand('sw_clearcolor 0'); await typeCommand('sw_waterwarp 1'); await sleep(300);
+    const sw0 = await page.evaluate(() => ({ flat: window.quake2.renderer.drawflat, cc: window.quake2.renderer.clearColor, warp: window.quake2.settings.swWaterwarp })).catch(() => ({}));
+    assert(sw1.flat === true && sw1.cc === 2 && sw1.warp === false && sw0.flat === false && sw0.cc === 0 && sw0.warp === true, `sw_drawflat, sw_clearcolor and sw_waterwarp reach the painter and the settings and go back (${JSON.stringify(sw1)} → ${JSON.stringify(sw0)})`);
     // m_yaw, cl_gun and con_notifytime reach the settings, con_notifytime the notify's seconds; back to the defaults after
     await typeCommand('m_yaw 0.044'); await typeCommand('cl_gun 0'); await typeCommand('con_notifytime 1');
     const three = await page.evaluate(() => ({ yaw: window.quake2.settings.mYaw, gun: window.quake2.settings.clGun, notify: window.quake2.settings.conNotifytime, seconds: window.quake2.notify.seconds })).catch(() => ({}));

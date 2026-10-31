@@ -32,6 +32,8 @@ export class Renderer {
     this.viewsize = 100;     // SCR_CalcVrect's viewsize: the 3D view's share of the screen, 40–100 percent (setViewSize)
     this.backtile = null;    // Draw_TileClear's backtile, the 64×64 picture tiled around a view smaller than the screen
     this.fullbright = false; // r_fullbright: every surface and model at full light (the surface cache is cleared when it changes)
+    this.drawflat = false;   // sw_drawflat: every face a flat colour of its own, no texture (the surface cache is cleared when it changes)
+    this.clearColor = 0;     // sw_clearcolor: the palette index the view is cleared to before the frame (Quake's default was 2; 0 here)
     this.sky = null;             // [6 × { w, h, data }]
     this.lightScale = 1.4;       // ref_gl's intensity: the software lightmaps are dim on their own
     this.dlights = [];           // this frame's dynamic lights: [{ x, y, z, r }] (V_AddLight)
@@ -84,12 +86,13 @@ export class Renderer {
   /** The frame buffer at a frame's start: the view's rectangle black, the rest the backtile (SCR_TileClear), the whole black without one. */
   tileClear() {
     const { fb, w, h, vr, backtile } = this;
-    if (vr.x === 0 && vr.y === 0 && vr.w === w && vr.h === h) { fb.fill(0); return; }
-    if (!backtile) { fb.fill(0); return; }
+    const cc = this.clearColor & 255;   // (sw_clearcolor)
+    if (vr.x === 0 && vr.y === 0 && vr.w === w && vr.h === h) { fb.fill(cc); return; }
+    if (!backtile) { fb.fill(cc); return; }
     const td = backtile.data, tw = backtile.w, th = backtile.h;
     for (let y = 0; y < h; y++) {
       const row = y * w, trow = (y % th) * tw, inside = y >= vr.y && y <= vr.y1;
-      for (let x = 0; x < w; x++) fb[row + x] = inside && x >= vr.x && x <= vr.x1 ? 0 : td[trow + (x % tw)];
+      for (let x = 0; x < w; x++) fb[row + x] = inside && x >= vr.x && x <= vr.x1 ? cc : td[trow + (x % tw)];
     }
   }
 
@@ -209,7 +212,7 @@ export class Renderer {
     // a face a dynamic light reaches is built afresh for this frame and not cached (ref_soft did the same)
     if (this.dlights.length && !(f.flags & (SURF.SKY | SURF.WARP))) {
       const lit = this.faceDlights(bsp, f, ti);
-      if (lit) return this.buildSurface(bsp, f, tex, styles, lit, mip);
+      if (lit) return this.buildSurface(bsp, f, tex, styles, lit, mip, faceId);
     }
     let light = 0;
     const fs = f.styles;
@@ -222,7 +225,7 @@ export class Renderer {
     let s = this.surfCache.get(key);
     if (s !== undefined) return s;
     if (this.surfCache.size > SURF_CACHE_MAX) this.surfCache.clear();
-    s = this.buildSurface(bsp, f, tex, styles, null, mip);
+    s = this.buildSurface(bsp, f, tex, styles, null, mip, faceId);
     this.surfCache.set(key, s);
     return s;
   }
@@ -255,7 +258,7 @@ export class Renderer {
    * lightmap is bilinear over 16×16 texel blocks: one row of light values is
    * interpolated per texel row, then stepped along it (R_DrawSurfaceBlock8).
    */
-  buildSurface(bsp, f, tex, styles, lit = null, mip = 0) {
+  buildSurface(bsp, f, tex, styles, lit = null, mip = 0, faceId = 0) {
     // at mip level k the surface is the extents >> k from the .wal's k-th image, a light sample every 16 >> k
     // pixels (R_DrawSurface's surfmip, blocksize, blockdivshift)
     if (!tex.mips[mip]) mip = 0;
@@ -263,6 +266,12 @@ export class Renderer {
     const sh = Math.max(1, f.extents[1] >> mip);
     const bs = 16 >> mip, bshift = 4 - mip;
     const data = new Uint8Array(sw * sh);
+    const smin0 = f.texturemins[0], tmin0 = f.texturemins[1];
+    // sw_drawflat (D_DrawflatSurfaces): the surface one colour of its own, as ref_soft took the surface pointer's low byte; no texture, no light
+    if (this.drawflat) {
+      data.fill((faceId * 37 + 1) & 255);
+      return { data, w: sw, h: sh, smin: smin0, tmin: tmin0, ms: 1 / (1 << mip), mask: (sw & (sw - 1)) === 0 && (sh & (sh - 1)) === 0 };
+    }
     const lw = f.lightW;
     const lh = f.lightH;
     const ls = this.lightScale;
