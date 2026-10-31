@@ -86,6 +86,18 @@ await audio.playEvents([ev(6, 7, 1, 'nope/missing.wav', 1, 1, 0, 0, 0)], L);
 check(started().length === before + 2 && (await audio.buffer('nope/missing.wav')) === null, 'a sound not in the pak is skipped');
 check(!pak.has('sound/player/female/jump1.wav') && (await audio.buffer('player/female/jump1.wav')) !== null && (await audio.buffer('player/female/jump1.wav')).length === (await audio.buffer('player/male/jump1.wav')).length,
   'a female client\'s sexed sound the pak lacks plays the male\'s (S_RegisterSexedSound\'s fallback)');
+// play, stopsound and soundinfo (S_Play, S_StopAllSounds, S_SoundInfo_f): a sound at the ear, every one-shot and loop cut, the figures
+{
+  const n0 = started().length;
+  audio.playLocal(BLAST); await tick(); await tick();
+  const mine = started().at(-1);
+  check(started().length === n0 + 1 && near(chain(mine).g.gain.value, 1) && near(chain(mine).p.pan.value, 0), 'playLocal plays a sound at the ear, full and centred');
+  const info = audio.info();
+  check(info.started && info.rate === 22050 && info.stereo === 1 && info.decoded >= 2 && info.playing === started().length, `info says the rate, stereo, the sounds decoded and the ones playing (${JSON.stringify(info)})`);
+  audio.stopAll();
+  check(started().length === 0 && audio.playing.size === 0 && audio.channels.size === 0 && audio.loops.size === 0, 'stopAll cuts every one-shot and clears the channels and the loops');
+  check(new Q2Audio().info().started === false, 'before the context exists, not started');
+}
 const decoded = audio.ctx.decoded;
 await audio.playEvents([ev(7, 8, 2, BLAST, 1, 1, 0, 0, 0), ev(8, 9, 2, BLAST, 1, 1, 0, 0, 0)], L);
 check(audio.ctx.decoded === decoded, 'a sound is decoded once and the buffer kept');

@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_forwardspeed', 'cl_gun', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundlist', 'spectator', 'status', 'stop', 'sv_gravity', 'sv_rollangle', 'sv_rollspeed', 'timedemo', 'timelimit', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_forwardspeed', 'cl_gun', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundinfo', 'soundlist', 'spectator', 'status', 'stop', 'stopsound', 'sv_gravity', 'sv_rollangle', 'sv_rollspeed', 'timedemo', 'timelimit', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -108,6 +108,7 @@ const HISTORY = 32;
  *         toggleScores() (score: the score board, in a game of more than one client), putAway() (putaway: every screen off),
  *         serverInfo() → the game's cvars as { mapname, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill }, null on a joined page or without a map (serverinfo),
  *         userInfo() → this page's { name, hand, gender, msg, fov, spectator } (userinfo),
+ *         playSound(name) → whether the pak has sound/<name>, played at the ear (play), stopSounds() (stopsound), soundInfo() → { started, rate, stereo, decoded, playing, loops } (soundinfo),
  *         viewPos() → the first view's { x, y, z, yaw } (viewpos), timeRefresh(flip) → { seconds, fps } after a full turn in 128 frames, null without a game of this page's own (timerefresh), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
  *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
  *         toggleHelp() (help: the help computer, F1's), gravity() → the game's gravity, null on a joined page or without a map, setGravity(n) (sv_gravity),
@@ -345,6 +346,29 @@ export class Console {
         if (!h.isRunning()) { say('screenshot: nothing is on the view', true); return; }
         h.screenshot?.();
         return;
+      case 'play': {
+        // S_Play: each word a pak sound played at the ear (".wav" added to a name without a dot), as S_StartSound at the player's own entity did
+        if (!arg) { say('play <sound> …: a pak sound, as weapons/blastf1a', true); return; }
+        const names = arg.split(/\s+/).map((w) => (w.includes('.') ? w : `${w}.wav`).toLowerCase());
+        const missing = names.filter((n) => !h.playSound?.(n));
+        if (missing.length) say(`play: no ${missing.join(', ')} in the pak`, true);
+        else say(`playing ${names.join(', ')}`);
+        return;
+      }
+      case 'stopsound':
+        // S_StopAllSounds: every sound cut, the loops too until the next frame starts them again
+        h.stopSounds?.();
+        say('sounds stopped');
+        return;
+      case 'soundinfo': {
+        // S_SoundInfo_f: the mix's figures, a line each on the scrollback as it laid them out ("%5d speed"), and the sum on the line;
+        // "sound system not started" before the first click or key makes the context
+        const i = h.soundInfo?.();
+        if (!i?.started) { say('sound system not started', true); return; }
+        h.print?.([`${String(i.rate).padStart(5)} speed`, `${String(i.stereo).padStart(5)} stereo`, `${String(i.decoded).padStart(5)} sounds decoded`, `${String(i.playing).padStart(5)} playing`, `${String(i.loops).padStart(5)} looping`].join('\n'));
+        say(`sound: ${i.rate} Hz ${i.stereo ? 'stereo' : 'mono'}, ${i.decoded} decoded, ${i.playing} playing, ${i.loops} looping`, false, 8000);
+        return;
+      }
       case 'viewpos': {
         // V_Viewpos_f: the eye's position and the yaw, whole numbers as Com_Printf("(%i %i %i) : %i") had them (what screenshot.mjs --at= takes, its z the origin's)
         const v = h.viewPos?.();

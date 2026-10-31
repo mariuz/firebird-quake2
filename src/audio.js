@@ -19,6 +19,7 @@ export class Q2Audio {
     this.volume = 0.7;
     this.musicVolume = 0.5;
     this.channels = new Map();   // `${ent}:${chan}` → source, to cut
+    this.playing = new Set();    // every one-shot source still playing (S_StopAllSounds cuts them all)
     this.speakers = [];          // looped target_speakers: { id, name, x, y, z, on }
     this.loops = new Map();      // looped entity sounds: name → { src, gain, pan }
     this.loopRows = [];
@@ -132,7 +133,7 @@ export class Q2Audio {
       const key = `${ent}:${chan}`;
       if (ent != null && chan !== 0) {
         const old = this.channels.get(key);
-        if (old) { try { old.stop(); } catch { /* ended */ } }
+        if (old) { try { old.stop(); } catch { /* ended */ } this.playing.delete(old); }
       }
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
@@ -141,8 +142,25 @@ export class Q2Audio {
       const p = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
       if (p) { p.pan.value = pan; src.connect(g).connect(p).connect(this.master); } else src.connect(g).connect(this.master);
       src.start();
+      this.playing.add(src);
+      src.onended = () => this.playing.delete(src);
       if (ent != null && chan !== 0) this.channels.set(key, src);
     }
+  }
+
+  /** S_StopAllSounds: every one-shot cut, the loops with them (the next frame's rows start them again), a cinematic's samples too. */
+  stopAll() {
+    for (const s of this.playing) { try { s.stop(); } catch { /* ended */ } }
+    this.playing.clear();
+    this.channels.clear();
+    this.stopLoops();
+    this.stopRaw();
+  }
+
+  /** S_SoundInfo_f: the mix's figures, or { started: false } before the context exists (the first click or key makes it). */
+  info() {
+    if (!this.ctx) return { started: false };
+    return { started: true, rate: this.ctx.sampleRate, stereo: (this.ctx.destination?.channelCount ?? 2) >= 2 ? 1 : 0, decoded: this.buffers.size, playing: this.playing.size, loops: this.loops.size };
   }
 
   // ── looped speakers ───────────────────────────────────────────────────

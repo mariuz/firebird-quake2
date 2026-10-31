@@ -119,6 +119,24 @@ await con.submit('timerefresh 1'); check(flipped === false, 'timerefresh 1 runs 
 host.timeRefresh = async () => null;
 await con.submit('timerefresh'); check(status.at(-1)?.[1] === true, 'refused without a game of this page\'s own');
 check(con.complete('timer') === 'timerefresh ' && con.complete('viewp') === 'viewpos ', 'Tab completes the two');
+// play, stopsound and soundinfo: S_Play's words with .wav added, S_StopAllSounds, S_SoundInfo_f's lines
+const played = [];
+host.playSound = (name) => { played.push(name); return name !== 'nope/missing.wav'; };
+host.stopSounds = () => calls.push(['stopsound']);
+host.soundInfo = () => ({ started: true, rate: 44100, stereo: 1, decoded: 12, playing: 2, loops: 3 });
+let sprinted = null;
+host.print = (text) => { sprinted = text; };
+await con.submit('play weapons/blastf1a Misc/Menu1.wav');
+check(played.join('|') === 'weapons/blastf1a.wav|misc/menu1.wav' && status.at(-1)?.[0] === 'playing weapons/blastf1a.wav, misc/menu1.wav', 'play plays each word as a pak sound, .wav added to one without a dot, lower-cased');
+await con.submit('play nope/missing');
+check(status.at(-1)?.[0] === 'play: no nope/missing.wav in the pak' && status.at(-1)?.[1] === true, 'a sound the pak lacks is named');
+await con.submit('play'); check(status.at(-1)?.[1] === true, 'play alone says what it takes');
+await con.submit('stopsound'); check(last() === 'stopsound' && status.at(-1)?.[0] === 'sounds stopped', 'stopsound cuts every sound through the page');
+await con.submit('soundinfo');
+check(sprinted === '44100 speed\n    1 stereo\n   12 sounds decoded\n    2 playing\n    3 looping' && status.at(-1)?.[0] === 'sound: 44100 Hz stereo, 12 decoded, 2 playing, 3 looping', 'soundinfo lays the figures out as S_SoundInfo_f did and sums them on the line');
+host.soundInfo = () => ({ started: false });
+await con.submit('soundinfo'); check(status.at(-1)?.[0] === 'sound system not started' && status.at(-1)?.[1] === true, 'before the context exists, "sound system not started"');
+check(con.complete('pla') === 'play ' && con.complete('soundi') === 'soundinfo ' && con.complete('stops') === 'stopsound ', 'Tab completes the three');
 // say and say_team: Cmd_Say_f's words, as typed
 host.say = async (text) => calls.push(['say', text]);
 await con.submit('say Hello, World!');
@@ -208,7 +226,7 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   rows = [{ num: 1, name: 'player 1', kind: 'page' }, { num: 2, name: 'player 2', kind: 'pad' }];
   await con.submit('players');
   check(status.at(-1)?.[0] === '1 player 1 (this page) · 2 player 2 (a pad)', 'a coop game at one page lists the pad\'s player');
-  check(con.complete('pl') === 'players ' && con.complete('ki') === 'kick ', 'Tab completes players and kick');
+  check(con.complete('pl') === 'play ' && con.complete('playe') === 'players ' && con.complete('ki') === 'kick ', 'Tab completes play, players and kick');
   delete host.listPlayers; delete host.kick;
 }
 
@@ -587,7 +605,7 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, sensitivity: 7, al
   check(printed === '    4000 : weapons/blastf1a.wav\nL    300 : world/fan1.wav\nTotal resident: 4300' && status.at(-1)?.[0] === '2 sounds loaded, 4300 bytes', 'soundlist lists the sounds with L on the looping ones and their sizes, as S_SoundList_f did');
   delete host.modelList; delete host.imageList; delete host.soundList;
   await con.submit('modellist'); check(printed === 'Loaded models:\nTotal resident: 0' && status.at(-1)?.[0] === '0 models loaded, 0 bytes', 'without the page\'s listing, none');
-  check(con.complete('di') === 'dir ' && con.complete('pat') === 'path ' && con.complete('mod') === 'modellist ' && con.complete('ima') === 'imagelist ' && con.complete('sou') === 'soundlist ', 'Tab completes the five');
+  check(con.complete('di') === 'dir ' && con.complete('pat') === 'path ' && con.complete('mod') === 'modellist ' && con.complete('ima') === 'imagelist ' && con.complete('soundl') === 'soundlist ', 'Tab completes the five');
   let pausedNow = null;
   host.togglePause = () => (pausedNow === null ? null : (pausedNow = !pausedNow));
   const n0 = status.length;
