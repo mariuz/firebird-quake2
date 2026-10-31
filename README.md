@@ -67,7 +67,8 @@ status bar and score board), each page painting its own view, the guest's from t
 WebRTC data channel, its own move predicted ahead of them as the Quake 2 client predicted (the player's move and
 the traces have a JS twin, `src/pmove.js`, held to the SQL's numbers). Host again while hosting makes an offer
 for the next player, who joins the game as it runs, a channel each; a joined page that ticks "spectate" only
-watches, with no body in the game; `say <text>` at any page's console (`T` opens it with `say ` typed) puts the
+watches, with no body in the game (its attack key chases a player, as 3.20's chase cam did, jump lets go,
+`chase <n>` at its console picks one); `say <text>` at any page's console (`T` opens it with `say ` typed) puts the
 words on every player's message line by the speaker's name, and a joined page's game commands (`god`, `give`,
 `kill`…) run at the host for its player; `players` at the host's console lists the clients and what drives
 each, `kick <n>` drops a guest; the host's menu and `P` do not stop a shared game, as Quake 2

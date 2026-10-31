@@ -2972,7 +2972,7 @@ DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISI
 DECLARE hp INTEGER; DECLARE mhp INTEGER; DECLARE fl INTEGER;
 BEGIN
   on_ = IIF(COALESCE(on_, 0) = 0, 0, 1);
-  UPDATE player p SET p.spectator = :on_ WHERE p.id = :pid;
+  UPDATE player p SET p.spectator = :on_, p.chase = 0, p.fire_held = 1 WHERE p.id = :pid;   -- (floating free; an attack held as it turns watcher chases nobody)
   SELECT p.ent_id, IIF(e.solid = 0 AND e.movetype = 2 AND e.takedamage = 0, 1, 0), e.health, e.max_health, BIN_AND(e.flags, 16)
     FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = :pid INTO pe, isnow, hp, mhp, fl;
   IF (pe IS NULL OR isnow = on_) THEN EXIT;
@@ -2981,6 +2981,44 @@ BEGIN
   IF (x IS NULL) THEN EXIT;
   EXECUTE PROCEDURE put_client_in_server(pe, x, y, z, yaw, hp, mhp, fl);
   IF (on_ = 0) THEN UPDATE player p SET p.weapon = best_weapon(p.ent_id) WHERE p.id = :pid AND (p.weapon = 0 OR BIN_AND(p.weapons, p.weapon) = 0);
+END^
+
+-- ChaseNext (g_chase.c, 3.20): the next client a watcher can follow after `cur`, cycling, among the clients playing
+-- (not watchers, with an entity); 0 when there is none but the watcher itself
+CREATE OR ALTER FUNCTION chase_next (pe INTEGER, cur SMALLINT) RETURNS SMALLINT
+AS
+DECLARE n SMALLINT;
+BEGIN
+  SELECT FIRST 1 p.id FROM player p WHERE p.id > :cur AND p.spectator = 0 AND p.ent_id IS NOT NULL AND p.ent_id <> :pe ORDER BY p.id INTO n;
+  IF (n IS NULL) THEN SELECT FIRST 1 p.id FROM player p WHERE p.spectator = 0 AND p.ent_id IS NOT NULL AND p.ent_id <> :pe ORDER BY p.id INTO n;
+  RETURN COALESCE(n, 0);
+END^
+
+-- UpdateChaseCam (g_chase.c, 3.20): the watcher's eye thirty units behind the chased client's, along its view, kept out of
+-- the walls by a trace from the eye (then two units back toward it), and its angles the client's; the watcher does not
+-- move on its own meanwhile (PM_FREEZE). The eye is e.z + view_ofs: the entity sits view_ofs under the goal.
+CREATE OR ALTER PROCEDURE update_chase_cam (pe INTEGER, target SMALLINT)
+AS
+DECLARE ox DOUBLE PRECISION; DECLARE oy DOUBLE PRECISION; DECLARE oz DOUBLE PRECISION; DECLARE tyaw DOUBLE PRECISION; DECLARE tpitch DOUBLE PRECISION;
+DECLARE fx DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE fz DOUBLE PRECISION; DECLARE cp DOUBLE PRECISION;
+DECLARE gx DOUBLE PRECISION; DECLARE gy DOUBLE PRECISION; DECLARE gz DOUBLE PRECISION; DECLARE tz DOUBLE PRECISION;
+DECLARE f DOUBLE PRECISION; DECLARE ex DOUBLE PRECISION; DECLARE ey DOUBLE PRECISION; DECLARE ez DOUBLE PRECISION;
+DECLARE nx DOUBLE PRECISION; DECLARE ny DOUBLE PRECISION; DECLARE nz DOUBLE PRECISION; DECLARE sf INTEGER; DECLARE ct INTEGER; DECLARE als SMALLINT; DECLARE sts SMALLINT; DECLARE hit INTEGER;
+DECLARE vofs DOUBLE PRECISION;
+BEGIN
+  SELECT e.x, e.y, e.z + e.viewheight, e.z, e.yaw, p.pitch FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = :target INTO ox, oy, oz, tz, tyaw, tpitch;
+  IF (ox IS NULL) THEN EXIT;
+  cp = COS(tpitch * 0.0174532925e0);
+  fx = cp * COS(tyaw * 0.0174532925e0); fy = cp * SIN(tyaw * 0.0174532925e0); fz = -SIN(tpitch * 0.0174532925e0);
+  gx = ox - 30 * fx; gy = oy - 30 * fy; gz = oz - 30 * fz;
+  IF (gz < tz + 20) THEN gz = tz + 20;
+  EXECUTE PROCEDURE trace_move(pe, 0, 0, 0, 0, 0, 0, ox, oy, oz, gx, gy, gz, 3)   -- (MASK_SOLID)
+    RETURNING_VALUES f, ex, ey, ez, nx, ny, nz, sf, ct, als, sts, hit;
+  gx = ex + 2 * fx; gy = ey + 2 * fy; gz = ez + 2 * fz;
+  SELECT p.view_ofs FROM player p WHERE p.ent_id = :pe INTO vofs;
+  UPDATE ents e SET e.x = :gx, e.y = :gy, e.z = :gz - COALESCE(:vofs, 22), e.yaw = :tyaw, e.vx = 0, e.vy = 0, e.vz = 0 WHERE e.id = :pe;
+  UPDATE player p SET p.pitch = :tpitch, p.stepz = 0, p.bob_z = 0, p.bob_pitch = 0, p.bob_roll = 0 WHERE p.ent_id = :pe;
+  EXECUTE PROCEDURE link_ent(pe);
 END^
 
 -- SaveClientData: at a level's exit, each client's health, max health and god or notarget flags go to its

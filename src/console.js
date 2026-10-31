@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
+export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'chase', 'cl_run', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'players', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the

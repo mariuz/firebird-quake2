@@ -761,10 +761,12 @@ function guestFrame(now) {
   const frameTics = guestSentAt ? Math.min(2, (now - guestSentAt) / TIC_MS) : 1;
   guestSentAt = now;
   const [cmd] = readInput(frameTics);
-  if (!net?.guest?.open) return;
+  const g = net?.guest;
+  if (!g?.open) return;
   const seq = guestPred ? ++guestPred.seq : undefined;
-  net.guest.sendCommand(cmd, { inv: showInv[0], seq });
-  const got = net.guest.take();
+  g.sendCommand(cmd, { inv: showInv[0], seq });
+  if (net?.guest !== g) return;   // (a channel closing under the send closes the link at once, its close handler dropping the game: a kick, the host gone)
+  const got = g.take();
   if (!map) return;
   if (got) {
     last = got.row;
@@ -800,7 +802,7 @@ function guestAck(got, now) {
   const p = guestPred;
   if (!p) return;
   const row = got.row;
-  if (row.DEAD || row.INTERMISSION || row.VX == null) { p.st = null; p.cmds = []; p.error = null; return; }
+  if (row.DEAD || row.INTERMISSION || row.VX == null || row.CHASE) { p.st = null; p.cmds = []; p.error = null; return; }   // (chasing: the view is the host's, PM_FREEZE)
   const before = p.st ? { x: p.st.x, y: p.st.y, z: p.st.z } : null;
   p.cmds = p.cmds.filter((c) => c.seq > got.ack);
   const solids = [], seen = new Set();
