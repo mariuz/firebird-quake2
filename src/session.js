@@ -23,7 +23,7 @@ export const SLOTS = 15;
  * `styleBase` holds the light styles' resting values; the frame lists only the ones that animate or switched.
  */
 export function decodeFrame(rows, styleBase) {
-  const faces = [], ents = [], sounds = [], fx = [], loops = [];
+  const faces = [], ents = [], sounds = [], fx = [], loops = [], boxes = [];
   const styles = styleBase.slice();
   const brushFrames = new Map(), brushAngles = new Map();
   let speakers = null;
@@ -38,10 +38,11 @@ export function decodeFrame(rows, styleBase) {
       case 6: brushFrames.set(r[1], [r[2], r[3] ?? 0]); if (r[6] || r[7] || r[8]) brushAngles.set(r[1], [r[6], r[7], r[8]]); break;
       case 7: speakers = r[15] ? r[15].split(',').map(Number) : []; break;
       case 9: loops.push([r[14], r[8], r[9], r[10], r[1]]); break;   // (the carrier's id last: a recording names it)
+      case 10: boxes.push({ id: r[1], mins: [r[6], r[7], r[8]], maxs: [r[9], r[10], r[11]], contents: r[2] }); break;   // (asked for: a guest's prediction clips against them)
       default: break;
     }
   }
-  return { faces, ents, sounds, fx, loops, styles, speakers, brushFrames, brushAngles };
+  return { faces, ents, sounds, fx, loops, styles, speakers, brushFrames, brushAngles, boxes };
 }
 
 export class Session {
@@ -186,12 +187,13 @@ export class Session {
   /**
    * The frame in one round trip (FRAME_ALL), decoded. The looped speakers are asked for every tenth frame.
    * `sqlRenderer` is the renderer mode that projects in SQL; its face vertices load the first time it asks.
-   * `client` is whose view it is (1 the first): the other client's model is in it, its own is not.
+   * `client` is whose view it is (1 the first): the other client's model is in it, its own is not. `boxes` asks
+   * for the box entities about the client (`boxes`: [{ id, mins, maxs, contents }]), for a guest's prediction.
    */
-  async frame({ sqlRenderer = false, client = 1 } = {}) {
+  async frame({ sqlRenderer = false, client = 1, boxes = false } = {}) {
     const wantSpeakers = ++this.frameNo % 10 === 0;
     if (sqlRenderer && this.res.world && !this.res.world.faceVertsLoaded) await ensureFaceVerts(this.db, this.res);
-    const rows = (await this.db.query(`SELECT * FROM frame_all(${sqlRenderer ? 1 : 0}, ${this.lastSoundId}, ${this.lastFxId}, ${wantSpeakers ? 1 : 0}, ${client})`, [], ARR)).rows;
+    const rows = (await this.db.query(`SELECT * FROM frame_all(${sqlRenderer ? 1 : 0}, ${this.lastSoundId}, ${this.lastFxId}, ${wantSpeakers ? 1 : 0}, ${client}, ${boxes ? 1 : 0})`, [], ARR)).rows;
     const f = decodeFrame(rows, this.styleBase);
     if (f.sounds.length) this.lastSoundId = f.sounds[f.sounds.length - 1][0];
     if (f.fx.length) this.lastFxId = f.fx[f.fx.length - 1][0];

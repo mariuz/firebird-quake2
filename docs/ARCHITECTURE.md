@@ -309,7 +309,7 @@ rooms, 18 clusters crossed, frames over 8 ms went from 19–22 to 9–10 with si
 eight they thrashed: 29 marks for 18 crossings, 15 hitches left). What stays are the corners where
 two or three small clusters are crossed within a few tics, and the first frame's mark.
 
-`frame_all(mode, last_sound, last_fx, want_speakers, client = 1)` returns the frame of the client's view
+`frame_all(mode, last_sound, last_fx, want_speakers, client = 1, with_boxes = 0)` returns the frame of the client's view
 (`view_setup(client)`: its eye; its own model left out, the other client's in) as kind-tagged rows
 (`kind`, `i1..i5`, `d1..d8`, `s`, `lst`):
 
@@ -324,6 +324,7 @@ two or three small clusters are crossed within a few tics, and the first frame's
 | 6 | one per posed brush model | id, frame, angles |
 | 7 | one (when asked) | the looped speakers that are on |
 | 9 | one per looped entity sound | entity, position, name (`s.sound`: missiles, moving movers, the player's hum) |
+| 10 | one per box entity about the client (when `with_boxes` = 1) | entity, contents, absolute mins and maxs: what a guest's prediction clips against |
 
 The world's faces are the scan of `vis_faces` with the back-face test and the frustum tests as
 expressions, `LIST()`ed into one row. The frustum is four world-space planes (`kx·f ∓ r`,
@@ -539,9 +540,11 @@ the row's state (the tic row carries the velocity, the ground flag, the step, th
 bob's pitch for it) through the commands past the ack, and each command it sends through the state at
 once, the brush models where the frame's faces have them; the painter takes the predicted eye and angles
 (`FrameLerp.at`'s `view`) with the frame's entities lerped as before. A correction that lands away from
-the prediction fades over the next tenth of a second (`prediction_error`); a teleport snaps; the monsters,
-whose boxes the frame does not carry, are not clipped against, so the next frame puts a guest that walked
-into one back. When a guest leaves, the host's game goes on with its client standing (the next guest, or a
+the prediction fades over the next tenth of a second (`prediction_error`); a teleport snaps. The box
+entities about the guest (the monsters, the other clients, the barrels: within 384 of its eye, with the
+contents `trace_move` gives them, its own missiles left out) come with its frame (`frame_all`'s kind 10,
+asked for with `with_boxes`; `Session.frame`'s `boxes`), so the prediction clips against them as the host
+does and a guest stops at a monster where the host stops it. When a guest leaves, the host's game goes on with its client standing (the next guest, or a
 gamepad once the last is gone, moves it again); when the host leaves, the guest's page says so and starts a
 game of its own on a key.
 
