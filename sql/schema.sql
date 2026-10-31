@@ -488,7 +488,8 @@ CREATE TABLE player (
   anim_duck       SMALLINT DEFAULT 0 NOT NULL,
   anim_run        SMALLINT DEFAULT 0 NOT NULL,
   netname         VARCHAR(16),                            -- pers.netname (the userinfo's name): the obituaries and the score board; empty, "player N"
-  hand            SMALLINT DEFAULT 0 NOT NULL             -- pers.hand: 0 right, 1 left, 2 centre (P_ProjectSource moves the shots, the client the gun)
+  hand            SMALLINT DEFAULT 0 NOT NULL,            -- pers.hand: 0 right, 1 left, 2 centre (P_ProjectSource moves the shots, the client the gun)
+  spectator       SMALLINT DEFAULT 0 NOT NULL             -- pers.spectator (3.20's userinfo): a watcher with no body, noclipping through the level
 );
 
 -- client_respawn_t's coop_respawn: each client's persistent data as it was when the level began

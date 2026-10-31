@@ -463,6 +463,18 @@ try {
       assert(moved > 50, `the guest's W walks its player at the host (${moved.toFixed(0)} units)`);
       assert(samples > 5 && ahead > 0 && farthest < 120, `the guest's own move is predicted ahead of the host's frames (${ahead} of ${samples} samples ahead, at most ${farthest.toFixed(1)} units)`);
       assert(boxed > 0, `the prediction clips against the box entities the frames carry (${boxed} about the guest)`);
+      // the guest ticks spectate: the host puts its client back in as a watcher (no body, noclip); unticked, a player again
+      await gp.evaluate(() => document.exitPointerLock?.());
+      await sleep(300);
+      await gp.check('#net-spectate');
+      const c2 = () => page.evaluate(() => window.quake2.sql('SELECT e.solid, e.movetype, e.takedamage, p.spectator FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2').then((r) => r[0])).catch(() => null);
+      let watcher = null;
+      for (let i = 0; i < 40 && !watcher; i++) { await sleep(250); const r = await c2(); if (r && r.SPECTATOR === 1 && r.SOLID === 0) watcher = r; }
+      assert(watcher && watcher.MOVETYPE === 2 && watcher.TAKEDAMAGE === 0, `spectate ticked on the guest's page makes its client a watcher at the host (${JSON.stringify(watcher)})`);
+      await gp.uncheck('#net-spectate');
+      let player2 = null;
+      for (let i = 0; i < 40 && !player2; i++) { await sleep(250); const r = await c2(); if (r && r.SPECTATOR === 0 && r.SOLID === 3) player2 = r; }
+      assert(player2 && player2.MOVETYPE === 3 && player2.TAKEDAMAGE === 2, `unticked, a player again (${JSON.stringify(player2)})`);
       // a third page joins the game running: Host makes another offer while hosting, the third answers it, and the
       // host's game gets a third client (ClientBegin) that the third page drives, each guest sent its own frames
       const tctx = await browser.newContext({ viewport: { width: 960, height: 720 } });

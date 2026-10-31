@@ -70,8 +70,37 @@ check(infoSeen && infoSeen.name === 'Rimmer, Arnold ' && infoSeen.hand === 1 && 
 await session.setUserinfo(2, host.info);
 check((await q('SELECT netname, hand FROM player WHERE id = 2'))[0].NETNAME === 'Rimmer, Arnold ' && (await q('SELECT hand FROM player WHERE id = 2'))[0].HAND === 1, 'and the second client carries them');
 guest.sendInfo({ name: 'x', hand: 7 });
-check(host.info.hand === 0, 'a hand that is not 0, 1 or 2 is right-handed');
+check(host.info.hand === 0 && host.info.spectator === 0, 'a hand that is not 0, 1 or 2 is right-handed; a guest plays unless it says it watches');
 await session.setUserinfo(2, { name: '', hand: 0 });
+// a guest that watches (3.20's spectator userinfo): the host puts its client back in with no body, noclipping, whom
+// nothing hurts and the monsters ignore; playing again, it is back at its spot, solid, with a weapon in hand
+{
+  const e2 = async () => (await q('SELECT e.solid, e.movetype, e.takedamage, e.model_id, e.flags, e.health, e.x, e.y, e.z, p.weapon, p.spectator FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0];
+  const before = await e2();
+  guest.sendInfo({ name: 'Holly', hand: 0, spectator: 1 });
+  check(host.info.spectator === 1, 'the guest says it watches');
+  await session.setUserinfo(2, host.info);
+  const sp = await e2();
+  check(sp.SPECTATOR === 1 && sp.SOLID === 0 && sp.MOVETYPE === 2 && sp.TAKEDAMAGE === 0 && sp.MODEL_ID === null && (sp.FLAGS & 64) && sp.WEAPON === 0,
+    `the second client is a watcher: nothing solid, noclip, no damage, no model, notarget, nothing in hand (${JSON.stringify({ solid: sp.SOLID, movetype: sp.MOVETYPE, weapon: sp.WEAPON })})`);
+  const p1e = (await q('SELECT ent_id e FROM player WHERE id = 1'))[0].E, p2e = (await q('SELECT ent_id e FROM player WHERE id = 2'))[0].E;
+  const seen = new Set();
+  for (let i = 0; i < 4; i++) { await session.tic(idle, host.takeCommand()); seen.add((await q('SELECT sight_client s FROM game'))[0].S); }
+  check(seen.size === 1 && seen.has(p1e) && !seen.has(p2e), `the monsters look for the first client only (the sight client over four tics: ${[...seen].join(', ')})`);
+  await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE t_damage(${p2e}, ${p1e}, ${p1e}, 50, 0, 0); END`);
+  check((await e2()).HEALTH === sp.HEALTH, 'a shot does it no harm');
+  // the watcher flies where it looks, through the wall ahead (the yard's east wall, 36 units on at 236)
+  await db.exec(`UPDATE ents SET x = 200, y = -60, z = 40, yaw = 0 WHERE id = ${(await q('SELECT ent_id e FROM player WHERE id = 2'))[0].E}; UPDATE player SET pitch = 0 WHERE id = 2; EXECUTE PROCEDURE link_ent(${(await q('SELECT ent_id e FROM player WHERE id = 2'))[0].E})`);
+  for (let i = 0; i < 20; i++) { guest.sendCommand([1, 1, 0, 0, 0, 0, 0, 1, 0]); await session.tic(idle, host.takeCommand()); }
+  const flew = await e2();
+  check(flew.X > 300, `it flies through the wall the players stop at (x 200 → ${flew.X.toFixed(0)})`);
+  guest.sendInfo({ name: 'Holly', hand: 0, spectator: 0 });
+  await session.setUserinfo(2, host.info);
+  const back = await e2();
+  check(back.SPECTATOR === 0 && back.SOLID === 3 && back.MOVETYPE === 3 && back.TAKEDAMAGE === 2 && back.MODEL_ID !== null && !(back.FLAGS & 64) && back.WEAPON === 1 && Math.abs(back.X - before.X) < 1 && Math.abs(back.Y - before.Y) < 1,
+    `playing again, it is back at its spot (${back.X.toFixed(0)},${back.Y.toFixed(0)}), solid, with its model and the blaster in hand`);
+  await session.setUserinfo(2, { name: '', hand: 0 });
+}
 
 // nothing sent yet: the guest stands
 check(JSON.stringify(host.takeCommand()) === JSON.stringify(idle), 'before any command the guest stands still');

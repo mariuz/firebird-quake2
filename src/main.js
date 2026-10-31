@@ -211,9 +211,16 @@ function setSetting(k, v) {
  * and whenever the setup changes.
  */
 function applyUserinfo() {
-  const info = { name: settings.name, hand: settings.hand };
+  // (only a joined page watches: the host's and a local game's clients play)
+  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 };
   if (netGuest()) { if (net.guest?.open) net.guest.sendInfo(info); return; }
   session?.setUserinfo(1, info).catch((err) => console.warn('userinfo:', err.message));
+}
+/** The console's `spectator`: a joined page watches or plays; none joined, it says so. Returns what it is now, or null. */
+function setSpectator(on) {
+  if (!netGuest()) return null;
+  if (on !== null && on !== undefined) { $('net-spectate').checked = !!on; applyUserinfo(); }
+  return $('net-spectate').checked ? 1 : 0;
 }
 /** Quit: the game ends and the attract loop comes back (Quake 2 quit the program; a page has nowhere to go). */
 function quitGame() {
@@ -244,6 +251,7 @@ const con = new Console({
   record: (name) => startRecording(name),
   stopRecord: () => stopRecording(),
   isRecording: () => !!recorder,
+  setSpectator: (on) => setSpectator(on),
 });
 function openConsole() {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
@@ -1271,6 +1279,7 @@ $('net-join').addEventListener('click', () => joinGame());
 $('net-leave').addEventListener('click', () => { const guest = netGuest(); leaveNet(); if (guest) endGame(); });
 netEl.go.addEventListener('click', () => netGo());
 $('net-copy').addEventListener('click', () => { netEl.text.select(); navigator.clipboard?.writeText(netEl.text.value).catch(() => {}); });
+$('net-spectate').addEventListener('change', () => applyUserinfo());   // (a joined page: the host puts its client in as a watcher, or a player again)
 
 // ── SQL console ─────────────────────────────────────────────────────────
 async function runConsole() {

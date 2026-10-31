@@ -6,13 +6,14 @@
 // Nothing here touches the DOM: the page wires the input element to historyStep(), complete() and
 // submit(), and gives a host with what the commands act on, so the tests can drive it with a fake one.
 
-export const COMMANDS = ['deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'save', 'seed', 'skill', 'stop', 'timelimit', 'use'];
+export const COMMANDS = ['deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'save', 'seed', 'skill', 'spectator', 'stop', 'timelimit', 'use'];
 const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
  *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
- *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording() }
+ *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
+ *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game) }
  */
 export class Console {
   constructor(host) {
@@ -132,6 +133,18 @@ export class Console {
         h.saveSettings();
         h.setSkill?.(value);
         say(h.isRunning() ? 'skill will be changed for next game.' : `"skill" is "${value}"`);
+        return;
+      }
+      case 'spectator': {
+        // 3.20's spectator userinfo, for a page that has joined a game: no argument shows it, 0 or 1 sets it (the host
+        // puts the client back in as a watcher with no body, or as a player again)
+        const now = h.setSpectator?.(null);
+        if (now === null || now === undefined) { say('spectator: only a page that has joined a game can watch', true); return; }
+        if (!arg) { say(`"spectator" is "${now}"`); return; }
+        const v = Number(arg);
+        if (!Number.isFinite(v)) { say('spectator takes 0 or 1', true); return; }
+        h.setSpectator(v !== 0);
+        say(v !== 0 ? 'spectator: watching' : 'spectator: playing again');
         return;
       }
       case 'save': return h.saveGame();
