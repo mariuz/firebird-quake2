@@ -722,7 +722,10 @@ staying up and its status bar offering it), and the settings, which go through t
 both agree. The game menu's `credits` scrolls
 menu.c's `idcredits` (`src/credits.js`) up the screen as `M_Credits_MenuDraw` did: a line every ten
 pixels rising a pixel every 40 ms, the `+` lines in the highlighted font, round again once the last is off
-the top, Escape to leave. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
+the top, Escape to leave. The console's `menu_main`, `menu_game`, `menu_loadgame`, `menu_savegame`,
+`menu_options`, `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits` and
+`menu_quit` open the menus as `M_Init` registered them (the host's `openMenu`), so a key bound to one opens
+it. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
 high for each of the twenty-two bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
 mouse look, keyboard look, sidestep and centre view, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
 `s` and `p`, which are the page's back and pause: `l` and `h` here) with its keys named as `Key_KeynumToString` named them

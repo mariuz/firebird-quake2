@@ -200,6 +200,20 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   delete host.listPlayers; delete host.kick;
 }
 
+// the menus from the console (M_Init's commands): each menu_* word opens its menu through the host, so a key bound to one opens it
+{
+  const opened = []; let menusReady = false;
+  host.openMenu = (name) => { if (!menusReady) return false; opened.push(name); return true; };
+  await con.submit('menu_options');
+  check(opened.length === 0 && status.at(-1)?.[0] === 'menu_options: the menus wait on the pak' && status.at(-1)?.[1] === true, 'before the pak is in, a menu word says the menus wait');
+  menusReady = true;
+  for (const w of ['menu_main', 'menu_game', 'menu_loadgame', 'menu_savegame', 'menu_options', 'menu_keys', 'menu_video', 'menu_multiplayer', 'menu_playerconfig', 'menu_credits', 'menu_quit']) await con.submit(w);
+  check(opened.join() === 'main,game,loadgame,savegame,options,keys,video,multiplayer,playerconfig,credits,quit', `the eleven menu words open their menus (${opened.join(', ')})`);
+  await con.submit('MENU_KEYS');
+  check(opened.at(-1) === 'keys' && con.complete('menu_') === 'menu_credits ' && con.complete('menu_o') === 'menu_options ', 'case aside, and Tab completes them');
+  delete host.openMenu;
+}
+
 // connect, disconnect and reconnect: Join with a code or an offer, Leave, and the last host joined again (CL_Connect_f,
 // CL_Disconnect_f, CL_Reconnect_f over the page's buttons)
 {

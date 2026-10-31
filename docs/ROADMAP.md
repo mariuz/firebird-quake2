@@ -684,9 +684,31 @@ The eighth list: what a game shared over the network and the console still lack,
   one for a frame that came past twice its time, and one as high as the ping is long in thirtieths of a
   millisecond. `test:hud` draws the graph against a recorder, `test:console` the cvar, the browser test
   turns it on at the joined page's console and sees the columns come.
-- **The menus from the console**: `menu_main`, `menu_game`, `menu_loadgame`, `menu_savegame`, `menu_options`,
-  `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits` and `menu_quit` open the
-  menus as `M_Init` registered them, so a key bound to one (`bind F4 menu_options`) opens it.
+- **The menus from the console**: done. `menu_main`, `menu_game`, `menu_loadgame`, `menu_savegame`,
+  `menu_options`, `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits` and
+  `menu_quit` open the menus as `M_Init` registered them (the console's `openMenu` host hook, through the
+  page's `openMenu`, so the pointer is let go as a key would), so a key bound to one (`bind F4 menu_video`)
+  opens it as it goes down; before the pak is in they say the menus wait. `test:console` runs the eleven
+  words and Tab, the browser test `menu_options` at the console and F4 bound to `menu_video`.
+
+The ninth list: what the console and a shared game still lack of Quake 2's own words, with the demo pak.
+
+- **`alias` and `;` at the console**: a line is one command. Cbuf split a line at `;` (`Cmd_TokenizeString`
+  on `Cbuf_ExecuteText`), so `bind k "god; noclip"` ran both; `alias <name> <line>` gave a line a name
+  (`Cmd_Alias_f`), `writeconfig` wrote the aliases, and `wait` held the rest of a line to the next frame.
+- **`centerview`, `+strafe` and `+klook`**: default.cfg's words the page lacks. `centerview` puts the pitch
+  back to level (`IN_CenterView`), `+strafe` held turns the turning keys into side steps, `+klook` held
+  turns the walking keys into looking up and down (cl_input.c's `CL_BaseMove`).
+- **The `cheats` cvar**: `god`, `noclip`, `notarget` and `give` run in a deathmatch for anyone. `CheatsOk`
+  refused them unless `cheats 1` at the host ("You must run the server with '+set cheats 1' to enable this
+  command."); a game played alone keeps them.
+- **A guest's own fov**: a guest sees the host's fov (the map message's view). The guest's `fov` goes with
+  its userinfo, as the fov userinfo did (`ClientUserinfoChanged`), and the host's frame for it is at that fov
+  (`viewcfg` per client).
+- **`clear` and `condump`**: the console's scrollback is read in the backquote line alone. `clear` empties it
+  (`Con_Clear_f`), `condump <name>` downloads it as `<name>.txt` (`Con_Dump_f`).
+- **`invdrop` and `weaplast`**: bindnames' "drop item" (`invdrop`: the selected item dropped, `Cmd_InvDrop_f`)
+  and the last weapon back (`weaplast`, `Cmd_WeapLast_f`), with their keys in the keys menu and `bind`.
 
 ## Playing the demo
 
