@@ -440,6 +440,16 @@ try {
     const uk = await page.evaluate(() => window.quake2.settings.lines.KeyK ?? null).catch(() => 'x');
     assert(bk.line === 'god' && bk.stored === 'god' && bk.status === '"k" = "god"' && g0 === 0 && g1 === 16 && g2 === 0 && uk === null,
       `bind k god binds K to the line, kept in the settings; K switches godmode on and K again off; unbind k takes it off (${JSON.stringify({ bk, g0, g1, g2, uk })})`);
+    // `;` and alias at the console: god; noclip runs both, an alias names the line and runs it by name (Cmd_Alias_f)
+    const cheats = () => page.evaluate(() => window.quake2.sql('SELECT e.flags, e.movetype FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1').then((r) => ({ god: (r[0].FLAGS & 16) !== 0, noclip: r[0].MOVETYPE === 2 }))).catch(() => null);
+    await typeCommand('alias both "god; noclip"');
+    await typeCommand('both');
+    let ch1 = null;
+    for (let i = 0; i < 20 && !(ch1?.god && ch1?.noclip); i++) { await sleep(250); ch1 = await cheats(); }
+    await typeCommand('god; noclip');
+    let ch2 = null;
+    for (let i = 0; i < 20 && (ch2?.god !== false || ch2?.noclip !== false); i++) { await sleep(250); ch2 = await cheats(); }
+    assert(ch1?.god === true && ch1?.noclip === true && ch2?.god === false && ch2?.noclip === false, `an alias of "god; noclip" switches both on, the line typed with ; both off (${JSON.stringify({ ch1, ch2 })})`);
     // the menus from the console (M_Init's menu_* words): menu_options opens the options menu over the game, Escape puts it
     // away; a key bound to one (bind F4 menu_video) opens it as it goes down
     await typeCommand('menu_options');

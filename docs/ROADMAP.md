@@ -693,9 +693,15 @@ The eighth list: what a game shared over the network and the console still lack,
 
 The ninth list: what the console and a shared game still lack of Quake 2's own words, with the demo pak.
 
-- **`alias` and `;` at the console**: a line is one command. Cbuf split a line at `;` (`Cmd_TokenizeString`
-  on `Cbuf_ExecuteText`), so `bind k "god; noclip"` ran both; `alias <name> <line>` gave a line a name
-  (`Cmd_Alias_f`), `writeconfig` wrote the aliases, and `wait` held the rest of a line to the next frame.
+- **`alias` and `;` at the console**: done. A line was one command. A line's commands part at `;` outside
+  quotes now (`splitLine`, as `Cbuf_ExecuteText` parted them, a bind's quoted line kept whole), so `god;
+  noclip` and `bind k "god; noclip"` run both; `alias <name> <line>` names a line (`Cmd_Alias_f`: the name in
+  lower case, 32 characters at most, `alias` alone listing them, `alias <name>` an empty one), the name runs
+  it unless a command has that name (`Cmd_ExecuteString` looked at the commands first), sixteen deep at most
+  (`ALIAS_LOOP_COUNT`); the aliases last the session, as Quake's did (an autoexec.cfg brings them back).
+  `wait` holds the rest of a line to the next frame (`cmd_wait`: `Console.pending`, run by `tick` from the
+  page's frame). `test:console` runs the parting, the binds, the aliases, the loop guard and `wait`; the
+  browser test an alias of `god; noclip` and the line typed.
 - **`centerview`, `+strafe` and `+klook`**: default.cfg's words the page lacks. `centerview` puts the pitch
   back to level (`IN_CenterView`), `+strafe` held turns the turning keys into side steps, `+klook` held
   turns the walking keys into looking up and down (cl_input.c's `CL_BaseMove`).
