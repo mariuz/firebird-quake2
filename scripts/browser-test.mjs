@@ -461,6 +461,13 @@ try {
     const threeBack = await page.evaluate(() => ({ yaw: window.quake2.settings.mYaw, gun: window.quake2.settings.clGun, seconds: window.quake2.notify.seconds })).catch(() => ({}));
     assert(three.yaw === 0.044 && three.gun === false && three.notify === 1 && three.seconds === 1 && threeBack.yaw === 0.022 && threeBack.gun === true && threeBack.seconds === 3,
       `m_yaw, cl_gun and con_notifytime reach the settings, the last the notify's seconds (${JSON.stringify(three)} → ${JSON.stringify(threeBack)})`);
+    // the keys' speeds (cl_yawspeed, cl_forwardspeed) reach the settings and the defaults come back
+    await typeCommand('cl_yawspeed 280'); await typeCommand('cl_forwardspeed 100');
+    const spd = await page.evaluate(() => ({ yaw: window.quake2.settings.clYawspeed, fwd: window.quake2.settings.clForwardspeed })).catch(() => ({}));
+    await typeCommand('cl_yawspeed 140'); await typeCommand('cl_forwardspeed 200');
+    const spdBack = await page.evaluate(() => ({ yaw: window.quake2.settings.clYawspeed, fwd: window.quake2.settings.clForwardspeed })).catch(() => ({}));
+    assert(spd.yaw === 280 && spd.fwd === 100 && spdBack.yaw === 140 && spdBack.fwd === 200,
+      `cl_yawspeed and cl_forwardspeed reach the settings and go back (${JSON.stringify(spd)} → ${JSON.stringify(spdBack)})`);
     // vid_gamma is the brightness (the painter's light scale follows, the control too), vid_fullscreen the page's state (a headless page is not)
     await typeCommand('vid_gamma 1.6');
     const gamma = await page.evaluate(() => ({ setting: window.quake2.settings.brightness, scale: window.quake2.renderer.lightScale, control: document.getElementById('brightness')?.value })).catch(() => ({}));

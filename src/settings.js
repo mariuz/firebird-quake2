@@ -11,6 +11,7 @@ export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, m
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1,
   crosshair: 1, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false,
   mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '',
+  clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200,
   coop: false, deathmatch: false,
   dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, rtcIce: '', rtcSignal: '', netgraph: false });
 
@@ -49,6 +50,9 @@ const CHECK = {
   rFullbright: bool, rDrawentities: bool, rDrawworld: bool, rLerpmodels: bool, rNovis: bool, rSpeeds: bool,
   // m_yaw (the turn a mouse count, 0.022), cl_gun (the view weapon drawn), con_notifytime (the notify lines' seconds, 3)
   mYaw: num(-10, 10), clGun: bool, conNotifytime: num(0, 60),
+  // the keys' speeds (CL_AdjustAngles, CL_BaseMove): cl_yawspeed and cl_pitchspeed in degrees a second (140, 150), cl_anglespeedkey
+  // the run key's factor on them (1.5), cl_forwardspeed and cl_sidespeed in units a second (200, the full speed: the command's 1)
+  clYawspeed: num(0, 3600), clPitchspeed: num(0, 3600), clAnglespeedkey: num(0, 100), clForwardspeed: num(0, 1000), clSidespeed: num(0, 1000),
   // hostname (the host's name, serverinfo's and a guest's stats line's; at most 32 printable characters, empty "noname" as Quake had it)
   hostname: (v) => (typeof v === 'string' && /^[\x20-\x7e]{0,32}$/.test(v) ? v : undefined),
   coop: bool,            // a new game with two players: the view split, the gamepad the second's

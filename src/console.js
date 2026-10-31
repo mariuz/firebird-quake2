@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_gun', 'cl_predict', 'cl_run', 'cl_showmiss', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'help', 'hostname', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'spectator', 'status', 'stop', 'sv_gravity', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_forwardspeed', 'cl_gun', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'help', 'hostname', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'spectator', 'status', 'stop', 'sv_gravity', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -55,6 +55,14 @@ export const CVARS = {
   m_yaw: { key: 'mYaw', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && Math.abs(n) <= 10 ? n : null; }, help: 'a number, 0.022 as Quake had it', archive: false },
   cl_gun: { key: 'clGun', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   con_notifytime: { key: 'conNotifytime', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && n >= 0 && n <= 60 ? n : null; }, help: 'seconds, 0 to 60', archive: false },
+  // the keys' speeds (CL_AdjustAngles, CL_BaseMove; none archived, as Quake's were not): cl_yawspeed and cl_pitchspeed in degrees a second
+  // (140 and 150), cl_anglespeedkey the run key's factor on them (1.5), cl_forwardspeed and cl_sidespeed in units a second (200, the
+  // full speed: the command's fraction, within it)
+  cl_yawspeed: { key: 'clYawspeed', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && n >= 0 && n <= 3600 ? n : null; }, help: 'degrees a second, 0 to 3600', archive: false },
+  cl_pitchspeed: { key: 'clPitchspeed', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && n >= 0 && n <= 3600 ? n : null; }, help: 'degrees a second, 0 to 3600', archive: false },
+  cl_anglespeedkey: { key: 'clAnglespeedkey', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null; }, help: 'a factor, 0 to 100', archive: false },
+  cl_forwardspeed: { key: 'clForwardspeed', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && n >= 0 && n <= 1000 ? n : null; }, help: 'units a second, 0 to 1000', archive: false },
+  cl_sidespeed: { key: 'clSidespeed', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && n >= 0 && n <= 1000 ? n : null; }, help: 'units a second, 0 to 1000', archive: false },
   // vid_gamma: the video menu's brightness (the lightmaps' modulate: the control's tenths from 1 to 1.8, 1.4 by default, a number between
   // snapped and clamped to them), archived as Quake's was; vid_fullscreen is the page's live state, a case of its own
   vid_gamma: { key: 'brightness', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.round(Math.max(1, Math.min(1.8, n)) * 10) / 10 : null; }, help: '1 to 1.8' },
@@ -262,7 +270,8 @@ export class Console {
       case 'name': case 'hand': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume':
       case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'netgraph': case 'cl_predict': case 'cl_showmiss': case 'viewsize':
       case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lerpmodels': case 'r_novis': case 'r_speeds':
-      case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname': {
+      case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname':
+      case 'cl_yawspeed': case 'cl_pitchspeed': case 'cl_anglespeedkey': case 'cl_forwardspeed': case 'cl_sidespeed': {
         // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
         // page's setSetting, so the menus and the page's controls agree; a word the cvar refuses leaves it
         const name = cmd.toLowerCase(), cv = CVARS[name];

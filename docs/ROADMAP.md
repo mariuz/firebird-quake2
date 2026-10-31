@@ -857,9 +857,15 @@ the server's among them. In the order they are to be taken.
 The twelfth list: what the console still lacks of Quake 2's own words and cvars with the demo pak, the
 client's speeds and the game's view cvars among them. In the order they are to be taken.
 
-- **`cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed`, `cl_sidespeed` and `cl_upspeed`**:
-  the keys' speeds as cvars (`CL_AdjustAngles` and `CL_BaseMove`'s: 140 and 150 degrees a second, the run key's
-  1.5 on the turn, 200 units a second each move), where `src/input.js` has the numbers.
+- **`cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed` and `cl_sidespeed`**: done. The keys'
+  speeds as cvars, `CL_AdjustAngles` and `CL_BaseMove`'s, with Quake's defaults: 140 and 150 degrees a second (the
+  look was 100 here), `cl_anglespeedkey`'s 1.5 on the turn and the look with `+speed` held, 200 units a second each
+  move. `Input.read` has them from the settings (`speeds`): the keys and the right stick turn and look by them a tic,
+  the walk and the sidestep are scaled in the full speed's 200, the command's fraction kept within 1 (the game runs at
+  300 over 200 as pmove's most, so a speed past 200 is the full one). None archived, as Quake's were not. `cl_upspeed`
+  is not here: the command's up is the jump and the crouch keys, and the swim and noclip rise are the fixed 200.
+  `test:input` holds each to its numbers; `test:console` shows, sets and refuses them, `cvarlist` with them; the
+  browser test types `cl_yawspeed 280` and `cl_forwardspeed 100` and reads the settings on both builds.
 - **`gun_x`, `gun_y`, `gun_z` and `scr_centertime`**: the view weapon's offset (cl_view.c's three, 0 by
   default) and the centre print's seconds (`scr_centertime`, 2.5).
 - **`dir`, `path`, `modellist`, `imagelist` and `soundlist`**: `dir <filter>` lists the pak's files as

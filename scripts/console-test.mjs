@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -307,7 +307,7 @@ await con.submit('netgraph 1'); check(s.netgraph === true && last() === 'set net
 await con.submit('netgraph 2'); check(s.netgraph === true && status.at(-1)?.[0] === 'netgraph takes 0 or 1' && status.at(-1)?.[1] === true, 'netgraph 2 is refused');
 await con.submit('netgraph 0'); check(s.netgraph === false, 'netgraph 0 turns it off');
 await con.submit('cvarlist');
-check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · vid_gamma "1.4" · hostname "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · vid_gamma "1.4" · hostname "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
 // hostname (the host's name, at most 32 printable characters), help (Cmd_Help_f) and sv_gravity (the game's gravity)
 await con.submit('hostname'); check(status.at(-1)?.[0] === '"hostname" is ""', 'hostname shows the empty default');
 await con.submit('hostname Hal 9000'); check(s.hostname === 'Hal 9000' && last() === 'set hostname Hal 9000', 'hostname takes a name with spaces');
@@ -365,6 +365,19 @@ await con.submit('cl_gun 2'); check(s.clGun === false && status.at(-1)?.[0] === 
 await con.submit('con_notifytime 1.5'); check(s.conNotifytime === 1.5 && last() === 'set conNotifytime 1.5', 'con_notifytime 1.5 shortens the notify lines\' stay');
 await con.submit('con_notifytime -1'); check(s.conNotifytime === 1.5 && status.at(-1)?.[0] === 'con_notifytime takes seconds, 0 to 60' && status.at(-1)?.[1] === true, 'con_notifytime -1 is refused');
 Object.assign(s, { mYaw: 0.022, clGun: true, conNotifytime: 3 });
+// the keys' speeds (CL_AdjustAngles, CL_BaseMove): cl_yawspeed, cl_pitchspeed, cl_anglespeedkey, cl_forwardspeed and cl_sidespeed, numbers through the page
+await con.submit('cl_yawspeed'); check(status.at(-1)?.[0] === '"cl_yawspeed" is "140"', 'cl_yawspeed shows 140 by default');
+await con.submit('cl_yawspeed 280'); check(s.clYawspeed === 280 && last() === 'set clYawspeed 280' && status.at(-1)?.[0] === '"cl_yawspeed" is "280"', 'cl_yawspeed 280 doubles the keys\' turn through the page');
+await con.submit('cl_yawspeed -1'); check(s.clYawspeed === 280 && status.at(-1)?.[0] === 'cl_yawspeed takes degrees a second, 0 to 3600' && status.at(-1)?.[1] === true, 'cl_yawspeed -1 is refused');
+await con.submit('cl_pitchspeed'); check(status.at(-1)?.[0] === '"cl_pitchspeed" is "150"', 'cl_pitchspeed shows 150 by default');
+await con.submit('cl_pitchspeed 100'); check(s.clPitchspeed === 100 && last() === 'set clPitchspeed 100', 'cl_pitchspeed 100 slows the look');
+await con.submit('cl_anglespeedkey'); check(status.at(-1)?.[0] === '"cl_anglespeedkey" is "1.5"', 'cl_anglespeedkey shows 1.5 by default');
+await con.submit('cl_anglespeedkey 2'); check(s.clAnglespeedkey === 2 && last() === 'set clAnglespeedkey 2', 'cl_anglespeedkey 2 doubles the turn with +speed');
+await con.submit('cl_anglespeedkey x'); check(s.clAnglespeedkey === 2 && status.at(-1)?.[1] === true, 'cl_anglespeedkey x is refused');
+await con.submit('cl_forwardspeed 100'); check(s.clForwardspeed === 100 && last() === 'set clForwardspeed 100' && status.at(-1)?.[0] === '"cl_forwardspeed" is "100"', 'cl_forwardspeed 100 halves the walk');
+await con.submit('cl_forwardspeed 2000'); check(s.clForwardspeed === 100 && status.at(-1)?.[0] === 'cl_forwardspeed takes units a second, 0 to 1000' && status.at(-1)?.[1] === true, 'cl_forwardspeed 2000 is refused');
+await con.submit('cl_sidespeed 0'); check(s.clSidespeed === 0 && last() === 'set clSidespeed 0', 'cl_sidespeed 0 is no sidestep');
+Object.assign(s, { clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200 });
 // ref_soft's switches: r_fullbright, r_drawentities, r_drawworld, r_lerpmodels, r_novis and r_speeds, 0 or 1 through the page
 for (const [name, key, dflt] of [['r_fullbright', 'rFullbright', false], ['r_drawentities', 'rDrawentities', true], ['r_drawworld', 'rDrawworld', true], ['r_lerpmodels', 'rLerpmodels', true], ['r_novis', 'rNovis', false], ['r_speeds', 'rSpeeds', false]]) {
   await con.submit(name); const shown = status.at(-1)?.[0] === `"${name}" is "${dflt ? '1' : '0'}"`;
@@ -415,7 +428,7 @@ await con.submit('lookstrafe 2'); check(s.lookstrafe === true && status.at(-1)?.
 await con.submit('m_forward 2'); check(s.mForward === 2 && last() === 'set mForward 2', 'm_forward 2');
 await con.submit('m_side -1'); check(s.mSide === -1 && last() === 'set mSide -1' && status.at(-1)?.[0] === '"m_side" is "-1"', 'm_side -1');
 await con.submit('m_side x'); check(s.mSide === -1 && status.at(-1)?.[1] === true, 'm_side x is refused');
-Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
+Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
 
 // the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
 {
@@ -467,7 +480,7 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   check(lines[0].startsWith('//') && lines[1] === 'unbindall' && lines[2] === 'bind k "+attack"' && lines[3] === 'bind MOUSE2 "+attack"' && lines.includes('bind MWHEELDOWN "weapnext"') && !lines.some((l) => l.includes('"+moveup"'))
     && godAt > 3 && godAt < setAt && lines[godAt + 1] === 'bind MOUSE3 "say hello"'
     && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && lines.includes('set freelook "1"') && lines.includes('set lookspring "0"') && lines.includes('set viewsize "100"') && lines.includes('set vid_gamma "1.4"') && lines.includes('set hostname ""') && !lines.some((l) => l.startsWith('set netgraph') || l.startsWith('set m_forward') || l.startsWith('set m_side') || l.startsWith('set cl_predict') || l.startsWith('set cl_showmiss') || l.startsWith('set r_') || l.startsWith('set m_yaw') || l.startsWith('set cl_gun') || l.startsWith('set con_notifytime')) && cfg.endsWith('\n'),
-    'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them (netgraph, m_forward, m_side, m_yaw, cl_gun, con_notifytime, cl_predict, cl_showmiss and the r_ switches, not archived, left out)');
+    'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them (netgraph, m_forward, m_side, m_yaw, cl_gun, con_notifytime, the cl_ speeds, cl_predict, cl_showmiss and the r_ switches, not archived, left out)');
   let downloaded = null;
   host.download = (name, text) => { downloaded = { name, text }; };
   await con.submit('writeconfig');
