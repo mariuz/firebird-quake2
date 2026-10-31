@@ -383,6 +383,18 @@ try {
     assert(cfgDl && cfgDl.suggestedFilename() === 'config.cfg' && /^unbindall$/m.test(cfgText) && /^bind MOUSE1 "\+attack"$/m.test(cfgText) && /^set sensitivity "5"$/m.test(cfgText) && /^set name "Ace"$/m.test(cfgText)
       && cfgBefore.sens === 7 && cfgBefore.name === '' && /config\.cfg: \d+ lines run/.test(ran) && cfgAfter.sens === 5 && cfgAfter.name === 'Ace' && cfgAfter.attack === 'Control,Mouse1',
       `writeconfig writes config.cfg (${cfgText.split('\n').length} lines) and the Config control runs it back: ${ran} (${JSON.stringify(cfgAfter)})`);
+    // timescale: the game's clock against the wall's (the tics owed scaled; at most two a frame still, so a slow page
+    // cannot reach twice the pace: at 2 the clock runs faster than the wall where the page keeps up, at 0.5 half as fast)
+    const clock2 = () => page.evaluate(() => ({ game: window.quake2.session.last.TIME_, wall: performance.now(), paints: window.quake2.paints, scale: window.quake2.timescale })).catch(() => null);
+    const measure = async () => { const a = await clock2(); await sleep(2000); const b = await clock2(); return { rate: (b.game - a.game) / ((b.wall - a.wall) / 1000), fps: (b.paints - a.paints) / ((b.wall - a.wall) / 1000), scale: b.scale }; };
+    await typeCommand('timescale 2'); await sleep(300);
+    const fast = await measure();
+    await typeCommand('timescale 0.5'); await sleep(300);
+    const slow = await measure();
+    await typeCommand('timescale 1'); await sleep(300);
+    const normal = await measure();
+    assert(fast.scale === 2 && (fast.fps < 20 ? fast.rate <= 2.6 : fast.rate > 1.3 && fast.rate < 2.6) && slow.scale === 0.5 && slow.rate > 0.3 && slow.rate < 0.7 && normal.scale === 1 && normal.rate > 0.6 && normal.rate < 1.3,
+      `timescale 2 runs the clock at ${fast.rate.toFixed(2)}× the wall's (${fast.fps.toFixed(0)} fps), 0.5 at ${slow.rate.toFixed(2)}×, 1 at ${normal.rate.toFixed(2)}×`);
     // bind and unbind at the console: Quake's words over the keys menu's binds, kept in the settings and read by the input
     await typeCommand('bind j +attack');
     const bj = await page.evaluate(() => ({ attack: window.quake2.settings.binds.attack.join(), stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).binds.attack.join(), input: window.quake2.input.bound('KeyJ'), status: document.getElementById('status')?.textContent })).catch(() => ({}));

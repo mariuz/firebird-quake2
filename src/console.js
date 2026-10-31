@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'unbind', 'unbindall', 'use', 'writeconfig'];
+export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unbind', 'unbindall', 'use', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -33,7 +33,8 @@ const HISTORY = 32;
  *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
  *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), setSetting(key, value) (the cvars: through the page's controls and the userinfo),
- *         download(name, text) (writeconfig), execConfig() (exec: the page's file picker, whose file runs through execText) }
+ *         download(name, text) (writeconfig), execConfig() (exec: the page's file picker, whose file runs through execText),
+ *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's) }
  */
 /** The cvars config.cfg carries (CVARS, and fov and skill with them), each with its setting and how it shows. */
 const CONFIG_CVARS = () => ({ ...CVARS, fov: { key: 'fov', show: (v) => String(v) }, skill: { key: 'skill', show: (v) => String(v) } });
@@ -156,6 +157,19 @@ export class Console {
         if (value === null) { say(`${name} takes ${cv.help}`, true); return; }
         h.setSetting(cv.key, value);
         say(`"${name}" is "${cv.show(h.settings[cv.key])}"`);
+        return;
+      }
+      case 'timescale': {
+        // the timescale cvar: the game's clock against the wall's (Qcommon_Frame scaled the frame's milliseconds by it):
+        // 0.5 slow motion, 2 twice the pace, 1 back; 0.1 to 10 here, for the session (Quake did not archive it either). A
+        // guest's clock is the host's, so a guest is told.
+        const now = h.setTimescale?.(null);
+        if (!arg) { say(`"timescale" is "${now ?? 1}"`); return; }
+        const v = Number(arg);
+        if (!Number.isFinite(v) || v <= 0) { say('timescale takes a number above 0 (0.1 to 10)', true); return; }
+        const set = h.setTimescale?.(Math.max(0.1, Math.min(10, v)));
+        if (set === null) { say('timescale: a joined game runs at the host\'s pace', true); return; }
+        say(`"timescale" is "${set}"`);
         return;
       }
       case 'cvarlist': {
