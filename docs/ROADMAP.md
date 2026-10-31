@@ -365,9 +365,15 @@ The third list, from what is left in the entries above and below: in the order t
   player, never attack, die) and sees the crawler come on its knees, the crucified one hang unmoving, struggle
   and die on its cross; `test:entities` spawns the three from `misc_insane` and the body, which a shot does not
   harm and which sits up with its two sounds when used.
-- **A brush model's loop at its origin**: a looped sound on a brush model (a lift's hum) plays at the model's
-  origin, which is far from its box; the loop's position should be the box's centre, as `set_model` finds the
-  leaf from it.
+- **A brush model's loop at its origin**: done. The game's own sounds came from a brush model's box's middle
+  already (`snd`, the frame's loops); a demo's did not: the player placed an entity's looped sound, and a one-shot
+  sound at an entity with no position of its own, at the entity's origin, which for a brush model (the client's
+  `solid` 31) is wherever the mapper left it, often the map's centre, so a door's middle sound in the pak's demo hummed
+  from far away. `DemoPlayer.soundOrigin` is `CL_GetEntitySoundOrigin`: given the map's bounds for its `*N` models
+  (`brushBounds`, the page's from the loaded map), a brush model's sounds come from its origin plus the middle of its
+  bounds; without the bounds, from the origin as before. `test:demo` finds the door brush model with its middle sound
+  looped in q2demo1 and sees its loop come from the middle of its box with the bounds and from the origin without,
+  and a one-shot sound at a brush model placed the same way.
 
 ## Playing the demo
 
@@ -615,9 +621,9 @@ The third list, from what is left in the entries above and below: in the order t
   the team's master, as `FL_TEAMSLAVE` kept the others quiet), and the player the lava fry, the
   railgun's and BFG's hum and the hyperblaster's and chaingun's firing loop, each from where the entity
   is every frame (they used to play once at launch, or as a fresh copy every shot, piling up). A train's
-  `noise` is now its middle sound, looped while it moves, not a one-shot at each corner. Left: Quake 2
-  placed a brush model's loop at its origin, often the map's centre; here it sounds from the box's
-  middle, as the one-shot sounds already did.
+  `noise` is now its middle sound, looped while it moves, not a one-shot at each corner. Quake 2's client placed a brush model's
+  sounds at the middle of its bounds (`CL_GetEntitySoundOrigin`); here the game's come from the box's middle,
+  and a demo's too (see *Next*, the third list).
 - **Music**: CD tracks are optional files; the synthesised drone is a placeholder.
 - **Looped speakers**: done. In 3.14 a looped `target_speaker` is its `s.sound`, so it goes through
   `S_AddLoopSounds` with the entities' loops: full volume and `ATTN_STATIC` (heard to about 410 units),
