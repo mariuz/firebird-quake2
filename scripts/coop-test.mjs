@@ -105,6 +105,13 @@ await db.exec('UPDATE player SET pitch = 30 WHERE id = 1; UPDATE player SET pitc
 await q("SELECT msg FROM player_command('centerview', '', 1)");
 const pitches = (await q('SELECT pitch FROM player ORDER BY id')).map((r) => r.PITCH);
 check(pitches[0] === 0 && pitches[1] === -20, `centerview levels the client's view and nobody else's (${pitches.join(', ')})`);
+// wave (Cmd_Wave_f): the first client's taunt, its frames stepping where the second sees them (set_client_frame), the word on its line
+await q("SELECT msg FROM player_command('wave', '2', 1)");
+const wv = await one('SELECT p.anim_priority pr, p.anim_end fin, e.frame f, p.msg m FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1');
+await session.tic(idle, idle); await session.tic(idle, idle);
+const wv2 = await one('SELECT e.frame f, p.anim_priority pr FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1');
+check(wv.PR === 1 && wv.FIN === 111 && wv.F === 94 && wv.M === 'taunt' && wv2.F === 96 && wv2.PR === 1,
+  `wave 2 taunts: the frames from taunt01 step a tic (${wv.F} → ${wv2.F}, to ${wv.FIN}), the word said (${wv.M})`);
 for (let i = 0; i < 6; i++) await session.tic(idle, idle);
 enemy = (await one(`SELECT enemy_id FROM ents WHERE id = ${mon}`)).ENEMY_ID;
 check(enemy !== p2.ENT_ID, `with its enemy dead the monster drops it (enemy ${enemy ?? 'none'})`);

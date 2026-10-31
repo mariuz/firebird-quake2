@@ -136,7 +136,9 @@ leaf and the clusters the box touches), `lx ly lz` (where it was last linked), `
 (the model's kind and radius, copied in by `set_model`), `vis_cl`/`vis` and `fl_*`/`faces_lst`
 (brush-model visibility caches, section 6). `player` holds the clients, a row each (one in single
 player, two in coop; `ent_id` is the client's edict, and the game's routines find the row by it): ammo,
-armour, weapons, keys, timers, pitch, punch, step smoothing, the player model's animation; `coop_respawn`
+armour, weapons, keys, timers, pitch, punch, step smoothing, the player model's animation (`set_client_frame` is
+`G_SetClientFrame`, run at the end of every `player_think`; `wave 0`–`4` at the console is `Cmd_Wave_f`, a gesture's
+frames under the wave priority, the word said, `wave_cmd`); `coop_respawn`
 is each client's pers as the level began, which a coop respawn puts back; `usercmd` is each client's
 command for the tic. `game` is the level: time, tic, skill, counts, the next map, `has_water`, `coop`,
 `sight_client` (the client the monsters look for this tic). `sound_events` and `fx_events` are the outgoing queues (section 7).

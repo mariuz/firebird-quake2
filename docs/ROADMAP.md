@@ -765,8 +765,13 @@ pak. In the order they are to be taken.
   game or none, "Pause command is only valid in single player"). `test:console` sees the four reach the host
   with their answers; the browser test types them on both builds and reads the words, the version string, the
   count with the scrollback filled, and the game paused and on again.
-- **`wave 0–4`**: `Cmd_Wave_f`: flipoff, salute, taunt, wave and point as the player model's frames (`ANIM_WAVE`
-  under `anim_priority`, `G_SetClientFrame` letting them run), said on the line and seen by the other players.
+- **`wave 0–4`**: done. `Cmd_Wave_f` as `wave_cmd`: flipoff, salute, taunt, wave and point as the player
+  model's frames (m_player.h's flip01 72–83, salute01 84–94, taunt01 95–111, wave01 112–122, point01 123–134,
+  started one short and stepped by `set_client_frame` under the wave priority), the word said on the line and
+  the frames seen by the other players and in a recording; no number is the flipoff, as `atoi` had it; none
+  ducked, none over a jump, a pain, an attack or a death. The smoke test taunts and sees the frames set under
+  the wave priority, the word said, a flipoff over the taunt, and none over a pain or ducked; `test:coop`
+  sees a client's taunt step a frame a tic where the other client sees it.
 - **`score` and `putaway`**: `Cmd_Score_f` (the score board by a word, toggled, in coop and deathmatch) and
   `Cmd_PutAway_f` (the help computer, the inventory and the score board closed by a word).
 - **`cl_predict` and `cl_showmiss`**: a guest's prediction switched off (its view then the host's frames as they

@@ -835,6 +835,22 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   await cmd('weaplast');
   const wl3 = (await db.query('SELECT weapon w FROM player')).rows[0].W;
   assert(wl3 === 512, `with the shotgun dropped, weaplast leaves the railgun in hand (${wl3})`);
+  // wave (Cmd_Wave_f): a gesture on the player model (its frames step where another player sees them: test:coop), the word
+  // said; a wave over a wave, none over a pain, none ducked
+  await db.exec('UPDATE player SET anim_priority = 0, ducked = 0');
+  await cmd('wave', '2');
+  const wv = (await db.query('SELECT p.anim_priority pr, p.anim_end fin, e.frame f, p.msg m FROM player p JOIN ents e ON e.id = p.ent_id')).rows[0];
+  assert(wv.PR === 1 && wv.FIN === 111 && wv.F === 94 && wv.M === 'taunt', `wave 2 taunts: the frames set from taunt01 (${wv.F} to ${wv.FIN}) under the wave priority, the word said (${wv.M})`);
+  await cmd('wave', 'x');
+  const wv3 = (await db.query('SELECT e.frame f, p.msg m FROM player p JOIN ents e ON e.id = p.ent_id')).rows[0];
+  assert(wv3.M === 'flipoff' && wv3.F === 71, `a wave with no number is the flipoff, as atoi had it, over the taunt (${wv3.F})`);
+  await db.exec('UPDATE player SET anim_priority = 3');   // (a pain running)
+  await cmd('wave', '3');
+  assert((await pmsg()) === 'flipoff', 'over a pain, no wave');
+  await db.exec('UPDATE player SET anim_priority = 0, ducked = 1');
+  await cmd('wave', '1');
+  assert((await pmsg()) === 'flipoff', 'ducked, no wave');
+  await db.exec('UPDATE player SET ducked = 0');
   await cmd('god');
   await cmd('kill');
   const dead = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);

@@ -411,6 +411,25 @@ BEGIN
                                                 WHEN 128 THEN 8 WHEN 256 THEN 9 WHEN 512 THEN 10 WHEN 1024 THEN 11 ELSE 0 END);
 END^
 
+-- Cmd_Wave_f: a gesture on the player model, for the other players to see (m_player.h: flip01 72-83, salute01 84-94,
+-- taunt01 95-111, wave01 112-122, point01 123-134; the frame starts one short, set_client_frame steps it), the word said:
+-- 0 flipoff, 1 salute, 2 taunt, 3 wave, anything else point (atoi: no number is 0). Not ducked, and not over a jump, a
+-- pain, an attack or a death (anim_priority above ANIM_WAVE, 1)
+CREATE OR ALTER PROCEDURE wave_cmd (pe INTEGER, arg VARCHAR(64))
+AS
+DECLARE pri SMALLINT; DECLARE ducked SMALLINT; DECLARE n INTEGER; DECLARE fr INTEGER; DECLARE fin INTEGER; DECLARE word VARCHAR(8);
+BEGIN
+  SELECT p.anim_priority, p.ducked FROM player p WHERE p.ent_id = :pe INTO pri, ducked;
+  IF (pri IS NULL OR ducked = 1 OR pri > 1) THEN EXIT;
+  n = CASE WHEN TRIM(COALESCE(arg, '')) SIMILAR TO '[0-9]{1,3}' THEN CAST(TRIM(arg) AS INTEGER) ELSE 0 END;
+  word = TRIM(CASE n WHEN 0 THEN 'flipoff' WHEN 1 THEN 'salute' WHEN 2 THEN 'taunt' WHEN 3 THEN 'wave' ELSE 'point' END);
+  fr = CASE n WHEN 0 THEN 71 WHEN 1 THEN 83 WHEN 2 THEN 94 WHEN 3 THEN 111 ELSE 122 END;
+  fin = CASE n WHEN 0 THEN 83 WHEN 1 THEN 94 WHEN 2 THEN 111 WHEN 3 THEN 122 ELSE 134 END;
+  UPDATE player p SET p.anim_priority = 1, p.anim_end = :fin WHERE p.ent_id = :pe;
+  UPDATE ents e SET e.frame = :fr WHERE e.id = :pe;
+  EXECUTE PROCEDURE sprint(pe, word);
+END^
+
 -- Cmd_Use_f for one item (idx, the itemlist index; typed, the name as asked for), then the item's use function
 CREATE OR ALTER PROCEDURE use_item (pe INTEGER, idx SMALLINT, typed VARCHAR(40))
 AS
@@ -681,6 +700,7 @@ BEGIN
   ELSE IF (cmd = 'invprev') THEN EXECUTE PROCEDURE inv_impulse(pe, 15);
   ELSE IF (cmd = 'invdrop') THEN EXECUTE PROCEDURE inv_impulse(pe, 23);
   ELSE IF (cmd = 'weaplast') THEN EXECUTE PROCEDURE weaplast_cmd(pe);
+  ELSE IF (cmd = 'wave') THEN EXECUTE PROCEDURE wave_cmd(pe, arg);
   ELSE msg = 'unknown command "' || cmd || '"';
   IF (msg <> '') THEN EXECUTE PROCEDURE sprint(pe, msg);
   SUSPEND;
