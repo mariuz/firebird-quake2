@@ -223,7 +223,9 @@ sets in the client's `cube_mask` and counts in `power_cubes`, and `trigger_fire`
 `trigger_key_touch` did); the inventory by itemlist index (`inv_count` reads a count from wherever the game keeps it:
 weapon bits, ammo, armour, key bits and the cube count, the `inv_*` columns for powerups and power armour; `inv_select` and
 `inv_validate` move `inv_sel`; `use_item` is `Cmd_Use_f` with the use functions; `inv_impulse` takes
-impulses 13–21: invuse, invnext, invprev and the item keys; `inventory_list` is the inventory screen's rows);
+impulses 13–21 and 23: invuse, invnext, invprev, the item keys and invdrop (`Cmd_InvDrop_f`: the selected item
+through `drop_cmd`); `weaplast_cmd` is `Cmd_WeapLast_f`, impulse 24, over `player.lastweapon`, which every
+weapon change sets as `ChangeWeapon` set `pers.lastweapon`; `inventory_list` is the inventory screen's rows);
 the ten weapons (p_weapon.c, g_weapon.c:
 bullets with the 8192-unit spread, rail, blaster bolts, grenades with the held-grenade timing,
 rockets, hyperblaster, BFG with its think); `t_damage`, `t_radius_damage` (to `findradius`'s radius, with `can_damage`'s five lines of sight), armour
@@ -735,8 +737,8 @@ the top, Escape to leave. The console's `menu_main`, `menu_game`, `menu_loadgame
 `menu_options`, `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits` and
 `menu_quit` open the menus as `M_Init` registered them (the host's `openMenu`), so a key bound to one opens
 it. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
-high for each of the twenty-four bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
-mouse look and centre view (`centerview` is a game word, END's by default as a command line, `DEFAULT_LINES`), with sidestep (`+strafe`, ALT: held, the turning keys step sideways) and keyboard look (`+klook`, INS: held, the walking keys look up and down) as `CL_BaseMove` read them, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
+high for each of the twenty-five bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
+mouse look and centre view, "drop item" among them (`invdrop`, BACKSPACE by default) (`centerview` is a game word, END's by default as a command line, `DEFAULT_LINES`), with sidestep (`+strafe`, ALT: held, the turning keys step sideways) and keyboard look (`+klook`, INS: held, the walking keys look up and down) as `CL_BaseMove` read them, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
 `s` and `p`, which are the page's back and pause: `l` and `h` here) with its keys named as `Key_KeynumToString` named them
 (`keyName`: letters and digits as themselves, `UPARROW`, `CTRL`, `PGDN`, `MOUSE1`, `MWHEELUP`…, "or" between two, `???` for
 none); Enter waits for a key (the cursor an `=`, the status bar asking) and the next key, mouse button or wheel notch pressed binds it

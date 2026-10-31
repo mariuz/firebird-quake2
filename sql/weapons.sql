@@ -191,7 +191,7 @@ BEGIN
     EXECUTE PROCEDURE launch_grenade(pe, mx, my, mz, fx_ * spd, fy * spd, fz * spd + 200, 125, 165, MAXVALUE(0.1e0, 3 - (t - gt)), 1);
     EXECUTE PROCEDURE snd(pe, 1, 'weapons/hgrent1a.wav', vol, 1);
     UPDATE player p SET p.grenade_time = 0, p.grenades = p.grenades - :au, p.attack_finished = :t + 1, p.attack_start = :t WHERE p.ent_id = :pe;
-    IF (ammo_count(pe, 3) <= 0) THEN UPDATE player p SET p.weapons = BIN_AND(p.weapons, BIN_NOT(32)), p.weapon = best_weapon(:pe) WHERE p.ent_id = :pe;
+    IF (ammo_count(pe, 3) <= 0) THEN UPDATE player p SET p.weapons = BIN_AND(p.weapons, BIN_NOT(32)), p.lastweapon = p.weapon, p.weapon = best_weapon(:pe) WHERE p.ent_id = :pe;
     EXIT;
   END
 
@@ -219,7 +219,7 @@ BEGIN
       EXECUTE PROCEDURE snd(pe, 1, 'weapons/noammo.wav', 1, 1);
       UPDATE player p SET p.pain_finished = :t + 1 WHERE p.ent_id = :pe;
     END
-    UPDATE player p SET p.weapon = best_weapon(:pe), p.attack_finished = :t + 0.5e0 WHERE p.ent_id = :pe;
+    UPDATE player p SET p.lastweapon = p.weapon, p.weapon = best_weapon(:pe), p.attack_finished = :t + 0.5e0 WHERE p.ent_id = :pe;
     EXIT;
   END
   UPDATE player p SET p.show_hostile = :t + 1, p.attack_start = :t, p.silencer_shots = MAXVALUE(0, p.silencer_shots - 1) WHERE p.ent_id = :pe;
@@ -330,7 +330,7 @@ BEGIN
   IF (quad > t) THEN EXECUTE PROCEDURE snd(pe, 3, 'items/damage3.wav', 1, 1);
   -- out of ammo for this weapon now: switch after this shot
   IF (ak > 0 AND ammo_count(pe, ak) < need AND w NOT IN (32)) THEN
-    UPDATE player p SET p.weapon = best_weapon(:pe) WHERE p.ent_id = :pe;
+    UPDATE player p SET p.lastweapon = p.weapon, p.weapon = best_weapon(:pe) WHERE p.ent_id = :pe;
 END^
 
 -- "use <weapon>" for a key 1..0, cycling, and the cheats
@@ -395,7 +395,20 @@ BEGIN
       IF (n < IIF(w = 4, 2, IIF(w = 1024, 50, 1))) THEN BEGIN EXECUTE PROCEDURE sprint(pe, 'Not enough ' || aname || ' for ' || wname || '.'); EXIT; END
     END
   END
-  UPDATE player p SET p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0, p.attack_finished = MAXVALUE(p.attack_finished, now_() + 0.3e0) WHERE p.ent_id = :pe;
+  -- ChangeWeapon: the one in hand becomes pers.lastweapon (weaplast's)
+  UPDATE player p SET p.lastweapon = p.weapon, p.weapon = :w, p.grenade_time = 0, p.chaingun_spin = 0, p.weapon_sound = 0, p.attack_finished = MAXVALUE(p.attack_finished, now_() + 0.3e0) WHERE p.ent_id = :pe;
+END^
+
+-- Cmd_WeapLast_f: the weapon held before the one in hand raised again (Use_Weapon through player_impulse, its refusals
+-- as they are): nothing without a weapon in hand, one held before, and that one still held
+CREATE OR ALTER PROCEDURE weaplast_cmd (pe INTEGER)
+AS
+DECLARE w INTEGER; DECLARE lw INTEGER; DECLARE have INTEGER;
+BEGIN
+  SELECT p.weapon, p.lastweapon, p.weapons FROM player p WHERE p.ent_id = :pe INTO w, lw, have;
+  IF (w IS NULL OR w = 0 OR lw IS NULL OR lw = 0 OR BIN_AND(have, lw) = 0) THEN EXIT;
+  EXECUTE PROCEDURE player_impulse(pe, CASE lw WHEN 1 THEN 1 WHEN 2 THEN 2 WHEN 4 THEN 3 WHEN 8 THEN 4 WHEN 16 THEN 5 WHEN 32 THEN 6 WHEN 64 THEN 7
+                                                WHEN 128 THEN 8 WHEN 256 THEN 9 WHEN 512 THEN 10 WHEN 1024 THEN 11 ELSE 0 END);
 END^
 
 -- Cmd_Use_f for one item (idx, the itemlist index; typed, the name as asked for), then the item's use function
@@ -447,7 +460,8 @@ BEGIN
 END^
 
 -- the inventory's impulses: 13 invuse, 14 invnext, 15 invprev, and default.cfg's item keys: 16 "use quad damage",
--- 17 "use invulnerability", 18 "use silencer", 19 "use rebreather", 20 "use environment suit", 21 "use power shield"
+-- 17 "use invulnerability", 18 "use silencer", 19 "use rebreather", 20 "use environment suit", 21 "use power shield";
+-- 23 invdrop (bindnames' "drop item")
 CREATE OR ALTER PROCEDURE inv_impulse (pe INTEGER, imp SMALLINT)
 AS
 DECLARE sel SMALLINT;
@@ -459,6 +473,14 @@ BEGIN
     SELECT p.inv_sel FROM player p WHERE p.ent_id = :pe INTO sel;
     IF (sel < 0) THEN EXECUTE PROCEDURE sprint(pe, 'No item to use.');
     ELSE EXECUTE PROCEDURE use_item(pe, sel, item_name(sel));
+  END
+  ELSE IF (imp = 23) THEN
+  BEGIN
+    -- Cmd_InvDrop_f: the selected item dropped as `drop` drops it (the drop functions and their refusals)
+    EXECUTE PROCEDURE inv_validate(pe);
+    SELECT p.inv_sel FROM player p WHERE p.ent_id = :pe INTO sel;
+    IF (sel < 0) THEN EXECUTE PROCEDURE sprint(pe, 'No item to drop.');
+    ELSE EXECUTE PROCEDURE drop_cmd(pe, item_name(sel));
   END
   ELSE IF (imp = 14) THEN EXECUTE PROCEDURE inv_select(pe, 1);
   ELSE IF (imp = 15) THEN EXECUTE PROCEDURE inv_select(pe, -1);
@@ -657,6 +679,8 @@ BEGIN
   ELSE IF (cmd = 'invuse') THEN EXECUTE PROCEDURE inv_impulse(pe, 13);
   ELSE IF (cmd = 'invnext') THEN EXECUTE PROCEDURE inv_impulse(pe, 14);
   ELSE IF (cmd = 'invprev') THEN EXECUTE PROCEDURE inv_impulse(pe, 15);
+  ELSE IF (cmd = 'invdrop') THEN EXECUTE PROCEDURE inv_impulse(pe, 23);
+  ELSE IF (cmd = 'weaplast') THEN EXECUTE PROCEDURE weaplast_cmd(pe);
   ELSE msg = 'unknown command "' || cmd || '"';
   IF (msg <> '') THEN EXECUTE PROCEDURE sprint(pe, msg);
   SUSPEND;
@@ -743,7 +767,8 @@ BEGIN
   -- view angles
   yaw = anglemod(yaw + yaw_d);
   pitch = MAXVALUE(-89, MINVALUE(89, ppitch + pitch_d));
-  IF (imp BETWEEN 13 AND 21) THEN EXECUTE PROCEDURE inv_impulse(pe, imp);
+  IF (imp BETWEEN 13 AND 21 OR imp = 23) THEN EXECUTE PROCEDURE inv_impulse(pe, imp);   -- (the inventory, the item keys, invdrop 23)
+  ELSE IF (imp = 24) THEN EXECUTE PROCEDURE weaplast_cmd(pe);
   ELSE IF (imp > 0) THEN EXECUTE PROCEDURE player_impulse(pe, imp);   -- (the weapons 1-11, weapnext 12, weapprev 22, 99 everything)
 
   -- P_WorldEffects: water, slime, lava, drowning

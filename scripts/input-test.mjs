@@ -96,6 +96,7 @@ check(readPad(null) === null, 'no pad reads as null');
   inp.key('KeyG'); check(cmd()[8] === 6, 'G is the hand grenades (6)');
   inp.key('Slash'); check(cmd()[8] === 12, '/ is the next weapon (12)');
   inp.key('BracketRight'); check(cmd()[8] === 14, '] is the inventory\'s next (14)');
+  inp.key('Backspace'); check(cmd()[8] === 23, 'Backspace drops the item selected (23, bindnames\' "drop item")');
   inp.key('KeyQ'); check(cmd()[8] === 16, 'Q uses the quad (16)');
   inp.key('KeyL'); check(cmd()[8] === 18, 'L uses the silencer (18: default.cfg\'s s, the page\'s back)');
   inp.key('KeyH'); check(cmd()[8] === 21, 'H uses the power shield (21: default.cfg\'s p, the page\'s pause)');
@@ -194,7 +195,7 @@ check(readPad(null) === null, 'no pad reads as null');
     check(checkLine('  give all ') === 'give all' && checkLine('') === null && checkLine('x'.repeat(128)) !== null && checkLine('x'.repeat(129)) === null && checkLine('say\nhi') === null && checkLine(null) === null,
       'checkLine trims, and refuses nothing, past 128 characters or a control character');
   }
-  check(ACTIONS.length === 24 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
+  check(ACTIONS.length === 25 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
     'every action has its default keys, no key twice');
   inp.clear();
   inp.mouse(100, -50, settings); c = cmd();

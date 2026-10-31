@@ -731,8 +731,34 @@ The ninth list: what the console and a shared game still lack of Quake 2's own w
   said). `test:console` sees both reach the host and the name cleaned; the browser test types `condump mylog`
   and reads the file downloaded, the print and the line typed before it in it, and `clear` leaving an empty
   scrollback.
-- **`invdrop` and `weaplast`**: bindnames' "drop item" (`invdrop`: the selected item dropped, `Cmd_InvDrop_f`)
-  and the last weapon back (`weaplast`, `Cmd_WeapLast_f`), with their keys in the keys menu and `bind`.
+- **`invdrop` and `weaplast`**: done. bindnames' "drop item" is an action now, `invdrop` (`Cmd_InvDrop_f`: the
+  selected item dropped as `drop` drops it, "No item to drop." with nothing selected; impulse 23 through
+  `inv_impulse`; BACKSPACE by default, the twenty-fifth row of the keys menu), and `weaplast` (`Cmd_WeapLast_f`:
+  the weapon held before the one in hand raised again, through `Use_Weapon` and its refusals; nothing without
+  one in hand, one held before, or that one still held) is a game word for the console and `bind`, impulse 24
+  (`weaplast_cmd`), over `player.lastweapon`, which every weapon change sets as `ChangeWeapon` set
+  `pers.lastweapon` (`Use_Weapon`, the pickups' switch, the change when the ammo runs out; a fresh client has
+  none). The smoke test drops the selected shells by the impulse and by the word, sees `weaplast` go back and
+  forth between the shotgun and the railgun and do nothing once the shotgun is dropped; `test:input` and
+  `test:menu` count the action.
+
+The tenth list: what the console, the keys and a shared game still lack of Quake 2's own words, with the demo
+pak. In the order they are to be taken.
+
+- **`+mlook`, `freelook`, `lookspring` and `lookstrafe`**: bindnames' "mouse look" and the options menu's three
+  items. The mouse always looks here; with `freelook 0` its vertical walks the player forward and back
+  (`m_forward`) unless `+mlook` is held, `lookspring` levels the view as `+mlook` is let go (`IN_MLookUp`), and
+  `lookstrafe` makes its horizontal a sidestep under `+mlook` (`CL_MouseMove`).
+- **`echo`, `cmdlist`, `version` and `pause`**: cmd.c's `echo` prints its words, `cmdlist` the commands and
+  their count, `version` says which build the page runs, and `pause` is the P key's word (`CL_Pause_f`).
+- **`wave 0–4`**: `Cmd_Wave_f`: flipoff, salute, taunt, wave and point as the player model's frames (`ANIM_WAVE`
+  under `anim_priority`, `G_SetClientFrame` letting them run), said on the line and seen by the other players.
+- **`score` and `putaway`**: `Cmd_Score_f` (the score board by a word, toggled, in coop and deathmatch) and
+  `Cmd_PutAway_f` (the help computer, the inventory and the score board closed by a word).
+- **`cl_predict` and `cl_showmiss`**: a guest's prediction switched off (its view then the host's frames as they
+  come), and the prediction's misses counted and printed on its line as `CL_CheckPredictionError` printed them.
+- **`viewsize`, `sizeup` and `sizedown`**: the view at 40 to 100 percent of the screen within the backtile, as
+  `SCR_CalcVrect` laid it, `-` and `=` default.cfg's keys for them, the status bar staying where it is.
 
 ## Playing the demo
 

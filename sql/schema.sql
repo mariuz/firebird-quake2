@@ -493,7 +493,8 @@ CREATE TABLE player (
   spectator       SMALLINT DEFAULT 0 NOT NULL,            -- pers.spectator (3.20's userinfo): a watcher with no body, noclipping through the level
   chase           SMALLINT DEFAULT 0 NOT NULL,            -- chase_target (3.20's g_chase.c): the client a watcher's view follows, 0 floating free
   fire_held       SMALLINT DEFAULT 0 NOT NULL,            -- latched_buttons' attack for a watcher: a press counts once (the next player chased)
-  fov             DOUBLE PRECISION                        -- the fov userinfo (ClientUserinfoChanged, 1..160): the client's own frustum; NULL, the view's
+  fov             DOUBLE PRECISION,                       -- the fov userinfo (ClientUserinfoChanged, 1..160): the client's own frustum; NULL, the view's
+  lastweapon      INTEGER DEFAULT 0 NOT NULL              -- pers.lastweapon (ChangeWeapon): the weapon bit held before the one in hand, weaplast's; 0 none yet
 );
 
 -- client_respawn_t's coop_respawn: each client's persistent data as it was when the level began
