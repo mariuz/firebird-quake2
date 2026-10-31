@@ -424,11 +424,13 @@ try {
       `viewsize 60 draws the view in a 192×144 rectangle at 64,48 with the backtile around it and the SQL's frustum its size, sizeup and = step it up, - down, viewsize 100 is the whole screen again (${JSON.stringify({ vs60, vs70, vs80, vs70b, vs100 })})`);
     // ref_soft's switches: r_novis marks every leaf (the frame has more faces), r_fullbright lights everything (the painter's flag, its
     // surfaces built again), r_speeds prints the frame's figures on the console's line once a second; back to the defaults after
-    const facesNow = () => page.evaluate(() => window.quake2.sql('SELECT COUNT(*) c FROM frame_faces_fast').then((r) => r[0].C)).catch(() => -1);
-    const withPvs = await facesNow();
+    // (the faces the kept vis set holds for the eye's cluster, counted after a frame query: r_novis marks every leaf, so the set grows;
+    // the faces in the frame itself would depend on where the view looks between the two counts)
+    const setFaces = () => page.evaluate(() => window.quake2.sql('SELECT COUNT(*) c FROM frame_faces_fast').then(() => window.quake2.sql('SELECT COUNT(*) c FROM vis_faces WHERE slot = (SELECT vis_slot FROM viewcfg WHERE id = 1)')).then((r) => r[0].C)).catch(() => -1);
+    const withPvs = await setFaces();
     await typeCommand('r_novis 1'); await sleep(300);
     const novis = await page.evaluate(() => window.quake2.sql('SELECT novis FROM viewcfg').then((r) => ({ novis: r[0].NOVIS, setting: window.quake2.settings.rNovis }))).catch(() => ({}));
-    const allFaces = await facesNow();
+    const allFaces = await setFaces();
     await typeCommand('r_novis 0');
     await typeCommand('r_fullbright 1');
     const fb1 = await page.evaluate(() => ({ flag: window.quake2.renderer.fullbright, setting: window.quake2.settings.rFullbright })).catch(() => ({}));
@@ -438,9 +440,9 @@ try {
     for (let i = 0; i < 20 && !speeds; i++) { await sleep(200); speeds = await page.evaluate(() => window.quake2.notify.log(64).find((l) => / ms, \d+ wpoly \d+ epoly/.test(l)) ?? null).catch(() => null); }
     await typeCommand('r_speeds 0');
     const rDefaults = await page.evaluate(() => ({ fullbright: window.quake2.renderer.fullbright, novis: window.quake2.settings.rNovis, speeds: window.quake2.settings.rSpeeds, ents: window.quake2.settings.rDrawentities, world: window.quake2.settings.rDrawworld })).catch(() => ({}));
-    assert(novis.novis === 1 && novis.setting === true && allFaces > withPvs && fb1.flag === true && fb1.setting === true && typeof speeds === 'string'
+    assert(novis.novis === 1 && novis.setting === true && allFaces > withPvs && withPvs > 0 && fb1.flag === true && fb1.setting === true && typeof speeds === 'string'
       && rDefaults.fullbright === false && rDefaults.novis === false && rDefaults.speeds === false && rDefaults.ents === true && rDefaults.world === true,
-      `r_novis 1 marks every leaf (${allFaces} faces against ${withPvs}), r_fullbright 1 sets the painter's flag, r_speeds 1 prints the frame's figures ("${speeds}"), and the switches come back (${JSON.stringify(rDefaults)})`);
+      `r_novis 1 marks every leaf (the set holds ${allFaces} faces against the PVS's ${withPvs}), r_fullbright 1 sets the painter's flag, r_speeds 1 prints the frame's figures ("${speeds}"), and the switches come back (${JSON.stringify(rDefaults)})`);
     // serverinfo, userinfo and status: the game's cvars, this page's userinfo and the clients, on the line (status's lines in the scrollback too)
     await typeCommand('serverinfo');
     const svInfo = await status();
