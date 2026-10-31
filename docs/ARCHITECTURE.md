@@ -538,12 +538,13 @@ guest's screen is up, and the score board's rows with each client's ping), dropp
 more than 256 KB queued; once a second a `ping` carrying the host's clock goes too, which the guest's link
 answers with a `pong` at once, the round trip read back against the clock (`HostLink.ping`: the score
 board's "Ping:", `players`' listing, the joined page's stats line). The guest's page
-(`GuestLink`) sends its userinfo (the player setup's name and hand, and whether it only watches, an `info` message) at the connect, then
+(`GuestLink`) sends its userinfo (the player setup's name and hand, whether it only watches, and its fov, an `info` message) at the connect, then
 `Input.read`'s command each of its own tics, and paints the newest frame it holds
 exactly as the page paints its own (`drawFrame`), the sounds at its own ear, the effects and particles run
 there; it loads the pak as every page does and, at each map message (sent from `mapLoaded`: the name, the
-sky and its rotation, the CD track, the looped speakers, the host's view size and fov, which the guest's
-frustum must match), the map's geometry for the painter alone (`loadMapModels`, the BSP and its brush
+sky and its rotation, the CD track, the looped speakers, the host's view size; the fov is the guest's own,
+`player.fov` from its userinfo, which `view_setup` makes its frame at, as the fov userinfo did), the map's
+geometry for the painter alone (`loadMapModels`, the BSP and its brush
 models into `res` with no database), so it runs no game logic and its own Firebird stands idle. A picture
 at a unit's end is sent too. The wire is JSON in chunks of 16,000 characters over one ordered data channel
 (`Link`), a frame of demo1 being 10–30 KB; the two sides know nothing of WebRTC and the network test runs

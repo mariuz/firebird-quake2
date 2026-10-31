@@ -108,7 +108,20 @@ check(infoSeen && infoSeen.name === 'Rimmer, Arnold ' && infoSeen.hand === 1 && 
 await session.setUserinfo(2, host.info);
 check((await q('SELECT netname, hand FROM player WHERE id = 2'))[0].NETNAME === 'Rimmer, Arnold ' && (await q('SELECT hand FROM player WHERE id = 2'))[0].HAND === 1, 'and the second client carries them');
 guest.sendInfo({ name: 'x', hand: 7 });
-check(host.info.hand === 0 && host.info.spectator === 0, 'a hand that is not 0, 1 or 2 is right-handed; a guest plays unless it says it watches');
+check(host.info.hand === 0 && host.info.spectator === 0 && host.info.fov === null, 'a hand that is not 0, 1 or 2 is right-handed; a guest plays unless it says it watches; no fov given is the view\'s');
+// the fov userinfo: the guest's own, clamped as ClientUserinfoChanged clamped it, on its row, and its frame at that fov
+// (fewer faces in a narrow view than in a wide one at the same eye)
+guest.sendInfo({ name: 'x', hand: 0, fov: 30 });
+await session.setUserinfo(2, host.info);
+const narrow = (await session.frame({ client: 2, sqlRenderer: false })).faces.length;
+check(host.info.fov === 30 && (await q('SELECT fov FROM player WHERE id = 2'))[0].FOV === 30, 'the guest\'s fov reaches the host and its row');
+guest.sendInfo({ name: 'x', hand: 0, fov: 500 });
+await session.setUserinfo(2, host.info);
+const wide = (await session.frame({ client: 2, sqlRenderer: false })).faces.length;
+check(host.info.fov === 160 && wide > narrow, `clamped to 160, where the frame has more faces than at 30 (${wide} against ${narrow})`);
+guest.sendInfo({ name: 'x', hand: 0, fov: 'x' });
+await session.setUserinfo(2, host.info);
+check(host.info.fov === null && (await q('SELECT fov FROM player WHERE id = 2'))[0].FOV === null && (await q('SELECT fov FROM player WHERE id = 1'))[0].FOV === null, 'a fov that is no number leaves the view\'s; the first client\'s is the view\'s too');
 await session.setUserinfo(2, { name: '', hand: 0 });
 // a guest that watches (3.20's spectator userinfo): the host puts its client back in with no body, noclipping, whom
 // nothing hurts and the monsters ignore; playing again, it is back at its spot, solid, with a weapon in hand
