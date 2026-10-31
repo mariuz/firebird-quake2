@@ -301,6 +301,8 @@ const con = new Console({
   stopRecord: () => stopRecording(),
   isRecording: () => !!recorder,
   setSpectator: (on) => setSpectator(on),
+  listPlayers: () => listPlayers(),                      // (players: the game's clients and what drives each; 'guest' on a joined page, null without a game)
+  kick: (n) => kickGuest(n),                             // (kick <n>: the guest driving client n dropped; its name, or 'none', 'not-hosting')
 });
 function openConsole(prefill = '') {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
@@ -1355,6 +1357,34 @@ async function hostAccept(peer, text) {
 const guestsState = () => `${net.guests.length} guest${net.guests.length === 1 ? '' : 's'} connected`;
 /** A guest's client number: the lowest of 2 to 4 no guest drives (a guest that left leaves its client to the next). */
 const freeClient = () => { for (let c = 2; c <= MAX_PLAYERS; c++) if (!net.guests.some((g) => g.client === c)) return c; return null; };
+/**
+ * SV_Status_f's list: the game's clients, each with its number, its name and what drives it (this page, a guest with the
+ * frames sent and dropped and whether it watches, a pad, or nothing: standing); 'guest' on a joined page, null with no game.
+ */
+function listPlayers() {
+  if (netGuest()) return 'guest';
+  if (!map || !session?.clients?.length || demo) return null;
+  const local = session.twoPlayers && !net ? session.nclients : 1;
+  return session.clients.map((c) => {
+    const g = net?.guests?.find((x) => x.client === c.CLIENT);
+    const kind = c.CLIENT === 1 ? 'page' : g ? 'guest' : c.CLIENT <= local ? 'pad' : 'standing';
+    return { num: c.CLIENT, name: c.NETNAME || `player ${c.CLIENT}`, kind, sent: g?.host.sentFrames ?? 0, dropped: g?.host.droppedFrames ?? 0, spectator: !!g?.host.info?.spectator };
+  });
+}
+/**
+ * SV_Kick_f: the guest driving client `n` is told and dropped (its client stands, as one that left), and every client's
+ * message line says who was kicked; the name kicked, or 'none' (no guest drives that client), 'not-hosting'.
+ */
+function kickGuest(n) {
+  if (!netHost()) return 'not-hosting';
+  const g = net.guests.find((x) => x.client === n);
+  if (!g) return 'none';
+  const name = session.clients.find((c) => c.CLIENT === n)?.NETNAME || `player ${n}`;
+  if (g.host.open) g.host.sendKick('You were kicked from the game');
+  guestLeft(g);
+  if (map && running) db.query('EXECUTE PROCEDURE sprint(NULL, ?)', [`${name} was kicked`]).catch((err) => console.warn('kick:', err.message));   // (SV_BroadcastPrintf)
+  return name;
+}
 /** A guest leaves: its client stands (the next guest, or a pad, drives it); the last one gone, the page plays alone. */
 function guestLeft(g) {
   if (net?.role !== 'host' || !net.guests.includes(g)) return;
@@ -1406,7 +1436,14 @@ async function netGo() {
       net.guest.onMap = (m) => guestMap(m).catch((err) => { console.error(err); setStatus(err.message, true); });
       net.guest.onPic = (file) => { if (pak.has(file)) { running = false; const p = loadPcx(pak.get(file)); renderer.drawPicFull(p); renderer.present(null, p.palette); } };
       net.guest.onCin = (file) => { if (pak.has(file) && !cinematic) playCinematic(file).catch((err) => console.error(err)); };
-      net.guest.onClose = () => { if (netGuest()) { if (recorder) stopRecording(); net = null; running = false; netState('the host left'); setStatus('The host left. Press a key or click the view for a game of your own.'); anyKey = () => { setStatus(''); endGame(); }; } };
+      net.guest.onClose = () => {
+        if (!netGuest()) return;
+        const why = net.guest.kicked ? `${net.guest.kicked}.` : 'The host left.';   // (SV_Kick_f told this page before the channel closed)
+        if (recorder) stopRecording(); net = null; running = false;
+        netState(why === 'The host left.' ? 'the host left' : 'kicked');
+        setStatus(`${why} Press a key or click the view for a game of your own.`);
+        anyKey = () => { setStatus(''); endGame(); };
+      };
       netEl.panel.hidden = true;
       canvas.scrollIntoView?.({ block: 'start' });
       netState('joined: waiting for the map');

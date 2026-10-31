@@ -38,7 +38,7 @@ npm run test:base2     # the same on the Installation (demo2)
 npm run test:base3     # and on demo3
 npm run test:monsters  # every monster, the demo's and the full game's: spawned, it sees the player, attacks, and dies
 npm run test:save      # save, play on, load: the game comes back exactly and keeps running
-# in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, skill 0-3, save, load, record …, stop, demos, deldemo …, timedemo …, screenshot, say …, bind k +attack, bind t "say hello", unbind k, unbindall, bindlist, the cvars name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume, cvarlist, writeconfig, exec, exec autoexec, unautoexec, timescale 0.5); T chats (say); F1 the help computer
+# in the page: ` opens the console (god, noclip, notarget, give …, use …, drop …, kill, map …, fov …, skill 0-3, save, load, record …, stop, demos, deldemo …, timedemo …, screenshot, say …, bind k +attack, bind t "say hello", unbind k, unbindall, bindlist, the cvars name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume, cvarlist, writeconfig, exec, exec autoexec, unautoexec, timescale 0.5, players, kick 2); T chats (say); F1 the help computer
 npm run serve          # http://localhost:8080/ (as Pages serves it); add -- --coi for the threaded engine
 npm run screenshots    # headless frames to docs/ (node scripts/screenshot.mjs demo1 --at=x,y,z,yaw)
 npm run bench          # where a tic and a frame spend their time
@@ -69,7 +69,8 @@ the traces have a JS twin, `src/pmove.js`, held to the SQL's numbers). Host agai
 for the next player, who joins the game as it runs, a channel each; a joined page that ticks "spectate" only
 watches, with no body in the game; `say <text>` at any page's console (`T` opens it with `say ` typed) puts the
 words on every player's message line by the speaker's name, and a joined page's game commands (`god`, `give`,
-`kill`…) run at the host for its player; the host's menu and `P` do not stop a shared game, as Quake 2
+`kill`…) run at the host for its player; `players` at the host's console lists the clients and what drives
+each, `kick <n>` drops a guest; the host's menu and `P` do not stop a shared game, as Quake 2
 paused single player alone. There is no signalling server on a static site, so the texts go by hand,
 or through a relay of your own: `npm run signal` runs one (`scripts/signal.mjs`, a small HTTP server with
 four-letter room codes), `rtc_signal http://host:8787` at the console of both pages points them at it, and

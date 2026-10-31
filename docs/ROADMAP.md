@@ -628,9 +628,37 @@ Quake: in the order they are to be taken.
   `exec autoexec` runs it again, `unautoexec` or the box unticked drops it, and the box ticked with none kept
   opens the picker. `test:console` covers the words, the browser test keeps a config, sees it run, run again
   and run at the next start (the offline reload), and dropped.
-- **`players` and `kick` at the host's console**: the host has no list of its guests but the stats line's
-  count. `players` lists the clients (number, name, frames sent and dropped, watching or playing), `kick <n>`
-  drops a guest, as `SV_Status_f` and `SV_Kick_f` did.
+- **`players` and `kick` at the host's console**: done. The host had no list of its guests but the stats
+  line's count. `players` lists the game's clients as `SV_Status_f` did: the number, the name and what drives
+  each (this page; a guest, with the frames sent to it and dropped, and watching when it only watches; a pad;
+  nothing, standing), on the page's one line (`listPlayers` in `src/main.js`; a joined page is told the host
+  lists them). `kick <n>` drops the guest driving client `n` as `SV_Kick_f` did (`kickGuest`): a `kick` message
+  with the reason goes first, which the guest's page shows in place of "The host left" and stands for a key,
+  then the channel closes and the client stands as one that left; "<name> was kicked" goes to every message
+  line (`sprint(NULL, …)`, `SV_BroadcastPrintf`); the usage and "Bad user id" as Quake printed them.
+  `test:console` covers the words over a fake host, `test:net` the kick message reaching the guest with its
+  reason before the close, the browser test `players` listing the host and two guests and `kick 3` dropping
+  the third page, which says why, every message line saying who.
+
+The eighth list: what a game shared over the network and the console still lack, from Quake 2's own words.
+
+- **`connect`, `disconnect` and `reconnect` at the console**: Join, Leave and the last host are the page's
+  buttons alone. `connect <code or offer>` joins as Join does (`CL_Connect_f`), `disconnect` leaves a joined
+  or hosted game (`CL_Disconnect_f`), `reconnect` joins the last host again through the relay's code.
+- **The chase cam for a watcher**: a spectator floats where it likes. 3.20's `g_chase.c`: a watcher's view at
+  a player's eye (`UpdateChaseCam`), the attack key cycling to the next player (`ChaseNext`, `ChasePrev`),
+  `chase <n>` at the console, and back to floating on jump.
+- **Pings on the score board**: "Ping: 0" for everyone. The host measures each guest's round trip with a
+  `ping` message a second and puts it in the row (`ping`), the score board shows it; a joined page shows its
+  own on the stats line.
+- **The host's save and load with guests connected**: a save in a shared game loads with its player rows but
+  the guests' clients are not put back under their guests, nor sent the map again. A load keeps the guests'
+  clients (`applyUserinfo` over them) and sends each its map message, as a level change does.
+- **`netgraph`**: nothing shows a guest's dropped or late frames but the stats line's count. `netgraph 1`
+  draws the frames' arrival and the drops in the view's corner as `SCR_DrawNet` and `netgraph` did.
+- **The menus from the console**: `menu_main`, `menu_game`, `menu_loadgame`, `menu_savegame`, `menu_options`,
+  `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits` and `menu_quit` open the
+  menus as `M_Init` registered them, so a key bound to one (`bind F4 menu_options`) opens it.
 
 ## Playing the demo
 

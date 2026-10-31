@@ -169,6 +169,37 @@ check(spectating === 1 && status.at(-1)?.[0] === 'spectator takes 0 or 1' && sta
 await con.submit('spectator 0');
 check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'spectator 0 plays again');
 
+// players and kick: SV_Status_f's list of the clients and what drives each, SV_Kick_f dropping a guest by its client number
+{
+  let rows = null, kicked = [];
+  host.listPlayers = () => rows;
+  host.kick = (n) => { if (rows === 'guest' || !rows?.some((r) => r.kind === 'guest')) return 'not-hosting'; const r = rows.find((x) => x.num === n && x.kind === 'guest'); if (!r) return 'none'; kicked.push(n); return r.name; };
+  await con.submit('players');
+  check(status.at(-1)?.[0] === 'players: no game is running' && status.at(-1)?.[1] === true, 'players with no game says so');
+  rows = 'guest';
+  await con.submit('players');
+  check(status.at(-1)?.[0] === 'players: the host lists them' && status.at(-1)?.[1] === true, 'on a joined page, the host lists them');
+  await con.submit('kick 2');
+  check(kicked.length === 0 && status.at(-1)?.[0] === 'kick: only the host of a game over the network can kick' && status.at(-1)?.[1] === true, 'kick on a page that does not host is refused');
+  rows = [{ num: 1, name: 'Ace', kind: 'page' }, { num: 2, name: 'Rimmer', kind: 'guest', sent: 120, dropped: 3, spectator: true }, { num: 3, name: 'player 3', kind: 'guest', sent: 40, dropped: 0, spectator: false }, { num: 4, name: 'player 4', kind: 'standing' }];
+  await con.submit('players');
+  check(status.at(-1)?.[0] === '1 Ace (this page) · 2 Rimmer (guest: 120 frames sent, 3 dropped, watching) · 3 player 3 (guest: 40 frames sent) · 4 player 4 (standing)' && status.at(-1)?.[1] === false,
+    'players lists every client with its number, name and what drives it, a guest with its frames sent and dropped and whether it watches');
+  await con.submit('kick');
+  check(status.at(-1)?.[0] === 'Usage: kick <userid>' && status.at(-1)?.[1] === true, 'kick alone shows its usage, as SV_Kick_f did');
+  await con.submit('kick x');
+  check(status.at(-1)?.[0] === 'Usage: kick <userid>' && kicked.length === 0, 'kick with no number too');
+  await con.submit('kick 4');
+  check(status.at(-1)?.[0] === 'Bad user id: no guest drives client 4' && status.at(-1)?.[1] === true && kicked.length === 0, 'a client no guest drives is a bad user id');
+  await con.submit('kick 2');
+  check(kicked.join() === '2' && status.at(-1)?.[0] === 'Rimmer was kicked' && status.at(-1)?.[1] === false, 'kick 2 drops the guest and says who was kicked');
+  rows = [{ num: 1, name: 'player 1', kind: 'page' }, { num: 2, name: 'player 2', kind: 'pad' }];
+  await con.submit('players');
+  check(status.at(-1)?.[0] === '1 player 1 (this page) · 2 player 2 (a pad)', 'a coop game at one page lists the pad\'s player');
+  check(con.complete('pl') === 'players ' && con.complete('ki') === 'kick ', 'Tab completes players and kick');
+  delete host.listPlayers; delete host.kick;
+}
+
 // rtc_ice: the ICE server for the next network game, kept in the settings; shown, set, refused, cleared
 host.settings.rtcIce = '';
 await con.submit('rtc_ice');

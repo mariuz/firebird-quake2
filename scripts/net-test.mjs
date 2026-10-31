@@ -446,7 +446,13 @@ check(session.clients.length === 3, 'the host\'s game goes on with its clients')
   const d2 = dguest.take();
   check(d2?.row.DEAD === 1 && d2.row.SCORE === -1 && d2.row.SCORES.find((s) => s.id === 2)?.score === -1 && d2.row.SCORES.find((s) => s.id === 1)?.score === 0,
     `the guest's kill, forwarded, costs its client a frag on its row and the board (${JSON.stringify(d2?.row.SCORES)})`);
-  dguest.close();
+  // SV_Kick_f: the host tells the guest before closing its channel; the guest's page knows why the connection went
+  let kickedWhy = null;
+  dguest.onKick = (why) => { kickedWhy = why; };
+  dhost.sendKick('You were kicked from the game');
+  check(kickedWhy === 'You were kicked from the game' && dguest.kicked === kickedWhy && dguest.open, 'a kick message reaches the guest with its reason, the channel still open');
+  dhost.close();
+  check(!dguest.open && !dhost.open, 'then the host closes the channel');
   await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, deathmatch: false, players: 2 });
   check(session.coop && !session.deathmatch && (await q('SELECT COUNT(*) n FROM ents WHERE mtype IS NOT NULL'))[0].N > 0, 'and a coop game again has its monsters');
 }
