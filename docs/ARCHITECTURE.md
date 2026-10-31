@@ -682,8 +682,10 @@ are `settings.binds` (action → key codes, the two shifts, controls and alts on
 way in from storage like every setting, and the `Input` reads the same object each tic (`read` asks
 whether any key bound to an action is down; a one-shot action's impulse comes from `key`); the options'
 reset defaults puts them back as `exec default.cfg` did. The weapon and item keys stay fixed, as Quake's
-menu did not list them, the silencer's and the power shield's aside (they had to move). The multiplayer menu's `player setup` is `M_Menu_PlayerConfig_f` (the servers stay
-greyed: the network game has the page's own buttons): a text field for the name (`menufield_s` as `Field_Draw`
+menu did not list them, the silencer's and the power shield's aside (they had to move). The multiplayer menu's `join network server` and `start network server` are
+the page's Join and Host (the host's `netJoin` and `netHost`: the menu goes away and the panel shows under the
+view, as `M_Menu_JoinServer_f` and `M_Menu_StartServer_f` opened theirs; greyed on a page with none), and its
+`player setup` is `M_Menu_PlayerConfig_f`: a text field for the name (`menufield_s` as `Field_Draw`
 and `Field_Key` had it: the box of frame pieces, the blinking cursor, the printable keys and Backspace,
 fifteen characters) and a spin for the handedness (right, left, center); the model and skin boxes wait on a
 pak with the player model. Both are settings (`name`, `hand`) and this client's userinfo

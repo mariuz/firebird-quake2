@@ -510,15 +510,29 @@ try {
       for (const p of [page, gp]) await p.evaluate((url) => { window.quake2.settings.rtcSignal = url; }, `http://localhost:${RELAY_PORT}`);
       const relaySet = await Promise.all([page, gp].map((p) => p.evaluate(() => window.quake2?.settings?.rtcSignal).catch(() => null)));
       assert(relaySet.every((s) => s === `http://localhost:${RELAY_PORT}`), `rtc_signal points both pages at it (${relaySet.join(', ')})`);
-      await page.click('#net-host');
+      // (Host from the multiplayer menu's start network server, over the attract loop, where the main menu is up already
+      // or a key brings it up; its cursor is put on multiplayer, wherever it was left)
+      const menuKeys = async (p, ...codes) => { for (const c of codes) { await p.keyboard.press(c); await sleep(150); } };
+      const toMultiplayer = async (p) => {
+        if (!(await p.evaluate(() => window.quake2?.menu?.active).catch(() => false))) await menuKeys(p, 'Escape');
+        await p.evaluate(() => { if (window.quake2.menu.current?.id === 'main') window.quake2.menu.mainCursor = 1; });
+        await menuKeys(p, 'Enter');
+        return p.evaluate(() => window.quake2?.menu?.current?.id ?? null).catch(() => null);
+      };
+      assert((await toMultiplayer(page)) === 'multiplayer', 'the main menu over the attract loop opens the multiplayer menu');
+      await menuKeys(page, 'ArrowDown', 'Enter');
+      let fromMenu = {};   // (the panel shows once the offer is made: the candidates take up to three seconds)
+      for (let i = 0; i < 80 && !fromMenu.panel; i++) { await sleep(250); fromMenu = await page.evaluate(() => ({ menu: window.quake2?.menu?.current?.id ?? null, panel: !document.getElementById('net').hidden })).catch(() => ({})); }
+      assert(fromMenu.menu === null && fromMenu.panel, `the multiplayer menu's start network server is Host: the menu goes away and the panel shows (${JSON.stringify(fromMenu)})`);
       let offer = '';   // (the code, here; the third page below joins by text)
       for (let i = 0; i < 80 && !/^[A-Z2-9]{4}$/.test(offer); i++) { await sleep(250); offer = await text(page); }
       const hostHelp = await page.evaluate(() => document.getElementById('net-help')?.textContent ?? '').catch(() => '');
       const room = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(/^[A-Z2-9]{4}$/.test(offer) && hostHelp.includes(`the code ${offer}`) && room === 200, `Host publishes the offer at the relay and shows its code (${offer}; the room there: ${room})`);
-      await gp.click('#net-join');
-      const joinHelp = await gp.evaluate(() => document.getElementById('net-help')?.textContent ?? '').catch(() => '');
-      assert(/Type the code/.test(joinHelp), `Join asks for the code (${joinHelp})`);
+      await toMultiplayer(gp);
+      await menuKeys(gp, 'Enter');   // (join network server, from the menu too)
+      const joinHelp = await gp.evaluate(() => (window.quake2?.menu?.active ? 'menu still up' : document.getElementById('net-help')?.textContent ?? '')).catch(() => '');
+      assert(/Type the code/.test(joinHelp), `the menu's join network server is Join, which asks for the code (${joinHelp})`);
       await gp.fill('#net-text', offer.toLowerCase());
       await gp.click('#net-go');
       const answer = '';   // (none to pass by hand: the relay carries it)

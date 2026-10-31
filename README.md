@@ -89,7 +89,8 @@ unit transitions play as `cl_cin.c` played them).
 
 Escape brings up Quake 2's menus over the game: a new game, the save slots, the credits, the options with
 `customize controls` (the keys menu: Enter then a key rebinds an action, Backspace clears it; the binds are
-kept with the settings in this browser), the multiplayer menu's `player setup` (your name, for the
+kept with the settings in this browser), the multiplayer menu's `join network server` and `start network
+server` (the page's Join and Host) and its `player setup` (your name, for the
 obituaries and the score board, and your handedness: a left-hander's shots come from the left and the gun is
 drawn mirrored, a centre-hander's from the middle with no gun drawn, as `P_ProjectSource` and the renderers
 had them; a guest's go to the host), the video modes, quit.

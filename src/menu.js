@@ -28,8 +28,8 @@ export const HANDS = ['right', 'left', 'center'];
 export class Menu {
   /**
    * host: { hud, playing(), newGame(skill), slots() → [{ valid, name }] × 15, loadSlot(i), saveSlot(i),
-   *         get(key), set(key, value), resetDefaults(), resetVideo(), bind(action, code), unbind(action),
-   *         credits() → lines, console(), quit(), sound(name) }
+   *         downloadSlot(i), get(key), set(key, value), resetDefaults(), resetVideo(), bind(action, code), unbind(action),
+   *         credits() → lines, console(), quit(), sound(name), netHost(), netJoin() (the last two optional: greyed without) }
    */
   constructor(host) {
     this.host = host;
@@ -341,12 +341,20 @@ export class Menu {
     this.push(m);
   }
 
-  /** M_Menu_Multiplayer_f: the servers greyed (the network game has the page's own buttons), the player setup live */
+  /**
+   * M_Menu_Multiplayer_f: join and start network server are the page's Join and Host (the host's netJoin and
+   * netHost: the menu goes away and the page's panel shows under the view, as M_Menu_JoinServer_f and
+   * M_Menu_StartServer_f opened theirs; greyed where the page has none), the player setup live
+   */
   multiplayer() {
+    const h = this.host;
+    const net = (fn, how) => (fn ? { callback: () => { this.off(); fn(); }, statusbar: how } : { callback: null, grayed: true, statusbar: 'the network game has the page\'s own buttons' });
+    const join = net(h.netJoin, 'join a game over the network: the host\'s offer, or its code, goes in the box under the view');
+    const start = net(h.netHost, 'host a game over the network: the offer, or its code, shows under the view');
     const m = this.framework({
       id: 'multiplayer', banner: 'm_banner_multiplayer', items: [
-        action('join network server', 0, null, { left: true, grayed: true, statusbar: 'the network game is joined from the page: Join' }),
-        action('start network server', 10, null, { left: true, grayed: true, statusbar: 'the network game is hosted from the page: Host' }),
+        action('join network server', 0, join.callback, { left: true, grayed: join.grayed, statusbar: join.statusbar }),
+        action('start network server', 10, start.callback, { left: true, grayed: start.grayed, statusbar: start.statusbar }),
         action('player setup', 20, () => this.playerConfig(), { left: true }),
       ],
     });
