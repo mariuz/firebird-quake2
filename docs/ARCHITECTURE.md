@@ -566,7 +566,8 @@ gamepad once the last is gone, moves it again); when the host leaves, the guest'
 game of its own on a key.
 
 A demo of the pak (`src/demo.js`; the Demo select, or `demomap <name>` at the console) plays as the attract
-loop played it. `parseDemo` reads the `.dm2` up front as `CL_ParseServerMessage` read the server's stream: a
+loop played it; `timedemo <name>` plays it a frame of the recording a painted frame, no pacing, and reports the
+frames and the seconds at its end as `CL_DemoCompleted` did. `parseDemo` reads the `.dm2` up front as `CL_ParseServerMessage` read the server's stream: a
 block an int32 length and its messages, the server data, the configstrings (the models, sounds, images and
 light styles by index), the spawn baselines, then a frame a block (`svc_frame`: the player state as
 `CL_ParsePlayerstate` delta-read it from the frame it names, the packet entities as `CL_ParseDelta` read
@@ -659,7 +660,8 @@ The console: the backquote opens a command line over the view. `map <name>`, `sa
 of, latched as the cvar was: "skill will be changed for next game."), as are `bind`, `unbind`, `unbindall` and
 `bindlist` over the keys menu's binds (`bind k +attack`: the key by the name the menu shows, `keyCode` being
 `Key_StringToKeynum`, the action by bindnames' command, `actionOfCommand`; `bind k` shows `"k" = "+attack"`
-as `Key_Bind_f` did); the rest go to `player_command(cmd, arg)`
+as `Key_Bind_f` did), `timedemo` (above) and `screenshot` (the view downloaded as `quakeNN.png`, as
+`SCR_ScreenShot_f` wrote `quakeNN.pcx`); the rest go to `player_command(cmd, arg)`
 (g_cmds.c: `god`, `notarget`, `noclip`, `give`, `kill`), which answers on the message line. The message line is
 console.c's notify (`src/notify.js`): each print of the first view's row (the tic row's `MSG`, a new one by its
 `MSG_TIME`) is kept with the game's clock, the view draws the last four not yet three seconds old at the top

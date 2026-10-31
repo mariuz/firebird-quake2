@@ -382,6 +382,10 @@ try {
     let rd = {};
     for (let i = 0; i < 240 && !(rd.demo?.name === 'run' && rd.demo.frame > 3); i++) { await sleep(250); rd = await page.evaluate(() => ({ demo: window.quake2?.demo, map: document.getElementById('mapname')?.textContent })).catch(() => ({})); }
     assert(rd.demo?.name === 'run' && rd.demo.frame > 3 && rd.demo.frames === parsed?.frames.length && /demo1 \(demo run\)/.test(rd.map ?? ''), `the select plays the recording over its map: frame ${rd.demo?.frame} of ${rd.demo?.frames}, ${rd.map}`);
+    // at its end the pak's next demo plays (the loop's nextserver), as the attract loop went on
+    let nd = {};
+    for (let i = 0; i < 120 && nd.demo?.name !== 'q2demo1'; i++) { await sleep(250); nd = await page.evaluate(() => ({ demo: window.quake2?.demo })).catch(() => ({})); }
+    assert(nd.demo?.name === 'q2demo1', `at the recording's end the pak's demo plays next (${nd.demo?.name})`);
     // the recording is kept across reloads (src/demostore.js: IndexedDB), and a .dm2 file opens from the select's file
     // input, kept under its name and played; `demos` lists them; the reload below finds them again
     const stored = await page.evaluate(() => window.quake2.demoStore.list()).catch(() => null);
@@ -393,6 +397,9 @@ try {
       assert(od.demo?.name === 'mycopy' && od.demo.frame > 3 && od.list?.includes('mycopy') && od.options?.includes('mycopy'), `a .dm2 file opened from the input plays under its cleaned name and is listed (${JSON.stringify({ demo: od.demo?.name, list: od.list })})`);
     }
 
+    // (the demos end and go on to the pak's now: a game of the page's own under the cinematics below)
+    await page.selectOption('#demo', '');
+    for (let i = 0; i < 240; i++) { await sleep(250); if (await page.evaluate(() => !window.quake2?.demo && !!window.quake2?.running).catch(() => false)) break; }
     // a cinematic (src/cinematic.js): the demo pak has none, so one made here (twenty frames of 64×48 with a palette and
     // sound) plays through the page's SCR_PlayCinematic: the frames come at fourteen a second with the game stopped, it
     // ends on its own and the game goes on; a second one ends at a key
@@ -436,6 +443,25 @@ try {
     let stopped = {};
     for (let i = 0; i < 240 && !(stopped.demo === null && stopped.running === true && /^demo1$/.test(stopped.map ?? '')); i++) { await sleep(250); stopped = await demoState(); }
     assert(stopped.demo === null && stopped.running === true && stopped.map === 'demo1' && stopped.menu === null, `the select put back to none starts a new game on the first map (${JSON.stringify({ demo: stopped.demo, map: stopped.map })})`);
+    // timedemo (CL_Timedemo_f): the recording made above (run: a few seconds; the pak's would take minutes at a headless
+    // page's rate) played a frame of the recording a painted frame, no pacing, the frames and the seconds reported at its
+    // end and a new game started; screenshot (SCR_ScreenShot_f) downloads the view as quake00.png
+    const tdFrames = parsed?.frames.length ?? 0;
+    await typeCommand('timedemo run');
+    let td = {};
+    const tdState = () => page.evaluate(() => ({ done: window.quake2.lastTimedemo, demo: window.quake2.demo?.name ?? null, running: window.quake2.running, map: document.getElementById('mapname')?.textContent })).catch(() => ({}));
+    for (let i = 0; i < 8 && !td.map?.includes('timedemo run'); i++) { await sleep(250); td = await tdState(); }
+    const tdMap = td.map;
+    for (let i = 0; i < 480 && !td.done; i++) { await sleep(250); td = await tdState(); }
+    if (!td.done) await page.selectOption('#demo', '');   // (not done: the demo stopped, so the rest of the test goes on)
+    for (let i = 0; i < 240 && !(td.demo === null && td.running); i++) { await sleep(250); td = await tdState(); }
+    assert(/\(timedemo run\)/.test(tdMap ?? '') && td.done && Math.abs(td.done.frames - tdFrames) <= 2 && td.done.seconds > 0 && /^\d+ frames, [\d.]+ seconds: [\d.]+ fps$/.test(td.done.report) && td.demo === null && td.running,
+      `timedemo plays the recording as fast as the page paints, a frame of its ${tdFrames} a painted frame, and reports it (${td.done?.report}), the game starting again`);
+    const [shot] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('screenshot')]);
+    const shotBytes = shot ? fs.readFileSync(await shot.path()) : Buffer.alloc(0);
+    const shotSize = shotBytes.length > 24 ? `${shotBytes.readUInt32BE(16)}×${shotBytes.readUInt32BE(20)}` : '?';
+    assert(shot && shot.suggestedFilename() === 'quake00.png' && shotBytes.subarray(1, 4).toString() === 'PNG' && shotSize === '320×240',
+      `screenshot downloads the view as ${shot?.suggestedFilename()} (a PNG of ${shotSize}, ${shotBytes.length} bytes)`);
     // (a game running: the console takes `demos` and `deldemo`; a click during a demo would bring the menu up instead)
     if (dm2) {
       await typeCommand('demos');

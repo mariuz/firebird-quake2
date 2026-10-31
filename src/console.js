@@ -9,14 +9,14 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 'save', 'seed', 'skill', 'spectator', 'stop', 'timelimit', 'unbind', 'unbindall', 'use'];
+export const COMMANDS = ['bind', 'bindlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 'save', 'screenshot', 'seed', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'unbind', 'unbindall', 'use'];
 const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
  *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
- *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game) }
+ *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot() }
  */
 export class Console {
   constructor(host) {
@@ -74,6 +74,20 @@ export class Console {
         await h.playDemo?.(name);
         return;
       }
+      case 'timedemo': {
+        // CL_Timedemo_f: the demo played a frame of the recording a painted frame, no pacing, the frames and the seconds
+        // reported at its end as CL_DemoCompleted reported them
+        const name = arg.toLowerCase().replace(/\.dm2$/, '');
+        const has = h.hasDemo ? h.hasDemo(name) : h.pak.has(`demos/${name}.dm2`);
+        if (!name || !has) { say(`no demo "${name}" in this pak`, true); return; }
+        await h.timedemo?.(name);
+        return;
+      }
+      case 'screenshot':
+        // SCR_ScreenShot_f: the view as a picture (quakeNN.png here, downloaded), as it stands
+        if (!h.isRunning()) { say('screenshot: nothing is on the view', true); return; }
+        h.screenshot?.();
+        return;
       case 'demos': {
         // the page's own: the pak's demos and the recordings kept (this session's, and the earlier ones' from the store)
         const d = h.listDemos?.() ?? { pak: [], kept: [] };
