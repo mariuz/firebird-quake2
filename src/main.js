@@ -30,7 +30,7 @@ import { padMenuKeys, padScreens, BUTTON } from './gamepad.js';
 import { Input, GAME_KEYS, DEFAULT_BINDS, MOUSE_KEYS, bindKey, boundLine, defaultLines } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
-import { Notify } from './notify.js';
+import { Notify, CenterPrint } from './notify.js';
 import { Netgraph } from './netgraph.js';
 import { DemoRecorder } from './record.js';
 import { DemoStore, FileStore } from './demostore.js';
@@ -245,6 +245,7 @@ function setSetting(k, v) {
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
   if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
+  if (k === 'scrCentertime') for (const c of centerPrints) c.seconds = Number(v) || 0;   // (scr_centertime: a centre print's seconds)
 }
 /**
  * The player setup's name and hand as this client's userinfo (ClientUserinfoChanged): to the game's first client,
@@ -276,6 +277,7 @@ function quitGame() {
 // seconds, four at most, as Con_DrawNotify drew them, and kept for the console's scrollback with the lines typed
 // and the commands' answers (those two in the scrollback alone)
 const notify = new Notify({ seconds: Number(settings.conNotifytime) || 3 });   // (con_notifytime: the notify lines' seconds)
+const centerPrints = perPlayer(() => new CenterPrint({ seconds: Number(settings.scrCentertime ?? 2.5) }));   // (scr_centertime: each view's centre print's seconds)
 let lastMsgTime = null;
 const gameClock = () => last?.TIME_ ?? 0;
 function noteMessage(row) {
@@ -591,6 +593,7 @@ function beginMap() {
   for (const L of lerps) { L.prev = null; L.cur = null; }   // (the frames of the map being left)
   lastPaint = 0;
   notify.clear(); lastMsgTime = null;   // (the prints were the level's; its clock starts over)
+  for (const c of centerPrints) c.clear();
   menu.off();
   showHelp = perPlayer(false);
   showInv = perPlayer(false);
@@ -1127,8 +1130,8 @@ function demoRow(st) {
   const gunName = v.gunindex > 0 ? dm.models[v.gunindex] ?? '' : '';
   const weapon = Number(Object.keys(WEAPONS).find((k) => WEAPONS[k].view === gunName) ?? 0);
   const armorIcon = image(s[4]);
-  // the prints: a centerprint for 2.5 s (scr_centertime), a console print at the top for 3 s (con_notifytime)
-  for (const cp of st.events.centerprints) d.cprint = { text: cp.replace(/\n+$/, ''), until: d.time + 2.5 };
+  // the prints: a centerprint for scr_centertime seconds (2.5, the row's; drawFrame's clock agrees), a console print at the top for 3 s (con_notifytime)
+  for (const cp of st.events.centerprints) d.cprint = { text: cp.replace(/\n+$/, ''), until: d.time + Number(settings.scrCentertime ?? 2.5) };
   for (const [level, text] of st.events.prints) if (level >= 1) d.msg = { text: text.replace(/\n+$/, ''), until: d.time + 3 };
   const row = {
     CLIENT: 1, TIME_: d.time, PX: v.x, PY: v.y, PZ: v.z, VIEW_Z: v.viewZ, YAW: v.yaw, PITCH: v.pitch, ROLL: v.roll,
@@ -1299,7 +1302,12 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       r.zb.fill(0, 0, r.w * r.h);
       // its frame with the one it stepped from and the blend (CL_AddViewWeapon's backlerp): the demo's as the server sent them
       const [gframe, gold, gbl] = last.GUNFRAME != null ? [last.GUNFRAME, last.GUN_OLDFRAME ?? last.GUNFRAME, last.GUN_BACKLERP ?? 0] : viewFrameLerp(vm.mdl, last, time);
-      r.drawAlias(vm.mdl, gframe, 0, [last.PX, last.PY, last.VIEW_Z], [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light,
+      // gun_x, gun_y and gun_z (SV_CalcGunOffset's development tools): the gun moved along the view's right, forward and down
+      const gx = Number(settings.gunX) || 0, gyo = Number(settings.gunY) || 0, gz = Number(settings.gunZ) || 0;
+      const { fwd: vf, right: vr, up: vu } = r.view;
+      const org = [last.PX, last.PY, last.VIEW_Z];
+      if (gx || gyo || gz) for (let i = 0; i < 3; i++) org[i] += vf[i] * gyo + vr[i] * gx - vu[i] * gz;
+      r.drawAlias(vm.mdl, gframe, 0, org, [-(last.PITCH + gp), last.YAW + gy, (last.ROLL ?? 0) + gr], light,
         { near: 1, time, minlight: true, dlight: dlightAt(r.dlights, last.PX, last.PY, last.VIEW_Z), mirror: last.HAND === 1, oldFrame: gold, backlerp: settings.rLerpmodels ? gbl : 0 });
     }
   }
@@ -1317,7 +1325,10 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   if (showScores[which] || (last.DEATHMATCH && last.INTERMISSION)) hud.drawScores(r, scoreRows(), last.CLIENT, time);
   else if (showHelp[which]) hud.drawHelp(r, last);
   else if (showInv[which] && !last.DEAD) hud.drawInventory(r, invItems[which], last.INV_SEL, performance.now() / 1000);
-  if (last.CPRINT) hud.drawCenter(r, last.CPRINT, Math.floor(r.h * 0.3));
+  // SCR_DrawCenterString: the row's centre print, for scr_centertime seconds from when it came (the clock in src/notify.js)
+  centerPrints[which].see(last.CPRINT ?? null, time);
+  const cprint = centerPrints[which].text(time);
+  if (cprint) hud.drawCenter(r, cprint, Math.floor(r.h * 0.3));
   // Con_DrawNotify for the first view: the last prints at the top, a line each, three seconds; another view its one line
   if (which === 0) { noteMessage(last); notify.lines(last.TIME_).forEach((s, i) => r.drawString(hud.conchars, s, 8, 8 + i * 8)); }
   else if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);

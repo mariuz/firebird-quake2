@@ -866,8 +866,14 @@ client's speeds and the game's view cvars among them. In the order they are to b
   is not here: the command's up is the jump and the crouch keys, and the swim and noclip rise are the fixed 200.
   `test:input` holds each to its numbers; `test:console` shows, sets and refuses them, `cvarlist` with them; the
   browser test types `cl_yawspeed 280` and `cl_forwardspeed 100` and reads the settings on both builds.
-- **`gun_x`, `gun_y`, `gun_z` and `scr_centertime`**: the view weapon's offset (cl_view.c's three, 0 by
-  default) and the centre print's seconds (`scr_centertime`, 2.5).
+- **`gun_x`, `gun_y`, `gun_z` and `scr_centertime`**: done. The three are `SV_CalcGunOffset`'s development tools
+  (g_main.c's cvars, 0): the view weapon drawn moved along the view's right, forward and down by them (the page's
+  `drawFrame`, the renderer's view vectors). `scr_centertime` is `SCR_DrawCenterString`'s 2.5 seconds: a centre print
+  is drawn that long from when it came, a clock a view (`CenterPrint` in `src/notify.js`), whatever the row carries
+  it for (the SQL's three seconds stay the game's, as a demo's frames were written: a print was the client's to time).
+  None archived, as Quake's were not. `test:console` shows, sets and refuses the four, `cvarlist` with them, and
+  holds the clock to its cases (the same text, the text back, a new one, the seconds changed, a new level); the
+  browser test types `gun_z 10` and `scr_centertime 1` and reads the settings on both builds.
 - **`dir`, `path`, `modellist`, `imagelist` and `soundlist`**: `dir <filter>` lists the pak's files as
   `FS_Dir_f` did, `path` the search path (the pak's name and where it came from), and the three listings the
   models, the pictures and the sounds loaded, on the scrollback with their counts.

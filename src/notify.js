@@ -32,3 +32,32 @@ export class Notify {
 
   clear() { this.entries.length = 0; }
 }
+
+/**
+ * The centre print's clock (SCR_CenterPrint, SCR_DrawCenterString): a print stays scr_centertime seconds from when it
+ * came, whatever the game's row carries it for (the SQL keeps it three seconds, as the demo's frames were written). Pure:
+ * see(text, now) is told the row's text (null for none) at the game's clock, text(now) is what to draw.
+ */
+export class CenterPrint {
+  constructor({ seconds = 2.5 } = {}) {
+    this.seconds = seconds;   // scr_centertime
+    this.cur = null;          // { text, at, held }: the print seen, when it came, whether the row still carries it
+  }
+
+  /** The row's centre print at `now`: a new text, or one back after the row dropped it, starts the clock again. */
+  see(text, now) {
+    const c = this.cur;
+    if (text) { if (!c || c.text !== text || !c.held || now < c.at) this.cur = { text, at: now, held: true }; }
+    else if (c) c.held = false;
+  }
+
+  /** The text to draw at `now`, or null once `seconds` have gone (a clock behind the print's, a new level's, drops it). */
+  text(now) {
+    const c = this.cur;
+    if (!c) return null;
+    if (now < c.at) { this.cur = null; return null; }
+    return now - c.at < this.seconds ? c.text : null;
+  }
+
+  clear() { this.cur = null; }
+}
