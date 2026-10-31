@@ -461,7 +461,7 @@ try {
     await typeCommand('status');
     const stLine = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(8) })).catch(() => ({}));
     assert(/^Server info settings: mapname "demo1" · deathmatch "0" · coop "0" · dmflags "\d+" · fraglimit "\d+" · timelimit "\d+" · cheats "\d" · skill "\d" · hostname "noname"$/.test(svInfo)
-      && /^User info settings: name "[^"]*" · hand "0" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
+      && /^User info settings: name "[^"]*" · hand "0" · gender "male" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
     // m_yaw, cl_gun and con_notifytime reach the settings, con_notifytime the notify's seconds; back to the defaults after
@@ -478,6 +478,12 @@ try {
     const spdBack = await page.evaluate(() => ({ yaw: window.quake2.settings.clYawspeed, fwd: window.quake2.settings.clForwardspeed })).catch(() => ({}));
     assert(spd.yaw === 280 && spd.fwd === 100 && spdBack.yaw === 140 && spdBack.fwd === 200,
       `cl_yawspeed and cl_forwardspeed reach the settings and go back (${JSON.stringify(spd)} → ${JSON.stringify(spdBack)})`);
+    // the gender userinfo: the word reaches the settings and the userinfo line, and male comes back
+    await typeCommand('gender female'); await typeCommand('userinfo');
+    const gen = await page.evaluate(() => ({ g: window.quake2.settings.gender, line: document.getElementById('status').textContent })).catch(() => ({}));
+    await typeCommand('gender male');
+    const genBack = await page.evaluate(() => window.quake2.settings.gender).catch(() => null);
+    assert(gen.g === 'female' && /· gender "female" ·/.test(gen.line ?? '') && genBack === 'male', `gender reaches the settings and the userinfo (${JSON.stringify(gen)} → ${genBack})`);
     // gun_z and scr_centertime reach the settings (the gun drawn lower, a centre print's seconds) and the defaults come back
     await typeCommand('gun_z 10'); await typeCommand('scr_centertime 1');
     const gun = await page.evaluate(() => ({ z: window.quake2.settings.gunZ, ct: window.quake2.settings.scrCentertime })).catch(() => ({}));

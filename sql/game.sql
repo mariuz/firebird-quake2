@@ -153,6 +153,34 @@ BEGIN
   UPDATE game g SET g.sight_client = :n WHERE g.id = 1 AND g.sight_client IS DISTINCT FROM :n;
 END^
 
+-- S_RegisterSexedSound: a client's sexed sound (player/male/…) by its gender userinfo: a female client's from player/female/
+-- (a pak without those plays the male's: the page falls back as the client did), the rest the male's
+CREATE OR ALTER FUNCTION sexed (pe INTEGER, name VARCHAR(64)) RETURNS VARCHAR(64)
+AS
+DECLARE g SMALLINT;
+BEGIN
+  SELECT p.gender FROM player p WHERE p.ent_id = :pe INTO g;
+  IF (g = 1) THEN RETURN REPLACE(name, 'player/male/', 'player/female/');
+  RETURN name;
+END^
+
+-- ClientObituary's pronouns by the gender userinfo (IsFemale, IsNeutral): his, her, its; himself, herself, itself
+CREATE OR ALTER FUNCTION his_ (g SMALLINT) RETURNS VARCHAR(8)
+AS
+BEGIN
+  IF (g = 1) THEN RETURN 'her';
+  IF (g = 2) THEN RETURN 'its';
+  RETURN 'his';
+END^
+
+CREATE OR ALTER FUNCTION himself_ (g SMALLINT) RETURNS VARCHAR(8)
+AS
+BEGIN
+  IF (g = 1) THEN RETURN 'herself';
+  IF (g = 2) THEN RETURN 'itself';
+  RETURN 'himself';
+END^
+
 CREATE OR ALTER FUNCTION now_ () RETURNS DOUBLE PRECISION
 AS
 DECLARE t DOUBLE PRECISION;
@@ -2075,13 +2103,13 @@ END^
 -- or a hand grenade, a rocket, the BFG's ball, a barrel, a mover, a trigger), the damage flags (radius, bullet,
 -- energy, no-protection, falling) and the attacker's weapon in hand (the bullets and the rail leave no
 -- projectile). A client is its netname (pers.netname, the player setup's name), "player 1" or "player 2" with
--- none; the model is the male's, so "his". The line goes to every client's message line, as gi.bprintf did.
+-- none; the pronouns by the gender userinfo (his_, himself_: IsFemale, IsNeutral). The line goes to every client's message line, as gi.bprintf did.
 CREATE OR ALTER PROCEDURE client_obituary (targ INTEGER, inflictor INTEGER, attacker INTEGER, dflags INTEGER, damage INTEGER)
 AS
 DECLARE me VARCHAR(16); DECLARE who VARCHAR(16); DECLARE icls VARCHAR(40); DECLARE ieff INTEGER; DECLARE wt INTEGER; DECLARE w INTEGER;
-DECLARE msg VARCHAR(80); DECLARE msg2 VARCHAR(40); DECLARE radius SMALLINT; DECLARE dm SMALLINT;
+DECLARE msg VARCHAR(80); DECLARE msg2 VARCHAR(40); DECLARE radius SMALLINT; DECLARE dm SMALLINT; DECLARE g SMALLINT;
 BEGIN
-  SELECT COALESCE(NULLIF(p.netname, ''), 'player ' || p.id) FROM player p WHERE p.ent_id = :targ INTO me;
+  SELECT COALESCE(NULLIF(p.netname, ''), 'player ' || p.id), p.gender FROM player p WHERE p.ent_id = :targ INTO me, g;
   IF (me IS NULL) THEN EXIT;
   SELECT COALESCE(NULLIF(p.netname, ''), 'player ' || p.id) FROM player p WHERE p.ent_id = :attacker INTO who;
   SELECT g.deathmatch FROM game g WHERE g.id = 1 INTO dm;
@@ -2106,11 +2134,11 @@ BEGIN
   ELSE IF (attacker = targ) THEN
   BEGIN
     IF (BIN_AND(dflags, 34) = 34 AND damage >= 100000) THEN msg = 'suicides';                   -- MOD_SUICIDE (the kill command)
-    ELSE IF (icls = 'hgrenade') THEN msg = 'tripped on his own grenade';                        -- MOD_HG_SPLASH
-    ELSE IF (icls = 'grenade') THEN msg = 'tripped on his own grenade';                         -- MOD_G_SPLASH
-    ELSE IF (icls = 'rocket') THEN msg = 'blew himself up';                                     -- MOD_R_SPLASH
+    ELSE IF (icls = 'hgrenade') THEN msg = 'tripped on ' || his_(g) || ' own grenade';            -- MOD_HG_SPLASH
+    ELSE IF (icls = 'grenade') THEN msg = 'tripped on ' || his_(g) || ' own grenade';             -- MOD_G_SPLASH
+    ELSE IF (icls = 'rocket') THEN msg = 'blew ' || himself_(g) || ' up';                         -- MOD_R_SPLASH
     ELSE IF (icls = 'bfg_ball') THEN msg = 'should have used a smaller gun';                    -- MOD_BFG_BLAST
-    ELSE msg = 'killed himself';
+    ELSE msg = 'killed ' || himself_(g);
   END
   IF (msg IS NOT NULL) THEN
   BEGIN
@@ -2212,7 +2240,7 @@ BEGIN
       EXECUTE PROCEDURE snd(targ, 2, 'misc/udeath.wav', 1, 1);
       EXECUTE PROCEDURE fx(3, (SELECT e.x FROM ents e WHERE e.id = :targ), (SELECT e.y FROM ents e WHERE e.id = :targ), (SELECT e.z FROM ents e WHERE e.id = :targ), 0, 0, 0, 60);
     END
-    ELSE EXECUTE PROCEDURE snd(targ, 2, 'player/male/death' || CAST(1 + FLOOR(rnd() * 4) AS INTEGER) || '.wav', 1, 1);
+    ELSE EXECUTE PROCEDURE snd(targ, 2, sexed(targ, 'player/male/death' || CAST(1 + FLOOR(rnd() * 4) AS INTEGER) || '.wav'), 1, 1);
     EXIT;
   END
   IF (BIN_AND(flags, 32) <> 0) THEN
@@ -2386,7 +2414,7 @@ BEGIN
     SELECT p.pain_finished FROM player p WHERE p.ent_id = :targ INTO pf;
     IF (pf < now_() AND take > 0) THEN
     BEGIN
-      EXECUTE PROCEDURE snd(targ, 2, 'player/male/pain' || CASE WHEN hp < 25 THEN '25' WHEN hp < 50 THEN '50' WHEN hp < 75 THEN '75' ELSE '100' END || '_' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav', 1, 1);
+      EXECUTE PROCEDURE snd(targ, 2, sexed(targ, 'player/male/pain' || CASE WHEN hp < 25 THEN '25' WHEN hp < 50 THEN '50' WHEN hp < 75 THEN '75' ELSE '100' END || '_' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav'), 1, 1);
       UPDATE player p SET p.pain_finished = now_() + 0.7e0, p.punchangle = -2 WHERE p.ent_id = :targ;
     END
     -- P_DamageFeedback: the pain animation (one of three in turn, the crouched one when ducked), unless something
