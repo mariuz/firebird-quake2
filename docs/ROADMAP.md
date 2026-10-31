@@ -346,9 +346,25 @@ The third list, from what is left in the entries above and below: in the order t
   wider the three draw as they did, to the pixel. `test:hud` checks the three at 320 against the classic
   positions and at 160×120 (and the board at 80×40): the panel scaled to half behind, every character inside
   the view and none over another, the lines where the layout says.
-- **The insane marines and the commander's body as logic**: `misc_insane`'s forms (stand, crawl, cross,
-  the fleeing), `misc_deadsoldier`'s poses and `monster_commander_body` are the full game's; the frame tables
-  are known, so they can run on model rows without a mesh as the monsters do (see *The full game*).
+- **The insane marines and the commander's body as logic**: done. `misc_insane` was not spawned at all (its
+  classname is not `monster_`); `monster_commander_body` neither. Now `misc_insane` becomes the monster type its
+  spawnflags say (`spawn_map_ents`: 8 CRUCIFIED `insane_cross`, 4 CRAWL `insane_crawl`, else `insane`, the
+  three rows of `monster_types` on the one model and frame table), in one of three skins (`rand() % 3`), and
+  STAND_GROUND (16) holds it where it is. The standing one raves and, roused, runs about (`insane_run`; it
+  never attacks, as m_insane.c has no attack); the crawling one's stand, walk and run are the crawl frames
+  (`insane_move_down`, `insane_move_crawl`, `insane_move_runcrawl`), its pain and death the crawl's; the
+  crucified one flies (`FL_FLY`: it never drops), in a box 8 deep, with `AI_STAND_GROUND` and no yaw, through
+  the cross frames, struggles when hurt (`insane_move_struggle_cross`) and, killed, dies on the cross and
+  stays there (`insane_dead` keeps `FL_FLY` and the box; `monster_die` leaves it hanging). The commander's body
+  (`SP_monster_commander_body`, g_misc.c) is a decoration on a model row of 24 frames (`DECORATIONS` in
+  `src/gamedata.js`, a placeholder the loader makes as for the full game's monsters): a box shots hit but never
+  hurt (`FL_GODMODE`, which `t_damage` now honours on anything, the knockback kept), let fall to the floor half
+  a second in (`commander_body_drop`), and used it sits up a frame a tenth of a second to its last with the tank's
+  pain sound, the thud at the twenty-second (`commander_body_use`, `commander_body_think`). `misc_deadsoldier`'s
+  six poses were in already. `test:monsters` runs the three forms through every monster's checks (they see the
+  player, never attack, die) and sees the crawler come on its knees, the crucified one hang unmoving, struggle
+  and die on its cross; `test:entities` spawns the three from `misc_insane` and the body, which a shot does not
+  harm and which sits up with its two sounds when used.
 - **A brush model's loop at its origin**: a looped sound on a brush model (a lift's hum) plays at the model's
   origin, which is far from its box; the loop's position should be the box's centre, as `set_model` finds the
   leaf from it.
@@ -619,8 +635,7 @@ picker). Missing for the rest of the game:
   its frame table, its attacks kinds of `monster_missile`. Their frame runs come from memory of the m_*.h
   headers; a registered pak's MD2 supplies the real ones, and is where their timing is to be checked. The
   medic's cable, the mutant's leap, the floater's zap and the chick's duck are in (see *Next*). Not yet:
-  the insane marines' crawling and crucified spawnflags, the commander body (`monster_commander_body`,
-  which only sits up when used).
+  nothing of the insane marines' forms or the commander body: they are in (see *Next*, the third list).
 - **Map entities**: done for `func_door_secret` (back, a second, aside, its wait, and home; shot open
   unless named, or with ALWAYS_SHOOT; silent, as its own moves never played the sounds it loaded),
   `target_earthquake` (a grounded player thrown up and about every 0.1 s, the rumble every half second,
@@ -641,9 +656,9 @@ picker). Missing for the rest of the game:
   dies as an infantry and the gun levels; what blocks a turning part is hurt by the breach's dmg.
   `target_spawner` spawns its target's classname at its place through the map's own spawn function
   (`spawn_map_ents` with one row) and sets it off along its angle at its speed.
-  `scripts/entities-test.mjs` adds them all to demo1's lump and checks them. Missing (checked against
-  g_spawn.c's spawn table): `target_actor` / `misc_actor` and `misc_insane`, which need the actor and
-  insane marines' models and animation tables. `misc_bigviper` stands still, as in Quake 2. `func_group` is editor-only and correctly ignored;
+  `scripts/entities-test.mjs` adds them all to demo1's lump and checks them, the insane marines' three forms
+  and the commander's body too. Missing (checked against g_spawn.c's spawn table): `target_actor` /
+  `misc_actor`, which need the actor's model and animation table. `misc_bigviper` stands still, as in Quake 2. `func_group` is editor-only and correctly ignored;
   `viewthing` is a debugging aid. (`target_mal_laser`, once listed here, is the first mission pack's.)
 - **Trains**: `func_train_find` put a train on its first corner and aimed it at the next; the port aimed
   it at the first again, so every train (and demo1's three strogg ships) began with that corner's wait

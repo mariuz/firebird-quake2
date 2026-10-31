@@ -271,8 +271,10 @@ attacks at once, and `medic_cable` on the `attack2` frames launches the hook, dr
 parasite's beam) to the body while it is within 256, not more than 45° up or down and in a clear line, hits
 and heals with their sounds, and at the eighteenth frame `monster_revive` makes the corpse the monster its
 spawn made (health, box, solid, counted among the level's monsters again, after the player as `FoundTarget`
-sent it); raised, the medic goes back to the fight. What is not there yet is in ROADMAP.md: the insane
-marines' crawling and crucified forms.
+sent it); raised, the medic goes back to the fight. The insane marines come in three forms, a type each on the
+one model (`insane`, `insane_crawl`, `insane_cross`: `misc_insane`'s spawnflags pick one in `spawn_map_ents`), the
+crucified flying in a box 8 deep that never moves and stays on its cross dead; the commander's body is a decoration
+on a model row of 24 frames (`DECORATIONS`) that sits up when used.
 
 ## 5. Visibility and the frame (`sql/render.sql`)
 

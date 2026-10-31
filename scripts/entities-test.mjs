@@ -65,6 +65,12 @@ await add('info_notnull', 92, -320, 48, { targetname: 'muz' });
 await add('turret_driver', 60, -280, 40, { target: 'tb' });
 await add('target_spawner', 160, -220, 40, { targetname: 'spw', target: 'misc_explobox' });
 await add('target_spawner', 160, -220, 60, { targetname: 'spw2', target: 'misc_gib_arm', angle: 90, speed: 100 });
+// the insane marines in their three forms (misc_insane: standing, CRAWL 4, CRUCIFIED 8 with STAND_GROUND 16) and the
+// commander's body, in the yard by the start
+await add('misc_insane', 300, -200, 24, { angle: 180 });
+await add('misc_insane', 340, -200, 24, { angle: 180, spawnflags: 4 });
+await add('misc_insane', 380, -200, 60, { angle: 180, spawnflags: 8 + 16 });
+await add('monster_commander_body', 300, -150, 30, { targetname: 'body' });
 // two power cubes by the start and three doors that each want one (the full game's power cube hunt)
 await add('key_power_cube', 200, -300, 24);
 await add('key_power_cube', 230, -300, 24);
@@ -74,7 +80,7 @@ await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents
 await db.exec(`EXECUTE PROCEDURE init_map('demo1', ${world}, 2, 1, NULL)`);
 const pe = (await q1('SELECT ent_id e FROM player')).E;
 await db.exec(`UPDATE ents SET flags = BIN_OR(flags, 16 + 64) WHERE id = ${pe}`);   // god, notarget
-await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL AND classname <> 'turret_driver'");   // the map's monsters, not the turret's driver
+await db.exec("DELETE FROM ents WHERE mtype IS NOT NULL AND classname <> 'turret_driver' AND mtype NOT STARTING WITH 'insane'");   // the map's monsters, not the turret's driver nor the marines
 // fire a targetname as if the player's own target, with a pathtarget for the elevator
 const use = (name, pathtarget = null) => db.query(`EXECUTE BLOCK AS BEGIN
   UPDATE ents SET target = '${name}', pathtarget = ${pathtarget ? `'${pathtarget}'` : 'NULL'} WHERE id = ${pe};
@@ -239,6 +245,41 @@ const near = (a, b) => Math.abs(a - b) < 0.5;
   for (let i = 0; i < 45; i++) await tic();
   const h2 = await ent('misc_blackhole'), tk2 = await ent('misc_eastertank');
   assert(h2.FRAME > 0 && h2.FRAME < 19 && tk2.FRAME > 254 && tk2.FRAME < 293, `2.25 s on, the hole is at frame ${h2.FRAME} (of 19, wrapped) and the tank at ${tk2.FRAME} (254..292)`);
+}
+
+// ── the insane marines' forms and the commander's body
+{
+  const marines = await qa("SELECT classname, mtype, skin, aiflags, flags, movetype, minz, maxy, st, anim, x, y, z FROM ents WHERE mtype STARTING WITH 'insane' ORDER BY x");
+  assert(marines.length === 3 && marines.map((m) => m.MTYPE).join() === 'insane,insane_crawl,insane_cross' && marines.every((m) => m.CLASSNAME === `monster_${m.MTYPE}`),
+    `misc_insane spawns a marine in the form its spawnflags say (${marines.map((m) => m.MTYPE).join(', ')})`);
+  const [st, cr, cx] = marines;
+  assert(st.SKIN >= 0 && st.SKIN <= 2 && cr.SKIN >= 0 && cr.SKIN <= 2 && cx.SKIN === 0 && (st.AIFLAGS & 1) === 0 && (cx.AIFLAGS & 1) === 1,
+    `the standing and crawling ones in one of three skins (${st.SKIN}, ${cr.SKIN}), the crucified in the first and holding its ground`);
+  assert((cx.FLAGS & 1) === 1 && cx.MOVETYPE === 5 && cx.MINZ === 0 && cx.MAXY === 8 && Math.abs(cx.Z - 60) < 1 && (st.FLAGS & 1) === 0 && st.Z < 60,
+    `the crucified one hangs where it was put (z ${cx.Z.toFixed(0)}, a box 8 deep), the others dropped to the floor (z ${st.Z.toFixed(1)})`);
+  for (let i = 0; i < 12; i++) await tic();
+  const anims = await qa("SELECT mtype, anim, st FROM ents WHERE mtype STARTING WITH 'insane' ORDER BY x");
+  assert(anims[0].ANIM === 'stand_insane' && anims[1].ANIM === 'crawl' && anims[2].ANIM === 'cross' && anims.every((m) => m.ST === 'stand'),
+    `each stands in its form's frames (${anims.map((m) => m.ANIM).join(', ')}), seeing no one (the player is notarget)`);
+  const body = await ent('monster_commander_body');
+  const bodyRuns = await qa(`SELECT anim, first_frame, frame_count FROM anims WHERE model_id = ${body.MODEL_ID}`);
+  assert(body.SOLID === 2 && body.TAKEDAMAGE === 1 && (body.FLAGS & 16) && body.FRAME === 0 && body.MOVETYPE === 6 && body.MINZ === 0 && body.MAXZ === 48 && bodyRuns.length === 1 && bodyRuns[0].FRAME_COUNT === 24 && !res.models.has(body.MODEL_ID),
+    `the commander's body lies at frame 0 on a model row of 24 frames the painter has no mesh for, a box shots hit but never hurt, let fall half a second in (movetype ${body.MOVETYPE})`);
+  const hp0 = body.HEALTH;
+  await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE t_damage(${body.ID}, ${pe}, ${pe}, 50, 0, 0); END`);
+  assert((await ent('monster_commander_body')).HEALTH === hp0, 'a shot does it no harm');
+  await db.exec('DELETE FROM sound_events');
+  await use('body');
+  const heard = [];
+  let sitting = null, frames = 0;
+  for (let i = 0; i < 60 && !sitting; i++) {
+    await tic();
+    for (const s of await qa("SELECT snd FROM sound_events WHERE snd IN ('tank/pain.wav', 'tank/thud.wav') ORDER BY id")) if (!heard.includes(s.SND)) heard.push(s.SND);   // (old events are dropped: gathered as they come)
+    const b = await ent('monster_commander_body');
+    if (b.FRAME > frames) frames = b.FRAME;
+    if (b.NEXTTHINK === null && b.FRAME > 0) sitting = b;
+  }
+  assert(sitting && sitting.FRAME === 23 && heard.join() === 'tank/pain.wav,tank/thud.wav', `used, it sits up through its frames to the last (${sitting?.FRAME}) with the tank's pain, then the thud, and stays (${heard.join(', ')})`);
 }
 
 // ── target_string, target_character, func_clock
