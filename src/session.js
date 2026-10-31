@@ -129,6 +129,11 @@ export class Session {
     if (this.map) await this.writeUserinfo(client, info);
     return info;
   }
+  /** Cmd_Say_f: a client's words on every client's message line as "name: text" (client_say). */
+  async say(client, text) {
+    if (!this.map) return;
+    await this.db.query('EXECUTE PROCEDURE client_say(?, ?)', [client, String(text ?? '').slice(0, 150)]);
+  }
   async applyUserinfo() {
     for (const [client, info] of Object.entries(this.userinfo)) await this.writeUserinfo(Number(client), info);
   }

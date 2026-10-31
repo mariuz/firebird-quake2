@@ -523,6 +523,36 @@ The fifth list, from what the entries above and below still leave: in the order 
   to the pak's next; the end is the last frame reached with the clock past it now, and the browser test sees a
   recording's end bring the pak's demo on.
 
+The sixth list, from what the entries above and below still leave and what a game shared over the network
+wants: in the order they are to be taken.
+
+- **`say`, `say_team` and the chat key**: done. There was no way to talk to the other players. `say <text>` at
+  the console (and `say_team`, which is `say` here: there are no model or skin teams) puts the words on every
+  client's message line as "name: text", as `Cmd_Say_f` printed them (`client_say` in game.sql: the client's
+  name or "player N", the text as typed and not the console's lower case, 150 characters at most, trimmed;
+  nothing said prints nothing); a guest's words go to the host as a `say` message, which says them for the
+  guest's client (`GuestLink.sendSay`, `HostLink.onSay`, the text cleaned on arrival). `T` is default.cfg's
+  `messagemode`, a bindable action ("chat" in the keys menu): the console opens with `say ` on its line.
+  `test:console` sees the words sent as typed, the usage line and nothing with no game; `test:coop` the words
+  on every client's line by the client's name, a named client by its name, nothing for nothing; `test:net` a
+  guest's say reach the host cleaned and cut at 150; `test:input` the key; the browser test T opening the
+  console with `say `, the words on the message line and in the notify lines, and a guest's say on the host's
+  line by its client's name.
+- **No pause in a shared game**: the host's menu, its pause key and its hidden tab stop the tics, and every
+  guest with them; Quake 2 paused single player alone (`cl_paused` only with `maxclients 1`). While a guest is
+  connected the tics go on under the host's menu and pause, as they do under a guest's.
+- **The settings as cvars at the console**: `name`, `hand`, `sensitivity`, `cl_run`, `m_pitch` (negative
+  inverts, as the invert mouse option set it), `crosshair`, `s_volume` and `cd_volume`, shown alone and set
+  with a value, kept with the settings as the menus set them, and `cvarlist` to list them.
+- **`writeconfig` and `exec`**: the settings and the binds as a Quake cfg file downloaded (`bind k +attack`,
+  `set name "Ace"`…) and a cfg file executed line by line from a file picked (the saves' file input's kin), so
+  a configuration moves between browsers as a save does.
+- **Saves across schema changes**: a save lacking a column the schema gained takes its default, a column the
+  schema lost is dropped with a note, and `SAVE_VERSION`'s comment says what changed (the *Save and load*
+  entry's leftover).
+- **`timescale`**: `timescale <n>` at the console runs the game's clock at `n` times the wall's (`0.5` slow
+  motion, `2` twice, as `Qcommon_Frame` scaled the frame's milliseconds), the demos too; `1` puts it back.
+
 ## Playing the demo
 
 - **Save and load**: done as Quake 2 had them in single player: fifteen slots in the load and save menus

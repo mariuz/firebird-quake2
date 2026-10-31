@@ -66,6 +66,15 @@ const p2 = async () => (await q('SELECT e.x, e.y, e.z, e.yaw, e.health FROM play
 // the guest's userinfo (its player setup's name and hand) reaches the host, which gives it to the second client
 let infoSeen = null;
 host.onInfo = (i) => { infoSeen = i; };
+// the chat: the guest's `say` goes to the host as a text, cleaned (a line break a space, 150 characters at most), nothing for none
+let said = null;
+host.onSay = (t) => { said = t; };
+guest.sendSay(' hello\nhost ');
+check(said === 'hello host', 'a guest\'s say reaches the host, its line break a space, trimmed');
+guest.sendSay('x'.repeat(200));
+check(said?.length === 150, 'and is cut at 150 characters, as Quake cut a say');
+said = null; guest.sendSay('   ');
+check(said === null, 'nothing said, nothing to the host');
 guest.sendInfo({ name: 'Rimmer, Arnold J.', hand: 1 });
 check(infoSeen && infoSeen.name === 'Rimmer, Arnold ' && infoSeen.hand === 1 && host.info === infoSeen, `the host gets the guest's name (cut at fifteen) and hand (${JSON.stringify(infoSeen)})`);
 await session.setUserinfo(2, host.info);

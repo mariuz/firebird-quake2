@@ -106,9 +106,21 @@ await con.submit('timedemo nosuch');
 check(status.at(-1)?.[0] === 'no demo "nosuch" in this pak' && status.at(-1)?.[1] === true && last() === 'timedemo q2demo1', 'a demo not to be had is refused');
 await con.submit('screenshot');
 check(last() === 'screenshot', 'screenshot takes the view');
+// say and say_team: Cmd_Say_f's words, as typed
+host.say = async (text) => calls.push(['say', text]);
+await con.submit('say Hello, World!');
+check(last() === 'say Hello, World!', 'say sends the words as typed, their case kept');
+await con.submit('say_team go  left');
+check(last() === 'say go left', 'say_team says too (no teams here), the spaces one');
+await con.submit('say');
+check(status.at(-1)?.[0] === 'say <text>' && status.at(-1)?.[1] === true && last() === 'say go left', 'say alone shows its usage');
+running = false;
+await con.submit('say nobody');
+check(last() === 'say go left', 'with no game running, nothing is said');
+running = true;
 running = false;
 await con.submit('screenshot');
-check(last() === 'screenshot' && status.at(-1)?.[0] === 'screenshot: nothing is on the view' && status.at(-1)?.[1] === true, 'with nothing on the view it is refused');
+check(!calls.slice(-1).some((c) => c[0] === 'screenshot' && calls.indexOf(c) > 0 && calls.at(-2)?.[0] !== 'say') && last() === 'say go left' && status.at(-1)?.[0] === 'screenshot: nothing is on the view' && status.at(-1)?.[1] === true, 'with nothing on the view it is refused');
 running = true;
 // demos and deldemo: the page's own, for the recordings kept across reloads (src/demostore.js)
 const keptDemos = ['mine', 'run'];

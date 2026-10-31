@@ -151,8 +151,19 @@ check(!(await one(`SELECT id FROM ents WHERE id = ${body.ID}`)), 'the body gibs 
   await db.exec(`DELETE FROM ents WHERE id = ${hunter}; DELETE FROM player_trail`);
 }
 
-// ── the obituaries (ClientObituary, coop only): every client's message line says who died of what ──
+// ── the chat (Cmd_Say_f, client_say): a client's words on every client's message line, by its name ──
 const msgs = async () => (await q('SELECT msg FROM player ORDER BY id')).map((r) => r.MSG);
+await db.exec('UPDATE player SET msg = NULL');
+await session.say(2, '  hello there  ');
+check((await msgs()).join('|') === 'player 2: hello there|player 2: hello there', 'say puts the words on every message line as "name: text", trimmed');
+await db.exec("UPDATE player SET netname = 'Ace' WHERE id = 1");
+await session.say(1, 'Hi!');
+check((await msgs())[1] === 'Ace: Hi!', 'a named client speaks by its name, the words as typed');
+await db.exec("UPDATE player SET netname = '' WHERE id = 1; UPDATE player SET msg = NULL");
+await session.say(1, '   ');
+check((await msgs()).every((m) => m === null), 'nothing said prints nothing');
+
+// ── the obituaries (ClientObituary, coop only): every client's message line says who died of what ──
 const respawn = async () => { for (let i = 0; i < 22; i++) await session.tic(idle, idle); await session.tic(idle, cmd({ jump: 1 })); };
 const dieOf = async (sql, want) => {
   await db.exec(sql);
