@@ -240,6 +240,12 @@ const menu = new Menu({
   // the multiplayer menu's join and start network server: the page's Join and Host
   netHost: () => hostGame(),
   netJoin: () => joinGame(),
+  // the start server menu: the pak's maps, the next game's mode (latched, as the console's deathmatch and coop words latch it),
+  // and begin, which starts a new game on the map as the Map select does
+  maps: () => pak?.mapNames() ?? [],
+  gameMode: () => ({ coop: !!settings.coop, deathmatch: !!settings.deathmatch, players: settings.players }),
+  setGameMode: (mode) => con.host.setGameMode(mode),
+  startServer: (name) => { if (!name || !pak?.has(`maps/${name}.bsp`)) return; settings.map = name; saveSettings(); $('map').value = name; startMap(name, true).catch((err) => setStatus(err.message, true)); },
 });
 /** A setting changed from a menu: through the page's own control where there is one, so both agree. */
 function setSetting(k, v) {
@@ -266,8 +272,9 @@ function setSetting(k, v) {
   if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
   if (k === 'scrCentertime') for (const c of centerPrints) c.seconds = Number(v) || 0;   // (scr_centertime: a centre print's seconds)
   if (k === 'clFootsteps') audio.footsteps = v !== false;   // (cl_footsteps 0: the footsteps dropped)
-  // dmflags from the deathmatch options menu: the next game's, and the game running (as the console's dmflags word sets the cvar)
-  if (k === 'dmflags' && session) { session.cvars.dmflags = v; if (map && db && !netGuest()) db.exec(`UPDATE game SET dmflags = ${Number(v) || 0} WHERE id = 1`).catch((err) => console.warn('dmflags:', err.message)); }
+  // dmflags from the deathmatch options menu, the limits from the start server menu: the next game's, and the game running (as the
+  // console's dmflags, fraglimit and timelimit words set the cvars)
+  if ((k === 'dmflags' || k === 'fraglimit' || k === 'timelimit') && session) { session.cvars[k] = v; if (map && db && !netGuest()) db.exec(`UPDATE game SET ${k} = ${Number(v) || 0} WHERE id = 1`).catch((err) => console.warn(`${k}:`, err.message)); }
 }
 /**
  * The player setup's name and hand as this client's userinfo (ClientUserinfoChanged): to the game's first client,
@@ -437,7 +444,8 @@ const con = new Console({
   // M_Init's menu_* commands: the menu opens over the view as the key or the menu's item would open it
   openMenu: (name) => {
     const open = { main: () => menu.main(), game: () => menu.game(), loadgame: () => menu.loadMenu(), savegame: () => menu.saveMenu(), options: () => menu.options(), keys: () => menu.keysMenu(),
-      video: () => menu.video(), multiplayer: () => menu.multiplayer(), playerconfig: () => menu.playerConfig(), credits: () => menu.credits(), quit: () => menu.quitMenu(), dmoptions: () => menu.dmOptions() }[name];
+      video: () => menu.video(), multiplayer: () => menu.multiplayer(), playerconfig: () => menu.playerConfig(), credits: () => menu.credits(), quit: () => menu.quitMenu(), dmoptions: () => menu.dmOptions(),
+      startserver: () => menu.startServer() }[name];
     if (!open || !res) return false;
     openMenu(open);
     return true;

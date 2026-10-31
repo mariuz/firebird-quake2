@@ -1030,10 +1030,18 @@ own words with the demo pak. In the order they are to be taken.
 The fifteenth list: what the menus, the host's console, the chat, the painter and the page's logs still lack of
 Quake 2's own words with the demo pak. In the order they are to be taken.
 
-- **`menu_startserver`**: `M_Menu_StartServer_f` from the multiplayer menu: the map (the pak's, by name), the rules
-  (single player, coop, deathmatch), the time limit, the frag limit, the players and the hostname as fields and
-  spins writing the page's settings, `deathmatch options` and `begin` starting the game as the select does, the word
-  at the console.
+- **`menu_startserver`**: done. The multiplayer menu's fifth row, `start server`, is `M_Menu_StartServer_f` as
+  `StartServer_MenuInit` laid it out: the initial map (the pak's maps by name on a spin, the settings' map first), the
+  rules (single player, cooperative, deathmatch: the page's mode, latched for the next game as the `coop` and
+  `deathmatch` words latch it, the Players select following), the time limit and the frag limit (numbers-only fields,
+  `QMF_NUMBERSONLY`, writing the settings and the game row at every key as the console's words do), the max players
+  (two to four at this page, the rules allowing), the hostname (twelve characters, as its field had), the deathmatch
+  flags (`M_Menu_DMOptions_f`, greyed outside a deathmatch as `RulesChangeFunc` greyed them) and `begin`, which starts
+  a new game on the map as the Map select does (`StartServerActionFunc` ran `map`); `menu_startserver` opens it at the
+  console. `test:menu` opens it from the multiplayer menu, turns the map and the rules, types the limits, the players
+  and the hostname, reads the settings and the mode latched, and begins; `test:console` the word; the browser test
+  opens it, turns the rules to deathmatch and types a time limit, reads the settings, the select and the game row with
+  the game running on, on both builds.
 - **`menu_joinserver` and `menu_addressbook`**: `M_Menu_JoinServer_f` as the page's Join in a menu (the code or the
   offer typed in a field, the relay named), and `M_Menu_AddressBook_f` keeping the last codes and relays in the
   settings as the address book kept servers, one picked joining.
