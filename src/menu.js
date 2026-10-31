@@ -382,7 +382,7 @@ export class Menu {
     this.push(m);
   }
 
-  /** M_Menu_Options_f: the options that the page has (sound quality, lookspring and the like have no meaning here) */
+  /** M_Menu_Options_f: the options that the page has (sound quality and the joystick have no meaning here) */
   options() {
     const h = this.host;
     const m = this.framework({
@@ -392,10 +392,14 @@ export class Menu {
         slider('mouse speed', 30, 2, 22, () => Math.round(h.get('sensitivity') * 2), (v) => h.set('sensitivity', v / 2)),
         spin('always run', 40, YESNO, () => (h.get('alwaysRun') ? 1 : 0), (v) => h.set('alwaysRun', !!v)),
         spin('invert mouse', 50, YESNO, () => (h.get('invertMouse') ? 1 : 0), (v) => h.set('invertMouse', !!v)),
-        spin('crosshair', 60, ['none', 'cross', 'dot', 'angle'], () => h.get('crosshair'), (v) => h.set('crosshair', v)),
-        action('customize controls', 80, () => this.keysMenu()),
-        action('reset defaults', 90, () => h.resetDefaults()),
-        action('go to console', 100, () => { this.off(); h.console(); }),
+        // the mouse look cvars (Options_MenuInit's lookspring, lookstrafe and free look boxes)
+        spin('lookspring', 60, YESNO, () => (h.get('lookspring') ? 1 : 0), (v) => h.set('lookspring', !!v)),
+        spin('lookstrafe', 70, YESNO, () => (h.get('lookstrafe') ? 1 : 0), (v) => h.set('lookstrafe', !!v)),
+        spin('free look', 80, YESNO, () => (h.get('freelook') ? 1 : 0), (v) => h.set('freelook', !!v)),
+        spin('crosshair', 90, ['none', 'cross', 'dot', 'angle'], () => h.get('crosshair'), (v) => h.set('crosshair', v)),
+        action('customize controls', 110, () => this.keysMenu()),
+        action('reset defaults', 120, () => h.resetDefaults()),
+        action('go to console', 130, () => { this.off(); h.console(); }),
       ],
     });
     m.layout = (r) => { m.x = r.w >> 1; m.y = (r.h >> 1) - 58; };

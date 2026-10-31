@@ -17,7 +17,7 @@ const assert = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if 
 
 // a host that records what the menus ask for, and a renderer that records what they draw
 const calls = [];
-const settings = { sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false, binds: defaultBinds(), name: '', hand: 0 };
+const settings = { sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, crosshair: 1, renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false, binds: defaultBinds(), name: '', hand: 0 };
 const slots = Array.from({ length: 15 }, (_, i) => (i === 0 ? { valid: true, name: 'ENTERING Outer Base' } : i === 3 ? { valid: true, name: ' 9:05 10/ 8  Outer Base' } : { valid: false }));
 const cache = new Map();
 const hud = { conchars: pic(pak, 'conchars'), pic: (n) => (cache.has(n) ? cache.get(n) : (cache.set(n, pic(pak, n)), cache.get(n))) };
@@ -105,8 +105,9 @@ for (let i = 0; i < 20; i++) keys('ArrowRight');
 assert(settings.sfx === 100, 'and no further than the end');
 keys('ArrowDown', 'ArrowLeft');
 assert(settings.musicMode === 'off', 'CD music disabled turns the music off');
-keys('ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowDown', 'ArrowRight', 'ArrowRight');
-assert(settings.alwaysRun === false && settings.invertMouse === true && settings.crosshair === 3, 'always run, invert mouse and the crosshair turn');
+keys('ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowDown', 'ArrowRight', 'ArrowDown', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowRight');
+assert(settings.alwaysRun === false && settings.invertMouse === true && settings.lookspring === true && settings.lookstrafe === true && settings.freelook === false && settings.crosshair === 3,
+  'always run, invert mouse, lookspring, lookstrafe, free look and the crosshair turn');
 draw();
 const slider = drawn.filter(([k, n]) => k === 'char' && n >= 128 && n <= 131).map(([, n]) => n);
 assert(slider.filter((n) => n === 129).length === 20 && slider.includes(131), 'the sliders draw their ends, ten notches and the knob');
@@ -115,9 +116,9 @@ assert(calls.includes('defaults') && calls.includes('console') && !menu.active, 
 
 // the keys menu (M_Menu_Keys_f): every action with its keys, Enter then a key binds, Backspace unbinds
 menu.mainCursor = 0; menu.main(); keys('ArrowDown', 'ArrowDown', 'Enter');
-for (let i = 0; i < 6; i++) keys('ArrowDown');
+for (let i = 0; i < 9; i++) keys('ArrowDown');
 keys('Enter');
-assert(menu.current.id === 'keys' && menu.current.items.length === 25, `customize controls opens the keys menu with its ${menu.current?.items.length} actions`);
+assert(menu.current.id === 'keys' && menu.current.items.length === 26, `customize controls opens the keys menu with its ${menu.current?.items.length} actions`);
 draw();
 let rows = drawn.filter(([k]) => k === 'str');
 const attack = rows.find(([, s]) => s === 'attack'), ctrl = rows.find(([, s]) => s === 'CTRL'), or = rows.find(([, s]) => s === 'or'), f = rows.find(([, s]) => s === 'MOUSE1');
