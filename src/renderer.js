@@ -29,6 +29,8 @@ export class Renderer {
     this.models = null;
     this.particles = [];
     this.sbarLines = 0;
+    this.viewsize = 100;     // SCR_CalcVrect's viewsize: the 3D view's share of the screen, 40–100 percent (setViewSize)
+    this.backtile = null;    // Draw_TileClear's backtile, the 64×64 picture tiled around a view smaller than the screen
     this.sky = null;             // [6 × { w, h, data }]
     this.lightScale = 1.4;       // ref_gl's intensity: the software lightmaps are dim on their own
     this.dlights = [];           // this frame's dynamic lights: [{ x, y, z, r }] (V_AddLight)
@@ -63,6 +65,30 @@ export class Renderer {
     this.edgeL = new Float32Array(this.h * 5);   // x, iz, sz, tz, light per scanline
     this.edgeR = new Float32Array(this.h * 5);
     this.warpTab = null;
+    this.setViewSize(this.viewsize ?? 100);
+  }
+
+  /**
+   * SCR_CalcVrect: the 3D view's rectangle within a view, `size` percent of it (40–100, the viewsize cvar), the width a
+   * multiple of 8 and the height of 2, centred; around it the backtile (Draw_TileClear) and the status bar as it is.
+   */
+  setViewSize(size) {
+    this.viewsize = Math.max(40, Math.min(100, Math.round(size)));
+    const [vw, vh] = vrectSize(this.w, this.h, this.viewsize);
+    const x = (this.w - vw) >> 1, y = (this.h - vh) >> 1;
+    this.vr = { x, y, w: vw, h: vh, x1: x + vw - 1, y1: y + vh - 1 };
+  }
+
+  /** The frame buffer at a frame's start: the view's rectangle black, the rest the backtile (SCR_TileClear), the whole black without one. */
+  tileClear() {
+    const { fb, w, h, vr, backtile } = this;
+    if (vr.x === 0 && vr.y === 0 && vr.w === w && vr.h === h) { fb.fill(0); return; }
+    if (!backtile) { fb.fill(0); return; }
+    const td = backtile.data, tw = backtile.w, th = backtile.h;
+    for (let y = 0; y < h; y++) {
+      const row = y * w, trow = (y % th) * tw, inside = y >= vr.y && y <= vr.y1;
+      for (let x = 0; x < w; x++) fb[row + x] = inside && x >= vr.x && x <= vr.x1 ? 0 : td[trow + (x % tw)];
+    }
   }
 
   /** The model registry (loader.js's res.models) and the world's faces. */
@@ -297,9 +323,9 @@ export class Renderer {
   // ── a frame ─────────────────────────────────────────────────────────────
   beginFrame(view) {
     this.view = view;
-    const { w, h } = this;
+    const { w, h } = this.vr;   // (the 3D view's rectangle: the whole view at viewsize 100)
     this.zb.fill(0);
-    this.fb.fill(0);
+    this.tileClear();
     const yaw = (view.yaw * Math.PI) / 180, pitch = (view.pitch * Math.PI) / 180;
     const sy = Math.sin(yaw), cy = Math.cos(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch);
     view.fwd = [cp * cy, cp * sy, -sp];
@@ -312,8 +338,8 @@ export class Renderer {
       view.up = [-R[0] * sr + U[0] * cr, -R[1] * sr + U[1] * cr, -R[2] * sr + U[2] * cr];
     }
     view.scale = (w / 2) / Math.tan((view.fov * Math.PI) / 360);
-    view.cx = w / 2;
-    view.cy = (h - this.sbarLines) / 2;
+    view.cx = this.vr.x + w / 2;
+    view.cy = this.vr.y + (h - this.sbarLines) / 2;
   }
 
   /** Room for n vertices in the view-space (stride 7) and screen-space (stride 5) scratch polygons. */
@@ -345,7 +371,8 @@ export class Renderer {
       const vv = this.vv;
       for (let k = 0; k < m; k++) {
         const r = rows[j + k], o = k * 7;
-        vv[o] = r[2]; vv[o + 1] = r[3]; vv[o + 2] = r[4]; vv[o + 3] = r[5]; vv[o + 4] = r[6]; vv[o + 5] = r[7]; vv[o + 6] = r[8];
+        // (SQL projected into a view the rectangle's size at the origin: moved to where the rectangle is)
+        vv[o] = r[2]; vv[o + 1] = r[3]; vv[o + 2] = r[4]; vv[o + 3] = r[5] == null ? r[5] : r[5] + this.vr.x; vv[o + 4] = r[6] == null ? r[6] : r[6] + this.vr.y; vv[o + 5] = r[7]; vv[o + 6] = r[8];
       }
       this.emitPoly(m, behind, face, ent, info, styles, time, entFrames, alphaPolys);
     }
@@ -467,11 +494,11 @@ export class Renderer {
    * between (D_DrawSpans16), the depth test runs on every pixel.
    */
   fillPolygon(poly, n, surf, mode, time, blend, scroll) {
-    const { w, h, edgeL, edgeR, fb, zb } = this;
+    const { w, h, edgeL, edgeR, fb, zb, vr } = this;   // (the spans clipped to the view's rectangle, vr)
     let ymin = Infinity, ymax = -Infinity;
     for (let k = 0; k < n; k++) { const py = poly[k * 5 + 1]; if (py < ymin) ymin = py; if (py > ymax) ymax = py; }
-    const y0 = Math.max(0, Math.ceil(ymin - 0.5));
-    const y1 = Math.min(h - 1, Math.ceil(ymax - 0.5) - 1);
+    const y0 = Math.max(vr.y, Math.ceil(ymin - 0.5));
+    const y1 = Math.min(vr.y1, Math.ceil(ymax - 0.5) - 1);
     if (y0 > y1) return;
     for (let y = y0; y <= y1; y++) { edgeL[y * 5] = Infinity; edgeR[y * 5] = -Infinity; }
     for (let k = 0; k < n; k++) {
@@ -509,7 +536,7 @@ export class Renderer {
         const o = y * 5;
         const xl = edgeL[o], xr = edgeR[o];
         if (xl === Infinity || xr === -Infinity) continue;
-        const xs = Math.max(0, Math.ceil(xl - 0.5)), xe = Math.min(w - 1, Math.ceil(xr - 0.5) - 1);
+        const xs = Math.max(vr.x, Math.ceil(xl - 0.5)), xe = Math.min(vr.x1, Math.ceil(xr - 0.5) - 1);
         if (xs > xe) continue;
         const kx = (xs + 0.5 - view.cx) * dk, ky = (view.cy - y - 0.5) * dk;
         let dx = fwd[0] + right[0] * kx + up[0] * ky, dy = fwd[1] + right[1] * kx + up[1] * ky, dz = fwd[2] + right[2] * kx + up[2] * ky;
@@ -535,7 +562,7 @@ export class Renderer {
       const o = y * 5;
       const xl = edgeL[o], xr = edgeR[o];
       if (xl === Infinity || xr === -Infinity) continue;
-      const xs = Math.max(0, Math.ceil(xl - 0.5)), xe = Math.min(w - 1, Math.ceil(xr - 0.5) - 1);
+      const xs = Math.max(vr.x, Math.ceil(xl - 0.5)), xe = Math.min(vr.x1, Math.ceil(xr - 0.5) - 1);
       if (xs > xe) continue;
       const span = xr - xl || 1;
       const diz = (edgeR[o + 1] - edgeL[o + 1]) / span;
@@ -730,9 +757,9 @@ export class Renderer {
 
   /** A Gouraud-lit, affine-textured triangle with z-test. shell: a flat colour instead of the skin. */
   triangle(x0, y0, iz0, s0, t0, l0, x1, y1, iz1, s1, t1, l1, x2, y2, iz2, s2, t2, l2, tex, tw, th, transparent, noZ, alpha, shell) {
-    const { w, h, edgeL, edgeR, fb, zb, colormap } = this;
+    const { w, edgeL, edgeR, fb, zb, colormap, vr } = this;   // (clipped to the view's rectangle, vr)
     const ymin = Math.min(y0, y1, y2), ymax = Math.max(y0, y1, y2);
-    const ya = Math.max(0, Math.ceil(ymin - 0.5)), yb = Math.min(h - 1, Math.ceil(ymax - 0.5) - 1);
+    const ya = Math.max(vr.y, Math.ceil(ymin - 0.5)), yb = Math.min(vr.y1, Math.ceil(ymax - 0.5) - 1);
     if (ya > yb) return;
     for (let y = ya; y <= yb; y++) { edgeL[y * 5] = Infinity; edgeR[y * 5] = -Infinity; }
     this.triEdge(ya, yb, x0, y0, iz0, s0, t0, l0, x1, y1, iz1, s1, t1, l1);
@@ -744,7 +771,7 @@ export class Renderer {
     for (let y = ya; y <= yb; y++) {
       const o = y * 5, xl = edgeL[o], xr = edgeR[o];
       if (xl === Infinity) continue;
-      const xs = Math.max(0, Math.ceil(xl - 0.5)), xe = Math.min(w - 1, Math.ceil(xr - 0.5) - 1);
+      const xs = Math.max(vr.x, Math.ceil(xl - 0.5)), xe = Math.min(vr.x1, Math.ceil(xr - 0.5) - 1);
       if (xs > xe) continue;
       const span = xr - xl || 1;
       const diz = (edgeR[o + 1] - edgeL[o + 1]) / span, ds = (edgeR[o + 2] - edgeL[o + 2]) / span;
@@ -878,7 +905,7 @@ export class Renderer {
       if (size < pixMin) size = pixMin; else if (size > pixMax) size = pixMax;
       for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
         const px = x + dx, py = y + dy;
-        if (px < 0 || py < 0 || px >= w || py >= h) continue;
+        if (px < this.vr.x || py < this.vr.y || px > this.vr.x1 || py > this.vr.y1) continue;   // (within the view's rectangle)
         const idx = py * w + px;
         if (iz > zb[idx]) { zb[idx] = iz; fb[idx] = p.color; }
       }
@@ -1000,6 +1027,12 @@ export class Renderer {
     for (let i = 0; i < fb.length; i++) pixels[i] = p[fb[i]];
     this.ctx.putImageData(this.image, (view % this.cols) * this.w, Math.floor(view / this.cols) * this.h);
   }
+}
+
+/** SCR_CalcVrect's size: `size` percent of w × h, the width a multiple of 8 and the height of 2 (the whole at 100 for the page's sizes). */
+export function vrectSize(w, h, size) {
+  const s = Math.max(40, Math.min(100, Math.round(size)));
+  return [Math.floor((w * s) / 100) & ~7, Math.floor((h * s) / 100) & ~1];
 }
 
 /** AngleVectors as a matrix with the columns forward, -right, up (the game's convention for brush models). */

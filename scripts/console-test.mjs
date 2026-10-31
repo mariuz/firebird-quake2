@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -306,7 +306,15 @@ await con.submit('netgraph 1'); check(s.netgraph === true && last() === 'set net
 await con.submit('netgraph 2'); check(s.netgraph === true && status.at(-1)?.[0] === 'netgraph takes 0 or 1' && status.at(-1)?.[1] === true, 'netgraph 2 is refused');
 await con.submit('netgraph 0'); check(s.netgraph === false, 'netgraph 0 turns it off');
 await con.submit('cvarlist');
-check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+// viewsize (SCR_CalcVrect's cvar, 40 to 100), sizeup and sizedown (SCR_SizeUp_f, SCR_SizeDown_f: ten at a time, within the range)
+await con.submit('viewsize'); check(status.at(-1)?.[0] === '"viewsize" is "100"', 'viewsize shows 100 by default');
+await con.submit('viewsize 60'); check(s.viewsize === 60 && last() === 'set viewsize 60', 'viewsize 60 makes the view six tenths of the screen');
+await con.submit('viewsize 20'); check(s.viewsize === 40, 'viewsize 20 clamps to 40');
+await con.submit('viewsize x'); check(s.viewsize === 40 && status.at(-1)?.[0] === 'viewsize takes 40 to 100' && status.at(-1)?.[1] === true, 'viewsize x is refused');
+await con.submit('sizeup'); check(s.viewsize === 50 && status.at(-1)?.[0] === '"viewsize" is "50"', 'sizeup adds ten');
+await con.submit('sizedown'); await con.submit('sizedown'); check(s.viewsize === 40, 'sizedown takes ten, not under 40');
+await con.submit('viewsize 100'); check(s.viewsize === 100, 'viewsize 100 is the whole screen again');
 // a guest's prediction cvars: cl_predict (on by default) and cl_showmiss (off), 0 or 1
 await con.submit('cl_predict'); check(status.at(-1)?.[0] === '"cl_predict" is "1"', 'cl_predict shows 1 by default');
 await con.submit('cl_predict 0'); check(s.clPredict === false && last() === 'set clPredict false', 'cl_predict 0 stops a guest\'s prediction');
@@ -321,7 +329,7 @@ await con.submit('lookstrafe 2'); check(s.lookstrafe === true && status.at(-1)?.
 await con.submit('m_forward 2'); check(s.mForward === 2 && last() === 'set mForward 2', 'm_forward 2');
 await con.submit('m_side -1'); check(s.mSide === -1 && last() === 'set mSide -1' && status.at(-1)?.[0] === '"m_side" is "-1"', 'm_side -1');
 await con.submit('m_side x'); check(s.mSide === -1 && status.at(-1)?.[1] === true, 'm_side x is refused');
-Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false });
+Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100 });
 
 // the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
 {
@@ -372,7 +380,7 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   const setAt = lines.findIndex((l) => l.startsWith('set ')), godAt = lines.indexOf('bind j "god"');
   check(lines[0].startsWith('//') && lines[1] === 'unbindall' && lines[2] === 'bind k "+attack"' && lines[3] === 'bind MOUSE2 "+attack"' && lines.includes('bind MWHEELDOWN "weapnext"') && !lines.some((l) => l.includes('"+moveup"'))
     && godAt > 3 && godAt < setAt && lines[godAt + 1] === 'bind MOUSE3 "say hello"'
-    && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && lines.includes('set freelook "1"') && lines.includes('set lookspring "0"') && !lines.some((l) => l.startsWith('set netgraph') || l.startsWith('set m_forward') || l.startsWith('set m_side') || l.startsWith('set cl_predict') || l.startsWith('set cl_showmiss')) && cfg.endsWith('\n'),
+    && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && lines.includes('set freelook "1"') && lines.includes('set lookspring "0"') && lines.includes('set viewsize "100"') && !lines.some((l) => l.startsWith('set netgraph') || l.startsWith('set m_forward') || l.startsWith('set m_side') || l.startsWith('set cl_predict') || l.startsWith('set cl_showmiss')) && cfg.endsWith('\n'),
     'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them (netgraph, m_forward, m_side, cl_predict and cl_showmiss, not archived, left out)');
   let downloaded = null;
   host.download = (name, text) => { downloaded = { name, text }; };

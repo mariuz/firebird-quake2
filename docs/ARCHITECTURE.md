@@ -721,7 +721,13 @@ package's version and the engine line: Firebird's version, threads or not), `pau
 game running pauses or goes on, `togglePause`; a shared game or none, "Pause command is only valid in single
 player"), `score` (`Cmd_Score_f`: the score board toggled in a game of more than one client, coop, deathmatch or
 shared, the inventory and the help put away; nothing in single player, `toggleScores`) and `putaway`
-(`Cmd_PutAway_f`: the help computer, the inventory and the score board put away, `putAway`), `timedemo` (above) and
+(`Cmd_PutAway_f`: the help computer, the inventory and the score board put away, `putAway`), `viewsize` (`SCR_CalcVrect`'s
+cvar, 40 to 100, archived: the painter draws the 3D view in a rectangle that share of the view, the width a multiple of 8 and
+the height of 2, centred, `Renderer.setViewSize`, with `pics/backtile.pcx` tiled around it as `Draw_TileClear` tiled it and
+the status bar, the notify lines and the menus where they were; the projection's centre and scale are the rectangle's, every
+span, triangle and particle clips to it, the SQL-projecting mode's points move with it, and the SQL's frustum, `viewcfg`, is
+the rectangle's size), `sizeup` and `sizedown` (`SCR_SizeUp_f`, `SCR_SizeDown_f`: ten up or down; `=` and `-` by default,
+default.cfg's, as lines beside END's centerview), `timedemo` (above) and
 `screenshot` (the view downloaded as `quakeNN.png`, as
 `SCR_ScreenShot_f` wrote `quakeNN.pcx`), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the

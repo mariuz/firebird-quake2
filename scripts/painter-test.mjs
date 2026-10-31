@@ -88,6 +88,27 @@ r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
 const levels = [0, 0, 0, 0];
 for (const k of r.surfCache.keys()) levels[k % 4]++;
 assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws near surfaces at mip 0 and far ones smaller (by level: ${levels.join(' ')})`);
+// SCR_CalcVrect (the viewsize cvar): at 60 the frame is a 192×144 rectangle at 64,48 with the backtile around it and the
+// world inside; at 100 the whole view again, pixel for pixel as before
+{
+  const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: 0, fov: 90 };
+  const full = r.fb.slice();
+  r.backtile = { w: 64, h: 64, data: new Uint8Array(64 * 64).fill(7) };
+  r.setViewSize(60);
+  assert(r.vr.x === 64 && r.vr.y === 48 && r.vr.w === 192 && r.vr.h === 144 && r.vr.x1 === 255 && r.vr.y1 === 191, `viewsize 60 is a 192×144 rectangle at 64,48 (${JSON.stringify(r.vr)})`);
+  r.beginFrame(view);
+  r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
+  let outside = 0, outsideTile = 0, inside = 0, insideWorld = 0;
+  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) {
+    const p = r.fb[y * r.w + x];
+    if (x < 64 || x > 255 || y < 48 || y > 191) { outside++; if (p === 7) outsideTile++; } else { inside++; if (p !== 7) insideWorld++; }
+  }
+  assert(outsideTile === outside && insideWorld > inside * 0.9, `the backtile fills everything outside the rectangle (${outsideTile} of ${outside} pixels) and the world the rectangle (${insideWorld} of ${inside})`);
+  r.setViewSize(100); r.backtile = null;
+  r.beginFrame(view);
+  r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
+  assert(r.vr.w === 320 && r.vr.h === 240 && r.vr.x === 0 && r.fb.every((p, i) => p === full[i]), 'viewsize 100 paints the whole view again, pixel for pixel as before');
+}
 // the underwater warp
 {
   const { w, h } = r;

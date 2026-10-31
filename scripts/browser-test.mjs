@@ -406,6 +406,22 @@ try {
     await typeCommand('score');
     const sc1 = await page.evaluate(() => window.quake2.screens).catch(() => ({}));
     assert(sc1.scores === false && !sc1.help && !sc1.inventory, `score in single player shows no score board (${JSON.stringify(sc1)})`);
+    // viewsize (SCR_CalcVrect): the 3D view's rectangle within the screen, the backtile around it; sizeup and sizedown step it by
+    // ten, = and - by default (default.cfg); the SQL's frustum follows the rectangle
+    const vrect = () => page.evaluate(() => window.quake2.sql('SELECT w, h FROM viewcfg').then((r) => ({ setting: window.quake2.settings.viewsize, vr: window.quake2.renderer.vr, sqlW: r[0].W, sqlH: r[0].H, tile: !!window.quake2.renderer.backtile }))).catch(() => ({}));
+    await typeCommand('viewsize 60');
+    const vs60 = await vrect();
+    await typeCommand('sizeup');
+    const vs70 = await vrect();
+    await page.keyboard.press('Equal'); await sleep(300);
+    const vs80 = await vrect();
+    await page.keyboard.press('Minus'); await sleep(300);
+    const vs70b = await vrect();
+    await typeCommand('viewsize 100');
+    const vs100 = await vrect();
+    assert(vs60.setting === 60 && vs60.vr?.w === 192 && vs60.vr?.h === 144 && vs60.vr?.x === 64 && vs60.vr?.y === 48 && vs60.sqlW === 192 && vs60.sqlH === 144 && vs60.tile
+      && vs70.setting === 70 && vs70.vr?.w === 224 && vs80.setting === 80 && vs80.vr?.w === 256 && vs70b.setting === 70 && vs100.setting === 100 && vs100.vr?.w === 320 && vs100.vr?.x === 0 && vs100.sqlW === 320,
+      `viewsize 60 draws the view in a 192×144 rectangle at 64,48 with the backtile around it and the SQL's frustum its size, sizeup and = step it up, - down, viewsize 100 is the whole screen again (${JSON.stringify({ vs60, vs70, vs80, vs70b, vs100 })})`);
     // writeconfig downloads config.cfg with the keys and the cvars; the settings put back, the file run through the Config
     // control (exec's picker) brings them again
     const [cfgDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('writeconfig')]);
