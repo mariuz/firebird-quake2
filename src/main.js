@@ -395,8 +395,8 @@ async function loadSaveFile(file) {
   if (!file || guestNotice()) return;
   const save = await session.unpackText(await file.text());
   if (!save) { setStatus(`${file.name} is not a saved game of this port`, true); return; }
-  if (save.version !== SAVE_VERSION) { setStatus(`${file.name} is a saved game of another version (${save.version}, this is ${SAVE_VERSION})`, true); return; }
-  await loadSaved(save);
+  if (save.version > SAVE_VERSION) { setStatus(`${file.name} is a saved game of a newer version (${save.version}, this is ${SAVE_VERSION})`, true); return; }
+  await loadSaved(save);   // (an older version loads: the columns it lacks take their defaults, the ones the schema has lost are dropped and named)
 }
 async function loadSaved(save) {
   if (!pak.has(`maps/${save.map}.bsp`)) { setStatus(`The saved game is on ${save.map}, which is not in this pak`, true); return; }
@@ -405,9 +405,11 @@ async function loadSaved(save) {
     beginMap();
     setStatus('Loading the saved game…');
     // the map's geometry and models afresh, then the saved rows, then the unit's other levels as the save left them
-    await mapLoaded(await session.loadSave(save, { skill: settings.skill, faceVerts: settings.renderer === 'sql' }));
-    setStatus('Game loaded');
-    setTimeout(() => { if (statusEl.textContent === 'Game loaded') setStatus(''); }, 2000);
+    const setup = await session.loadSave(save, { skill: settings.skill, faceVerts: settings.renderer === 'sql' });
+    await mapLoaded(setup);
+    const loaded = setup.saveNote ? `Game loaded (${setup.saveNote})` : 'Game loaded';
+    setStatus(loaded);
+    setTimeout(() => { if (statusEl.textContent === loaded) setStatus(''); }, setup.saveNote ? 5000 : 2000);
     lastTic = performance.now();
     running = true;
   } catch (err) { console.error(err); setStatus(`Load failed: ${err.message}`, true); }

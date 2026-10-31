@@ -565,9 +565,15 @@ wants: in the order they are to be taken.
   the picker, a config run back with its comments, quotes and a bad line, and `set`'s refusals; the browser
   test downloads config.cfg at the console, puts the settings back and runs the file through the control,
   which brings them again.
-- **Saves across schema changes**: a save lacking a column the schema gained takes its default, a column the
-  schema lost is dropped with a note, and `SAVE_VERSION`'s comment says what changed (the *Save and load*
-  entry's leftover).
+- **Saves across schema changes**: done. A save lacking a column the schema gained took its default already
+  (the columns come from the save's field list); one carrying a column the schema has lost failed on the
+  insert, and another `SAVE_VERSION` was refused outright. `insertRows` now asks the table for its columns and
+  drops the saved ones it has not, naming them; `importSave` loads any older version (refusing a newer one and
+  rubbish) and returns the version and the columns dropped, which `saveNote` words and the page shows with
+  "Game loaded" (five seconds, for a note); `SAVE_VERSION`'s comment says what each version meant and when to
+  bump (a column's meaning changed, not its presence). `test:save` loads a version-1 save with a column the
+  schema has lost and one it gained and sees the first dropped and named, the second defaulted and the rest
+  as saved, a newer version and rubbish refused; the browser test's file load is as it was.
 - **`timescale`**: `timescale <n>` at the console runs the game's clock at `n` times the wall's (`0.5` slow
   motion, `2` twice, as `Qcommon_Frame` scaled the frame's milliseconds), the demos too; `1` puts it back.
 
@@ -579,8 +585,8 @@ wants: in the order they are to be taken.
   plus the quick slot (`F6` / `F9`). Dying and pressing fire brings up the load menu (`respawn` in single
   player). `src/savegame.js`, tested by `scripts/save-test.mjs`. A save carries the unit's other levels
   as they were left (below), as `SV_WriteServerFile` copied every level's `.sav` beside the game's, and a
-  loaded game comes back to them as left. Left: a save made by an older schema loads with the new columns'
-  defaults, and one whose columns are gone fails (bump `SAVE_VERSION` when that matters).
+  loaded game comes back to them as left. A save made by an older schema loads with the new columns'
+  defaults and the columns since lost dropped and named (*Saves across schema changes*, the sixth list).
 - **Cross-level state**: done. `game.serverflags` holds the unit's eight flags across maps (a new
   game clears them); a used `target_crosslevel_trigger` sets its spawnflags there and is spent; a
   `target_crosslevel_target` looks once, after its delay, and fires its targets when every flag it

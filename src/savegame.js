@@ -5,9 +5,13 @@
 // the monsters follow). exportSave reads them; importSave, with the same map freshly loaded, empties them and
 // inserts the saved rows, then restarts the entity id sequence above the highest id and forgets the frame's
 // caches. Column names come from the result's field list, so the format follows the schema: a save from
-// before a column loads with the column's default, one from before a table with the table empty.
+// before a column loads with the column's default, one from before a table with the table empty, and a
+// save carrying a column the schema has lost loads without it (the load names what it dropped). The version
+// says what the schema meant at the time: an older save loads so, a newer one is refused.
 
-export const SAVE_VERSION = 2;   // 2: game lost next_spawn, intermission_tics and finale; gained intermission_time, help_msg2, help_changed
+export const SAVE_VERSION = 2;   // 1: the first saves; 2: game lost next_spawn, intermission_tics and finale, gained intermission_time, help_msg2, help_changed
+// (a column added since loads defaulted in an older save, one removed since is dropped: bump the version only when a
+// column's meaning changed, so a save of the old meaning can be told)
 const TABLES = ['game', 'player', 'coop_respawn', 'ents', 'lightstyles', 'player_trail'];
 // per-frame caches on ents that are rebuilt rather than saved
 const SKIP = new Set(['FACES_LST', 'FL_STAMP', 'FL_X', 'FL_Y', 'FL_Z', 'FL_P', 'FL_YAW', 'FL_R', 'VIS_CL', 'VIS']);
@@ -49,7 +53,13 @@ export function savedLevels(save) {
  * was off by an ulp for one value in six: doubles went over as a mantissa and a power of two).
  */
 async function insertRows(db, t, { cols, rows }, remap, fix = null) {
-  if (!rows.length) return;
+  if (!rows.length) return [];
+  // the table's columns now: a saved column the schema has lost is dropped (and named), one the schema gained
+  // is not inserted and takes its default
+  const have = new Set((await db.query(`SELECT * FROM ${t} WHERE 1 = 0`, [], { rowMode: 'array' })).fields.map((f) => (f.name ?? f.alias ?? f).toString().toUpperCase()));
+  const keep = cols.map((c) => have.has(String(c).toUpperCase()));
+  const dropped = cols.filter((_, i) => !keep[i]);
+  if (dropped.length) { cols = cols.filter((_, i) => keep[i]); rows = rows.map((r) => r.filter((_, i) => keep[i])); }
   const sql = `INSERT INTO ${t} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;
   const mi = cols.indexOf(t === 'game' ? 'WORLD_MODEL' : 'MODEL_ID');
   await db.execBatch(sql, rows.map((r) => {
@@ -58,6 +68,7 @@ async function insertRows(db, t, { cols, rows }, remap, fix = null) {
     if (fix) for (let i = 0; i < cols.length; i++) row[i] = fix(cols[i], row[i]);
     return row;
   }));
+  return dropped;
 }
 
 /** Read one table's rows (the frame caches left out). */
@@ -137,19 +148,32 @@ export async function importLevel(db, lv) {
   END`);
 }
 
+/** The load's note for the page: an older version, the columns dropped; '' for a save of this version with nothing dropped. */
+export function saveNote(info) {
+  const parts = [];
+  if (info.version < SAVE_VERSION) parts.push(`a save of version ${info.version}`);
+  for (const [t, cols] of Object.entries(info.dropped ?? {})) parts.push(`${t}'s ${cols.map((c) => c.toLowerCase()).join(', ')} dropped`);
+  return parts.join('; ');
+}
+
+/** Returns { version, dropped: { table: [columns the schema has lost] } } for the page's note. */
 export async function importSave(db, save) {
-  if (!save || save.version !== SAVE_VERSION) throw new Error('not a saved game of this version');
+  if (!save || !Number.isInteger(save.version) || !save.tables) throw new Error('not a saved game of this port');
+  if (save.version > SAVE_VERSION) throw new Error(`a saved game of a newer version (${save.version}, this is ${SAVE_VERSION})`);
   // the saved model ids → this load's, by name
   const byName = new Map((await db.query('SELECT id, name FROM models', [], { rowMode: 'array' })).rows.map(([id, name]) => [name, id]));
   const remap = (id) => { if (id == null) return id; const name = save.models?.[id]; const nid = name == null ? undefined : byName.get(name); return nid ?? id; };
   await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM vis_faces; DELETE FROM lightstyles; DELETE FROM player_trail; DELETE FROM ents; DELETE FROM coop_respawn; DELETE FROM player; DELETE FROM game; DELETE FROM usercmd;');
+  const dropped = {};
   for (const t of TABLES) {
     if (!save.tables[t]) continue;   // a save from before the table: it starts empty
-    await insertRows(db, t, save.tables[t], remap);
+    const d = await insertRows(db, t, save.tables[t], remap);
+    if (d.length) dropped[t] = d;
   }
   const maxId = (await db.query('SELECT MAX(id) m FROM ents')).rows[0].M ?? 0;
   await db.exec(`ALTER SEQUENCE ent_seq RESTART WITH ${maxId + 1}`);
   if (save.rng != null) await db.query("SELECT RDB$SET_CONTEXT('USER_SESSION', 'rng', ?) FROM rdb$database", [Math.floor(save.rng)]);
   // the frame's caches describe a view and a cluster that are gone
   await db.exec('UPDATE viewcfg SET vis_cluster = NULL, lv_ex = NULL, lv_leaf = NULL, world_lst = NULL, view_stamp = view_stamp + 1;');
+  return { version: save.version, dropped };
 }

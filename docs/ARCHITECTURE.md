@@ -725,10 +725,13 @@ gets them back), and keeps them in `localStorage` as `src/savestore.js` packs th
 fifteen slots fit the origin's quota (a plain JSON save from before still reads). The same text is a save
 file: the page's Download writes the game as `<map>-<time>.q2sav` (`Session.packGame`, no slot), `d` on a
 slot of the load menu writes that slot as it is stored (`Session.slotText`, `save<n>-<map>.q2sav`), and its
-Load takes a file (`Session.unpackText`: the save, or null for anything else; the page refuses another
-`SAVE_VERSION`) into the same load as a slot's, so a game moves between browsers. `F9` reloads the map, empties the four tables, inserts the
+Load takes a file (`Session.unpackText`: the save, or null for anything else; the page refuses a newer
+`SAVE_VERSION`, an older one loads) into the same load as a slot's, so a game moves between browsers. `F9` reloads the map, empties the four tables, inserts the
 saved rows with model ids remapped by name, restarts `ent_seq` above the highest id and resets the
-frame's caches. The per-frame cache columns of `ents` are not saved. Each table's rows go in as one
+frame's caches. The columns come from the save: one the schema gained since takes its default, one the
+schema has lost is dropped (`insertRows` asks the table for its columns) and named in the note `importSave`
+returns and the page shows with "Game loaded" (`saveNote`); `SAVE_VERSION` is bumped only when a column's
+meaning changed. The per-frame cache columns of `ents` are not saved. Each table's rows go in as one
 `execBatch`, and a `DOUBLE PRECISION` column gets the saved double bit for bit: since firebird-wasm
 0.4.0 a number is bound in binary. (Before, every parameter was text, Firebird's text-to-double
 conversion was off by an ulp for one value in six, and doubles went over as
