@@ -329,6 +329,22 @@ const con = new Console({
   // version: the page's version and build (scripts/build.mjs stamps them), the engine package's version, and the engine line (Firebird's version, threads or not)
   version: () => `Firebird Quake 2 ${typeof __VERSION__ === 'string' ? __VERSION__ : 'dev'} build ${typeof __BUILD__ === 'string' ? __BUILD__ : 'dev'}, firebird-wasm ${typeof __FBWASM__ === 'string' ? __FBWASM__ : 'dev'}, ${$('engine').textContent}`,   // eslint-disable-line no-undef
   togglePause: () => { if (netHost() || netGuest() || !running) return null; paused = !paused; return paused; },   // (pause: a single-player game running, as CL_Pause_f allowed)
+  // path and dir: the pak in use, its files counted and where it came from (the demo's download, or the picked one the browser keeps)
+  pakInfo: () => (pak ? { name: pickedPak ?? 'pak0.pak', files: pak.files.size, from: pickedPak ? 'picked, kept in the browser' : "the demo's, ./pak/pak0.pak" } : null),
+  // modellist: the models loaded (the MD2s and sprites by name, the full game's monsters on a row without a mesh at size 0) with their size in the pak
+  modelList: () => (res ? [...res.models.values()].map((m) => ({ name: m.name, size: pak?.files.get(m.name)?.size ?? 0 })) : []),
+  // imagelist: the pictures in use (P: the hud's, the menus' through its cache), the wall textures the painter has built (W) and the models' skins (M), with their sizes
+  imageList: () => {
+    const out = [];
+    if (hud) {
+      for (const [name, p] of [['conchars', hud.conchars], ['backtile', hud.backtile], ['num_minus', hud.numMinus], ['anum_minus', hud.anumMinus], ...hud.nums.map((p, i) => [`num_${i}`, p]), ...hud.anums.map((p, i) => [`anum_${i}`, p]), ...hud.cache]) if (p) out.push({ kind: 'P', w: p.w, h: p.h, name: `pics/${name}.pcx` });
+    }
+    if (renderer) for (const [name, t] of renderer.textures) if (t) out.push({ kind: 'W', w: t.w, h: t.h, name: `textures/${name}.wal` });
+    if (res) for (const m of res.models.values()) if (m.mdl) m.mdl.skins.forEach((sk, i) => out.push({ kind: 'M', w: sk.w, h: sk.h, name: `${m.name}#${i}` }));
+    return out;
+  },
+  // soundlist: the sounds decoded so far with their size in the pak, L on the ones looping now
+  soundList: () => [...audio.buffers.keys()].map((name) => ({ name, size: pak?.files.get(`sound/${name}`)?.size ?? 0, loop: audio.loops.has(name) })),
   // a joined page's game commands (god, give, kill…) go to the host, which runs them for this page's client (Cmd_ForwardToServer)
   forward: (cmd, arg) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendConsole(cmd, arg); return true; },
   // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)

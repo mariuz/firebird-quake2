@@ -2,7 +2,7 @@
 // the rest reach player_command, the history steps and forgets as Key_Console's did, Tab completes.
 //   node scripts/console-test.mjs
 
-import { Console, COMMANDS, writeConfig } from '../src/console.js';
+import { Console, COMMANDS, writeConfig, dirList } from '../src/console.js';
 import { Notify, CenterPrint } from '../src/notify.js';
 import { ACTIONS, defaultBinds } from '../src/input.js';
 
@@ -13,7 +13,7 @@ const calls = [];
 const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
-  pak: { has: (p) => p === 'maps/demo2.bsp' },
+  pak: { has: (p) => p === 'maps/demo2.bsp', list: () => ['maps/demo1.bsp', 'maps/demo2.bsp', 'pics/conchars.pcx', 'sound/weapons/blastf1a.wav', 'readme.txt'] },
   settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
@@ -523,6 +523,33 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   check(printed === COMMANDS.join('\n') && status.at(-1)?.[0] === `${COMMANDS.length} commands`, 'cmdlist prints every command on a line of the scrollback and says how many');
   await con.submit('version');
   check(status.at(-1)?.[0] === 'Firebird Quake 2 0.1.0 build x', 'version says which build the page runs');
+  // path, dir and the listings (FS_Path_f, FS_Dir_f, Mod_Modellist_f, R_ImageList_f, S_SoundList_f): the pak's name and files, its
+  // files a wildcard names, and the models, the images and the sounds loaded, a line each in the scrollback with their sizes
+  host.pakInfo = () => ({ name: 'pak0.pak', files: 5, from: "the demo's, ./pak/pak0.pak" });
+  await con.submit('path');
+  check(status.at(-1)?.[0] === "Current search path: pak0.pak (5 files, the demo's, ./pak/pak0.pak)", 'path names the pak, its files and where it came from');
+  await con.submit('dir maps/*.bsp');
+  check(printed === 'Directory of pak0.pak/maps/*.bsp\n----\ndemo1.bsp\ndemo2.bsp' && status.at(-1)?.[0] === 'dir maps/*.bsp: 2 files', 'dir lists the files a wildcard names by their names, under "Directory of", and counts them');
+  await con.submit('dir');
+  check(printed === 'Directory of pak0.pak/*.*\n----\nreadme.txt' && status.at(-1)?.[0] === 'dir *.*: 1 file', 'dir alone is *.* at the root, as FS_Dir_f had it');
+  await con.submit('dir *.bsp');
+  check(printed === 'Directory of pak0.pak/*.bsp\n----' && status.at(-1)?.[0] === 'dir *.bsp: no files', 'a wildcard stays in its directory');
+  check(dirList(['a/b.wav', 'a/c.wav', 'a/d/e.wav', 'b.wav'], 'a/?.wav').join() === 'a/b.wav,a/c.wav' && dirList(['x.txt', 'x+y.txt'], 'x+y.txt').join() === 'x+y.txt', 'dirList: ? is one character, the rest as written');
+  host.pakInfo = () => null;
+  await con.submit('path'); check(status.at(-1)?.[0] === 'path: no pak loaded yet' && status.at(-1)?.[1] === true, 'path without a pak says so');
+  await con.submit('dir'); check(status.at(-1)?.[1] === true, 'dir too');
+  host.modelList = () => [{ name: 'models/weapons/v_blast/tris.md2', size: 12345 }, { name: 'models/monsters/berserk/tris.md2', size: 0 }];
+  await con.submit('modellist');
+  check(printed === 'Loaded models:\n   12345 : models/weapons/v_blast/tris.md2\n       0 : models/monsters/berserk/tris.md2\nTotal resident: 12345' && status.at(-1)?.[0] === '2 models loaded, 12345 bytes', 'modellist lists the models with their size in the pak, as Mod_Modellist_f laid them out, and sums them');
+  host.imageList = () => [{ kind: 'P', w: 128, h: 128, name: 'pics/conchars.pcx' }, { kind: 'W', w: 64, h: 32, name: 'textures/e1u1/floor1_1.wal' }];
+  await con.submit('imagelist');
+  check(printed === 'P  128  128 pics/conchars.pcx\nW   64   32 textures/e1u1/floor1_1.wal\nTotal texel count: 18432' && status.at(-1)?.[0] === '2 images, 18432 texels', 'imagelist lists the images with their kind and size, as R_ImageList_f did, and counts the texels');
+  host.soundList = () => [{ name: 'weapons/blastf1a.wav', size: 4000, loop: false }, { name: 'world/fan1.wav', size: 300, loop: true }];
+  await con.submit('soundlist');
+  check(printed === '    4000 : weapons/blastf1a.wav\nL    300 : world/fan1.wav\nTotal resident: 4300' && status.at(-1)?.[0] === '2 sounds loaded, 4300 bytes', 'soundlist lists the sounds with L on the looping ones and their sizes, as S_SoundList_f did');
+  delete host.modelList; delete host.imageList; delete host.soundList;
+  await con.submit('modellist'); check(printed === 'Loaded models:\nTotal resident: 0' && status.at(-1)?.[0] === '0 models loaded, 0 bytes', 'without the page\'s listing, none');
+  check(con.complete('di') === 'dir ' && con.complete('pat') === 'path ' && con.complete('mod') === 'modellist ' && con.complete('ima') === 'imagelist ' && con.complete('sou') === 'soundlist ', 'Tab completes the five');
   let pausedNow = null;
   host.togglePause = () => (pausedNow === null ? null : (pausedNow = !pausedNow));
   const n0 = status.length;

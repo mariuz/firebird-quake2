@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_forwardspeed', 'cl_gun', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'spectator', 'status', 'stop', 'sv_gravity', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_forwardspeed', 'cl_gun', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundlist', 'spectator', 'status', 'stop', 'sv_gravity', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -75,6 +75,16 @@ export const CVARS = {
   // hostname: the host's name (serverinfo's, a guest's stats line's; "noname" when empty, as Quake had it), archived as Quake's was
   hostname: { key: 'hostname', show: (v) => String(v ?? ''), read: (w) => (/^[\x20-\x7e]{0,32}$/.test(w) ? w : null), help: 'at most 32 printable characters' },
 };
+/**
+ * FS_Dir_f's wildcard over the pak's names: the directory before the last slash as written, the rest a glob (* any run, ? one
+ * character, neither across a slash), case aside; the matching names, sorted.
+ */
+export function dirList(names, filter) {
+  const slash = filter.lastIndexOf('/');
+  const dir = slash >= 0 ? filter.slice(0, slash + 1).toLowerCase() : '', wild = slash >= 0 ? filter.slice(slash + 1) : filter;
+  const re = new RegExp(`^${wild.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')}$`, 'i');
+  return names.filter((n) => n.startsWith(dir) && !n.slice(dir.length).includes('/') && re.test(n.slice(dir.length))).sort();
+}
 const HISTORY = 32;
 
 /**
@@ -83,7 +93,8 @@ const HISTORY = 32;
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
  *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), setSetting(key, value) (the cvars: through the page's controls and the userinfo),
  *         download(name, text) (writeconfig), clearLog() (clear: the scrollback emptied), dumpLog(name) (condump: the scrollback downloaded as <name>.txt),
- *         print(text) (lines into the scrollback alone: cmdlist), version() → the page's version string (version), togglePause() → paused now, null for a shared game or none (pause),
+ *         print(text) (lines into the scrollback alone: cmdlist, dir and the listings), pakInfo() → { name, files, from } (path, dir: the pak's name, how many files, where it came from),
+ *         modelList() → [{ name, size }] (modellist), imageList() → [{ kind, w, h, name }] (imagelist: P a picture, W a wall texture, M a skin), soundList() → [{ name, size, loop }] (soundlist), version() → the page's version string (version), togglePause() → paused now, null for a shared game or none (pause),
  *         toggleScores() (score: the score board, in a game of more than one client), putAway() (putaway: every screen off),
  *         serverInfo() → the game's cvars as { mapname, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill }, null on a joined page or without a map (serverinfo),
  *         userInfo() → this page's { name, hand, fov, spectator } (userinfo), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
@@ -343,6 +354,48 @@ export class Console {
         h.print?.(COMMANDS.join('\n'));
         say(`${COMMANDS.length} commands`);
         return;
+      case 'path': {
+        // FS_Path_f: the search path, one pak here, with its files counted and where it came from
+        const pk = h.pakInfo?.();
+        if (!pk) { say('path: no pak loaded yet', true); return; }
+        say(`Current search path: ${pk.name} (${pk.files} files${pk.from ? `, ${pk.from}` : ''})`, false, 8000);
+        return;
+      }
+      case 'dir': {
+        // FS_Dir_f: the pak's files a wildcard names (*.* without one; * and ? within a directory, as the file system's glob
+        // had them: dir maps/*.bsp), on the scrollback by their names after the last slash under "Directory of", and how many
+        const pk = h.pakInfo?.();
+        if (!h.pak || !pk) { say('dir: no pak loaded yet', true); return; }
+        const filter = arg || '*.*';
+        const names = dirList(h.pak.list(), filter);
+        h.print?.([`Directory of ${pk.name}/${filter}`, '----', ...names.map((n) => n.slice(n.lastIndexOf('/') + 1))].join('\n'));
+        say(names.length ? `dir ${filter}: ${names.length} file${names.length === 1 ? '' : 's'}` : `dir ${filter}: no files`, false, 8000);
+        return;
+      }
+      case 'modellist': {
+        // Mod_Modellist_f: the models loaded, their size in the pak and their names, a line each, and the total
+        const ms = h.modelList?.() ?? [];
+        const total = ms.reduce((t, m) => t + (m.size || 0), 0);
+        h.print?.(['Loaded models:', ...ms.map((m) => `${String(m.size || 0).padStart(8)} : ${m.name}`), `Total resident: ${total}`].join('\n'));
+        say(`${ms.length} model${ms.length === 1 ? '' : 's'} loaded, ${total} bytes`, false, 8000);
+        return;
+      }
+      case 'imagelist': {
+        // R_ImageList_f: the pictures in use with their kind (P a picture, W a wall texture, M a skin), their size and name, and the texels
+        const im = h.imageList?.() ?? [];
+        const texels = im.reduce((t, i) => t + (i.w || 0) * (i.h || 0), 0);
+        h.print?.([...im.map((i) => `${i.kind} ${String(i.w).padStart(4)} ${String(i.h).padStart(4)} ${i.name}`), `Total texel count: ${texels}`].join('\n'));
+        say(`${im.length} image${im.length === 1 ? '' : 's'}, ${texels} texels`, false, 8000);
+        return;
+      }
+      case 'soundlist': {
+        // S_SoundList_f: the sounds loaded, L on the ones looping, their size in the pak and their names, and the total
+        const ss = h.soundList?.() ?? [];
+        const total = ss.reduce((t, x) => t + (x.size || 0), 0);
+        h.print?.([...ss.map((x) => `${x.loop ? 'L' : ' '} ${String(x.size || 0).padStart(6)} : ${x.name}`), `Total resident: ${total}`].join('\n'));
+        say(`${ss.length} sound${ss.length === 1 ? '' : 's'} loaded, ${total} bytes`, false, 8000);
+        return;
+      }
       case 'version':
         // the version command (Com_Printf of the version string): the page's version and build, the engine's package and Firebird's
         say(h.version?.() ?? 'version: unknown', false, 8000);
