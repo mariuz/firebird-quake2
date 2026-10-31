@@ -37,6 +37,7 @@ export class Renderer {
     this.dlights = [];           // this frame's dynamic lights: [{ x, y, z, r }] (V_AddLight)
     this.skyRotate = 0;          // worldspawn's skyrotate (degrees a second) and skyaxis, as ref_gl turned the sky
     this.skyAxis = [0, 0, 0];
+    this.skyName = null;         // the sky box loaded (env/<name>*.pcx), for the sky word
     this.vv = new Float64Array(64 * 7);   // a polygon's vertices in view space
     this.pp = new Float64Array(64 * 5);   // ... and on screen, clipped
     this.av = new Float32Array(1024 * 7); // an alias model's transformed vertices
@@ -133,6 +134,7 @@ export class Renderer {
       try { const p = loadPcx(this.pak.get(file)); faces.push({ w: p.w, h: p.h, data: p.data }); } catch { this.sky = null; return; }
     }
     this.sky = faces;
+    this.skyName = name;
   }
 
   // ── the underwater view (D_WarpScreen) ──────────────────────────────────

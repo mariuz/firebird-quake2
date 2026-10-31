@@ -773,7 +773,10 @@ guest's prediction bobs by the host's, one changed at the host's console reachin
 `PM_AirAccelerate` with the wish speed capped at 30 and the acceleration 10 over the whole of it, a strafe jump; `player_think` and
 `src/pmove.js` alike, a guest's from the map message) and `g_select_empty` (`Use_Weapon` takes a weapon with no ammo for it and the
 cycle visits it), all three on the game row as the bob's; `weapnext` and `weapprev` (`Cmd_WeapNext_f`, `Cmd_WeapPrev_f` as words, the
-impulses 12 and 22) and `hostname` (the host's name, archived as Quake's was,
+impulses 12 and 22), `sv_maplist` (a text on the game row, `setGameString`: the deathmatch rotation `end_dm_level` follows
+through `maplist_next`, the map after the one running in the list, round again from the end, a map not in it going where the
+exit leads) and `sky <name> [rotate] [axis x y z]` (`SCR_Sky_f`: the sky box of the map running changed and spun, `setSky`, this
+page's alone; one the pak lacks is refused and the one up stays) and `hostname` (the host's name, archived as Quake's was,
 "noname" when empty: the serverinfo's, and the map message carries it so a joined page's stats line names the host),
 `deathmatch`, `coop` and `maxclients` (the Players select's words, latched as Quake latched them: the next game's mode and
 clients go to the settings and the select through `setGameMode`, "will be changed for next game." said, the game running

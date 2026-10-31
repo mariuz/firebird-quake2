@@ -46,6 +46,7 @@ CREATE TABLE game (
   sv_maxvelocity DOUBLE PRECISION DEFAULT 2000 NOT NULL,
   sv_airaccelerate DOUBLE PRECISION DEFAULT 0 NOT NULL,
   g_select_empty SMALLINT DEFAULT 0 NOT NULL,
+  sv_maplist     VARCHAR(400) DEFAULT '' NOT NULL,     -- the sv_maplist cvar: the deathmatch rotation EndDMLevel follows, map names parted by spaces or commas
   sky            VARCHAR(32),                           -- worldspawn "sky": env/<sky>rt.pcx …
   cd_track       INTEGER DEFAULT 0 NOT NULL,
   intermission_time DOUBLE PRECISION,                   -- set at a unit's end: the player watches from an info_player_intermission

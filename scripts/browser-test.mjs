@@ -492,6 +492,16 @@ try {
     await typeCommand('stopsound'); const sstop = await status();
     assert(played === 'playing weapons/blastf1a.wav' && /^sound: \d+ Hz (stereo|mono), \d+ decoded, \d+ playing, \d+ looping$/.test(sinfo) && sstop === 'sounds stopped',
       `play plays a pak sound (${played}), soundinfo says the figures (${sinfo}), stopsound cuts them (${sstop})`);
+    // sky spins the map's sky box about an axis (the demo pak's unit1_), a sky the pak lacks is refused and the one up stays; sv_maplist goes on the game row
+    await typeCommand('sky unit1_ 20 0 1 0'); await sleep(200);
+    const sky1 = await page.evaluate(() => ({ name: window.quake2.renderer.skyName, rot: window.quake2.renderer.skyRotate, axis: window.quake2.renderer.skyAxis.join(','), up: !!window.quake2.renderer.sky })).catch(() => ({}));
+    await typeCommand('sky nosuch'); const skyNo = await status();
+    const sky2 = await page.evaluate(() => ({ name: window.quake2.renderer.skyName, up: !!window.quake2.renderer.sky })).catch(() => ({}));
+    await typeCommand('sky unit1_ 0'); await typeCommand('sv_maplist demo1 demo2'); await sleep(200);
+    const mlist = await page.evaluate(async () => (await window.quake2.sql('SELECT sv_maplist m FROM game'))[0]?.M).catch(() => null);
+    await typeCommand('sv_maplist ""');
+    assert(sky1.name === 'unit1_' && sky1.rot === 20 && sky1.axis === '0,1,0' && sky1.up === true && skyNo === 'sky: no env/nosuch*.pcx in the pak' && sky2.name === 'unit1_' && sky2.up === true && mlist === 'demo1 demo2',
+      `sky spins the sky box (${JSON.stringify(sky1)}), a missing one is refused and the box stays (${skyNo}; ${JSON.stringify(sky2)}), sv_maplist reaches the game row (${mlist})`);
     // sv_airaccelerate and g_select_empty reach the game row; weapnext and weapprev are words: the shotgun next (give all was typed), the blaster back
     await typeCommand('sv_airaccelerate 10'); await typeCommand('g_select_empty 1'); await typeCommand('use blaster'); await typeCommand('weapnext'); await sleep(300);
     const wn = await page.evaluate(async () => (await window.quake2.sql('SELECT g.sv_airaccelerate a, g.g_select_empty s, p.weapon w FROM game g CROSS JOIN player p WHERE p.id = 1'))[0]).catch(() => ({}));

@@ -965,9 +965,38 @@ client's events among them. In the order they are to be taken.
   to 100 under `sv_maxvelocity 100`; `test:predict` holds the JS to the SQL's origin, speed and view over a jump with
   `sv_airaccelerate 10`; `test:console` the three on the game row and Tab; the browser test sets two on the row and
   cycles the weapons by the words, on both builds.
-- **`sv_maplist` and `sky`**: the deathmatch rotation (`EndDMLevel`: the next map of the list at the exit, the
-  fraglimit or the timelimit, round again from the end), and `sky <name> [rotate] [axis x y z]` (`SCR_Sky_f`: the
-  sky box changed and spun for the map running; the demo pak has `unit1_`).
+- **`sv_maplist` and `sky`**: done. `sv_maplist` is a text on the game row (map names parted by spaces or commas,
+  set at the console; in the save): `end_dm_level` walks it through `maplist_next` as `EndDMLevel` did, the map
+  after the one running at the exit, the frag limit or the time limit, round again from the end, a map not in the
+  list going where the exit leads, the same-level flag first. `sky <name> [rotate] [axis x y z]` is `SCR_Sky_f`: the
+  sky box of the map running changed and spun about an axis (`setSky`; the demo pak has `unit1_`), this page's
+  alone; one the pak lacks is refused and the one up stays. `test:dm` ends the level under a list three ways and
+  parts a list's cases; `test:console` the text set, cleared and refused, the sky's usage, the box, the spin, a
+  missing one and no map, and Tab; the browser test spins the demo's sky and reads the renderer, refuses a missing
+  one, and reads the list on the row, on both builds.
+
+The fourteenth list: what the menus, the network game, the painter, the music and the console still lack of Quake 2's
+own words with the demo pak. In the order they are to be taken.
+
+- **`menu_dmoptions`**: the deathmatch options menu (`M_Menu_DMOptions_f`, from the multiplayer menu): the dmflags as
+  rows to toggle (falling damage, weapons stay, instant powerups, allow powerups, allow health, allow armor, spawn
+  farthest, same map, force respawn, allow exit, infinite ammo, quad drop, friendly fire), written to the page's
+  `dmflags` setting as `DMFlagCallback` wrote the cvar, the word at the console too.
+- **`password` and `spectator_password`**: the network game's passwords (`SV_DirectConnect`: a guest whose userinfo
+  `password` does not match is refused, "Password required or incorrect."; a watcher's `spectator_password`),
+  `needpass` in the serverinfo, the guest's word set at its console and sent with its info.
+- **`sw_drawflat`, `sw_waterwarp` and `sw_clearcolor`**: ref_soft's: every face flat in a colour of its own, no
+  texture (`sw_drawflat`), the underwater warp off (`sw_waterwarp 0`), and the colour behind what nothing paints
+  (`sw_clearcolor`, 2); painter switches like `r_fullbright`, none archived.
+- **`cd_loopcount`, `cd_looptrack` and `cd_nocd`**: the music as `CDAudio_Play` looped it: a map's track played
+  `cd_loopcount` times (4), then `cd_looptrack` (11) over and over, with the page's folder tracks and the synth;
+  `cd_nocd 1` plays none.
+- **`m_filter` and `host_speeds`**: the mouse averaged over the last two samples (`CL_MouseMove` with `m_filter`),
+  and `host_speeds 1` printing a frame's times on the line as `Qcommon_Frame` did ("all, sv, gm, cl, rf": here the
+  tic, the game logic in it, the frame query and the raster).
+- **`timeout` and `cl_timeout`**: the host drops a guest that sent no command for `timeout` seconds
+  (`SV_CheckTimeouts`, 125, "timed out"), and a guest leaves a host silent for `cl_timeout` seconds (120, "Server
+  connection timed out."), both words at the console.
 
 ## Playing the demo
 

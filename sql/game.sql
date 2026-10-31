@@ -155,6 +155,30 @@ BEGIN
   UPDATE game g SET g.sight_client = :n WHERE g.id = 1 AND g.sight_client IS DISTINCT FROM :n;
 END^
 
+-- EndDMLevel's walk of sv_maplist: the map after `cur` in the list (names parted by spaces or commas, case aside), the first again
+-- past the end, NULL when the list is empty or does not hold `cur` (the exit's map then)
+CREATE OR ALTER FUNCTION maplist_next (list VARCHAR(400), cur VARCHAR(32)) RETURNS VARCHAR(32)
+AS
+DECLARE s VARCHAR(404); DECLARE tok VARCHAR(400); DECLARE first_ VARCHAR(32); DECLARE found SMALLINT; DECLARE i INTEGER;
+BEGIN
+  IF (list IS NULL OR TRIM(list) = '' OR cur IS NULL) THEN RETURN NULL;
+  s = TRIM(REPLACE(REPLACE(REPLACE(list, ',', ' '), ASCII_CHAR(10), ' '), ASCII_CHAR(13), ' ')) || ' ';
+  found = 0; first_ = NULL;
+  WHILE (s <> '') DO
+  BEGIN
+    i = POSITION(' ', s);
+    IF (i = 0) THEN LEAVE;
+    tok = TRIM(SUBSTRING(s FROM 1 FOR i - 1));
+    s = TRIM(LEADING ' ' FROM SUBSTRING(s FROM i + 1));
+    IF (tok = '') THEN CONTINUE;
+    IF (found = 1) THEN RETURN SUBSTRING(tok FROM 1 FOR 32);
+    IF (first_ IS NULL) THEN first_ = SUBSTRING(tok FROM 1 FOR 32);
+    IF (LOWER(tok) = LOWER(cur)) THEN found = 1;
+  END
+  IF (found = 1) THEN RETURN first_;
+  RETURN NULL;
+END^
+
 -- S_RegisterSexedSound: a client's sexed sound (player/male/…) by its gender userinfo: a female client's from player/female/
 -- (a pak without those plays the male's: the page falls back as the client did), the rest the male's
 CREATE OR ALTER FUNCTION sexed (pe INTEGER, name VARCHAR(64)) RETURNS VARCHAR(64)
@@ -1527,16 +1551,21 @@ BEGIN
   ELSE UPDATE game g SET g.exit_kind = 1 WHERE g.id = 1;
 END^
 
--- EndDMLevel: the same level over with DF_SAME_LEVEL, else where the map's target_changelevel leads (the map
--- designer's exit), else the same level; always through the intermission
+-- EndDMLevel: the same level over with DF_SAME_LEVEL, else the next map of sv_maplist (round again from the end; a map not in the
+-- list falls through), else where the map's target_changelevel leads (the map designer's exit), else the same level; always
+-- through the intermission
 CREATE OR ALTER PROCEDURE end_dm_level
 AS
-DECLARE m VARCHAR(64); DECLARE dmf INTEGER; DECLARE cur VARCHAR(32);
+DECLARE m VARCHAR(64); DECLARE dmf INTEGER; DECLARE cur VARCHAR(32); DECLARE ml VARCHAR(400);
 BEGIN
-  SELECT g.dmflags, g.map_name FROM game g WHERE g.id = 1 INTO dmf, cur;
+  SELECT g.dmflags, g.map_name, g.sv_maplist FROM game g WHERE g.id = 1 INTO dmf, cur, ml;
   m = NULL;
   IF (BIN_AND(dmf, 32) = 0) THEN
-    SELECT FIRST 1 e.map FROM ents e WHERE e.classname = 'target_changelevel' AND e.map IS NOT NULL AND e.map <> '' ORDER BY e.id INTO m;
+  BEGIN
+    m = maplist_next(ml, cur);
+    IF (m IS NULL) THEN
+      SELECT FIRST 1 e.map FROM ents e WHERE e.classname = 'target_changelevel' AND e.map IS NOT NULL AND e.map <> '' ORDER BY e.id INTO m;
+  END
   UPDATE game g SET g.next_map = COALESCE(:m, :cur) WHERE g.id = 1;
   EXECUTE PROCEDURE begin_intermission;
 END^
