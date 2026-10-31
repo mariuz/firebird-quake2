@@ -73,6 +73,23 @@ check(st.i === 0 && st.frac === 0 && near(st.view.x, f0.ps.origin[0]) && near(st
   `at 0: the first frame's origin (${st.view.x.toFixed(2)}, ${st.view.y.toFixed(2)}, ${st.view.z.toFixed(2)}), yaw ${st.view.yaw.toFixed(1)}, the eye at the view offset`);
 check(st.events.sounds.length === f0.sounds.length && st.events.fx.length === f0.fx.length, 'and the first frame\'s events');
 check(player.at(0.02).events.sounds.length === 0 && player.at(0.02).events.fx.length === 0, 'asked again before the next frame, the events are not given twice');
+// the entities' events (entity_event_t on the states, CL_EntityEvent's sounds): the demo's frames carry footsteps (2) and more; a player
+// of its own gives them with the frames reached, and soundRows plays them as the client did, the footsteps on the body channel and none
+// with cl_footsteps off
+{
+  const evFrames = demo.frames.filter((f) => [...f.ents.values()].some((es) => es.event)).length;
+  const p2 = new DemoPlayer(demo, { modelId: (n) => modelIds.get(n) });
+  const v0 = p2.at(0).view;
+  const ev = p2.at(p2.duration).events.entityEvents;
+  const kinds = new Set(ev.map((e) => e.event));
+  const empty = { sounds: [], fx: [], prints: [], centerprints: [], flashes: [], configs: [] };
+  const on = p2.soundRows({ ...empty, entityEvents: ev }, demo.frames[0], v0).rows;
+  const off = p2.soundRows({ ...empty, entityEvents: ev }, demo.frames[0], v0, Math.random, false).rows;
+  const stepRows = on.filter((r) => /^player\/step[1-4]\.wav$/.test(r[4]) && r[3] === 3);
+  check(evFrames > 0 && ev.length > 0 && kinds.has(2) && stepRows.length === ev.filter((e) => e.event === 2).length && stepRows.every((r) => pak.has(`sound/${r[4]}`)),
+    `${evFrames} frames carry entity events (${ev.length}, kinds ${[...kinds].sort().join(',')}): the footsteps play as player/step1-4.wav on the body channel (${stepRows.length})`);
+  check(off.every((r) => !r[4].startsWith('player/step')) && off.length === on.length - stepRows.length, 'with cl_footsteps off the footsteps are left out, the other events kept');
+}
 // a frame where the player moves: the midpoint between it and the next
 const mi = demo.frames.findIndex((f, i) => i + 1 < demo.frames.length && Math.hypot(...[0, 1, 2].map((k) => demo.frames[i + 1].ps.origin[k] - f.ps.origin[k])) > 1);
 const fa = demo.frames[mi], fb = demo.frames[mi + 1];

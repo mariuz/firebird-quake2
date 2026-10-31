@@ -98,6 +98,16 @@ check(!pak.has('sound/player/female/jump1.wav') && (await audio.buffer('player/f
   check(started().length === 0 && audio.playing.size === 0 && audio.channels.size === 0 && audio.loops.size === 0, 'stopAll cuts every one-shot and clears the channels and the loops');
   check(new Q2Audio().info().started === false, 'before the context exists, not started');
 }
+// cl_footsteps: a player/step sound is dropped with the switch off, played with it on (CL_EntityEvent's cl_footsteps)
+{
+  const n0 = started().length;
+  audio.footsteps = false;
+  await audio.playEvents([ev(20, 5, 3, 'player/step1.wav', 1, 1, 10, 0, 0)], L);
+  check(started().length === n0 && pak.has('sound/player/step1.wav'), 'footsteps off, a footstep makes no source');
+  audio.footsteps = true;
+  await audio.playEvents([ev(21, 5, 3, 'player/step2.wav', 1, 1, 10, 0, 0)], L);
+  check(started().length === n0 + 1, 'on, it plays');
+}
 const decoded = audio.ctx.decoded;
 await audio.playEvents([ev(7, 8, 2, BLAST, 1, 1, 0, 0, 0), ev(8, 9, 2, BLAST, 1, 1, 0, 0, 0)], L);
 check(audio.ctx.decoded === decoded, 'a sound is decoded once and the buffer kept');

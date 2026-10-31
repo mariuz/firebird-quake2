@@ -20,6 +20,7 @@ export class Q2Audio {
     this.musicVolume = 0.5;
     this.channels = new Map();   // `${ent}:${chan}` → source, to cut
     this.playing = new Set();    // every one-shot source still playing (S_StopAllSounds cuts them all)
+    this.footsteps = true;       // cl_footsteps: the player/step sounds played, or dropped
     this.speakers = [];          // looped target_speakers: { id, name, x, y, z, on }
     this.loops = new Map();      // looped entity sounds: name → { src, gain, pan }
     this.loopRows = [];
@@ -126,6 +127,7 @@ export class Q2Audio {
     this.listener = listener;
     if (!this.ctx) return;
     for (const [, , ent, chan, name, vol, attn, x, y, z] of rows) {
+      if (!this.footsteps && name.startsWith('player/step')) continue;   // (cl_footsteps 0: CL_EntityEvent played no footstep)
       const buf = await this.buffer(name);
       if (!buf) continue;
       const { gain, pan } = this.spatialize(x, y, z, attn);

@@ -492,6 +492,12 @@ try {
     await typeCommand('stopsound'); const sstop = await status();
     assert(played === 'playing weapons/blastf1a.wav' && /^sound: \d+ Hz (stereo|mono), \d+ decoded, \d+ playing, \d+ looping$/.test(sinfo) && sstop === 'sounds stopped',
       `play plays a pak sound (${played}), soundinfo says the figures (${sinfo}), stopsound cuts them (${sstop})`);
+    // cl_footsteps 0 reaches the settings and the audio's switch, 1 puts it back
+    await typeCommand('cl_footsteps 0');
+    const fs0 = await page.evaluate(() => ({ s: window.quake2.settings.clFootsteps, a: window.quake2.audio?.footsteps ?? null })).catch(() => ({}));
+    await typeCommand('cl_footsteps 1');
+    const fs1 = await page.evaluate(() => ({ s: window.quake2.settings.clFootsteps, a: window.quake2.audio?.footsteps ?? null })).catch(() => ({}));
+    assert(fs0.s === false && fs0.a !== true && fs1.s === true && fs1.a !== false, `cl_footsteps 0 and 1 reach the settings and the audio (${JSON.stringify(fs0)} → ${JSON.stringify(fs1)})`);
     // p_view.c's cvars reach the game row (bob_up, sv_rollangle), and the defaults come back
     await typeCommand('bob_up 0'); await typeCommand('sv_rollangle 4');
     const pv = await page.evaluate(async () => (await window.quake2.sql('SELECT bob_up, sv_rollangle FROM game'))[0]).catch(() => ({}));
