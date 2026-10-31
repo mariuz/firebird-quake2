@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -253,11 +253,13 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
 
 // writeconfig and exec: the binds and the cvars as config.cfg (Key_WriteBindings, Cvar_WriteVariables), run back line by line
 {
-  const cfg = writeConfig({ ...s, name: 'Ace Rimmer', sensitivity: 5, invertMouse: true, binds: { ...defaultBinds(), attack: ['KeyK', 'Mouse2'], moveup: [] } });
+  const cfg = writeConfig({ ...s, name: 'Ace Rimmer', sensitivity: 5, invertMouse: true, binds: { ...defaultBinds(), attack: ['KeyK', 'Mouse2'], moveup: [] }, lines: { KeyJ: 'god', Mouse3: 'say hello' } });
   const lines = cfg.split('\n');
+  const setAt = lines.findIndex((l) => l.startsWith('set ')), godAt = lines.indexOf('bind j "god"');
   check(lines[0].startsWith('//') && lines[1] === 'unbindall' && lines[2] === 'bind k "+attack"' && lines[3] === 'bind MOUSE2 "+attack"' && lines.includes('bind MWHEELDOWN "weapnext"') && !lines.some((l) => l.includes('"+moveup"'))
+    && godAt > 3 && godAt < setAt && lines[godAt + 1] === 'bind MOUSE3 "say hello"'
     && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && cfg.endsWith('\n'),
-    'writeConfig writes unbindall, a bind line a key in the actions\' order and a set line a cvar, as config.cfg had them');
+    'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them');
   let downloaded = null;
   host.download = (name, text) => { downloaded = { name, text }; };
   await con.submit('writeconfig');
@@ -266,15 +268,16 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   host.execConfig = () => { picked++; };
   await con.submit('exec');
   check(picked === 1, 'exec opens the Config picker');
-  s.sensitivity = 7; s.name = ''; s.invertMouse = false; host.settings.binds = defaultBinds();
+  s.sensitivity = 7; s.name = ''; s.invertMouse = false; host.settings.binds = defaultBinds(); host.settings.lines = {};
   const n = await con.execText(cfg + '\n// a comment\n\nset fov 100 // trailing\nbind nosuch +attack\n');
-  check(n === lines.length && s.name === 'Ace Rimmer' && s.sensitivity === 5 && s.invertMouse === true && host.settings.fov === 100 && host.settings.binds.attack.join() === 'KeyK,Mouse2' && host.settings.binds.moveup.length === 0,
-    `exec runs a config's lines (${n}): the comments and blanks skipped, the quotes off, a bad key refused and the rest run`);
+  check(n === lines.length && s.name === 'Ace Rimmer' && s.sensitivity === 5 && s.invertMouse === true && host.settings.fov === 100 && host.settings.binds.attack.join() === 'KeyK,Mouse2' && host.settings.binds.moveup.length === 0
+    && host.settings.lines.KeyJ === 'god' && host.settings.lines.Mouse3 === 'say hello',
+    `exec runs a config's lines (${n}): the comments and blanks skipped, the quotes off, a bad key refused and the rest run, the keys bound to lines among them`);
   await con.submit('set');
   check(status.at(-1)?.[0] === 'usage: set <variable> <value>' && status.at(-1)?.[1] === true, 'set alone shows its usage');
   await con.submit('set bogus 1');
   check(status.at(-1)?.[0] === '"bogus" is not a cvar this page keeps' && status.at(-1)?.[1] === true, 'set on a cvar the page has not is refused');
-  host.settings.fov = 160; host.settings.binds = defaultBinds();
+  host.settings.fov = 160; host.settings.binds = defaultBinds(); host.settings.lines = {};
   Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 });
 }
 
@@ -290,20 +293,36 @@ await con.submit('bind uparrow weapprev');
 check(binds.weapprev.join() === 'MWheelUp,ArrowUp' && binds.forward.join() === 'KeyW', 'a key bound to another action leaves its old one (UPARROW off walk forward)');
 await con.submit('bind mouse2 use power shield');
 check(binds.shield.join() === 'KeyH,Mouse2' && status.at(-1)?.[0] === '"MOUSE2" = "use power shield"', 'a mouse button binds to a command of two words');
-await con.submit('bind k nosuch');
-check(binds.attack.join() === 'KeyJ' && /"nosuch" is not a command this page binds: \+attack, weapnext/.test(status.at(-1)?.[0] ?? '') && status.at(-1)?.[1] === true, 'a command the page has not is refused, the commands listed');
+// a line that is no action's command binds as Quake bound any line: the key runs it at the console when it goes down
+const lines = host.settings.lines;
+await con.submit('bind k god');
+check(lines.KeyK === 'god' && last() === 'saveSettings' && status.at(-1)?.[0] === '"k" = "god"', 'bind k god binds K to the line god, saved and shown');
+await con.submit('bind t "say hello"');
+check(lines.KeyT === 'say hello' && binds.messagemode.length === 0 && status.at(-1)?.[0] === '"t" = "say hello"', 'bind t "say hello" binds T to the line, the quotes off, T leaving the chat action');
+await con.submit('bind T');
+check(status.at(-1)?.[0] === '"t" = "say hello"', 'bind <key> shows the line');
+await con.submit('bind t +attack');
+check(!('KeyT' in lines) && binds.attack.join() === 'KeyJ,KeyT', 'bound to an action again, the key loses its line');
+await con.submit('bind j ""');
+check(binds.attack.join() === 'KeyJ,KeyT' && status.at(-1)?.[0] === '"" is not a line this page can bind (printable, at most 128 characters)' && status.at(-1)?.[1] === true, 'a line that is nothing is refused');
+await con.submit(`bind j ${'x'.repeat(129)}`);
+check(binds.attack.join() === 'KeyJ,KeyT' && status.at(-1)?.[1] === true, 'a line past 128 characters is refused');
 await con.submit('bind zz +attack');
-check(binds.attack.join() === 'KeyJ' && status.at(-1)?.[0] === '"zz" isn\'t a valid key' && status.at(-1)?.[1] === true, 'a key that is not one is refused');
+check(binds.attack.join() === 'KeyJ,KeyT' && status.at(-1)?.[0] === '"zz" isn\'t a valid key' && status.at(-1)?.[1] === true, 'a key that is not one is refused');
 await con.submit('bind m');
 check(status.at(-1)?.[0] === '"m" is not bound', 'a key with no binding says so');
 await con.submit('bindlist');
-check(status.at(-1)?.[0].startsWith('j "+attack" · / "weapnext" · MWHEELDOWN "weapnext" · MWHEELUP "weapprev" · UPARROW "weapprev"') && status.at(-1)?.[0].includes('MOUSE2 "use power shield"'), 'bindlist shows every key bound with its command, in the actions\' order');
+check(status.at(-1)?.[0].startsWith('j "+attack" · t "+attack" · / "weapnext" · MWHEELDOWN "weapnext" · MWHEELUP "weapprev" · UPARROW "weapprev"') && status.at(-1)?.[0].includes('MOUSE2 "use power shield"') && status.at(-1)?.[0].endsWith(' · k "god"'),
+  'bindlist shows every key bound with its command, in the actions\' order, the lines after');
 await con.submit('unbind');
 check(status.at(-1)?.[0] === 'unbind <key> : remove commands from a key' && status.at(-1)?.[1] === true, 'unbind alone shows its usage');
 await con.submit('unbind j');
-check(binds.attack.length === 0 && last() === 'saveSettings' && status.at(-1)?.[0] === '"j" unbound', 'unbind j takes the key off');
+check(binds.attack.join() === 'KeyT' && last() === 'saveSettings' && status.at(-1)?.[0] === '"j" unbound', 'unbind j takes the key off');
+await con.submit('unbind k');
+check(!('KeyK' in lines) && status.at(-1)?.[0] === '"k" unbound', 'unbind k takes a line\'s key off');
+await con.submit('bind k god');
 await con.submit('unbindall');
-check(ACTIONS.every((a) => binds[a.id].length === 0) && status.at(-1)?.[0] === 'all keys unbound', 'unbindall empties every action');
+check(ACTIONS.every((a) => binds[a.id].length === 0) && Object.keys(host.settings.lines).length === 0 && status.at(-1)?.[0] === 'all keys unbound', 'unbindall empties every action and the lines');
 await con.submit('bindlist');
 check(status.at(-1)?.[0] === 'no keys bound', 'and bindlist says so');
 

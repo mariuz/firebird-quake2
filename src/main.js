@@ -27,7 +27,7 @@ import { SAVE_VERSION } from './savegame.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS, ITEMS, ARMOR_ICONS, TIMER_ICONS } from './gamedata.js';
 import { padMenuKeys, padScreens, BUTTON } from './gamepad.js';
-import { Input, GAME_KEYS, DEFAULT_BINDS, MOUSE_KEYS, bindKey } from './input.js';
+import { Input, GAME_KEYS, DEFAULT_BINDS, MOUSE_KEYS, bindKey, boundLine } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
 import { Notify } from './notify.js';
@@ -146,6 +146,9 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'F10') { e.preventDefault(); openMenu(() => menu.quitMenu()); return; }
   if (e.code === 'Escape') { e.preventDefault(); escape(); return; }
   if (e.code === 'Backquote') { e.preventDefault(); openConsole(); return; }
+  // a key bound to a command line (bind k god, bind t "say hello": settings.lines) runs it at the console as it goes
+  // down, as Key_Event put a key's binding into the command buffer; the `+` actions stay the held ones below
+  if (runBoundLine(e.code)) { e.preventDefault(); return; }
   // the bound actions (settings.binds, the keys menu): the help computer and the inventory screen are the page's,
   // the rest the movement keys, and the weapon, inventory and item keys as impulses
   const act = input.bound(e.code);
@@ -158,6 +161,15 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'F6') { e.preventDefault(); saveGame(); }
   if (e.code === 'F9') { e.preventDefault(); loadGame(); }
 });
+
+/** A key (or a mouse button, a wheel notch) bound to a command line runs it at the console; true when it was. */
+function runBoundLine(code) {
+  const line = boundLine(settings.lines, code);
+  if (!line) return false;
+  notify.add(`]${line}`, gameClock(), { show: false });
+  con.submit(line).catch((err) => console.error(err));
+  return true;
+}
 
 // ── the menus (src/menu.js): up, the game is paused (M_PushMenu sets "paused" in single player) ──────
 let quietUnlock = false;   // the page let the pointer go itself: no menu for that
@@ -191,8 +203,8 @@ const menu = new Menu({
   get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : k === 'players' ? PLAYER_CHOICES.indexOf(playersValue()) : settings[k]),
   set: (k, v) => setSetting(k, v),
   // ControlsResetDefaultsFunc ran default.cfg: the options and the keys go back
-  resetDefaults: () => { for (const [k, v] of Object.entries(OPTIONS_RESET)) setSetting(k, v); for (const [a, keys] of Object.entries(DEFAULT_BINDS)) settings.binds[a] = [...keys]; saveSettings(); },
-  bind: (action, code) => { bindKey(settings.binds, action, code); saveSettings(); },
+  resetDefaults: () => { for (const [k, v] of Object.entries(OPTIONS_RESET)) setSetting(k, v); for (const [a, keys] of Object.entries(DEFAULT_BINDS)) settings.binds[a] = [...keys]; settings.lines = {}; saveSettings(); },   // (default.cfg began with unbindall: the lines go too)
+  bind: (action, code) => { bindKey(settings.binds, action, code, settings.lines); saveSettings(); },
   unbind: (action) => { settings.binds[action] = []; saveSettings(); },
   credits: () => CREDITS,
   resetVideo: () => { for (const [k, v] of Object.entries(VIDEO_RESET)) setSetting(k, v); },
@@ -422,8 +434,14 @@ async function loadSaved(save) {
 input.attach(canvas, window, { locked: () => document.pointerLockElement === canvas, settings: () => settings });
 canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } else if (demo && !menu.active) openMenu(() => menu.main()); });
 // the keys menu waiting for a key takes a mouse button or the wheel too ("press a key or button"), as KeyBindingFunc took K_MOUSE1
-canvas.addEventListener('mousedown', (e) => { if (menu.active && menu.current?.grab && MOUSE_KEYS[e.button]) { e.preventDefault(); menu.key(MOUSE_KEYS[e.button]); } });
-canvas.addEventListener('wheel', (e) => { if (menu.active && menu.current?.grab) { e.preventDefault(); menu.key(e.deltaY > 0 ? 'MWheelDown' : 'MWheelUp'); } }, { passive: false });
+canvas.addEventListener('mousedown', (e) => {
+  if (menu.active && menu.current?.grab && MOUSE_KEYS[e.button]) { e.preventDefault(); menu.key(MOUSE_KEYS[e.button]); }
+  else if (running && !menu.active && !demo && document.pointerLockElement === canvas && MOUSE_KEYS[e.button]) runBoundLine(MOUSE_KEYS[e.button]);   // (a button bound to a line, under the lock)
+});
+canvas.addEventListener('wheel', (e) => {
+  if (menu.active && menu.current?.grab) { e.preventDefault(); menu.key(e.deltaY > 0 ? 'MWheelDown' : 'MWheelUp'); }
+  else if (running && !menu.active && !demo && document.pointerLockElement === canvas) runBoundLine(e.deltaY > 0 ? 'MWheelDown' : 'MWheelUp');
+}, { passive: false });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());   // (the right button is a key under the lock, and in the keys menu)
 canvas.addEventListener('click', () => {
   if (running && !menu.active && !demo && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});

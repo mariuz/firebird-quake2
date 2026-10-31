@@ -4,7 +4,7 @@
 //   node scripts/input-test.mjs
 
 import { readPad, padImpulse, padScreens, padMenuKeys, firstPad, connectedPads, axis, DEAD, BUTTON } from '../src/gamepad.js';
-import { Input, GAME_KEYS, ACTIONS, DEFAULT_BINDS, defaultBinds, bindKey, keyName, keyCode, actionOfCommand, normalizeKey } from '../src/input.js';
+import { Input, GAME_KEYS, ACTIONS, DEFAULT_BINDS, defaultBinds, bindKey, bindLine, unbindKey, boundLine, checkLine, keyName, keyCode, actionOfCommand, normalizeKey } from '../src/input.js';
 
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failures++; };
@@ -165,6 +165,21 @@ check(readPad(null) === null, 'no pad reads as null');
   check(actionOfCommand('+attack')?.id === 'attack' && actionOfCommand('USE  Silencer')?.id === 'silencer' && actionOfCommand('weapprev')?.id === 'weapprev' && actionOfCommand('+speed')?.id === 'run'
     && actionOfCommand('nosuch') === null && ACTIONS.every((a) => a.cmd && actionOfCommand(a.cmd) === a), 'every action has Quake\'s bind command for it, found case and spacing aside');
   check(inp.bound('KeyT') === 'messagemode' && GAME_KEYS.has('KeyT'), 'T is the chat key (messagemode), a game key');
+  // a key bound to a command line (bindLine): the key leaves its action and runs the line; bindKey over it takes the line off;
+  // unbindKey takes either off; checkLine keeps a printable line of at most 128 characters, trimmed
+  {
+    const b = defaultBinds(), l = {};
+    bindLine(b, l, 'KeyT', 'say hello');
+    check(b.messagemode.length === 0 && boundLine(l, 'KeyT') === 'say hello' && boundLine(l, 'KeyU') === null, 'bindLine takes the key off its action and keeps the line for it');
+    bindLine(b, l, 'ControlRight', 'god');
+    check(b.attack.join() === 'Mouse1' && boundLine(l, 'ControlLeft') === 'god', 'a side-key is the key (CTRL off attack, the line for both controls)');
+    bindKey(b, 'attack', 'KeyT', l);
+    check(b.attack.join() === 'Mouse1,KeyT' && boundLine(l, 'KeyT') === null && boundLine(l, 'Control') === 'god', 'bound to an action again, the key loses its line');
+    unbindKey(b, l, 'Control'); unbindKey(b, l, 'KeyT');
+    check(boundLine(l, 'Control') === null && b.attack.join() === 'Mouse1', 'unbindKey takes a line or an action off');
+    check(checkLine('  give all ') === 'give all' && checkLine('') === null && checkLine('x'.repeat(128)) !== null && checkLine('x'.repeat(129)) === null && checkLine('say\nhi') === null && checkLine(null) === null,
+      'checkLine trims, and refuses nothing, past 128 characters or a control character');
+  }
   check(ACTIONS.length === 22 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
     'every action has its default keys, no key twice');
   inp.clear();

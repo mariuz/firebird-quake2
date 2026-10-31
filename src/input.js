@@ -93,12 +93,36 @@ export function boundAction(binds, code) {
  * Key_SetBinding as the keys menu binds: the key leaves whatever it was bound to (a key has one command), and
  * joins the action's keys; an action keeps at most two, the oldest making room (KeyBindingFunc unbound both first).
  */
-export function bindKey(binds, action, code) {
+export function bindKey(binds, action, code, lines = null) {
   code = normalizeKey(code);
   for (const a of ACTIONS) if (binds[a.id]) binds[a.id] = binds[a.id].filter((c) => c !== code);
+  if (lines) delete lines[code];   // (a key has one command: a line it ran goes)
   const keys = binds[action] ?? (binds[action] = []);
   if (keys.length >= 2) keys.length = 0;
   keys.push(code);
+}
+/**
+ * Key_SetBinding for a command line (`bind t "say hello"`, `bind k god`): the key leaves the action it was bound
+ * to and runs the line at the console when it goes down (settings.lines: key code → the line). An action's
+ * command (`+attack`, `weapnext`…) is the action's, through bindKey, never a line.
+ */
+export function bindLine(binds, lines, code, line) {
+  code = normalizeKey(code);
+  for (const a of ACTIONS) if (binds[a.id]) binds[a.id] = binds[a.id].filter((c) => c !== code);
+  lines[code] = line;
+}
+/** Key_SetBinding(key, ""): the key off its action, or its line. */
+export function unbindKey(binds, lines, code) {
+  code = normalizeKey(code);
+  for (const a of ACTIONS) if (binds[a.id]) binds[a.id] = binds[a.id].filter((c) => c !== code);
+  if (lines) delete lines[code];
+}
+/** The line a key runs (settings.lines), or null. */
+export const boundLine = (lines, code) => lines?.[normalizeKey(code)] ?? null;
+/** A line a key may be bound to: printable, at most 128 characters, trimmed; null for none. */
+export function checkLine(line) {
+  const s = String(line ?? '').trim();
+  return s && s.length <= 128 && /^[\x20-\x7e]+$/.test(s) ? s : null;
 }
 
 const MOUSE = 0.022;      // degrees per count at sensitivity 1 (m_yaw, m_pitch)
