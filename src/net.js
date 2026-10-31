@@ -135,6 +135,8 @@ export class HostLink {
   sendPic(file) { this.link.send({ t: 'pic', file }); }
   /** A cinematic at a level's end (the guest plays its own copy until the next map). */
   sendCin(file) { this.link.send({ t: 'cin', file }); }
+  /** SV_Kick_f: the guest is told it was kicked (its page says so), then the channel closes. */
+  sendKick(reason = 'kicked') { this.link.send({ t: 'kick', reason: String(reason ?? '').slice(0, 80) }); }
   /**
    * The guest's frame: its player row, its frame's rows (packed), the tic's sounds and effects (they come with
    * the host's own frame query, the first of the tic), the tic's length, the newest command the tic took (`ack`:
@@ -165,6 +167,7 @@ export class GuestLink {
     this.onMap = null;
     this.onPic = null;
     this.onCin = null;
+    this.onKick = null;     // the host kicked this guest (SV_Kick_f): the reason, before the channel closes
     this.onClose = null;
     link.onMessage = (m) => this.receive(m);
     link.onClose = () => this.onClose?.();
@@ -181,6 +184,7 @@ export class GuestLink {
         break;
       case 'pic': this.onPic?.(m.file); break;
       case 'cin': this.onCin?.(m.file); break;
+      case 'kick': this.kicked = String(m.reason ?? 'kicked'); this.onKick?.(this.kicked); break;
       default: break;
     }
   }

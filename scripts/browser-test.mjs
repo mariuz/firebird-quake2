@@ -847,11 +847,24 @@ try {
         const g2f2 = await gp.evaluate(() => window.quake2?.net?.guest?.frames ?? 0).catch(() => 0);
         assert(g2f2 > g2f, `the first guest's frames keep coming (${g2f2 - g2f} in 0.7 s)`);
         assert(/hosting: \d+ frames sent to 2 guests/.test(await stats()), 'the host\'s stats line counts both guests');
-        // the third leaves: its client stands, the first guest plays on
-        await tp.click('#net-leave');
+        // players at the host's console lists the three clients and what drives each (SV_Status_f)
+        await typeOn(page, 'players');
+        const plist = await page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+        assert(/^1 player 1 \(this page\) · 2 player 2 \(guest: \d+ frames sent(, \d+ dropped)?\) · 3 player 3 \(guest: \d+ frames sent(, \d+ dropped)?\)$/.test(plist), `players lists the host's page and the two guests with their frames (${plist})`);
+        // kick 3 at the host's console drops the third page (SV_Kick_f): its client stands, the first guest plays on, the
+        // third page says why and offers a game of its own, every message line says who was kicked
+        await typeOn(page, 'kick 3');
         let h4 = await hstate();
         for (let i = 0; i < 40 && h4.guests?.length !== 1; i++) { await sleep(250); h4 = await hstate(); }
-        assert(h4.role === 'host' && h4.guests?.length === 1 && h4.guests[0] === 2 && h4.clients === 3, `the third page leaves: the host keeps the first guest, its game its three clients (${JSON.stringify(h4)})`);
+        let tk = {}, kickMsg = [], kickSeen = false;   // (the message line holds the print three seconds: read while waiting)
+        for (let i = 0; i < 40 && !(tk.role === undefined && /kicked/.test(tk.status ?? '') && kickSeen); i++) {
+          await sleep(250);
+          tk = await tp.evaluate(() => ({ role: window.quake2?.net?.role, status: document.getElementById('status')?.textContent, state: document.getElementById('net-state')?.textContent, running: window.quake2?.running })).catch(() => ({}));
+          if (!kickSeen) { kickMsg = await page.evaluate(() => window.quake2.sql('SELECT msg FROM player ORDER BY id').then((r) => r.map((x) => x.MSG))).catch(() => []); kickSeen = kickMsg.length === 3 && kickMsg.every((m) => m === 'player 3 was kicked'); }
+        }
+        assert(h4.role === 'host' && h4.guests?.length === 1 && h4.guests[0] === 2 && h4.clients === 3, `kick 3 at the host's console drops the third page: the host keeps the first guest, its game its three clients (${JSON.stringify(h4)})`);
+        assert(tk.role === undefined && tk.status === 'You were kicked from the game. Press a key or click the view for a game of your own.' && tk.state === 'kicked' && tk.running === false && kickSeen,
+          `the third page says it was kicked and stands for a key, and every client's message line says who (${JSON.stringify({ tk, kickMsg })})`);
       }
       await tctx.close();
       // the guest leaves: the host plays on, its other players standing; the guest's page starts a game of its own

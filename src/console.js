@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
+export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'exec', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'players', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'set', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -36,6 +36,8 @@ const HISTORY = 32;
  *         download(name, text) (writeconfig), execConfig() (exec: the page's file picker, whose file runs through execText),
  *         execAutoexec() → the lines run, or null when none is kept (exec autoexec), dropAutoexec() → true when one was kept (unautoexec),
  *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
+ *         listPlayers() → the clients as [{ num, name, kind: 'page' | 'guest' | 'pad' | 'standing', sent, dropped, spectator }], 'guest' on a joined page, null without a game (players),
+ *         kick(n) → the name kicked, or 'none' | 'not-hosting' (kick),
  *         forward(cmd, arg) → true when the command went to the host (a joined page), false to run it here }
  */
 /** The cvars config.cfg carries (CVARS, and fov and skill with them), each with its setting and how it shows. */
@@ -270,6 +272,26 @@ export class Console {
         h.saveSettings();
         h.setSkill?.(value);
         say(h.isRunning() ? 'skill will be changed for next game.' : `"skill" is "${value}"`);
+        return;
+      }
+      case 'players': {
+        // SV_Status_f: the game's clients on the page's one line, each with its number, its name and what drives it (this
+        // page; a guest, with the frames sent to it and dropped, and watching when it only watches; a pad; nothing, standing)
+        const rows = h.listPlayers?.();
+        if (rows === 'guest') { say('players: the host lists them', true); return; }
+        if (!rows) { say('players: no game is running', true); return; }
+        const what = (r) => (r.kind === 'page' ? 'this page' : r.kind === 'guest' ? `guest: ${r.sent} frames sent${r.dropped ? `, ${r.dropped} dropped` : ''}${r.spectator ? ', watching' : ''}` : r.kind === 'pad' ? 'a pad' : 'standing');
+        say(rows.map((r) => `${r.num} ${r.name} (${what(r)})`).join(' · '), false, 8000);
+        return;
+      }
+      case 'kick': {
+        // SV_Kick_f: the guest driving a client dropped by the client's number, at the host's console alone
+        const n = Number(arg);
+        if (!arg || !Number.isInteger(n)) { say('Usage: kick <userid>', true); return; }
+        const r = h.kick?.(n) ?? 'not-hosting';
+        if (r === 'not-hosting') say('kick: only the host of a game over the network can kick', true);
+        else if (r === 'none') say(`Bad user id: no guest drives client ${n}`, true);
+        else say(`${r} was kicked`);
         return;
       }
       case 'spectator': {

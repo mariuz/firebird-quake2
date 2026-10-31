@@ -524,7 +524,8 @@ guest holds: a guest that left leaves its client standing for the next); the fir
 new game, a later one joins the game running (`Session.addClient`: ClientConnect and ClientBegin, the row
 with fresh pers and the entity at the level's coop spot, or a deathmatch spot, by `client_begin`; the game has that many clients
 from then on, the next level too), and is sent the map as it is. Host, while hosting, makes an offer for the
-next player (one offer out at a time). After the tic the host asks the frame once for itself and once per
+next player (one offer out at a time); `kick <n>` at the host's console drops a guest (a `kick` message
+first, so its page says why). After the tic the host asks the frame once for itself and once per
 guest in the fast mode and sends each its frame (`sendFrame`: the faces as `[face, entity, origin]`,
 the entities, the loops, the styles, the brush models' frames and angles, the guest's own `Q2_TIC` row, the
 tic's sounds and effects, which came with the host's own frame query, and the inventory rows when the
@@ -687,7 +688,12 @@ line as "name: text", `client_say`; a guest's go to the host as a `say` message,
 guest's client); the rest go to `player_command(cmd, arg)` (on a joined page to the host as a `con` message,
 `GuestLink.sendConsole` and `HostLink.onConsole`, which runs `player_command` for the guest's client, as
 `Cmd_ForwardToServer` sent what the client did not know; the answer comes back on the guest's line)
-(g_cmds.c: `god`, `notarget`, `noclip`, `give`, `kill`), which answers on the message line. The message line is
+(g_cmds.c: `god`, `notarget`, `noclip`, `give`, `kill`), which answers on the message line. `players` lists
+the game's clients as `SV_Status_f` did (the number, the name, and what drives each: this page, a guest with
+the frames sent to it and dropped and whether it watches, a pad, or nothing: standing; `listPlayers` in
+`src/main.js`), `kick <n>` drops the guest driving client `n` as `SV_Kick_f` did (`kickGuest`: a `kick`
+message with the reason, which the guest's page shows in place of "The host left", then the channel closed
+and the client left standing; "<name> was kicked" on every message line, `sprint(NULL, …)`). The message line is
 console.c's notify (`src/notify.js`): each print of the first view's row (the tic row's `MSG`, a new one by its
 `MSG_TIME`) is kept with the game's clock, the view draws the last four not yet three seconds old at the top
 as `Con_DrawNotify` did, and the backquote console shows the last twelve lines printed under its input line,
