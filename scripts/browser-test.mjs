@@ -496,6 +496,13 @@ try {
     await typeCommand('sw_drawflat 0'); await typeCommand('sw_clearcolor 0'); await typeCommand('sw_waterwarp 1'); await sleep(300);
     const sw0 = await page.evaluate(() => ({ flat: window.quake2.renderer.drawflat, cc: window.quake2.renderer.clearColor, warp: window.quake2.settings.swWaterwarp })).catch(() => ({}));
     assert(sw1.flat === true && sw1.cc === 2 && sw1.warp === false && sw0.flat === false && sw0.cc === 0 && sw0.warp === true, `sw_drawflat, sw_clearcolor and sw_waterwarp reach the painter and the settings and go back (${JSON.stringify(sw1)} → ${JSON.stringify(sw0)})`);
+    // sw_mipcap, sw_mipscale and sw_stipplealpha reach the painter: under the cap the frame's surfaces are built at mip 3
+    await typeCommand('sw_mipcap 3'); await typeCommand('sw_mipscale 2'); await typeCommand('sw_stipplealpha 1'); await sleep(600);
+    const mp1 = await page.evaluate(() => { const r = window.quake2.renderer; return { cap: r.mipcap, scale: r.mipscale, stipple: r.stipplealpha, at3: [...r.surfCache.keys()].some((k) => k % 4 === 3), s: [window.quake2.settings.swMipcap, window.quake2.settings.swMipscale, window.quake2.settings.swStipplealpha] }; }).catch(() => ({}));
+    await typeCommand('sw_mipcap 0'); await typeCommand('sw_mipscale 1'); await typeCommand('sw_stipplealpha 0'); await sleep(300);
+    const mp0 = await page.evaluate(() => { const r = window.quake2.renderer; return { cap: r.mipcap, scale: r.mipscale, stipple: r.stipplealpha }; }).catch(() => ({}));
+    assert(mp1.cap === 3 && mp1.scale === 2 && mp1.stipple === true && mp1.at3 === true && mp1.s?.join() === '3,2,true' && mp0.cap === 0 && mp0.scale === 1 && mp0.stipple === false,
+      `sw_mipcap 3, sw_mipscale 2 and sw_stipplealpha 1 reach the painter and the settings, surfaces are built at mip 3 under the cap, and go back (${JSON.stringify(mp1)} → ${JSON.stringify(mp0)})`);
     // m_yaw, cl_gun and con_notifytime reach the settings, con_notifytime the notify's seconds; back to the defaults after
     await typeCommand('m_yaw 0.044'); await typeCommand('cl_gun 0'); await typeCommand('con_notifytime 1');
     const three = await page.evaluate(() => ({ yaw: window.quake2.settings.mYaw, gun: window.quake2.settings.clGun, notify: window.quake2.settings.conNotifytime, seconds: window.quake2.notify.seconds })).catch(() => ({}));

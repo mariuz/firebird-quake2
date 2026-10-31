@@ -1069,9 +1069,17 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   wait, and floods freely at 0; `test:console` the three cvars shown, set and refused, and dumpuser's usage, a joined
   page, no game, a client's print and sum, a pad's, an inactive client and a bad slot; the browser test prints this
   page's userinfo, asks for an inactive client and sets a flood cvar on the row, on both builds.
-- **`sw_mipcap`, `sw_mipscale` and `sw_stipplealpha`**: the painter's mip levels as `D_MipLevelForScale` scaled and
-  capped them (the cap 0, the scale 1), and stippled translucency in place of the blend (`sw_stipplealpha 1`: every
-  other pixel, as ref_soft drew water and glass without the alpha map).
+- **`sw_mipcap`, `sw_mipscale` and `sw_stipplealpha`**: done. `mipLevel(scale, mipscale, mipcap)` is `D_MipLevelForScale`
+  whole: the thresholds 1, 0.4 and 0.2 scaled by `sw_mipscale` (`d_scalemip`, 1) and the level at least `sw_mipcap`
+  (`d_minmip`, 0 to 3), both the painter's (`Renderer.mipscale`, `mipcap`) from the settings, neither archived.
+  `sw_stipplealpha 1` draws the translucent surfaces stippled in place of the blend through the alpha map
+  (`stippleKeep`: three pixels in four at 66% and one in four at 33%, as `R_DrawSpanlet66Stipple` and
+  `R_DrawSpanlet33Stipple` kept them, the parity turned each frame, the depth left as the blend leaves it; the models'
+  blend stays, as ref_soft's did), archived as Quake's was. `test:painter` holds the thresholds scaled and capped, the
+  stipple's counts, a frame at the cap with every surface at mip 3 and a frame stippled differing where its translucent
+  faces are; `test:settings` the three checked; `test:console` shown, set, refused, Tab and config.cfg (the stipple
+  archived, the two not); the browser test sets the three, sees surfaces built at mip 3 under the cap and puts them
+  back, on both builds.
 - **`developer` and `logfile`**: the page's warnings (`console.warn`, `Com_DPrintf`'s kind) on the console's
   scrollback with `developer 1`, and `logfile 1` keeping the scrollback as it grows in the file store, downloaded as
   `qconsole.log` with `logfile 0` or at the end.
