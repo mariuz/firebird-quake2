@@ -240,8 +240,9 @@ short stories of what changed and what it measured; keep that.
   comparison depends on both selecting the same faces.
 - When adding a column to `ents`, remember `set_model` (kind, radius), `link_core` (leaf,
   clusters, link position), and that the row is already ~120 columns wide: prefer fewer writes.
-  A per-frame cache column goes into `SKIP` in `src/savegame.js`; any other new column changes the
-  save format (bump `SAVE_VERSION` if old saves must not load).
+  A per-frame cache column goes into `SKIP` in `src/savegame.js`; any other new column is in the save
+  format (an older save loads with it defaulted, and a column removed is dropped from an older save with a
+  note; bump `SAVE_VERSION` only when a column's meaning changes, and say what in its comment).
 - README and docs are updated in the same commit as the change they describe; the docs
   screenshots are regenerated (`node scripts/screenshot.mjs demo1`, `demo2`, `demo3`) when the painter
   changes, visibly or not: `test:golden` compares them pixel for pixel, so a painter change that leaves

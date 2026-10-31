@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
-import { exportSave, importSave, exportLevel, importLevel, savedLevels } from '../src/savegame.js';
+import { exportSave, importSave, exportLevel, importLevel, savedLevels, saveNote, SAVE_VERSION } from '../src/savegame.js';
 import { packSave, unpackSave, saveHeader, MAGIC } from '../src/savestore.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -73,6 +73,30 @@ check(later.M > before.M || later.N >= before.N, `new entities got ids above the
 const faces = await db.query('SELECT * FROM frame_all(0, 0, 0, 1)', [], { rowMode: 'array' });
 check(faces.rows.some((r) => r[0] === 1), `a frame renders after the load (${faces.rows.length} rows)`);
 check((await db.query('SELECT COUNT(*) n FROM ents WHERE id IN (SELECT id FROM ents GROUP BY id HAVING COUNT(*) > 1)')).rows[0].N === 0, 'entity ids are unique');
+
+// a save across schema changes: a column the schema has lost is dropped (and named), one it gained takes its default, an
+// older version loads with a note, a newer one is refused
+{
+  const info0 = await (async () => { await loadMap(db, pak, res, mapName, { skill: 2 }); return importSave(db, JSON.parse(json)); })();
+  check(info0.version === SAVE_VERSION && Object.keys(info0.dropped).length === 0 && saveNote(info0) === '', 'a save of this version loads with nothing to note');
+  const old = JSON.parse(json);
+  old.version = 1;
+  old.tables.game.cols.push('NEXT_SPAWN'); old.tables.game.rows.forEach((r) => r.push(7));
+  const hi = old.tables.game.cols.indexOf('HELP_MSG2'); old.tables.game.cols.splice(hi, 1); old.tables.game.rows.forEach((r) => r.splice(hi, 1));
+  await db.exec("UPDATE game SET help_msg2 = 'to be defaulted'");
+  await loadMap(db, pak, res, mapName, { skill: 2 });
+  const info = await importSave(db, old);
+  const g = (await db.query('SELECT help_msg2 FROM game')).rows[0];
+  const back = await state();
+  check(info.version === 1 && info.dropped.game?.join() === 'NEXT_SPAWN' && g.HELP_MSG2 === null && back.X === before.X && back.TIC === before.TIC && saveNote(info) === "a save of version 1; game's next_spawn dropped",
+    `an older save loads: the column the schema has lost dropped, the one it gained defaulted, the rest as saved (${saveNote(info)})`);
+  let refused = null;
+  try { await importSave(db, { ...JSON.parse(json), version: SAVE_VERSION + 1 }); } catch (e) { refused = e.message; }
+  check(/newer version/.test(refused ?? ''), `a save of a newer version is refused (${refused})`);
+  refused = null;
+  try { await importSave(db, { map: mapName }); } catch (e) { refused = e.message; }
+  check(refused === 'not a saved game of this port', 'rubbish is refused');
+}
 
 // a level left by an ordinary exit and come back to (SV_WriteLevelFile, SV_ReadLevelFile): as it was left, the
 // player put in at the spawn point, the clock where the level's stopped

@@ -6,7 +6,7 @@
 // wires it to the DOM; `scripts/session-test.mjs` drives one in Node through the same calls.
 
 import { loadMap, ensureFaceVerts } from './loader.js';
-import { exportSave, importSave, exportLevel, importLevel, savedLevels } from './savegame.js';
+import { exportSave, importSave, exportLevel, importLevel, savedLevels, saveNote } from './savegame.js';
 import { packSave, unpackSave, saveHeader } from './savestore.js';
 import { parseChangeMap } from './levels.js';
 
@@ -335,7 +335,7 @@ export class Session {
     if (!this.pak.has(`maps/${save.map}.bsp`)) throw new Error(`The saved game is on ${save.map}, which is not in this pak`);
     this.unitLevels.clear();
     const setup = await this.startMap(save.map, { skill, faceVerts });
-    await importSave(this.db, save);
+    setup.saveNote = saveNote(await importSave(this.db, save));   // (an older save, the columns the schema has lost: the page says so)
     const g = (await this.db.query('SELECT coop, deathmatch, (SELECT COUNT(*) FROM player) n FROM game')).rows[0];   // the save's game: one player's, coop or deathmatch, with its clients
     this.coop = g?.COOP === 1;
     this.deathmatch = g?.DEATHMATCH === 1;
