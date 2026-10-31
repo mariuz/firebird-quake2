@@ -412,5 +412,44 @@ check(hostClosed && !host.open && !guest.open, 'closing one end closes the other
 await session.tic(idle, host.takeCommand(), idle);
 check(session.clients.length === 3, 'the host\'s game goes on with its clients');
 
+// ── deathmatch over the network: the host's game is a deathmatch when the Players select says so (startMap's modes
+// at the page), the guest's client at a deathmatch spot with fresh pers, no monster; its row says deathmatch and
+// carries its frags, the score board's rows come with it, and its kill (forwarded) costs it a frag the next frame ──
+{
+  const [a2, b2] = Loopback.pair();
+  const dhost = new HostLink(new Link(a2)), dguest = new GuestLink(new Link(b2));
+  dhost.onConsole = async (c, arg) => { await db.query('SELECT msg FROM player_command(?, ?, ?)', [c, arg, 2]); };
+  const setup = await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: false, deathmatch: true, players: 2 });
+  dhost.sendMap({ name: 'demo1', sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack, speakers: setup.speakers, view, nmodels: res.byName.size });
+  loadMapModels(pak, gres, 'demo1', { faceVerts: false });
+  const monsters = (await q('SELECT COUNT(*) n FROM ents WHERE mtype IS NOT NULL'))[0].N;
+  const dmTic = async () => {
+    const last = await session.tic(idle, dhost.takeCommand());
+    const f = await session.frame({ client: 1 });
+    const row = session.clients.find((r) => r.CLIENT === 2);
+    const scores = session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0 }));
+    dhost.sendFrame({ ...row, SCORES: scores }, await session.frame({ client: 2, sqlRenderer: false, boxes: true }), { sounds: f.sounds, fx: f.fx, dt: 0.05 });
+    return last;
+  };
+  await dmTic();
+  const d1 = dguest.take();
+  check(session.deathmatch && !session.coop && session.nclients === 2 && monsters === 0 && dguest.map?.name === 'demo1',
+    `a hosted deathmatch: two clients, no monster, the guest sent the map (${monsters} monsters)`);
+  check(d1?.row.CLIENT === 2 && d1.row.DEATHMATCH === 1 && d1.row.SCORE === 0 && Array.isArray(d1.row.SCORES) && d1.row.SCORES.length === 2 && d1.row.SCORES.every((s) => s.score === 0),
+    `the guest's row says deathmatch, its frags with it and the score board's rows for both (${JSON.stringify(d1?.row.SCORES)})`);
+  const spots = await q('SELECT p.id, e.x, e.y, p.weapons, e.health FROM player p JOIN ents e ON e.id = p.ent_id ORDER BY p.id');
+  check(spots.length === 2 && Math.hypot(spots[0].X - spots[1].X, spots[0].Y - spots[1].Y) > 1 && spots[1].WEAPONS === 1 && spots[1].HEALTH === 100,
+    `the guest's client at a deathmatch spot of its own with fresh pers (${spots.map((s) => `${s.X.toFixed(0)},${s.Y.toFixed(0)}`).join(' and ')})`);
+  dguest.sendConsole('kill', '');
+  await new Promise((r) => setTimeout(r, 50));
+  await dmTic();
+  const d2 = dguest.take();
+  check(d2?.row.DEAD === 1 && d2.row.SCORE === -1 && d2.row.SCORES.find((s) => s.id === 2)?.score === -1 && d2.row.SCORES.find((s) => s.id === 1)?.score === 0,
+    `the guest's kill, forwarded, costs its client a frag on its row and the board (${JSON.stringify(d2?.row.SCORES)})`);
+  dguest.close();
+  await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, deathmatch: false, players: 2 });
+  check(session.coop && !session.deathmatch && (await q('SELECT COUNT(*) n FROM ents WHERE mtype IS NOT NULL'))[0].N > 0, 'and a coop game again has its monsters');
+}
+
 console.log(failures ? `${failures} failure(s)` : 'all good');
 process.exit(failures ? 1 : 0);

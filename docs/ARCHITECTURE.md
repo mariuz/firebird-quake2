@@ -511,7 +511,9 @@ ends the level at the frag or time limit through `end_dm_level` and the intermis
 `fraglimit` and `timelimit` are console commands the session gives each map load (`Session.cvars`) and
 the page keeps in its settings.
 
-A game over the network (`src/net.js`) is a coop game whose other clients, one to three, are on other pages.
+A game over the network (`src/net.js`) is a coop game, or a deathmatch when the host's Players select says so
+(`startMap`'s modes: the select's deathmatch, coop otherwise, the clients as many as the guests drive), whose
+other clients, one to three, are on other pages.
 The host's page is the server, as sv_main.c was: its `Session` runs the game with a client per guest and
 itself, and each tic a guest's client's usercmd is what its `HostLink.takeCommand` merges from the commands
 the guest sent since the last tic (the turns summed, a button pressed in any held, the latest movement and run,
@@ -519,8 +521,8 @@ the last impulse; none, the guest stands, as a client whose packets did not come
 animation frame, so only a paused, hidden or menu-bound page is silent). Each guest has a channel, a `Peer` and
 a `HostLink` of its own (`net.guests` in `src/main.js`, each with its client number, the lowest of 2 to 4 no
 guest holds: a guest that left leaves its client standing for the next); the first guest's connect starts a
-new coop game, a later one joins the game running (`Session.addClient`: ClientConnect and ClientBegin, the row
-with fresh pers and the entity at the level's coop spot by `client_begin`; the game has that many clients
+new game, a later one joins the game running (`Session.addClient`: ClientConnect and ClientBegin, the row
+with fresh pers and the entity at the level's coop spot, or a deathmatch spot, by `client_begin`; the game has that many clients
 from then on, the next level too), and is sent the map as it is. Host, while hosting, makes an offer for the
 next player (one offer out at a time). After the tic the host asks the frame once for itself and once per
 guest in the fast mode and sends each its frame (`sendFrame`: the faces as `[face, entity, origin]`,

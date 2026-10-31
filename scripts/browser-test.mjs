@@ -676,6 +676,21 @@ try {
       for (let i = 0; i < 20 && gmsg !== 'godmode ON'; i++) { await sleep(250); gmsg = await gp.evaluate(() => window.quake2.net?.guest?.row?.MSG ?? null).catch(() => null); }
       await typeOn(gp, 'god');   // (off again)
       assert((ggod?.flags & 16) !== 0 && ggod?.msg === 'godmode ON' && gmsg === 'godmode ON', `god at the guest's console runs at the host for the guest's client, the answer on the guest's line (${JSON.stringify({ ggod, gmsg })})`);
+      // the host's Players select at deathmatch makes the shared game a deathmatch: a new one with both clients, no
+      // monster, the guest's row saying so with the score board's rows; back at one, a coop game again
+      await page.selectOption('#players', 'dm');
+      const dmState = () => page.evaluate(() => ({ dm: window.quake2.session.deathmatch, coop: window.quake2.session.coop, clients: window.quake2.session.clients?.length, guests: window.quake2.net?.guests?.length })).catch(() => ({}));
+      const dmGuest = () => gp.evaluate(() => { const r = window.quake2.net?.guest?.row; return { dm: r?.DEATHMATCH, scores: r?.SCORES?.length, client: r?.CLIENT }; }).catch(() => ({}));
+      let dms = {}, dmg = {};
+      for (let i = 0; i < 120 && !(dms.dm === true && dms.clients === 2 && dmg.dm === 1 && dmg.scores === 2); i++) { await sleep(250); dms = await dmState(); dmg = await dmGuest(); }
+      const dmMonsters = await page.evaluate(() => window.quake2.sql('SELECT COUNT(*) n FROM ents WHERE mtype IS NOT NULL').then((r) => r[0].N)).catch(() => -1);
+      assert(dms.dm === true && dms.coop === false && dms.clients === 2 && dms.guests === 1 && dmMonsters === 0,
+        `the host's select at deathmatch starts a deathmatch with both clients and no monster (${JSON.stringify(dms)}, ${dmMonsters} monsters)`);
+      assert(dmg.dm === 1 && dmg.scores === 2 && dmg.client === 2, `the guest's row says deathmatch and carries the score board's two rows (${JSON.stringify(dmg)})`);
+      await page.selectOption('#players', '1');
+      for (let i = 0; i < 120 && !(dms.dm === false && dms.coop === true && dms.clients === 2); i++) { await sleep(250); dms = await dmState(); }
+      assert(dms.dm === false && dms.coop === true && dms.clients === 2 && dms.guests === 1, `the select back at one, the shared game is coop again with both clients (${JSON.stringify(dms)})`);
+      for (let i = 0; i < 40 && (await gp.evaluate(() => window.quake2.net?.guest?.row?.DEATHMATCH).catch(() => 1)) !== 0; i++) await sleep(250);
       // a shared game runs on under the host's menu and its pause key (Quake 2 paused single player alone): the host's
       // frames and the guest's keep coming
       await page.evaluate(() => document.exitPointerLock?.()); await sleep(300);

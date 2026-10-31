@@ -62,7 +62,8 @@ deathmatch-only weapons and spots in and the monsters out, items that come back 
 the status bar and the score board on F1 (`dmflags`, `fraglimit` and `timelimit` at the console).
 Or two to four pages, over the network: one hosts (Host makes an offer, a short text to send to the other
 player), the other joins (Join takes it and makes an answer to send back), and the host's game runs with the
-guest's player in it, each page painting its own view, the guest's from the frames the host sends it over a
+guest's player in it (coop, or a deathmatch when the host's Players select says so: the frags on every page's
+status bar and score board), each page painting its own view, the guest's from the frames the host sends it over a
 WebRTC data channel, its own move predicted ahead of them as the Quake 2 client predicted (the player's move and
 the traces have a JS twin, `src/pmove.js`, held to the SQL's numbers). Host again while hosting makes an offer
 for the next player, who joins the game as it runs, a channel each; a joined page that ticks "spectate" only
