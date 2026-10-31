@@ -8,6 +8,7 @@
     "fetch-pak": "node scripts/fetch-pak.mjs",
     "build": "node scripts/build.mjs",
     "serve": "node scripts/build.mjs --serve",
+    "signal": "node scripts/signal.mjs",
     "test": "node scripts/sql-smoke.mjs",
     "test:base2": "node scripts/sql-smoke.mjs demo2",
     "test:monsters": "node scripts/monsters-test.mjs",

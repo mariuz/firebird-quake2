@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
-import { HostLink, GuestLink, Peer, iceServers } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, iceServers } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame } from './renderer.js';
@@ -1140,9 +1140,12 @@ function updateStats() {
 
 // ── a game over the network (src/net.js): this page hosts one, or joins one ───────────────────────
 // The offer and the answer are texts the players pass each other (Pages is static: there is no signalling
-// server); the texts are the session descriptions with their candidates, gzipped and base64'd.
+// server); the texts are the session descriptions with their candidates, gzipped and base64'd. With a relay of
+// the player's own set (rtc_signal at the console: scripts/signal.mjs), the host publishes its offer there and
+// shows a four-letter code, the guest types the code, and the answer goes back the same way.
 const netEl = { panel: $('net'), help: $('net-help'), text: $('net-text'), go: $('net-go'), state: $('net-state') };
-let netStage = null;   // 'offer' (hosting: the guest's answer goes in the box), 'join' (the host's offer does)
+let netStage = null;   // 'offer' (hosting: the guest's answer goes in the box), 'code' (hosting through the relay), 'join' (the host's offer or code does)
+const signalRelay = () => (settings.rtcSignal ? new SignalClient(settings.rtcSignal) : null);
 function netState(msg, error = false) {
   netEl.state.textContent = msg;
   netEl.state.classList.toggle('error', error);
@@ -1171,10 +1174,51 @@ async function hostGame() {
     if (net) net.offer = { peer }; else net = { role: 'host', guests: [], offer: { peer } };
     const offer = await peer.offer();
     if (net?.offer?.peer !== peer) return;
+    const relay = signalRelay();
+    if (relay) {
+      // through the relay: the offer under a code the host tells the other player; the answer comes back by itself
+      netState('publishing the offer at the relay…');
+      const code = await relay.publish(offer);
+      if (net?.offer?.peer !== peer) { relay.drop(code); return; }
+      net.offer.code = code;
+      netStage = 'code';
+      netPanel(`Tell the ${net.guests.length ? 'next' : 'other'} player the code ${code} (they type it after Join); the game starts when their answer comes.`, code, null);
+      netState(`code ${code}: waiting for the answer${net.guests.length ? ` (${guestsState()})` : ''}`);
+      const answer = await relay.waitAnswer(code, { stopped: () => net?.offer?.peer !== peer });
+      if (net?.offer?.peer !== peer) return;
+      relay.drop(code);
+      if (!answer) throw new Error(`no answer came for the code ${code}: Host again`);
+      await hostAccept(peer, answer);
+      return;
+    }
     netStage = 'offer';
     netPanel(`Send this offer to the ${net.guests.length ? 'next' : 'other'} player (copy it), then paste their answer here and press Connect.`, offer, 'Connect');
     netState(`offer made: waiting for the answer${net.guests.length ? ` (${guestsState()})` : ''}`);
   } catch (err) { console.error(err); netState(err.message, true); if (net?.role === 'host' && !net.guests.length) leaveNet(); else if (net) { net.offer?.peer.close(); net.offer = null; } }
+}
+/** Host: the guest's answer accepted; the guest's client put into a new game, or into the game running. */
+async function hostAccept(peer, text) {
+  netState('connecting…');
+  await peer.accept(text);
+  const link = await peer.ready;
+  if (net?.offer?.peer !== peer) return;
+  net.offer = null;
+  netStage = null;
+  const g = { client: freeClient(), peer, host: new HostLink(link) };
+  net.guests.push(g);
+  g.host.onClose = () => guestLeft(g);
+  // the guest's name and hand are its client's (ClientUserinfoChanged), now and with every map
+  g.host.onInfo = (info) => { if (net?.guests.includes(g)) session.setUserinfo(g.client, info).catch((err) => console.warn('userinfo:', err.message)); };
+  netEl.panel.hidden = true;
+  canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
+  netState(`hosting: ${guestsState()}`);
+  // the first guest: a new game with two clients, the guest getting the map from mapLoaded; another, into the
+  // game running (ClientBegin: its client put in at the level's spot), with the map as it is
+  if (net.guests.length === 1 || !map || !session.twoPlayers) await startMap(session.firstMap(), true);
+  else {
+    await session.addClient(g.client);
+    if (g.host.open) g.host.sendMap(mapMessage());
+  }
 }
 const guestsState = () => `${net.guests.length} guest${net.guests.length === 1 ? '' : 's'} connected`;
 /** A guest's client number: the lowest of 2 to 4 no guest drives (a guest that left leaves its client to the next). */
@@ -1193,44 +1237,33 @@ function joinGame() {
   if (!res) return;
   leaveNet();
   netStage = 'join';
-  netPanel('Paste the host\'s offer here and press Answer; send the answer back to the host.', '', 'Answer');
-  netState('waiting for the host\'s offer');
+  netPanel(signalRelay() ? 'Type the code the host gave you (or paste an offer) and press Answer.' : 'Paste the host\'s offer here and press Answer; send the answer back to the host.', '', 'Answer');
+  netState(signalRelay() ? 'waiting for the host\'s code' : 'waiting for the host\'s offer');
   netEl.text.focus();
 }
-/** The box's text is used: the answer accepted by a host, the offer answered by a guest. */
+/** The box's text is used: the answer accepted by a host, the offer (or the code at the relay) answered by a guest. */
 async function netGo() {
   const text = netEl.text.value;
   try {
     if (netStage === 'offer' && net?.role === 'host' && net.offer) {
-      netState('connecting…');
-      const { peer } = net.offer;
-      await peer.accept(text);
-      const link = await peer.ready;
-      if (net?.offer?.peer !== peer) return;
-      net.offer = null;
-      netStage = null;
-      const g = { client: freeClient(), peer, host: new HostLink(link) };
-      net.guests.push(g);
-      g.host.onClose = () => guestLeft(g);
-      // the guest's name and hand are its client's (ClientUserinfoChanged), now and with every map
-      g.host.onInfo = (info) => { if (net?.guests.includes(g)) session.setUserinfo(g.client, info).catch((err) => console.warn('userinfo:', err.message)); };
-      netEl.panel.hidden = true;
-      canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
-      netState(`hosting: ${guestsState()}`);
-      // the first guest: a new game with two clients, the guest getting the map from mapLoaded; another, into the
-      // game running (ClientBegin: its client put in at the level's spot), with the map as it is
-      if (net.guests.length === 1 || !map || !session.twoPlayers) await startMap(session.firstMap(), true);
-      else {
-        await session.addClient(g.client);
-        if (g.host.open) g.host.sendMap(mapMessage());
-      }
+      await hostAccept(net.offer.peer, text);
     } else if (netStage === 'join') {
+      const relay = signalRelay();
+      const code = isRoomCode(text) ? text.trim().toUpperCase() : null;
+      if (code && !relay) { netState('a code needs the relay: rtc_signal <url> at the console', true); return; }
+      let offerText = text;
+      if (code) { netState(`fetching the offer for ${code}…`); offerText = await relay.offer(code); }
+      if (netStage !== 'join') return;
       netState('answering…');
       const peer = new Peer({ iceServers: iceServers(settings.rtcIce) });
       net = { role: 'guest', peer, guest: null };
-      const answer = await peer.answer(text);
+      const answer = await peer.answer(offerText);
       if (net?.peer !== peer) return;
-      netPanel('Send this answer back to the host. The game starts when the host connects.', answer, null);
+      if (code) {
+        await relay.answer(code, answer);
+        if (net?.peer !== peer) return;
+        netPanel('The answer went to the host through the relay. The game starts when the host connects.', '', null);
+      } else netPanel('Send this answer back to the host. The game starts when the host connects.', answer, null);
       netState('answered: waiting for the host');
       const link = await peer.ready;
       if (net?.peer !== peer) return;

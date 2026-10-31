@@ -53,6 +53,9 @@ check(DEFAULTS.rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 'tur
   && loadSettings(store(JSON.stringify({ rtcIce: 'stun:stun.example.org' }))).rtcIce === 'stun:stun.example.org'
   && loadSettings(store(JSON.stringify({ rtcIce: 'http://relay' }))).rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 'turn:relay ace' }))).rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 7 }))).rtcIce === '',
   'the ICE server setting is kept as a url, or a url with a user and a password; another scheme, two words or a number fall back to none');
+check(DEFAULTS.rtcSignal === '' && loadSettings(store(JSON.stringify({ rtcSignal: 'https://relay.example.org:8787' }))).rtcSignal === 'https://relay.example.org:8787'
+  && loadSettings(store(JSON.stringify({ rtcSignal: 'ws://relay' }))).rtcSignal === '' && loadSettings(store(JSON.stringify({ rtcSignal: 'http://re lay' }))).rtcSignal === '' && loadSettings(store(JSON.stringify({ rtcSignal: 1 }))).rtcSignal === '',
+  'the signalling relay setting is an http(s) url; another scheme, a space or a number fall back to none');
 
 const full = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); } };
 let threw = false; try { saveSettings(mine, full); } catch { threw = true; }
