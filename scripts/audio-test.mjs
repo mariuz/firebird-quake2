@@ -84,6 +84,8 @@ await audio.playEvents([ev(5, 7, 1, BLAST, 1, 1, 3000, 0, 0)], L);
 check(started().length === before + 2, 'a sound out of range makes no source');
 await audio.playEvents([ev(6, 7, 1, 'nope/missing.wav', 1, 1, 0, 0, 0)], L);
 check(started().length === before + 2 && (await audio.buffer('nope/missing.wav')) === null, 'a sound not in the pak is skipped');
+check(!pak.has('sound/player/female/jump1.wav') && (await audio.buffer('player/female/jump1.wav')) !== null && (await audio.buffer('player/female/jump1.wav')).length === (await audio.buffer('player/male/jump1.wav')).length,
+  'a female client\'s sexed sound the pak lacks plays the male\'s (S_RegisterSexedSound\'s fallback)');
 const decoded = audio.ctx.decoded;
 await audio.playEvents([ev(7, 8, 2, BLAST, 1, 1, 0, 0, 0), ev(8, 9, 2, BLAST, 1, 1, 0, 0, 0)], L);
 check(audio.ctx.decoded === decoded, 'a sound is decoded once and the buffer kept');

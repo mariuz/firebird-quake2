@@ -884,8 +884,16 @@ client's speeds and the game's view cvars among them. In the order they are to b
   far with L on the ones looping, a line each as those laid them out, and the totals. `test:console` reads the
   lines printed and the answers, the glob's cases and Tab; the browser test types the five on the demo pak and
   reads the pak's name, the three maps and the counts, on both builds.
-- **`gender`**: the gender userinfo (male, female, none): the obituaries' pronouns as `ClientObituary` chose
-  them ("blew himself up", "herself", "itself"), and the female pain and death sounds where a pak has them.
+- **`gender`**: done. The gender userinfo, a word (archived, as Quake's was: male by default; one starting with
+  f is female, with m male, any other neutral, as `IsFemale` and `IsNeutral` read it), on `player.gender` (0, 1, 2)
+  through `Session.setUserinfo` with the name and the hand, a guest's over the link. `client_obituary` chooses the
+  pronouns by it ("tripped on her own grenade", "blew herself up", "killed itself": `his_`, `himself_`), and the
+  sexed sounds (the pains, the deaths, the gurgles, the jump) come from `player/female/` for a female client
+  (`sexed`, `S_RegisterSexedSound`); the demo pak has no female sounds, so the page's audio plays the male's where a
+  pak lacks them, as the client fell back. `test:coop` sees the pronouns on the message line and the sounds' paths
+  by the row; `test:net` the guest's word on the host's row; `test:audio` the fallback; `test:console` the cvar,
+  `cvarlist`, `writeconfig` and `userinfo` with it; the browser test types `gender female` and reads the settings
+  and the userinfo line on both builds.
 - **`msg`**: the message level userinfo: at 1 the pickups' prints (`PRINT_LOW`) stay off the line, at 2 the
   medium ones too, as `cprintf` filtered them by the client's level.
 - **`bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle` and `sv_rollspeed`**: the view's

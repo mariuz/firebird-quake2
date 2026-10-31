@@ -57,9 +57,13 @@ export class Q2Audio {
   async buffer(name) {
     if (this.buffers.has(name)) return this.buffers.get(name);
     const p = (async () => {
-      if (!this.pak || !this.pak.has('sound/' + name)) return null;
+      if (!this.pak) return null;
+      let file = 'sound/' + name;
+      // (S_RegisterSexedSound: a female client's sound a pak lacks, the demo's has none, plays the male's)
+      if (!this.pak.has(file) && name.startsWith('player/female/')) file = 'sound/player/male/' + name.slice('player/female/'.length);
+      if (!this.pak.has(file)) return null;
       try {
-        return await this.ctx.decodeAudioData(this.pak.buffer('sound/' + name));
+        return await this.ctx.decodeAudioData(this.pak.buffer(file));
       } catch { return null; }
     })();
     this.buffers.set(name, p);

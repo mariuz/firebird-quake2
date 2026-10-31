@@ -203,6 +203,17 @@ await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${p1.ENT_ID}, ${p1.ENT_ID}
 const rk = (await one(`EXECUTE BLOCK RETURNS (id INTEGER) AS BEGIN EXECUTE PROCEDURE spawn_ent('rocket', 0, 0, 0) RETURNING_VALUES id; UPDATE ents e SET e.owner_id = ${p1.ENT_ID} WHERE e.id = :id; SUSPEND; END`)).ID;
 await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p1.ENT_ID}, 1000, 0, 1)`, "player 2 almost dodged player 1's rocket.");
 await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p2.ENT_ID}, 1000, 0, 1)`, 'player 2 blew himself up.');
+// the gender userinfo (IsFemale, IsNeutral: a word starting with f or m, else neutral): the obituaries' pronouns, and the sexed
+// sounds a female client's from player/female/ (sexed, S_RegisterSexedSound)
+await session.setUserinfo(2, { name: '', hand: 0, gender: 'Female' });
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p2.ENT_ID}, 1000, 0, 1)`, 'player 2 blew herself up.');
+check((await one('SELECT gender FROM player WHERE id = 2')).GENDER === 1 && (await one(`SELECT sexed(${p2.ENT_ID}, 'player/male/jump1.wav') S FROM rdb$database`)).S === 'player/female/jump1.wav'
+  && (await one(`SELECT sexed(${p1.ENT_ID}, 'player/male/jump1.wav') S FROM rdb$database`)).S === 'player/male/jump1.wav', 'the row carries the gender, and a female client\'s sexed sounds come from player/female/, a male\'s from player/male/');
+await session.setUserinfo(2, { name: '', hand: 0, gender: 'none' });
+await dieOf(`EXECUTE PROCEDURE t_damage(${p2.ENT_ID}, ${rk}, ${p2.ENT_ID}, 1000, 0, 1)`, 'player 2 blew itself up.');
+check((await one('SELECT gender FROM player WHERE id = 2')).GENDER === 2 && (await one(`SELECT sexed(${p2.ENT_ID}, 'player/male/pain100_1.wav') S FROM rdb$database`)).S === 'player/male/pain100_1.wav', 'a neutral client is 2 on the row, its sounds the male\'s');
+await session.setUserinfo(2, { name: '', hand: 0 });
+check((await one('SELECT gender FROM player WHERE id = 2')).GENDER === 0, 'no gender given is male');
 // the player setup's names (pers.netname, Session.setUserinfo: ClientUserinfoChanged) are the obituaries' and the rows'
 await session.setUserinfo(1, { name: 'Ace', hand: 0 });
 await session.setUserinfo(2, { name: 'Grunt with a long name', hand: 1 });

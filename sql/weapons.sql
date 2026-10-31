@@ -824,7 +824,7 @@ BEGIN
       BEGIN
         ddmg = MINVALUE(15, ddmg + 2);
         UPDATE player p SET p.next_drown_time = :t + 1, p.drown_dmg = :ddmg WHERE p.ent_id = :pe;
-        EXECUTE PROCEDURE snd(pe, 2, IIF(hp <= ddmg, 'player/drown1.wav', 'player/male/gurp' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav'), 1, 1);
+        EXECUTE PROCEDURE snd(pe, 2, IIF(hp <= ddmg, 'player/drown1.wav', sexed(pe, 'player/male/gurp' || CAST(1 + FLOOR(rnd() * 2) AS INTEGER) || '.wav')), 1, 1);
         EXECUTE PROCEDURE t_damage(pe, 0, 0, ddmg, 0, 2 + 32);
       END
     END
@@ -883,7 +883,7 @@ BEGIN
       flags = BIN_AND(flags, BIN_NOT(512));
       onground = 0;
       jr2 = 0;
-      EXECUTE PROCEDURE snd(pe, 2, 'player/male/jump1.wav', 1, 1);
+      EXECUTE PROCEDURE snd(pe, 2, sexed(pe, 'player/male/jump1.wav'), 1, 1);
     END
   END
   ELSE jr2 = 1;

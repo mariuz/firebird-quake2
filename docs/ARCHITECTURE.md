@@ -542,7 +542,7 @@ guest's screen is up, and the score board's rows with each client's ping), dropp
 more than 256 KB queued; once a second a `ping` carrying the host's clock goes too, which the guest's link
 answers with a `pong` at once, the round trip read back against the clock (`HostLink.ping`: the score
 board's "Ping:", `players`' listing, the joined page's stats line). The guest's page
-(`GuestLink`) sends its userinfo (the player setup's name and hand, whether it only watches, and its fov, an `info` message) at the connect, then
+(`GuestLink`) sends its userinfo (the player setup's name and hand, its gender, whether it only watches, and its fov, an `info` message) at the connect, then
 `Input.read`'s command each of its own tics, and paints the newest frame it holds
 exactly as the page paints its own (`drawFrame`), the sounds at its own ear, the effects and particles run
 there; it loads the pak as every page does and, at each map message (sent from `mapLoaded`: the name, the
@@ -761,7 +761,7 @@ clients go to the settings and the select through `setGameMode`, "will be change
 going on; the page's coop is more than one client at it, deathmatch them against each other, `maxclients 1` single player),
 `serverinfo` (`SV_Serverinfo_f`: the game's cvars, `mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`,
 `cheats` and `skill`, as `Info_Print` listed them, the host's `serverInfo`; a joined page runs no server of its own),
-`userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:
+`userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `gender`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:
 the map and the clients with their frags, pings and names, a line each in the scrollback and the sum on the line,
 `status` over the score board's rows, a joined page's from its row), `timedemo` (above) and
 `screenshot` (the view downloaded as `quakeNN.png`, as

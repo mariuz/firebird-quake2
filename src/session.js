@@ -45,6 +45,12 @@ export function decodeFrame(rows, styleBase) {
   return { faces, ents, sounds, fx, loops, styles, speakers, brushFrames, brushAngles, boxes };
 }
 
+/** IsFemale and IsNeutral: the gender userinfo's word as the row's code (0 male, 1 female, 2 neutral) by its first letter. */
+export function genderCode(word) {
+  const c = String(word ?? 'male').charAt(0).toLowerCase();
+  return c === 'f' ? 1 : c === 'm' ? 0 : 2;
+}
+
 export class Session {
   /**
    * @param {object} db         a FirebirdBrowser with the schema created
@@ -121,13 +127,14 @@ export class Session {
    * board's; empty, "player N"), hand (pers.hand: 0 right, 1 left, 2 centre, which turns the shots' origin and
    * the gun drawn) and spectator (3.20's: a watcher with no body, noclipping, whom nothing hurts and the monsters
    * ignore) and fov (the fov userinfo, 1..160, clamped as ClientUserinfoChanged clamped it: the client's own frustum, a
-   * guest's frame at the fov it paints with; null leaves the view's). Kept, and written to the client's row after every
+   * guest's frame at the fov it paints with; null leaves the view's) and gender (the gender userinfo, a word: one starting with f
+   * is female, with m male, any other neutral, as IsFemale and IsNeutral read it; the obituaries' pronouns and the sexed sounds). Kept, and written to the client's row after every
    * map load and loaded game, as the userinfo came with the client and not with the level; written at once to a game running.
    */
-  async setUserinfo(client, { name = '', hand = 0, spectator = 0, fov = null } = {}) {
+  async setUserinfo(client, { name = '', hand = 0, spectator = 0, fov = null, gender = 'male' } = {}) {
     const f = Number(fov);
     const info = { name: String(name ?? '').replace(/[^\x20-\x7e]/g, '').slice(0, 15), hand: [0, 1, 2].includes(hand) ? hand : 0, spectator: spectator ? 1 : 0,
-      fov: fov == null || !Number.isFinite(f) ? null : Math.max(1, Math.min(160, Math.round(f))) };
+      fov: fov == null || !Number.isFinite(f) ? null : Math.max(1, Math.min(160, Math.round(f))), gender: String(gender ?? 'male').replace(/[^\x20-\x7e]/g, '').slice(0, 15) || 'male' };
     this.userinfo[client] = info;
     if (this.map) await this.writeUserinfo(client, info);
     return info;
@@ -140,9 +147,9 @@ export class Session {
   async applyUserinfo() {
     for (const [client, info] of Object.entries(this.userinfo)) await this.writeUserinfo(Number(client), info);
   }
-  /** The row's name, hand and fov; `spectator` through client_spectator, which puts the client back in as a watcher, or as a player again. */
+  /** The row's name, hand, fov and gender (0 male, 1 female, 2 neutral); `spectator` through client_spectator, which puts the client back in as a watcher, or as a player again. */
   async writeUserinfo(client, info) {
-    await this.db.query('UPDATE player SET netname = ?, hand = ?, fov = ? WHERE id = ?', [info.name, info.hand, info.fov ?? null, client]);
+    await this.db.query('UPDATE player SET netname = ?, hand = ?, fov = ?, gender = ? WHERE id = ?', [info.name, info.hand, info.fov ?? null, genderCode(info.gender), client]);
     await this.db.query('EXECUTE PROCEDURE client_spectator(?, ?)', [client, info.spectator ? 1 : 0]);
   }
 
