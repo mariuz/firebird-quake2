@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_forwardspeed', 'cl_gun', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundlist', 'spectator', 'status', 'stop', 'sv_gravity', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_forwardspeed', 'cl_gun', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundlist', 'spectator', 'status', 'stop', 'sv_gravity', 'sv_rollangle', 'sv_rollspeed', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -91,6 +91,10 @@ export function dirList(names, filter) {
   const re = new RegExp(`^${wild.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')}$`, 'i');
   return names.filter((n) => n.startsWith(dir) && !n.slice(dir.length).includes('/') && re.test(n.slice(dir.length))).sort();
 }
+// p_view.c's cvars on the game row for the game running (SV_CalcViewOffset, SV_CalcRoll), as sv_gravity: Quake's default, the least and
+// the most taken. bob_up, bob_pitch and bob_roll are the bob's height, pitch and roll a unit of speed, run_pitch and run_roll the pitch
+// and roll from the velocity along the view, sv_rollangle the player model's roll, full at a sideways speed of sv_rollspeed
+export const GAME_CVARS = Object.freeze({ bob_up: [0.005, 0, 1], bob_pitch: [0.002, -1, 1], bob_roll: [0.002, -1, 1], run_pitch: [0.002, -1, 1], run_roll: [0.005, -1, 1], sv_rollangle: [2, -90, 90], sv_rollspeed: [200, 0, 10000] });
 const HISTORY = 32;
 
 /**
@@ -106,6 +110,7 @@ const HISTORY = 32;
  *         userInfo() → this page's { name, hand, gender, msg, fov, spectator } (userinfo), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
  *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
  *         toggleHelp() (help: the help computer, F1's), gravity() → the game's gravity, null on a joined page or without a map, setGravity(n) (sv_gravity),
+ *         gameCvar(col) → the game row's column, null on a joined page or without a map, setGameCvar(col, n) (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed: GAME_CVARS),
  *         setGameMode({ coop, deathmatch, players }) (deathmatch, coop, maxclients: the next game's, latched; the Players select follows),
  *         execConfig() (exec: the page's file picker, whose file runs through execText),
  *         execAutoexec() → the lines run, or null when none is kept (exec autoexec), dropAutoexec() → true when one was kept (unautoexec),
@@ -472,6 +477,18 @@ export class Console {
         if (!Number.isFinite(n) || n < -5000 || n > 5000) { say('sv_gravity takes a number, 800 as Quake had it', true); return; }
         await h.setGravity?.(n);
         say(`"sv_gravity" is "${n}"`);
+        return;
+      }
+      case 'bob_up': case 'bob_pitch': case 'bob_roll': case 'run_pitch': case 'run_roll': case 'sv_rollangle': case 'sv_rollspeed': {
+        // p_view.c's cvars on the game row for the game running (GAME_CVARS), as sv_gravity: shown, or set within their range
+        const name = cmd.toLowerCase(), [dflt, lo, hi] = GAME_CVARS[name];
+        const v = await h.gameCvar?.(name);
+        if (v == null) { say(`${name}: a joined page runs no server of its own, and a map must be running`, true); return; }
+        if (!arg) { say(`"${name}" is "${v}"`); return; }
+        const n = Number(arg);
+        if (!Number.isFinite(n) || n < lo || n > hi) { say(`${name} takes a number from ${lo} to ${hi}, ${dflt} as Quake had it`, true); return; }
+        await h.setGameCvar?.(name, n);
+        say(`"${name}" is "${n}"`);
         return;
       }
       case 'deathmatch': case 'coop': case 'maxclients': {

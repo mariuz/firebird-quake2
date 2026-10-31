@@ -509,6 +509,22 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   for (let i = 0; i < 12; i++) r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
   m = await me();
   assert(m.BOBTIME === 0 && m.BOB_Z === 0 && Math.abs(r.VIEW_Z - r.PZ - 22) < 0.01, `... and standing still stops it (bobtime ${m.BOBTIME}, xy speed ${r.XYSPEED?.toFixed(1)}, flags ${m.FLAGS}, water ${r.WATERLEVEL})`);
+  // p_view.c's cvars on the game row: bob_up 0 keeps the eye level while the cycle runs, run_roll rolls the view with the sideways
+  // speed, sv_rollangle and sv_rollspeed roll the player's model (SV_CalcRoll, times four, full at that speed), back to 0 standing
+  await db.exec('UPDATE game SET bob_up = 0, run_roll = 0.01, sv_rollangle = 4, sv_rollspeed = 100');
+  const run2 = await face();
+  await db.exec(`UPDATE ents SET yaw = ${run2.yaw + 90} WHERE id = ${(await me()).ID}`);   // (the clear run to the right: a sidestep along it)
+  let level = 0, rolled = 0, mroll = 0, cycle = 0;
+  for (let i = 0; i < 12; i++) {
+    r = await tic([1, 0, 1, 0, 0, 0, 0, 1, 0]);
+    level = Math.max(level, Math.abs(r.VIEW_Z - r.PZ - 22 + r.STEPZ)); rolled = Math.max(rolled, r.ROLL);
+    m = await me(); cycle = Math.max(cycle, m.BOBTIME); mroll = (await one(`SELECT roll FROM ents WHERE id = ${m.ID}`)).ROLL;
+  }
+  assert(cycle > 0.5 && level < 1e-6 && rolled > 2 && mroll === 16, `bob_up 0 keeps the eye level over a walk cycle (bob ${level.toExponential(1)}, bobtime ${cycle.toFixed(2)}), run_roll 0.01 rolls the view sidestepping (${rolled.toFixed(2)}), the model rolls sv_rollangle's 4 times four (${mroll})`);
+  await db.exec('UPDATE game SET bob_up = 0.005, run_roll = 0.005, sv_rollangle = 2, sv_rollspeed = 200');
+  for (let i = 0; i < 12; i++) r = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
+  m = await me();
+  assert((await one(`SELECT roll FROM ents WHERE id = ${m.ID}`)).ROLL === 0 && r.ROLL === 0, 'standing still, the model and the view are level again');
   // the ground holds from tic to tic while walking (PM_CatagorizePosition), so friction and acceleration act every tic
   await face();
   let grounded = 0, trail = '';

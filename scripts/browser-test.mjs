@@ -478,6 +478,12 @@ try {
     const spdBack = await page.evaluate(() => ({ yaw: window.quake2.settings.clYawspeed, fwd: window.quake2.settings.clForwardspeed })).catch(() => ({}));
     assert(spd.yaw === 280 && spd.fwd === 100 && spdBack.yaw === 140 && spdBack.fwd === 200,
       `cl_yawspeed and cl_forwardspeed reach the settings and go back (${JSON.stringify(spd)} → ${JSON.stringify(spdBack)})`);
+    // p_view.c's cvars reach the game row (bob_up, sv_rollangle), and the defaults come back
+    await typeCommand('bob_up 0'); await typeCommand('sv_rollangle 4');
+    const pv = await page.evaluate(async () => (await window.quake2.sql('SELECT bob_up, sv_rollangle FROM game'))[0]).catch(() => ({}));
+    await typeCommand('bob_up 0.005'); await typeCommand('sv_rollangle 2');
+    const pvBack = await page.evaluate(async () => (await window.quake2.sql('SELECT bob_up, sv_rollangle FROM game'))[0]).catch(() => ({}));
+    assert(pv?.BOB_UP === 0 && pv?.SV_ROLLANGLE === 4 && pvBack?.BOB_UP === 0.005 && pvBack?.SV_ROLLANGLE === 2, `bob_up and sv_rollangle reach the game row and go back (${JSON.stringify(pv)} → ${JSON.stringify(pvBack)})`);
     // the gender userinfo: the word reaches the settings and the userinfo line, and male comes back
     await typeCommand('gender female'); await typeCommand('userinfo');
     const gen = await page.evaluate(() => ({ g: window.quake2.settings.gender, line: document.getElementById('status').textContent })).catch(() => ({}));

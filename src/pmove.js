@@ -361,10 +361,13 @@ export function stateFromRow(row) {
 /**
  * ClientThink's move for one tic of `dt` seconds (player_think's movement, PM_* in pmove.c): `st` is changed in
  * place and returned. `cmd` is the usercmd's { fwd, side, yawd, pitchd, jump (1 up, -1 crouch), run }; `world`
- * the solids and boxes to clip against (see trace), `gravity` the map's. The view the state gives is in
+ * the solids and boxes to clip against (see trace), `gravity` the map's, `view` the game row's bob and run cvars. The view the state gives is in
  * `view`: { x, y, z, viewZ, yaw, pitch, roll } with the bob and the step smoothing in (SV_CalcViewOffset).
  */
-export function pmove(cm, st, cmd, dt, { solids = [], boxes = [], gravity = 800 } = {}) {
+/** p_view.c's view cvars as the game row has them by default (bob_up, bob_pitch, bob_roll, run_pitch, run_roll); a guest's come with the map message. */
+export const VIEW_CVARS = Object.freeze({ bobUp: 0.005, bobPitch: 0.002, bobRoll: 0.002, runPitch: 0.002, runRoll: 0.005 });
+
+export function pmove(cm, st, cmd, dt, { solids = [], boxes = [], gravity = 800, view = VIEW_CVARS } = {}) {
   const world = { solids, boxes };
   // the view angles
   st.yaw = anglemod(st.yaw + (cmd.yawd ?? 0));
@@ -473,9 +476,13 @@ export function pmove(cm, st, cmd, dt, { solids = [], boxes = [], gravity = 800 
   st.bobtime = bt;
   const bts = ducked ? bt * 4 : bt;
   const bfs = Math.abs(Math.sin(bts * Math.PI));
-  const bobz = Math.min(6, bfs * xys * 0.005);
-  const bobp = bfs * 0.002 * xys * (ducked ? 6 : 1);
-  const bobr = bobp * (Math.floor(bts) % 2 === 1 ? -1 : 1);
+  const bobz = Math.min(6, bfs * xys * view.bobUp);
+  let bobp = bfs * view.bobPitch * xys * (ducked ? 6 : 1);
+  let bobr = bfs * view.bobRoll * xys * (ducked ? 6 : 1) * (Math.floor(bts) % 2 === 1 ? -1 : 1);
+  // SV_CalcViewOffset's angles from the velocity: run_pitch along the view's forward, run_roll along its right
+  const cy = Math.cos(st.yaw * RAD), sy = Math.sin(st.yaw * RAD), cp = Math.cos(st.pitch * RAD), sp = Math.sin(st.pitch * RAD);
+  bobp += ((st.vx * cy + st.vy * sy) * cp - st.vz * sp) * view.runPitch;
+  bobr += (st.vx * sy - st.vy * cy) * view.runRoll;
   // smooth the view over steps
   st.stepz = st.onground && st.z - oldz > 0 && st.z - oldz <= 18 ? Math.min(st.stepz + (st.z - oldz), 18) : Math.max(0, st.stepz - 160 * dt);
   st.view = { x: st.x, y: st.y, z: st.z, viewZ: st.z + (ducked ? -2 : 22) - st.stepz + bobz, yaw: st.yaw, pitch: st.pitch + bobp, roll: bobr };
