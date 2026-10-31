@@ -48,6 +48,12 @@ const fresh = loadSettings(store());
 fresh.binds.attack.push('KeyZ');
 check(DEFAULTS.binds.attack.length === 2, 'editing a loaded bind leaves the defaults alone');
 
+// the ICE server (rtc_ice at the console): none by default; a url, or a url with a user and a password; anything else is none
+check(DEFAULTS.rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 'turn:relay.example.org:3478 ace secret' }))).rtcIce === 'turn:relay.example.org:3478 ace secret'
+  && loadSettings(store(JSON.stringify({ rtcIce: 'stun:stun.example.org' }))).rtcIce === 'stun:stun.example.org'
+  && loadSettings(store(JSON.stringify({ rtcIce: 'http://relay' }))).rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 'turn:relay ace' }))).rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 7 }))).rtcIce === '',
+  'the ICE server setting is kept as a url, or a url with a user and a password; another scheme, two words or a number fall back to none');
+
 const full = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); } };
 let threw = false; try { saveSettings(mine, full); } catch { threw = true; }
 check(!threw, 'a full storage does not throw: the settings live for the page');

@@ -439,9 +439,14 @@ The fourth list, from what the entries above and below still leave: in the order
   on a slot with a game and d there write it with the menu up; the browser test saves slot 1 from the save
   menu, opens the load menu on it and finds d's file the slot's text under its name, and with everything
   given sees l silence thirty shots and h turn the power shield on.
-- **A TURN server for the networks a STUN cannot cross**: `Peer` asks one STUN server; two players behind
-  symmetric NATs never connect. An ICE server setting (`rtc_ice <url> [user pass]` at the console, kept in
-  the settings) given to the peer connection.
+- **A TURN server for the networks a STUN cannot cross**: done. `Peer` asked one STUN server; two players
+  behind symmetric NATs never connected. `rtc_ice <url>` or `rtc_ice <url> <user> <pass>` at the console
+  (a `stun:`, `stuns:`, `turn:` or `turns:` url; `rtc_ice` alone shows it, `rtc_ice none` drops it) keeps
+  an ICE server in the settings (`rtcIce`, checked on the way in like every setting), and the next offer or
+  answer's peer connection is made with the STUN server and it (`parseIceServer`, `iceServers` in
+  `src/net.js`), on both pages. `test:net` parses the setting's forms and refuses the rest, and sees the Peer
+  give the servers to its connection; `test:settings` the round trip and the fallbacks; `test:console` the
+  command shown, set, refused and cleared; the browser test the command kept in the settings and cleared.
 
 ## Playing the demo
 

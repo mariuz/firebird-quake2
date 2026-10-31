@@ -1,12 +1,14 @@
 // console.js – Quake's console line: the commands the page runs itself (map, fov, seed, save, load,
-// inven) and the rest handed to the game's player_command (god, noclip, give, use, kill, drop …);
+// inven, rtc_ice …) and the rest handed to the game's player_command (god, noclip, give, use, kill, drop …);
 // the history (Key_Console: up and down step through the lines typed) and Tab completion
 // (Cmd_CompleteCommand: the first command that starts with what is typed).
 //
 // Nothing here touches the DOM: the page wires the input element to historyStep(), complete() and
 // submit(), and gives a host with what the commands act on, so the tests can drive it with a fake one.
 
-export const COMMANDS = ['deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'save', 'seed', 'skill', 'spectator', 'stop', 'timelimit', 'use'];
+import { parseIceServer } from './net.js';
+
+export const COMMANDS = ['deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'save', 'seed', 'skill', 'spectator', 'stop', 'timelimit', 'use'];
 const HISTORY = 32;
 
 /**
@@ -145,6 +147,17 @@ export class Console {
         if (!Number.isFinite(v)) { say('spectator takes 0 or 1', true); return; }
         h.setSpectator(v !== 0);
         say(v !== 0 ? 'spectator: watching' : 'spectator: playing again');
+        return;
+      }
+      case 'rtc_ice': {
+        // the ICE server the next network game adds to the STUN, for the networks a STUN cannot cross (a TURN relay:
+        // `rtc_ice turn:host:3478 user pass`); no argument shows it, `none` clears it. Kept in the settings.
+        if (!arg) { say(`"rtc_ice" is "${h.settings.rtcIce || 'none'}"`); return; }
+        if (/^(none|off|0)$/i.test(arg)) { h.settings.rtcIce = ''; h.saveSettings(); say('rtc_ice: the STUN server alone'); return; }
+        try { parseIceServer(arg); } catch (err) { say(`rtc_ice: ${err.message}`, true); return; }
+        h.settings.rtcIce = arg.trim().split(/\s+/).join(' ');
+        h.saveSettings();
+        say(`rtc_ice: ${h.settings.rtcIce.split(' ')[0]} for the next network game`);
         return;
       }
       case 'save': return h.saveGame();
