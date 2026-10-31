@@ -667,6 +667,15 @@ try {
       let gsaid = null;
       for (let i = 0; i < 20 && gsaid !== 'player 2: hi from the guest'; i++) { await sleep(250); gsaid = await page.evaluate(() => window.quake2.session.last.MSG).catch(() => null); }
       assert(gsaid === 'player 2: hi from the guest', `the guest's say reaches the host's message line by its client's name (${JSON.stringify(gsaid)})`);
+      // a game command at the guest's console goes to the host (Cmd_ForwardToServer): god runs for the guest's client, the
+      // answer on the guest's message line
+      await typeOn(gp, 'god');
+      let ggod = null;
+      for (let i = 0; i < 20 && !(ggod?.flags & 16); i++) { await sleep(250); ggod = await page.evaluate(() => window.quake2.sql('SELECT e.flags, p.msg FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2').then((r) => ({ flags: r[0].FLAGS, msg: r[0].MSG }))).catch(() => null); }
+      let gmsg = null;
+      for (let i = 0; i < 20 && gmsg !== 'godmode ON'; i++) { await sleep(250); gmsg = await gp.evaluate(() => window.quake2.net?.guest?.row?.MSG ?? null).catch(() => null); }
+      await typeOn(gp, 'god');   // (off again)
+      assert((ggod?.flags & 16) !== 0 && ggod?.msg === 'godmode ON' && gmsg === 'godmode ON', `god at the guest's console runs at the host for the guest's client, the answer on the guest's line (${JSON.stringify({ ggod, gmsg })})`);
       // a shared game runs on under the host's menu and its pause key (Quake 2 paused single player alone): the host's
       // frames and the guest's keep coming
       await page.evaluate(() => document.exitPointerLock?.()); await sleep(300);

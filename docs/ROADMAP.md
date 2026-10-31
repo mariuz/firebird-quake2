@@ -583,6 +583,33 @@ wants: in the order they are to be taken.
   is told so. `test:console` runs the cases; the browser test measures the game's clock against the wall's
   at 2 (faster than the wall where the page keeps up), at 0.5 (half) and back at 1.
 
+The seventh list, from what a game shared over the network still lacks and what the console's binds were in
+Quake: in the order they are to be taken.
+
+- **A guest's console commands forwarded to the host**: done. A joined page's console ran `god`, `give`, `kill`
+  and the rest against its own idle database, to no effect. The commands that reach `player_command` go to
+  the host now as a `con` message (`GuestLink.sendConsole`, `HostLink.onConsole`, the command and its argument
+  cut to the game's sizes), and the host runs `player_command` for the guest's client, whose answer comes
+  back on the guest's message line with its frames, as `Cmd_ForwardToServer` sent what the client did not
+  know. `test:net` sees a guest's `god` reach the host and switch the second client's godmode on and off, the
+  first untouched, the sizes cut; `test:console` the forwarding when joined and the local run alone; the
+  browser test `god` typed on the guest's page take at the host and answer on the guest's line.
+- **Deathmatch over the network**: a hosted game is coop whatever the Players select says
+  (`startMap`'s modes: `deathmatch: !netHost() && settings.deathmatch`). The select's deathmatch makes the
+  shared game a deathmatch (the spots, the maps' deathmatch items, the frags on every page's status bar and
+  score board, `fraglimit` and `timelimit`), coop otherwise.
+- **Keys bound to command lines**: `bind` takes the actions alone; Quake's binds were command lines (`bind t
+  "say hello"`, `bind k god`). A key bound to a line runs it at the console when it goes down, the `+` actions
+  staying the held ones, `writeconfig` and `exec` carrying such binds.
+- **Recording on a joined page**: `record` is refused on a guest. The frames the host sends are what a
+  recording writes: a guest records its own view as the host's client did.
+- **An autoexec.cfg kept in the browser**: a config file picked runs once. Kept in IndexedDB as the pak is
+  (the Config control's "keep", or `exec` with `autoexec`), it runs at every start as `autoexec.cfg` did;
+  `unautoexec` drops it.
+- **`players` and `kick` at the host's console**: the host has no list of its guests but the stats line's
+  count. `players` lists the clients (number, name, frames sent and dropped, watching or playing), `kick <n>`
+  drops a guest, as `SV_Status_f` and `SV_Kick_f` did.
+
 ## Playing the demo
 
 - **Save and load**: done as Quake 2 had them in single player: fifteen slots in the load and save menus

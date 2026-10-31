@@ -96,6 +96,7 @@ export class HostLink {
     this.info = null;       // the guest's userinfo: { name, hand, spectator }, as it last sent it (ClientUserinfoChanged)
     this.onInfo = null;
     this.onSay = null;      // the guest's chat (Cmd_Say_f): the host says it for the guest's client
+    this.onConsole = null;  // the guest's console command (Cmd_ForwardToServer): the host runs it for the guest's client
     this.onClose = null;
     this.sentFrames = 0;
     this.droppedFrames = 0;
@@ -104,6 +105,7 @@ export class HostLink {
       if (m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; if (Number.isInteger(m.seq)) this.pendingSeq = m.seq; }
       else if (m.t === 'info') { this.info = { name: typeof m.name === 'string' ? m.name.slice(0, 15) : '', hand: [0, 1, 2].includes(m.hand) ? m.hand : 0, spectator: m.spectator ? 1 : 0 }; this.onInfo?.(this.info); }
       else if (m.t === 'say' && typeof m.text === 'string') { const text = m.text.replace(/[\r\n]+/g, ' ').trim().slice(0, 150); if (text) this.onSay?.(text); }
+      else if (m.t === 'con' && typeof m.cmd === 'string') { const cmd = m.cmd.trim().slice(0, 32), arg = String(m.arg ?? '').trim().slice(0, 64); if (cmd) this.onConsole?.(cmd, arg); }
     };
     link.onClose = () => this.onClose?.();
   }
@@ -188,6 +190,8 @@ export class GuestLink {
   sendInfo({ name = '', hand = 0, spectator = 0 } = {}) { this.link.send({ t: 'info', name: String(name).slice(0, 15), hand, spectator: spectator ? 1 : 0 }); }
   /** The guest's chat (`say` at its console): the host prints it for the guest's client. */
   sendSay(text) { this.link.send({ t: 'say', text: String(text ?? '').slice(0, 150) }); }
+  /** A game command typed at the guest's console (god, give, kill…): the host runs it for the guest's client, as Cmd_ForwardToServer sent it. */
+  sendConsole(cmd, arg = '') { this.link.send({ t: 'con', cmd: String(cmd ?? '').slice(0, 32), arg: String(arg ?? '').slice(0, 64) }); }
   /** The newest frame since the last take, with its row, or null. */
   take() {
     if (!this.fresh) return null;

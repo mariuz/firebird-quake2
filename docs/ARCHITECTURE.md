@@ -668,7 +668,9 @@ runs line by line through `Console.execText`), and `bind`, `unbind`, `unbindall`
 as `Key_Bind_f` did), `timedemo` (above) and `screenshot` (the view downloaded as `quakeNN.png`, as
 `SCR_ScreenShot_f` wrote `quakeNN.pcx`), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the
-guest's client); the rest go to `player_command(cmd, arg)`
+guest's client); the rest go to `player_command(cmd, arg)` (on a joined page to the host as a `con` message,
+`GuestLink.sendConsole` and `HostLink.onConsole`, which runs `player_command` for the guest's client, as
+`Cmd_ForwardToServer` sent what the client did not know; the answer comes back on the guest's line)
 (g_cmds.c: `god`, `notarget`, `noclip`, `give`, `kill`), which answers on the message line. The message line is
 console.c's notify (`src/notify.js`): each print of the first view's row (the tic row's `MSG`, a new one by its
 `MSG_TIME`) is kept with the game's clock, the view draws the last four not yet three seconds old at the top

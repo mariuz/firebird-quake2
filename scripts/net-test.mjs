@@ -75,6 +75,20 @@ guest.sendSay('x'.repeat(200));
 check(said?.length === 150, 'and is cut at 150 characters, as Quake cut a say');
 said = null; guest.sendSay('   ');
 check(said === null, 'nothing said, nothing to the host');
+// a game command typed at the guest's console (Cmd_ForwardToServer): it reaches the host cut to the game's sizes, which runs
+// player_command for the guest's client: godmode on the second client, its message line answering, the first untouched
+const forwarded = [];
+host.onConsole = async (c, a) => { forwarded.push([c, a]); await db.query('SELECT msg FROM player_command(?, ?, ?)', [c, a, 2]); };
+guest.sendConsole(' god ', '');
+await new Promise((r) => setTimeout(r, 50));
+const godFlags = await q('SELECT p.id, e.flags, p.msg FROM player p JOIN ents e ON e.id = p.ent_id ORDER BY p.id');
+check(forwarded.length === 1 && forwarded[0][0] === 'god' && (godFlags[1].FLAGS & 16) !== 0 && godFlags[1].MSG === 'godmode ON' && (godFlags[0].FLAGS & 16) === 0,
+  `a guest's god reaches the host and runs for the second client alone (${JSON.stringify(godFlags.map((r) => [r.ID, r.FLAGS & 16, r.MSG]))})`);
+guest.sendConsole('x'.repeat(40), 'y'.repeat(80));
+check(forwarded[1][0].length === 32 && forwarded[1][1].length === 64, 'a command and its argument are cut to the game\'s sizes');
+guest.sendConsole('god', '');
+await new Promise((r) => setTimeout(r, 50));
+check(((await q('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0].FLAGS & 16) === 0, 'and god again puts it off');
 guest.sendInfo({ name: 'Rimmer, Arnold J.', hand: 1 });
 check(infoSeen && infoSeen.name === 'Rimmer, Arnold ' && infoSeen.hand === 1 && host.info === infoSeen, `the host gets the guest's name (cut at fifteen) and hand (${JSON.stringify(infoSeen)})`);
 await session.setUserinfo(2, host.info);
