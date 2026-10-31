@@ -306,6 +306,12 @@ export class Session {
     return this.unpackText(this.storage?.getItem(key));
   }
 
+  /** A slot's text as stored (what a save file holds) with its header, or null for an empty slot. */
+  slotText(i) {
+    const text = this.storage?.getItem(SLOT_KEY(i));
+    try { const header = saveHeader(text); return header ? { text, header } : null; } catch { return null; }
+  }
+
   /** The slots' headers for the load and save menus, read without inflating anything. */
   slots() {
     return Array.from({ length: SLOTS }, (_, i) => {

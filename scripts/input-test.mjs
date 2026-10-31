@@ -96,6 +96,10 @@ check(readPad(null) === null, 'no pad reads as null');
   inp.key('KeyG'); check(cmd()[8] === 6, 'G is the hand grenades (6)');
   inp.key('Slash'); check(cmd()[8] === 12, '/ is the next weapon (12)');
   inp.key('BracketRight'); check(cmd()[8] === 14, '] is the inventory\'s next (14)');
+  inp.key('KeyQ'); check(cmd()[8] === 16, 'Q uses the quad (16)');
+  inp.key('KeyL'); check(cmd()[8] === 18, 'L uses the silencer (18: default.cfg\'s s, the page\'s back)');
+  inp.key('KeyH'); check(cmd()[8] === 21, 'H uses the power shield (21: default.cfg\'s p, the page\'s pause)');
+  check(GAME_KEYS.has('KeyL') && GAME_KEYS.has('KeyH'), 'both are game keys the browser must not act on');
   check(GAME_KEYS.has('KeyW') && GAME_KEYS.has('Tab') && !GAME_KEYS.has('F6'), 'the game keys the browser must not act on are listed, the page\'s own are not');
   // the binds (settings.binds, the keys menu): the keys read are whatever each action is bound to
   check(inp.bound('KeyW') === 'forward' && inp.bound('ControlRight') === 'attack' && inp.bound('F1') === 'help' && inp.bound('KeyZ') === null, 'a key says what it is bound to (the right control as the control)');
@@ -118,7 +122,7 @@ check(readPad(null) === null, 'no pad reads as null');
     && keyName('BracketLeft') === '[' && keyName('PageDown') === 'PGDN' && keyName('F1') === 'F1' && keyName('Numpad5') === 'KP_5' && keyName('Delete') === 'DEL',
     'the keys are named as Key_KeynumToString named them');
   check(normalizeKey('ShiftLeft') === 'Shift' && normalizeKey('AltRight') === 'Alt' && normalizeKey('KeyA') === 'KeyA', 'the two shifts, controls and alts are one key each');
-  check(ACTIONS.length === 18 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
+  check(ACTIONS.length === 20 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
     'every action has its default keys, no key twice');
   inp.clear();
   inp.mouse(100, -50, settings); c = cmd();

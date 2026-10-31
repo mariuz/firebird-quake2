@@ -307,15 +307,22 @@ export class Menu {
     this.push(m);
   }
 
-  /** M_Menu_LoadGame_f: the fifteen slots, the autosave (save0) set apart above the rest */
+  /**
+   * M_Menu_LoadGame_f: the fifteen slots, the autosave (save0) set apart above the rest. This port's own: d on a
+   * slot with a game writes it as a file (the host's downloadSlot), the menu staying up; the status bar says so.
+   */
   loadMenu() {
     const slots = this.host.slots();
     const items = slots.map((s, i) => action(s.valid ? s.name : '<EMPTY>', i * 10 + (i > 0 ? 10 : 0),
-      () => { this.off(); if (s.valid) this.host.loadSlot(i); }, { left: true }));
+      () => { this.off(); if (s.valid) this.host.loadSlot(i); }, { left: true, statusbar: s.valid && this.host.downloadSlot ? 'enter loads, d writes the game as a file' : null }));
     const m = this.framework({ id: 'load', banner: 'm_banner_load_game', items, cursor: this.loadCursor });
     m.layout = (r) => { m.x = (r.w >> 1) - 120; m.y = (r.h >> 1) - 58; };
     // LoadGame_MenuKey: leaving, the save menu's cursor follows (one slot less: it has no autosave)
     m.onEnter = m.onEscape = () => { this.loadCursor = m.cursor; this.saveCursor = Math.max(0, m.cursor - 1); };
+    m.key = (code, char) => {
+      if (code === 'KeyD' && slots[m.cursor]?.valid && this.host.downloadSlot) { this.host.downloadSlot(m.cursor); return MENU_IN; }
+      return this.defaultKey(m, code, char);
+    };
     this.push(m);
   }
 

@@ -658,13 +658,16 @@ menus are frameworks of actions, sliders, spin controls and separators laid out 
 (labels right-aligned before the column, values after it, the blinking cursor between), drawn into the
 frame after ref_soft's stippled fade. While one is up `frame()` repaints the last view under it and runs
 no tics. The page's `host` object gives the menus what they act on: new games, the save slots
-(`firebird-quake2:save:save0` … `save14` in `localStorage`, each with Quake 2's comment), and the
-settings, which go through the page's own controls so both agree. The game menu's `credits` scrolls
+(`firebird-quake2:save:save0` … `save14` in `localStorage`, each with Quake 2's comment; `d` on a slot of
+the load menu is this port's own, the slot written as a file through the host's `downloadSlot`, the menu
+staying up and its status bar offering it), and the settings, which go through the page's own controls so
+both agree. The game menu's `credits` scrolls
 menu.c's `idcredits` (`src/credits.js`) up the screen as `M_Credits_MenuDraw` did: a line every ten
 pixels rising a pixel every 40 ms, the `+` lines in the highlighted font, round again once the last is off
 the top, Escape to leave. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
-high for each of the eighteen bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
-mouse look, keyboard look, sidestep and centre view) with its keys named as `Key_KeynumToString` named them
+high for each of the twenty bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
+mouse look, keyboard look, sidestep and centre view, and the silencer and the power shield, default.cfg's
+`s` and `p`, which are the page's back and pause: `l` and `h` here) with its keys named as `Key_KeynumToString` named them
 (`keyName`: letters and digits as themselves, `UPARROW`, `CTRL`, `PGDN`…, "or" between two, `???` for
 none); Enter waits for a key (the cursor an `=`, the status bar asking) and the next key pressed binds it
 (`bindKey`: the key leaves whatever it was bound to, an action keeps two and a third makes both go first,
@@ -673,7 +676,7 @@ are `settings.binds` (action → key codes, the two shifts, controls and alts on
 way in from storage like every setting, and the `Input` reads the same object each tic (`read` asks
 whether any key bound to an action is down; a one-shot action's impulse comes from `key`); the options'
 reset defaults puts them back as `exec default.cfg` did. The weapon and item keys stay fixed, as Quake's
-menu did not list them. The multiplayer menu's `player setup` is `M_Menu_PlayerConfig_f` (the servers stay
+menu did not list them, the silencer's and the power shield's aside (they had to move). The multiplayer menu's `player setup` is `M_Menu_PlayerConfig_f` (the servers stay
 greyed: the network game has the page's own buttons): a text field for the name (`menufield_s` as `Field_Draw`
 and `Field_Key` had it: the box of frame pieces, the blinking cursor, the printable keys and Backspace,
 fifteen characters) and a spin for the handedness (right, left, center); the model and skin boxes wait on a
@@ -693,7 +696,8 @@ model ids' names, and the unit's other levels as they were left (`exportLevel`'s
 gets them back), and keeps them in `localStorage` as `src/savestore.js` packs them: a header line
 (the map, the comment, the version) and the JSON gzipped and base64'd, a tenth of the JSON, so the
 fifteen slots fit the origin's quota (a plain JSON save from before still reads). The same text is a save
-file: the page's Download writes the game as `<map>-<time>.q2sav` (`Session.packGame`, no slot) and its
+file: the page's Download writes the game as `<map>-<time>.q2sav` (`Session.packGame`, no slot), `d` on a
+slot of the load menu writes that slot as it is stored (`Session.slotText`, `save<n>-<map>.q2sav`), and its
 Load takes a file (`Session.unpackText`: the save, or null for anything else; the page refuses another
 `SAVE_VERSION`) into the same load as a slot's, so a game moves between browsers. `F9` reloads the map, empties the four tables, inserts the
 saved rows with model ids remapped by name, restarts `ent_seq` above the highest id and resets the

@@ -14,12 +14,13 @@ import { readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON, TURN,
 export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
   'BracketLeft', 'BracketRight', 'Enter',
   'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
-  'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
+  'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'KeyL', 'KeyH', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
 
 // default.cfg: 1-5 blaster to chaingun, 6 grenade launcher … 0 BFG10K, G "use grenades"
 // (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher);
 // the item keys: q quad damage, i invulnerability, b rebreather, e environment suit (s, the silencer, and p,
-// the power shield, are the page's back and pause). The rest of the keys are the bindable actions below.
+// the power shield, are the page's back and pause: those two are bindable actions below, l and h by default).
+// The rest of the keys are the bindable actions below.
 export const KEY_IMPULSE = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5, Digit6: 7, Digit7: 8, Digit8: 9, Digit9: 10, Digit0: 11, KeyG: 6,
   KeyQ: 16, KeyI: 17, KeyB: 19, KeyE: 20 };
 
@@ -32,12 +33,14 @@ export const ACTIONS = [
   { id: 'lookup', name: 'look up' }, { id: 'lookdown', name: 'look down' }, { id: 'moveup', name: 'up / jump' }, { id: 'movedown', name: 'down / crouch' },
   { id: 'inven', name: 'inventory' }, { id: 'invuse', name: 'use item', impulse: 13 }, { id: 'invprev', name: 'prev item', impulse: 15 }, { id: 'invnext', name: 'next item', impulse: 14 },
   { id: 'help', name: 'help computer' },
+  // default.cfg's "use silencer" (s) and "use power shield" (p), whose keys the page has (back, pause): bound to l and h
+  { id: 'silencer', name: 'silencer', impulse: 18 }, { id: 'shield', name: 'power shield', impulse: 21 },
 ];
 // default.cfg's keys for them (and this port's WASD, F and the page keys), at most two a command as the keys menu shows
 export const DEFAULT_BINDS = Object.freeze({
   attack: ['Control', 'KeyF'], weapnext: ['Slash'], forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
   run: ['Shift'], moveleft: ['KeyA', 'Comma'], moveright: ['KeyD', 'Period'], lookup: ['PageUp'], lookdown: ['PageDown'], moveup: ['Space'], movedown: ['KeyC'],
-  inven: ['Tab'], invuse: ['Enter'], invprev: ['BracketLeft'], invnext: ['BracketRight'], help: ['F1'],
+  inven: ['Tab'], invuse: ['Enter'], invprev: ['BracketLeft'], invnext: ['BracketRight'], help: ['F1'], silencer: ['KeyL'], shield: ['KeyH'],
 });
 /** A fresh copy of the default binds (each action's keys its own array). */
 export const defaultBinds = () => Object.fromEntries(Object.entries(DEFAULT_BINDS).map(([k, v]) => [k, [...v]]));
