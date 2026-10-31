@@ -137,6 +137,19 @@ await con.submit('deldemo run');
 check(status.at(-1)?.[0] === 'no recording "run"' && status.at(-1)?.[1] === true, 'one not kept is refused');
 await con.submit('demos');
 check(status.at(-1)?.[0] === 'demos: q2demo1; recorded: mine', 'and the list says so');
+// a joined page: the game commands go to the host (forward true), not to this page's idle database
+{
+  const forwarded = [];
+  let joined = true;
+  host.forward = (c, a) => { if (!joined) return false; forwarded.push([c, a]); return true; };
+  const n = calls.length;
+  await con.submit('give all');
+  check(forwarded.length === 1 && forwarded[0].join(' ') === 'give all' && calls.length === n, 'joined, give all goes to the host and not to the database here');
+  joined = false;
+  await con.submit('god');
+  check(forwarded.length === 1 && calls.length === n + 1 && last().startsWith('query SELECT msg FROM player_command'), 'alone, it runs here');
+  delete host.forward;
+}
 host.db.query = async () => { throw new Error('boom'); };
 await con.submit('kill');
 check(status.at(-1)?.[0] === 'kill: boom' && status.at(-1)?.[1] === true, 'an error from the game is shown with the command');

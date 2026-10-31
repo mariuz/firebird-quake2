@@ -34,7 +34,8 @@ const HISTORY = 32;
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
  *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), setSetting(key, value) (the cvars: through the page's controls and the userinfo),
  *         download(name, text) (writeconfig), execConfig() (exec: the page's file picker, whose file runs through execText),
- *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's) }
+ *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
+ *         forward(cmd, arg) → true when the command went to the host (a joined page), false to run it here }
  */
 /** The cvars config.cfg carries (CVARS, and fov and skill with them), each with its setting and how it shows. */
 const CONFIG_CVARS = () => ({ ...CVARS, fov: { key: 'fov', show: (v) => String(v) }, skill: { key: 'skill', show: (v) => String(v) } });
@@ -348,6 +349,7 @@ export class Console {
       }
       default:
         if (!h.isRunning()) return;
+        if (h.forward?.(cmd, arg)) return;   // (a joined page: the command goes to the host, which runs it for this page's client, as Cmd_ForwardToServer sent it)
         try { await h.db.query('SELECT msg FROM player_command(?, ?)', [cmd, arg]); }
         catch (err) { console.error(err); say(`${cmd}: ${err.message}`, true); }
     }

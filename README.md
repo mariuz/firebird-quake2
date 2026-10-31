@@ -67,8 +67,9 @@ WebRTC data channel, its own move predicted ahead of them as the Quake 2 client 
 the traces have a JS twin, `src/pmove.js`, held to the SQL's numbers). Host again while hosting makes an offer
 for the next player, who joins the game as it runs, a channel each; a joined page that ticks "spectate" only
 watches, with no body in the game; `say <text>` at any page's console (`T` opens it with `say ` typed) puts the
-words on every player's message line by the speaker's name; the host's menu and `P` do not stop a shared
-game, as Quake 2 paused single player alone. There is no signalling server on a static site, so the texts go by hand,
+words on every player's message line by the speaker's name, and a joined page's game commands (`god`, `give`,
+`kill`…) run at the host for its player; the host's menu and `P` do not stop a shared game, as Quake 2
+paused single player alone. There is no signalling server on a static site, so the texts go by hand,
 or through a relay of your own: `npm run signal` runs one (`scripts/signal.mjs`, a small HTTP server with
 four-letter room codes), `rtc_signal http://host:8787` at the console of both pages points them at it, and
 Host then shows a code for the other player to type after Join (the page on Pages is https, which reaches

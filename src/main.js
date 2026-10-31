@@ -275,6 +275,8 @@ const con = new Console({
   say: (text) => sayText(text),
   setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
   download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
+  // a joined page's game commands (god, give, kill…) go to the host, which runs them for this page's client (Cmd_ForwardToServer)
+  forward: (cmd, arg) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendConsole(cmd, arg); return true; },
   // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)
   setTimescale: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; timescale = n; lastTic = performance.now(); } return timescale; },
   execConfig: () => $('cfg-file').click(),              // (exec: the Config control's picker; its file runs through execText)
@@ -1300,6 +1302,8 @@ async function hostAccept(peer, text) {
   // the guest's name and hand are its client's (ClientUserinfoChanged), now and with every map
   g.host.onInfo = (info) => { if (net?.guests.includes(g)) session.setUserinfo(g.client, info).catch((err) => console.warn('userinfo:', err.message)); };
   g.host.onSay = (text) => { if (net?.guests.includes(g) && map && !demo) session.say(g.client, text).catch((err) => console.warn('say:', err.message)); };
+  // the guest's game commands run here for its client (the answer goes to its message line, as player_command prints it)
+  g.host.onConsole = (cmd, arg) => { if (net?.guests.includes(g) && map && !demo && running) db.query('SELECT msg FROM player_command(?, ?, ?)', [cmd, arg, g.client]).catch((err) => console.warn('a guest\'s command:', err.message)); };
   netEl.panel.hidden = true;
   canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
   netState(`hosting: ${guestsState()}`);
