@@ -191,10 +191,16 @@ try {
     assert((await menuId()) === null, 'and the menus close');
     // the mouse: the left button fires under the lock (MOUSE1, attack's second default key), the wheel changes weapon,
     // and in the keys menu a button binds (Enter on attack, then the right button)
-    await page.mouse.click(480, 360); await sleep(300);   // (the lock)
+    // (the lock: Chromium refuses a request made too soon after the menus let the pointer go, so the click is
+    // tried until the canvas holds it, and the button held until a shot is heard, a slow runner allowed its time)
+    const locked = () => page.evaluate(() => document.pointerLockElement === document.getElementById('screen')).catch(() => false);
+    for (let i = 0; i < 10 && !(await locked()); i++) { await page.mouse.click(480, 360); await sleep(500); }
+    assert(await locked(), 'a click on the view locks the pointer');
     const sm0 = await shots();
-    await page.mouse.down(); await sleep(700); await page.mouse.up(); await sleep(300);
-    const sm1 = await shots();
+    await page.mouse.down();
+    let sm1 = sm0;
+    for (let i = 0; i < 30 && !(sm1 > sm0); i++) { await sleep(200); sm1 = await shots(); }
+    await page.mouse.up(); await sleep(300);
     assert(sm1 > sm0, `the left mouse button fires the blaster under the lock (${sm0} → ${sm1} shots)`);
     await page.evaluate(() => document.exitPointerLock?.()); await sleep(400);
     if ((await menuId()) !== 'main') await press('Escape');   // (the pointer let go brings the main menu up by itself)
