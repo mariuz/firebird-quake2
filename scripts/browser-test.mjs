@@ -440,6 +440,20 @@ try {
     const uk = await page.evaluate(() => window.quake2.settings.lines.KeyK ?? null).catch(() => 'x');
     assert(bk.line === 'god' && bk.stored === 'god' && bk.status === '"k" = "god"' && g0 === 0 && g1 === 16 && g2 === 0 && uk === null,
       `bind k god binds K to the line, kept in the settings; K switches godmode on and K again off; unbind k takes it off (${JSON.stringify({ bk, g0, g1, g2, uk })})`);
+    // centerview (default.cfg's END): End levels the view first (the runner's pointer lock swung it to the limit once), the
+    // look-down key pitches it down (the mouse under a lock is the runner's to refuse or swing), End levels it again
+    const pitchNow = () => page.evaluate(() => window.quake2.session.last.PITCH).catch(() => 99);
+    await page.keyboard.press('End');
+    let level0 = 99;
+    for (let i = 0; i < 20 && Math.abs(level0) > 0.5; i++) { await sleep(150); level0 = await pitchNow(); }
+    await page.keyboard.down('PageDown'); await sleep(400); await page.keyboard.up('PageDown');
+    let pitched = 0;
+    for (let i = 0; i < 20 && !(pitched > 3); i++) { await sleep(150); pitched = await pitchNow(); }
+    await page.keyboard.press('End');
+    let level = pitched;
+    for (let i = 0; i < 20 && Math.abs(level) > 0.5; i++) { await sleep(150); level = await pitchNow(); }
+    assert(Math.abs(level0) <= 0.5 && pitched > 3 && Math.abs(level) <= 0.5 && (await page.evaluate(() => window.quake2.settings.lines.End).catch(() => null)) === 'centerview',
+      `End levels the view (${level0.toFixed(1)}), PgDn pitches it down (${pitched.toFixed(1)}) and End, bound to centerview by default, levels it again (${level.toFixed(1)})`);
     // `;` and alias at the console: god; noclip runs both, an alias names the line and runs it by name (Cmd_Alias_f)
     const cheats = () => page.evaluate(() => window.quake2.sql('SELECT e.flags, e.movetype FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1').then((r) => ({ god: (r[0].FLAGS & 16) !== 0, noclip: r[0].MOVETYPE === 2 }))).catch(() => null);
     await typeCommand('alias both "god; noclip"');

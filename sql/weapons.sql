@@ -586,6 +586,9 @@ BEGIN
       ELSE BEGIN UPDATE player p SET p.chase = :num WHERE p.id = :client; msg = 'chasing player ' || num; END
     END
   END
+  ELSE IF (cmd = 'centerview') THEN
+    -- IN_CenterView: the view level again (the pitch the client's angles held, here the player's)
+    UPDATE player p SET p.pitch = 0 WHERE p.ent_id = :pe;
   ELSE IF (cmd = 'kill') THEN
   BEGIN
     -- suicide: godmode does not save you from it

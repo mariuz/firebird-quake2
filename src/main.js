@@ -27,7 +27,7 @@ import { SAVE_VERSION } from './savegame.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS, ITEMS, ARMOR_ICONS, TIMER_ICONS } from './gamedata.js';
 import { padMenuKeys, padScreens, BUTTON } from './gamepad.js';
-import { Input, GAME_KEYS, DEFAULT_BINDS, MOUSE_KEYS, bindKey, boundLine } from './input.js';
+import { Input, GAME_KEYS, DEFAULT_BINDS, MOUSE_KEYS, bindKey, boundLine, defaultLines } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
 import { Notify } from './notify.js';
@@ -206,7 +206,7 @@ const menu = new Menu({
   get: (k) => (k === 'fullscreen' ? !!document.fullscreenElement : k === 'players' ? PLAYER_CHOICES.indexOf(playersValue()) : settings[k]),
   set: (k, v) => setSetting(k, v),
   // ControlsResetDefaultsFunc ran default.cfg: the options and the keys go back
-  resetDefaults: () => { for (const [k, v] of Object.entries(OPTIONS_RESET)) setSetting(k, v); for (const [a, keys] of Object.entries(DEFAULT_BINDS)) settings.binds[a] = [...keys]; settings.lines = {}; saveSettings(); },   // (default.cfg began with unbindall: the lines go too)
+  resetDefaults: () => { for (const [k, v] of Object.entries(OPTIONS_RESET)) setSetting(k, v); for (const [a, keys] of Object.entries(DEFAULT_BINDS)) settings.binds[a] = [...keys]; settings.lines = defaultLines(); saveSettings(); },   // (default.cfg began with unbindall: the lines go, but for its own END centerview)
   bind: (action, code) => { bindKey(settings.binds, action, code, settings.lines); saveSettings(); },
   unbind: (action) => { settings.binds[action] = []; saveSettings(); },
   credits: () => CREDITS,

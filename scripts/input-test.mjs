@@ -4,7 +4,7 @@
 //   node scripts/input-test.mjs
 
 import { readPad, padImpulse, padScreens, padMenuKeys, firstPad, connectedPads, axis, DEAD, BUTTON } from '../src/gamepad.js';
-import { Input, GAME_KEYS, ACTIONS, DEFAULT_BINDS, defaultBinds, bindKey, bindLine, unbindKey, boundLine, checkLine, keyName, keyCode, actionOfCommand, normalizeKey } from '../src/input.js';
+import { Input, GAME_KEYS, ACTIONS, DEFAULT_BINDS, DEFAULT_LINES, defaultBinds, bindKey, bindLine, unbindKey, boundLine, checkLine, keyName, keyCode, actionOfCommand, normalizeKey } from '../src/input.js';
 
 let failures = 0;
 const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if (!ok) failures++; };
@@ -136,6 +136,20 @@ check(readPad(null) === null, 'no pad reads as null');
   check(c[6] === 0 && c[8] === 0 && inp.binds.weapprev.length === 0, 'the wheel bound to a held action does nothing (let go at once), and leaves its old action');
   check(keyName('Mouse1') === 'MOUSE1' && keyName('Mouse3') === 'MOUSE3' && keyName('MWheelUp') === 'MWHEELUP' && keyName('MWheelDown') === 'MWHEELDOWN', 'named as Key_KeynumToString named them');
   inp.binds = defaultBinds();
+  // +strafe and +klook (CL_BaseMove, CL_AdjustAngles): ALT held, the turning keys step sideways and turn nothing; INS held,
+  // the walking keys look up and down and walk nothing; centerview is a console word, END's by default
+  inp.clear(); inp.key('AltLeft'); inp.key('ArrowRight'); c = cmd();
+  check(c[2] === 1 && c[3] === 0 && inp.bound('AltRight') === 'strafe', 'Alt held, the right arrow steps right and turns nothing (+strafe)');
+  inp.key('ArrowLeft'); c = cmd();
+  check(c[2] === 0 && c[3] === 0, 'both arrows held step nowhere');
+  inp.clear(); inp.key('Insert'); inp.key('KeyW'); c = cmd();
+  check(c[1] === 0 && c[4] === -5 && inp.bound('Insert') === 'klook', 'Insert held, W looks up and walks nothing (+klook)');
+  inp.release('KeyW'); inp.key('KeyS'); c = cmd(2);
+  check(c[1] === 0 && c[4] === 10, 'S looks down, scaled with the tics');
+  inp.clear(); inp.key('KeyW'); c = cmd();
+  check(c[1] === 1 && c[4] === 0, 'let go, W walks again');
+  check(GAME_KEYS.has('AltLeft') && GAME_KEYS.has('Insert') && GAME_KEYS.has('End') && DEFAULT_LINES.End === 'centerview' && keyName('End') === 'END' && keyName('Insert') === 'INS',
+    'Alt, Insert and End are game keys, END bound to centerview by default, named as Quake named them');
   // the browser events wired by attach: a button under the lock is a key down and up, the wheel a notch, a button outside the lock nothing
   {
     const on = {};
@@ -180,7 +194,7 @@ check(readPad(null) === null, 'no pad reads as null');
     check(checkLine('  give all ') === 'give all' && checkLine('') === null && checkLine('x'.repeat(128)) !== null && checkLine('x'.repeat(129)) === null && checkLine('say\nhi') === null && checkLine(null) === null,
       'checkLine trims, and refuses nothing, past 128 characters or a control character');
   }
-  check(ACTIONS.length === 22 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
+  check(ACTIONS.length === 24 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
     'every action has its default keys, no key twice');
   inp.clear();
   inp.mouse(100, -50, settings); c = cmd();
