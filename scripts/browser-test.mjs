@@ -359,6 +359,17 @@ try {
     const iceOff = await page.evaluate(() => window.quake2.settings.rtcIce).catch(() => null);
     assert(ice.setting === 'turn:relay.example.org:3478 ace secret' && ice.stored === ice.setting && /rtc_ice: turn:relay.example.org:3478 for the next network game/.test(ice.status ?? '') && iceOff === '',
       `rtc_ice keeps a TURN server in the settings for the next network game, and none clears it (${JSON.stringify(ice)})`);
+    // the settings as cvars: sensitivity and name set at the console reach the settings (stored), the name the game's
+    // player row as the player setup's does; cvarlist shows them
+    await typeCommand('sensitivity 5');
+    await typeCommand('name Ace');
+    let cvName = '';
+    for (let i = 0; i < 20 && cvName !== 'Ace'; i++) { await sleep(250); cvName = await page.evaluate(() => window.quake2.session.last.NETNAME).catch(() => ''); }
+    await typeCommand('cvarlist');
+    const cv = await page.evaluate(() => ({ sens: window.quake2.settings.sensitivity, stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).sensitivity, name: window.quake2.settings.name, list: document.getElementById('status')?.textContent })).catch(() => ({}));
+    await typeCommand('sensitivity 7'); await typeCommand('name ""');
+    assert(cv.sens === 5 && cv.stored === 5 && cv.name === 'Ace' && cvName === 'Ace' && /sensitivity "5"/.test(cv.list ?? '') && /name "Ace"/.test(cv.list ?? ''),
+      `sensitivity and name at the console reach the settings and the game's row, cvarlist shows them (${JSON.stringify(cv)})`);
     // bind and unbind at the console: Quake's words over the keys menu's binds, kept in the settings and read by the input
     await typeCommand('bind j +attack');
     const bj = await page.evaluate(() => ({ attack: window.quake2.settings.binds.attack.join(), stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).binds.attack.join(), input: window.quake2.input.bound('KeyJ'), status: document.getElementById('status')?.textContent })).catch(() => ({}));

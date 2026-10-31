@@ -657,7 +657,9 @@ loading plaque. `F1` toggles the help computer (`HelpComputer`): skill, level na
 
 The console: the backquote opens a command line over the view. `map <name>`, `save`, `load`, `fov`,
 `seed` and `skill` are the page's (`skill 0`–`3`: the next map's skill, 3 the nightmare the menus stop short
-of, latched as the cvar was: "skill will be changed for next game."), as are `bind`, `unbind`, `unbindall` and
+of, latched as the cvar was: "skill will be changed for next game."), as are the settings as cvars (`name`,
+`hand`, `sensitivity`, `cl_run`, `m_pitch`, `crosshair`, `s_volume`, `cd_volume`: shown alone, set with a
+word through the page's `setSetting` so its controls, the menus and the userinfo follow; `cvarlist`), and `bind`, `unbind`, `unbindall` and
 `bindlist` over the keys menu's binds (`bind k +attack`: the key by the name the menu shows, `keyCode` being
 `Key_StringToKeynum`, the action by bindnames' command, `actionOfCommand`; `bind k` shows `"k" = "+attack"`
 as `Key_Bind_f` did), `timedemo` (above) and `screenshot` (the view downloaded as `quakeNN.png`, as

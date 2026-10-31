@@ -546,9 +546,14 @@ wants: in the order they are to be taken.
   painting there), `P` does nothing on a host with guests or on a guest, and a guest's connecting lifts a pause
   the host had on. The browser test, with the guest connected, sees the host's frames and the guest's keep
   coming under the host's main menu and after its `P`.
-- **The settings as cvars at the console**: `name`, `hand`, `sensitivity`, `cl_run`, `m_pitch` (negative
-  inverts, as the invert mouse option set it), `crosshair`, `s_volume` and `cd_volume`, shown alone and set
-  with a value, kept with the settings as the menus set them, and `cvarlist` to list them.
+- **The settings as cvars at the console**: done. `name`, `hand`, `sensitivity`, `cl_run`, `m_pitch` (0.022, or
+  -0.022 to invert, as the invert mouse option sets it), `crosshair`, `s_volume` and `cd_volume` (0 to 1) are
+  console commands over the settings, as `Cvar_Command` took a cvar's name: alone they show the value as the
+  cvar showed it, with a word they set it through the page's `setSetting` (so the page's controls, the menus
+  and the userinfo follow, the name reaching the player's row), clamped or refused with the range (`CVARS` in
+  `src/console.js`); `name ""` clears the name; `cvarlist` lists them with `fov` and `skill` on the one line.
+  `test:console` runs each: shown, set, clamped, refused, the list; the browser test sets the sensitivity and
+  the name at the console and finds them in the settings, the storage, the game's row and the list.
 - **`writeconfig` and `exec`**: the settings and the binds as a Quake cfg file downloaded (`bind k +attack`,
   `set name "Ace"`…) and a cfg file executed line by line from a file picked (the saves' file input's kin), so
   a configuration moves between browsers as a save does.

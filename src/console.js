@@ -9,14 +9,30 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 'save', 'say', 'say_team', 'screenshot', 'seed', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'unbind', 'unbindall', 'use'];
+export const COMMANDS = ['bind', 'bindlist', 'cd_volume', 'cl_run', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'hand', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'm_pitch', 'map', 'name', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'screenshot', 'seed', 'sensitivity', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'unbind', 'unbindall', 'use'];
+
+/**
+ * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
+ * setting each stands for, its value as the cvar showed it and the setting's value from a word typed (null for one
+ * the cvar refuses). m_pitch is 0.022 or -0.022 (the invert mouse option), s_volume and cd_volume 0..1, cl_run 0 or 1.
+ */
+export const CVARS = {
+  name: { key: 'name', show: (v) => String(v ?? ''), read: (w) => (/^[\x20-\x7e]{0,15}$/.test(w) ? w : null), help: 'at most 15 printable characters' },
+  hand: { key: 'hand', show: (v) => String(v), read: (w) => ([0, 1, 2].includes(Number(w)) ? Number(w) : null), help: '0 right, 1 left, 2 center' },
+  sensitivity: { key: 'sensitivity', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.max(1, Math.min(20, n)) : null; }, help: '1 to 20' },
+  cl_run: { key: 'alwaysRun', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1' },
+  m_pitch: { key: 'invertMouse', show: (v) => (v ? '-0.022' : '0.022'), read: (w) => { const n = Number(w); return Number.isFinite(n) && n !== 0 ? n < 0 : null; }, help: '0.022, or -0.022 to invert' },
+  crosshair: { key: 'crosshair', show: (v) => String(v), read: (w) => (/^[0-3]$/.test(w) ? Number(w) : null), help: '0 to 3' },
+  s_volume: { key: 'sfx', show: (v) => (v / 100).toFixed(2), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.round(Math.max(0, Math.min(1, n)) * 100) : null; }, help: '0 to 1' },
+  cd_volume: { key: 'music', show: (v) => (v / 100).toFixed(2), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.round(Math.max(0, Math.min(1, n)) * 100) : null; }, help: '0 to 1' },
+};
 const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
  *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
- *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text) }
+ *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), setSetting(key, value) (the cvars: through the page's controls and the userinfo) }
  */
 export class Console {
   constructor(host) {
@@ -81,6 +97,25 @@ export class Console {
         const has = h.hasDemo ? h.hasDemo(name) : h.pak.has(`demos/${name}.dm2`);
         if (!name || !has) { say(`no demo "${name}" in this pak`, true); return; }
         await h.timedemo?.(name);
+        return;
+      }
+      case 'name': case 'hand': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume': {
+        // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
+        // page's setSetting, so the menus and the page's controls agree; a word the cvar refuses leaves it
+        const name = cmd.toLowerCase(), cv = CVARS[name];
+        const now = cv.show(h.settings[cv.key]);
+        const word = name === 'name' ? arg.replace(/^"(.*)"$/, '$1') : arg;   // (name "" clears the name)
+        if (!arg) { say(`"${name}" is "${now}"`); return; }
+        const value = cv.read(word);
+        if (value === null) { say(`${name} takes ${cv.help}`, true); return; }
+        h.setSetting(cv.key, value);
+        say(`"${name}" is "${cv.show(h.settings[cv.key])}"`);
+        return;
+      }
+      case 'cvarlist': {
+        // Cvar_List_f: the cvars with their values, on the one line the page has (fov and skill with them)
+        const all = { ...CVARS, fov: { key: 'fov', show: (v) => String(v) }, skill: { key: 'skill', show: (v) => String(v) } };
+        say(Object.entries(all).map(([n, c]) => `${n} "${c.show(h.settings[c.key])}"`).join(' · '), false, 8000);
         return;
       }
       case 'say': case 'say_team': {
