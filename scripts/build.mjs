@@ -33,6 +33,9 @@ fs.mkdirSync(OUT, { recursive: true });
 // meet an old script; asked for by a new URL, every file of the new build is
 // fetched new. (The retired service worker used to revalidate them instead.)
 const BUILD = Date.now().toString(36);
+// the versions the console's `version` names: the page's (package.json) and the engine package's
+const VERSION = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+const FBWASM = JSON.parse(fs.readFileSync(path.join(root, 'node_modules/firebird-wasm/package.json'), 'utf8')).version;
 
 await build({
   entryPoints: [path.join(root, 'src/main.js')],
@@ -44,7 +47,7 @@ await build({
   sourcemap: true,
   minify: true,
   loader: { '.sql': 'text' },
-  define: { __BUILD__: JSON.stringify(BUILD) },
+  define: { __BUILD__: JSON.stringify(BUILD), __VERSION__: JSON.stringify(VERSION), __FBWASM__: JSON.stringify(FBWASM) },
   external: EXTERNAL,
   logLevel: 'warning',
 });

@@ -757,8 +757,14 @@ pak. In the order they are to be taken.
   holds each switch to its numbers and the levelling to its one case; `test:menu` turns the three boxes;
   `test:console` the five cvars, `cvarlist` and `writeconfig` with them; the browser test types `freelook 0` and
   `lookspring 1` and reads them in the settings.
-- **`echo`, `cmdlist`, `version` and `pause`**: cmd.c's `echo` prints its words, `cmdlist` the commands and
-  their count, `version` says which build the page runs, and `pause` is the P key's word (`CL_Pause_f`).
+- **`echo`, `cmdlist`, `version` and `pause`**: done. `echo` prints its words as typed (`Cmd_Echo_f`),
+  `cmdlist` puts every command on a line of the scrollback and says how many (`Cmd_List_f`; the page's
+  `print`), `version` names the page's version and build (`scripts/build.mjs` stamps them into the bundle with
+  the engine package's version) and the engine line, Firebird's version with or without threads, and `pause`
+  is the P key's word (`CL_Pause_f`: a single-player game running pauses or goes on, `togglePause`; a shared
+  game or none, "Pause command is only valid in single player"). `test:console` sees the four reach the host
+  with their answers; the browser test types them on both builds and reads the words, the version string, the
+  count with the scrollback filled, and the game paused and on again.
 - **`wave 0–4`**: `Cmd_Wave_f`: flipoff, salute, taunt, wave and point as the player model's frames (`ANIM_WAVE`
   under `anim_priority`, `G_SetClientFrame` letting them run), said on the line and seen by the other players.
 - **`score` and `putaway`**: `Cmd_Score_f` (the score board by a word, toggled, in coop and deathmatch) and

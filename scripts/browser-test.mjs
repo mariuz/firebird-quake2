@@ -356,6 +356,20 @@ try {
     assert(dumpDl && dumpDl.suggestedFilename() === 'mylog.txt' && /^\]use nosuch\nunknown item: nosuch$/m.test(dumpText) && dumpText.endsWith(']condump mylog\n')
       && Array.isArray(clearedLog.log) && clearedLog.log.length === 0 && !clearedLog.shown,
       `condump writes the scrollback as mylog.txt (${dumpText.split('\n').length - 1} lines) and clear empties it (${JSON.stringify(clearedLog)})`);
+    // echo, cmdlist, version and pause: the words printed, the commands counted (listed in the scrollback), the build named,
+    // the game paused and on again
+    await typeCommand('echo Hello, World!');
+    const echoed = await status();
+    await typeCommand('version');
+    const ver = await status();
+    await typeCommand('cmdlist');
+    const cl = await page.evaluate(() => ({ status: document.getElementById('status').textContent, log: window.quake2.notify.log(100).length })).catch(() => ({}));
+    await typeCommand('pause');
+    const p1 = await page.evaluate(() => window.quake2.paused).catch(() => null);
+    await typeCommand('pause');
+    const p2 = await page.evaluate(() => window.quake2.paused).catch(() => null);
+    assert(echoed === 'Hello, World!' && /^Firebird Quake 2 \d+\.\d+\.\d+ build \w+, firebird-wasm \d+\.\d+\.\d+, Firebird \d/.test(ver) && /^\d+ commands$/.test(cl.status ?? '') && cl.log > 60 && p1 === true && p2 === false,
+      `echo prints its words (${echoed}), version names the build (${ver}), cmdlist counts the commands (${cl.status}, ${cl.log} lines in the scrollback), pause pauses and unpauses (${p1}, ${p2})`);
     // the chat: T (messagemode) opens the console with "say " on its line, and the words go to the message line by the
     // player's name (Cmd_Say_f), drawn in the notify lines
     await page.mouse.click(480, 360); await sleep(200);
