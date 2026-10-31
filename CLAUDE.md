@@ -202,7 +202,7 @@ short stories of what changed and what it measured; keep that.
   animation it names must be in it, and the painter skips a model it has no mesh for. A pak with the MD2 uses
   the MD2's runs instead. Its sounds are queued like any other; the smoke test's sound check lets a monster's
   whole directory be missing from the pak.
-- A client's userinfo (`player.netname`, `player.hand`, `player.spectator`: the player setup's name and hand, and a guest's "spectate") is not the level's:
+- A client's userinfo (`player.netname`, `player.hand`, `player.spectator`, `player.fov`: the player setup's name and hand, a guest's "spectate", and the page's fov, which `view_setup` makes the client's frame at) is not the level's:
   `init_map` and a loaded save make the player table anew, so `Session.userinfo` keeps it and `applyUserinfo`
   writes it after every load; a guest's comes over the link (`info`). Read the hand from the tic row (`HAND`),
   never from the page's settings: the other views' clients have their own.

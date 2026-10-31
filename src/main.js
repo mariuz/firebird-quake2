@@ -82,8 +82,8 @@ const kept = new Set();
 const fileStore = new FileStore();
 let pickedPak = null;    // the name of the picked pak in use, kept or just picked; null on the demo's
 let mapSetup = null;     // what session.startMap returned for the map in (the sky, the CD track: a recording's configstrings)
-/** The view's fov: the host's for a guest (the frustum is the host's), the setting otherwise. */
-const viewFov = () => (netGuest() && net.guest.map ? net.guest.map.view.fov : settings.fov);
+/** The view's fov: the setting, a guest's own too (its userinfo carries it, and the host's frame for it is at that fov). */
+const viewFov = () => settings.fov;
 // src/effects.js: the explosions, beams, tongues and muzzle flashes between frames, and the frame's dynamic lights
 const tempEnts = new Effects({ model: (name) => model(name), sprite: (name) => sprite(name) });
 // src/settings.js: the defaults, the video modes, and the round trip through localStorage, checked on the way in
@@ -239,7 +239,7 @@ function setSetting(k, v) {
  */
 function applyUserinfo() {
   // (only a joined page watches: the host's and a local game's clients play)
-  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 };
+  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, fov: settings.fov };
   if (netGuest()) { if (net.guest?.open) net.guest.sendInfo(info); return; }
   session?.setUserinfo(1, info).catch((err) => console.warn('userinfo:', err.message));
 }
@@ -531,6 +531,7 @@ async function applyView(fov = settings.fov) {
   if (netGuest()) {
     const v = net.guest.map?.view;
     if (v && renderer) renderer.setSize(v.w, v.h, 1);
+    applyUserinfo();   // (the fov is the guest's own: the host's frame for it at the fov it paints with)
     return;
   }
   const views = localViews();

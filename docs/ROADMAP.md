@@ -18,7 +18,7 @@ the order they are to be taken.
   tic's sounds and effects and, when the guest's screen is up, its inventory rows; the guest's page paints
   it as it paints its own, the sounds at its own ear, from the pak and the map's geometry alone
   (`loadMapModels`: no database, no game logic; its own Firebird stands idle). A map message at each
-  level (the sky, the music, the speakers, the host's view, which the guest's frustum must match) and
+  level (the sky, the music, the speakers, the host's view size; the fov is the guest's own since the ninth list) and
   the picture at a unit's end come the same way. The wire is JSON in 16 KB chunks over one data channel,
   10–30 KB a frame, a frame dropped when the channel is 256 KB behind. Signalling is by hand, as Pages
   is static: Host shows the offer as a text of some six hundred characters (the description with its
@@ -717,9 +717,13 @@ The ninth list: what the console and a shared game still lack of Quake 2's own w
   with the settings, given to each map load, the game running taking it at once; the host's, a guest's going
   to the host as its other words do). `test:dm` sees the four refused with the client untouched and run with
   cheats on, `test:console` the word.
-- **A guest's own fov**: a guest sees the host's fov (the map message's view). The guest's `fov` goes with
-  its userinfo, as the fov userinfo did (`ClientUserinfoChanged`), and the host's frame for it is at that fov
-  (`viewcfg` per client).
+- **A guest's own fov**: done. A guest saw the host's fov (the map message's view). The guest's `fov` goes
+  with its userinfo now, as the fov userinfo did (`ClientUserinfoChanged`: clamped to 1..160, on `player.fov`;
+  NULL, the view's), and `view_setup` makes the client's frame at it, so the host's frame for the guest is at
+  the fov the guest paints with (`viewFov` is the page's own setting on every page; `fov <n>` on a joined page
+  sends it again). `test:net` sends a fov with the userinfo and sees the row take it, clamped, and the frame
+  narrower at 30 than at 160; the browser test types `fov 60` at the joined page's console and reads it on the
+  host's row, the frames coming on.
 - **`clear` and `condump`**: the console's scrollback is read in the backquote line alone. `clear` empties it
   (`Con_Clear_f`), `condump <name>` downloads it as `<name>.txt` (`Con_Dump_f`).
 - **`invdrop` and `weaplast`**: bindnames' "drop item" (`invdrop`: the selected item dropped, `Cmd_InvDrop_f`)

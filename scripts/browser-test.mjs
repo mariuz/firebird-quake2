@@ -754,6 +754,19 @@ try {
       }
       assert(Number.isInteger(pinged.host) && pinged.host >= 0 && pinged.host < 1000 && Number.isInteger(pinged.row) && /ping \d+ ms/.test(pinged.stats),
         `the host measures the guest's round trip (${pinged.host} ms), the guest's score board row carries it (${pinged.row} ms) and its stats line says so`);
+      // a guest's own fov: fov 60 at its console goes with its userinfo to the host, onto its row there, whose frame for it is
+      // at that fov (test:net holds the frame's shape to it) and keeps coming; fov 90 puts it back
+      await typeOn(gp, 'fov 60');
+      const framesBefore = (await gstate()).frames;
+      let gfov = {};
+      for (let i = 0; i < 40 && !(gfov.host === 60 && gfov.frames > framesBefore + 5); i++) {
+        await sleep(250);
+        gfov = { host: await page.evaluate(() => window.quake2.sql('SELECT fov FROM player WHERE id = 2').then((r) => r[0].FOV)).catch(() => null), frames: (await gstate()).frames, setting: await gp.evaluate(() => window.quake2.settings.fov).catch(() => null) };
+      }
+      await typeOn(gp, 'fov 90');
+      let gfov2 = null;
+      for (let i = 0; i < 40 && gfov2 !== 90; i++) { await sleep(250); gfov2 = await page.evaluate(() => window.quake2.sql('SELECT fov FROM player WHERE id = 2').then((r) => r[0].FOV)).catch(() => null); }
+      assert(gfov.setting === 60 && gfov.host === 60 && gfov.frames > framesBefore + 5 && gfov2 === 90, `fov 60 at the guest's console is its own: on its row at the host, whose frames keep coming (${JSON.stringify(gfov)}); fov 90 puts it back (${gfov2})`);
       // netgraph 1 at the guest's console: a column a frame from the host along the bottom of its view (the newest a ping
       // column), netgraph 0 stops it; not written to config.cfg
       await typeOn(gp, 'netgraph 1');

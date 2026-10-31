@@ -26,18 +26,19 @@ RETURNS (ex DOUBLE PRECISION, ey DOUBLE PRECISION, ez DOUBLE PRECISION,
          w INTEGER, h INTEGER, scale_ DOUBLE PRECISION, nearz DOUBLE PRECISION,
          kx DOUBLE PRECISION, ky DOUBLE PRECISION, pvs VARCHAR(2048) CHARACTER SET ASCII, cluster INTEGER, leaf INTEGER)
 AS
-DECLARE yaw DOUBLE PRECISION; DECLARE pitch DOUBLE PRECISION; DECLARE fov DOUBLE PRECISION;
+DECLARE yaw DOUBLE PRECISION; DECLARE pitch DOUBLE PRECISION; DECLARE fov DOUBLE PRECISION; DECLARE pfov DOUBLE PRECISION;
 DECLARE sy DOUBLE PRECISION; DECLARE cy DOUBLE PRECISION; DECLARE sp DOUBLE PRECISION; DECLARE cp DOUBLE PRECISION;
 DECLARE stepz DOUBLE PRECISION; DECLARE punch DOUBLE PRECISION; DECLARE dead SMALLINT;
 DECLARE roll DOUBLE PRECISION; DECLARE cr DOUBLE PRECISION; DECLARE sr DOUBLE PRECISION;
 DECLARE t1 DOUBLE PRECISION; DECLARE t2 DOUBLE PRECISION; DECLARE t3 DOUBLE PRECISION;
 BEGIN
   -- the client's eye with the view's bob (SV_CalcViewOffset), the same q2_tic hands the page
-  SELECT e.x, e.y, e.z + p.view_ofs + p.bob_z, e.yaw, p.pitch + p.punchangle + p.bob_pitch, p.stepz, e.deadflag, p.bob_roll
-    FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = :client INTO ex, ey, ez, yaw, pitch, stepz, dead, roll;
+  SELECT e.x, e.y, e.z + p.view_ofs + p.bob_z, e.yaw, p.pitch + p.punchangle + p.bob_pitch, p.stepz, e.deadflag, p.bob_roll, p.fov
+    FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = :client INTO ex, ey, ez, yaw, pitch, stepz, dead, roll, pfov;
   IF (ex IS NULL) THEN EXIT;
   ez = ez - COALESCE(stepz, 0);
   SELECT c.w, c.h, c.fov, c.near_z FROM viewcfg c WHERE c.id = 1 INTO w, h, fov, nearz;
+  IF (pfov IS NOT NULL) THEN fov = pfov;   -- (the client's own fov, its userinfo's: a guest's frame at the fov it paints with)
   sy = SIN(yaw * 0.0174532925e0); cy = COS(yaw * 0.0174532925e0);
   sp = SIN(pitch * 0.0174532925e0); cp = COS(pitch * 0.0174532925e0);
   fx = cp * cy; fy = cp * sy; fz = -sp;
