@@ -706,6 +706,15 @@ try {
       assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
         `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
       assert(/joined: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
+      // the ping: the host measures the guest's round trip a second (a ping, its pong), the guest's score board row and
+      // its stats line carry it
+      let pinged = {};
+      for (let i = 0; i < 40 && !(Number.isInteger(pinged.host) && Number.isInteger(pinged.row)); i++) {
+        await sleep(250);
+        pinged = { host: await page.evaluate(() => window.quake2.net?.guests?.[0]?.host.ping ?? null).catch(() => null), row: await gp.evaluate(() => window.quake2.net?.guest?.row?.SCORES?.find((s) => s.id === 2)?.ping ?? null).catch(() => null), stats: await gstats() };
+      }
+      assert(Number.isInteger(pinged.host) && pinged.host >= 0 && pinged.host < 1000 && Number.isInteger(pinged.row) && /ping \d+ ms/.test(pinged.stats),
+        `the host measures the guest's round trip (${pinged.host} ms), the guest's score board row carries it (${pinged.row} ms) and its stats line says so`);
       // the guest's say goes to the host, which prints it for the guest's client on every message line
       await typeOn(gp, 'say hi from the guest');
       let gsaid = null;
@@ -861,7 +870,7 @@ try {
         // players at the host's console lists the three clients and what drives each (SV_Status_f)
         await typeOn(page, 'players');
         const plist = await page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
-        assert(/^1 player 1 \(this page\) · 2 player 2 \(guest: \d+ frames sent(, \d+ dropped)?\) · 3 player 3 \(guest: \d+ frames sent(, \d+ dropped)?\)$/.test(plist), `players lists the host's page and the two guests with their frames (${plist})`);
+        assert(/^1 player 1 \(this page\) · 2 player 2 \(guest: \d+ frames sent(, \d+ dropped)?(, ping \d+ ms)?\) · 3 player 3 \(guest: \d+ frames sent(, \d+ dropped)?(, ping \d+ ms)?\)$/.test(plist), `players lists the host's page and the two guests with their frames and pings (${plist})`);
         // kick 3 at the host's console drops the third page (SV_Kick_f): its client stands, the first guest plays on, the
         // third page says why and offers a game of its own, every message line says who was kicked
         await typeOn(page, 'kick 3');

@@ -204,9 +204,10 @@ export class Hud {
   /**
    * DeathmatchScoreboardMessage as the client laid it out: the clients sorted by score, up to six a column,
    * each with its tag (tag1 for the one whose screen this is), its name, "Score:" with the frags in the
-   * alternate font, the ping (none here) and the minutes in the game; the skin icon the demo pak lacks.
-   * rows: [{ id, name, score, time }] (`name` the client's netname, "player N" without one; `time` in seconds);
-   * self: the client whose screen this is.
+   * alternate font, the ping (a guest's round trip over the network, which the host measures; 0 at the page itself)
+   * and the minutes in the game; the skin icon the demo pak lacks.
+   * rows: [{ id, name, score, ping, time }] (`name` the client's netname, "player N" without one; `ping` in whole
+   * milliseconds; `time` in seconds); self: the client whose screen this is.
    */
   drawScores(r, rows, self, time) {
     const sorted = [...rows].sort((a, b) => b.score - a.score || a.id - b.id).slice(0, 12);
@@ -234,7 +235,7 @@ export class Hud {
       r.drawString(this.conchars, c.name || `player ${c.id}`, x + 32, y);
       r.drawString(this.conchars, 'Score: ', x + 32, y + 8);
       r.drawString(this.conchars, String(c.score ?? 0), x + 32 + 7 * 8, y + 8, true);
-      r.drawString(this.conchars, 'Ping:  0', x + 32, y + 16);
+      r.drawString(this.conchars, `Ping:  ${Math.min(999, Math.max(0, Math.round(c.ping ?? 0)))}`, x + 32, y + 16);
       r.drawString(this.conchars, `Time:  ${Math.floor(Math.max(0, time - (c.time ?? 0)) / 60)}`, x + 32, y + 24);
     });
   }

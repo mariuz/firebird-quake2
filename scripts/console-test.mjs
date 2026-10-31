@@ -181,10 +181,10 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   check(status.at(-1)?.[0] === 'players: the host lists them' && status.at(-1)?.[1] === true, 'on a joined page, the host lists them');
   await con.submit('kick 2');
   check(kicked.length === 0 && status.at(-1)?.[0] === 'kick: only the host of a game over the network can kick' && status.at(-1)?.[1] === true, 'kick on a page that does not host is refused');
-  rows = [{ num: 1, name: 'Ace', kind: 'page' }, { num: 2, name: 'Rimmer', kind: 'guest', sent: 120, dropped: 3, spectator: true }, { num: 3, name: 'player 3', kind: 'guest', sent: 40, dropped: 0, spectator: false }, { num: 4, name: 'player 4', kind: 'standing' }];
+  rows = [{ num: 1, name: 'Ace', kind: 'page' }, { num: 2, name: 'Rimmer', kind: 'guest', sent: 120, dropped: 3, ping: 37, spectator: true }, { num: 3, name: 'player 3', kind: 'guest', sent: 40, dropped: 0, ping: null, spectator: false }, { num: 4, name: 'player 4', kind: 'standing' }];
   await con.submit('players');
-  check(status.at(-1)?.[0] === '1 Ace (this page) · 2 Rimmer (guest: 120 frames sent, 3 dropped, watching) · 3 player 3 (guest: 40 frames sent) · 4 player 4 (standing)' && status.at(-1)?.[1] === false,
-    'players lists every client with its number, name and what drives it, a guest with its frames sent and dropped and whether it watches');
+  check(status.at(-1)?.[0] === '1 Ace (this page) · 2 Rimmer (guest: 120 frames sent, 3 dropped, ping 37 ms, watching) · 3 player 3 (guest: 40 frames sent) · 4 player 4 (standing)' && status.at(-1)?.[1] === false,
+    'players lists every client with its number, name and what drives it, a guest with its frames sent and dropped, its ping once measured, and whether it watches');
   await con.submit('kick');
   check(status.at(-1)?.[0] === 'Usage: kick <userid>' && status.at(-1)?.[1] === true, 'kick alone shows its usage, as SV_Kick_f did');
   await con.submit('kick x');

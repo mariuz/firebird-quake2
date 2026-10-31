@@ -529,7 +529,10 @@ first, so its page says why). After the tic the host asks the frame once for its
 guest in the fast mode and sends each its frame (`sendFrame`: the faces as `[face, entity, origin]`,
 the entities, the loops, the styles, the brush models' frames and angles, the guest's own `Q2_TIC` row, the
 tic's sounds and effects, which came with the host's own frame query, and the inventory rows when the
-guest's screen is up), dropping it when the channel has more than 256 KB queued. The guest's page
+guest's screen is up, and the score board's rows with each client's ping), dropping it when the channel has
+more than 256 KB queued; once a second a `ping` carrying the host's clock goes too, which the guest's link
+answers with a `pong` at once, the round trip read back against the clock (`HostLink.ping`: the score
+board's "Ping:", `players`' listing, the joined page's stats line). The guest's page
 (`GuestLink`) sends its userinfo (the player setup's name and hand, and whether it only watches, an `info` message) at the connect, then
 `Input.read`'s command each of its own tics, and paints the newest frame it holds
 exactly as the page paints its own (`drawFrame`), the sounds at its own ear, the effects and particles run

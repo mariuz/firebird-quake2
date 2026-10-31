@@ -89,6 +89,20 @@ check(forwarded[1][0].length === 32 && forwarded[1][1].length === 64, 'a command
 guest.sendConsole('god', '');
 await new Promise((r) => setTimeout(r, 50));
 check(((await q('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0].FLAGS & 16) === 0, 'and god again puts it off');
+// the ping: the host's clock goes to the guest and comes back at once, the round trip read against the host's clock
+{
+  let clock = 1000;
+  const [pa, pb] = Loopback.pair();
+  const ph = new HostLink(new Link(pa), { now: () => clock }), pg = new GuestLink(new Link(pb));
+  check(ph.ping === null, 'no ping until a pong has come');
+  ph.sendPing(); clock = 1037;   // (the pong comes back over the loopback at once: the clock moved by then as the wire would have it)
+  check(ph.ping === 0 || ph.ping === 37, `the pong carries the host's clock back: the round trip is the difference (${ph.ping} ms)`);
+  pb.send(JSON.stringify({ t: 'pong', at: 1000 }));
+  check(ph.ping === 37, 'a pong against the clock now reads 37 ms');
+  pb.send(JSON.stringify({ t: 'pong', at: 'x' })); pb.send(JSON.stringify({ t: 'pong', at: 2000 }));
+  check(ph.ping === 0, 'a pong with no clock is ignored, one from the future reads 0');
+  pg.close();
+}
 guest.sendInfo({ name: 'Rimmer, Arnold J.', hand: 1 });
 check(infoSeen && infoSeen.name === 'Rimmer, Arnold ' && infoSeen.hand === 1 && host.info === infoSeen, `the host gets the guest's name (cut at fifteen) and hand (${JSON.stringify(infoSeen)})`);
 await session.setUserinfo(2, host.info);

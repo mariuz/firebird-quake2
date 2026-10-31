@@ -302,7 +302,7 @@ export class Console {
         const rows = h.listPlayers?.();
         if (rows === 'guest') { say('players: the host lists them', true); return; }
         if (!rows) { say('players: no game is running', true); return; }
-        const what = (r) => (r.kind === 'page' ? 'this page' : r.kind === 'guest' ? `guest: ${r.sent} frames sent${r.dropped ? `, ${r.dropped} dropped` : ''}${r.spectator ? ', watching' : ''}` : r.kind === 'pad' ? 'a pad' : 'standing');
+        const what = (r) => (r.kind === 'page' ? 'this page' : r.kind === 'guest' ? `guest: ${r.sent} frames sent${r.dropped ? `, ${r.dropped} dropped` : ''}${r.ping != null ? `, ping ${r.ping} ms` : ''}${r.spectator ? ', watching' : ''}` : r.kind === 'pad' ? 'a pad' : 'standing');
         say(rows.map((r) => `${r.num} ${r.name} (${what(r)})`).join(' · '), false, 8000);
         return;
       }

@@ -661,9 +661,13 @@ The eighth list: what a game shared over the network and the console still lack,
   the guest's prediction stands down on; a watcher turning player again chases nobody. `test:net` runs the
   keys and the words over a loopback (the eye behind the client's, the view following its turn, a second
   press with nobody else, jump, the console's refusals), the browser test the watcher's Ctrl and Space.
-- **Pings on the score board**: "Ping: 0" for everyone. The host measures each guest's round trip with a
-  `ping` message a second and puts it in the row (`ping`), the score board shows it; a joined page shows its
-  own on the stats line.
+- **Pings on the score board**: done. "Ping: 0" was everyone's. The host sends each guest a `ping` carrying
+  its clock once a second (with the frames), the guest's link answers with a `pong` carrying it back at once,
+  and the host reads the round trip (`HostLink.ping`, whole milliseconds), which goes into the score board's
+  rows it sends (`SCORES`: `ping`, 0 for the host's own client) and into `players`' listing; the board draws
+  it as `DeathmatchScoreboardMessage` laid it out (`Ping:  n`, at most 999), and a joined page's stats line
+  shows its own. `test:net` runs a ping and pongs against a clock, `test:hud` the line drawn, the browser test
+  sees the host's measure, the guest's row and its stats line.
 - **The host's save and load with guests connected**: a save in a shared game loads with its player rows but
   the guests' clients are not put back under their guests, nor sent the map again. A load keeps the guests'
   clients (`applyUserinfo` over them) and sends each its map message, as a level change does.
