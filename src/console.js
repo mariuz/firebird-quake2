@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_gun', 'cl_predict', 'cl_run', 'cl_showmiss', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'spectator', 'status', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_gun', 'cl_predict', 'cl_run', 'cl_showmiss', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'crosshair', 'cvarlist', 'deldemo', 'demomap', 'demos', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'give', 'god', 'hand', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'name', 'netgraph', 'noclip', 'notarget', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 's_volume', 'save', 'say', 'say_team', 'score', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'spectator', 'status', 'stop', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -55,6 +55,9 @@ export const CVARS = {
   m_yaw: { key: 'mYaw', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && Math.abs(n) <= 10 ? n : null; }, help: 'a number, 0.022 as Quake had it', archive: false },
   cl_gun: { key: 'clGun', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   con_notifytime: { key: 'conNotifytime', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && n >= 0 && n <= 60 ? n : null; }, help: 'seconds, 0 to 60', archive: false },
+  // vid_gamma: the video menu's brightness (the lightmaps' modulate: the control's tenths from 1 to 1.8, 1.4 by default, a number between
+  // snapped and clamped to them), archived as Quake's was; vid_fullscreen is the page's live state, a case of its own
+  vid_gamma: { key: 'brightness', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.round(Math.max(1, Math.min(1.8, n)) * 10) / 10 : null; }, help: '1 to 1.8' },
 };
 const HISTORY = 32;
 
@@ -68,6 +71,7 @@ const HISTORY = 32;
  *         toggleScores() (score: the score board, in a game of more than one client), putAway() (putaway: every screen off),
  *         serverInfo() → the game's cvars as { mapname, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill }, null on a joined page or without a map (serverinfo),
  *         userInfo() → this page's { name, hand, fov, spectator } (userinfo), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
+ *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
  *         execConfig() (exec: the page's file picker, whose file runs through execText),
  *         execAutoexec() → the lines run, or null when none is kept (exec autoexec), dropAutoexec() → true when one was kept (unautoexec),
  *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
@@ -254,7 +258,7 @@ export class Console {
       case 'name': case 'hand': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume':
       case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'netgraph': case 'cl_predict': case 'cl_showmiss': case 'viewsize':
       case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lerpmodels': case 'r_novis': case 'r_speeds':
-      case 'm_yaw': case 'cl_gun': case 'con_notifytime': {
+      case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': {
         // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
         // page's setSetting, so the menus and the page's controls agree; a word the cvar refuses leaves it
         const name = cmd.toLowerCase(), cv = CVARS[name];
@@ -365,6 +369,14 @@ export class Console {
         if (!st) { say('status: no game running', true); return; }
         h.print?.(['num score ping name', ...st.rows.map((c) => `${String(c.num).padStart(3)} ${String(c.score).padStart(5)} ${String(c.ping).padStart(4)} ${c.name}`)].join('\n'));
         say(`map: ${st.map} · ${st.rows.length} client${st.rows.length === 1 ? '' : 's'}: ${st.rows.map((c) => `${c.num} ${c.name} ${c.score} frags, ${c.ping} ms`).join(' · ')}`, false, 8000);
+        return;
+      }
+      case 'vid_fullscreen': {
+        // the video menu's fullscreen as a cvar: the page's live state shown, set through the page (a request the browser may refuse)
+        if (!arg) { say(`"vid_fullscreen" is "${h.isFullscreen?.() ? '1' : '0'}"`); return; }
+        if (!/^(0|1)$/.test(arg)) { say('vid_fullscreen takes 0 or 1', true); return; }
+        h.setSetting('fullscreen', arg === '1');
+        say(`"vid_fullscreen" is "${arg}"`);
         return;
       }
       case 'demos': {

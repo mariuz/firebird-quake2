@@ -832,8 +832,12 @@ the server's among them. In the order they are to be taken.
   word). None archived, as Quake's were not. `test:input` doubles the turn with `m_yaw`; `test:console` shows,
   sets and refuses the three and leaves them out of config.cfg; the browser test sets the three and reads them
   in the settings and the notify's seconds, then puts them back.
-- **`vid_gamma` and `vid_fullscreen`**: the video menu's words: the brightness and fullscreen settings as
-  cvars, as `vid_gamma` and `vid_fullscreen` were.
+- **`vid_gamma` and `vid_fullscreen`**: done. `vid_gamma` is the video menu's brightness as a cvar (the
+  control's tenths from 1 to 1.8, 1.4 by default, a number between snapped and clamped to them; archived, as
+  Quake's was: the painter's light scale and the control follow through the page's `setSetting`), `vid_fullscreen` the page's live fullscreen state shown (`isFullscreen`), 0 or 1
+  asking the page for it or leaving it, as the video menu's box does. `test:console` shows, sets and refuses
+  the two and writes `vid_gamma` to config.cfg; the browser test sets the brightness by the word and reads
+  the setting, the painter's scale and the control, and reads the fullscreen state of a headless page.
 - **`help`, `sv_gravity` and `hostname`**: `help` as a word (`Cmd_Help_f`, F1's), `sv_gravity` the level's
   gravity for the game running (`sv_gravity 300` floats), `hostname` the host's name a guest sees on its
   score board and the relay's room.
