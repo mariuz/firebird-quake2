@@ -100,6 +100,11 @@ ps = await players();
 check(ps[1].DEADFLAG === 1 && ps[1].HEALTH <= 0 && ps[0].DEADFLAG === 0, 'the second client dies; the first lives on');
 check(session.last.EXIT_KIND === 0, 'nobody\'s death ends the game (no load menu)');
 await q("SELECT msg FROM player_command('notarget', '', 1)");   // off again
+// centerview (IN_CenterView): the client's view level again, the other client's as it was
+await db.exec('UPDATE player SET pitch = 30 WHERE id = 1; UPDATE player SET pitch = -20 WHERE id = 2');
+await q("SELECT msg FROM player_command('centerview', '', 1)");
+const pitches = (await q('SELECT pitch FROM player ORDER BY id')).map((r) => r.PITCH);
+check(pitches[0] === 0 && pitches[1] === -20, `centerview levels the client's view and nobody else's (${pitches.join(', ')})`);
 for (let i = 0; i < 6; i++) await session.tic(idle, idle);
 enemy = (await one(`SELECT enemy_id FROM ents WHERE id = ${mon}`)).ENEMY_ID;
 check(enemy !== p2.ENT_ID, `with its enemy dead the monster drops it (enemy ${enemy ?? 'none'})`);

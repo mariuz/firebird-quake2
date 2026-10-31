@@ -440,6 +440,16 @@ try {
     const uk = await page.evaluate(() => window.quake2.settings.lines.KeyK ?? null).catch(() => 'x');
     assert(bk.line === 'god' && bk.stored === 'god' && bk.status === '"k" = "god"' && g0 === 0 && g1 === 16 && g2 === 0 && uk === null,
       `bind k god binds K to the line, kept in the settings; K switches godmode on and K again off; unbind k takes it off (${JSON.stringify({ bk, g0, g1, g2, uk })})`);
+    // centerview (default.cfg's END): the mouse pitches the view down under the lock, End levels it again
+    await page.mouse.click(480, 360); await sleep(300);
+    for (let i = 0; i < 10; i++) { await page.mouse.move(480, 360 + 20 * (i + 1)); await sleep(30); }
+    let pitched = 0;
+    for (let i = 0; i < 20 && !(pitched > 3); i++) { await sleep(150); pitched = await page.evaluate(() => window.quake2.session.last.PITCH).catch(() => 0); }
+    await page.keyboard.press('End');
+    let level = pitched;
+    for (let i = 0; i < 20 && Math.abs(level) > 0.5; i++) { await sleep(150); level = await page.evaluate(() => window.quake2.session.last.PITCH).catch(() => 99); }
+    assert(pitched > 3 && Math.abs(level) <= 0.5 && (await page.evaluate(() => window.quake2.settings.lines.End).catch(() => null)) === 'centerview',
+      `the mouse pitches the view down (${pitched.toFixed(1)}) and End, bound to centerview by default, levels it (${level.toFixed(1)})`);
     // `;` and alias at the console: god; noclip runs both, an alias names the line and runs it by name (Cmd_Alias_f)
     const cheats = () => page.evaluate(() => window.quake2.sql('SELECT e.flags, e.movetype FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1').then((r) => ({ god: (r[0].FLAGS & 16) !== 0, noclip: r[0].MOVETYPE === 2 }))).catch(() => null);
     await typeCommand('alias both "god; noclip"');

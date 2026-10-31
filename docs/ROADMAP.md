@@ -702,9 +702,14 @@ The ninth list: what the console and a shared game still lack of Quake 2's own w
   `wait` holds the rest of a line to the next frame (`cmd_wait`: `Console.pending`, run by `tick` from the
   page's frame). `test:console` runs the parting, the binds, the aliases, the loop guard and `wait`; the
   browser test an alias of `god; noclip` and the line typed.
-- **`centerview`, `+strafe` and `+klook`**: default.cfg's words the page lacks. `centerview` puts the pitch
-  back to level (`IN_CenterView`), `+strafe` held turns the turning keys into side steps, `+klook` held
-  turns the walking keys into looking up and down (cl_input.c's `CL_BaseMove`).
+- **`centerview`, `+strafe` and `+klook`**: done. default.cfg's words the page lacked. `+strafe` (sidestep,
+  ALT) and `+klook` (keyboard look, INS) are bindable actions now, the twenty-third and twenty-fourth: held,
+  the turning keys step sideways and turn nothing, the walking keys look up and down and walk nothing, as
+  `CL_BaseMove` and `CL_AdjustAngles` read them (`Input.read`). `centerview` is a game word (`player_command`:
+  the pitch to level, `IN_CenterView`), bound to END by default as a command line (`DEFAULT_LINES`, the first
+  default line: the keys menu's reset puts it back, `unbindall` takes it off). `test:input` runs the keys,
+  `test:coop` the word for one client alone, `test:settings` the default line, the browser test the mouse
+  pitching the view down and End levelling it.
 - **The `cheats` cvar**: `god`, `noclip`, `notarget` and `give` run in a deathmatch for anyone. `CheatsOk`
   refused them unless `cheats 1` at the host ("You must run the server with '+set cheats 1' to enable this
   command."); a game played alone keeps them.

@@ -729,8 +729,8 @@ the top, Escape to leave. The console's `menu_main`, `menu_game`, `menu_loadgame
 `menu_options`, `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits` and
 `menu_quit` open the menus as `M_Init` registered them (the host's `openMenu`), so a key bound to one opens
 it. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
-high for each of the twenty-two bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
-mouse look, keyboard look, sidestep and centre view, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
+high for each of the twenty-four bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
+mouse look and centre view (`centerview` is a game word, END's by default as a command line, `DEFAULT_LINES`), with sidestep (`+strafe`, ALT: held, the turning keys step sideways) and keyboard look (`+klook`, INS: held, the walking keys look up and down) as `CL_BaseMove` read them, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
 `s` and `p`, which are the page's back and pause: `l` and `h` here) with its keys named as `Key_KeynumToString` named them
 (`keyName`: letters and digits as themselves, `UPARROW`, `CTRL`, `PGDN`, `MOUSE1`, `MWHEELUP`…, "or" between two, `???` for
 none); Enter waits for a key (the cursor an `=`, the status bar asking) and the next key, mouse button or wheel notch pressed binds it

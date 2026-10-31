@@ -14,7 +14,8 @@ import { readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON, TURN,
 export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
   'BracketLeft', 'BracketRight', 'Enter',
   'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
-  'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'KeyL', 'KeyH', 'KeyT', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
+  'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'KeyL', 'KeyH', 'KeyT', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash',
+  'AltLeft', 'AltRight', 'Insert', 'End']);
 
 // default.cfg: 1-5 blaster to chaingun, 6 grenade launcher … 0 BFG10K, G "use grenades"
 // (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher; 12 and 22 the
@@ -39,7 +40,14 @@ export const ACTIONS = [
   { id: 'silencer', name: 'silencer', impulse: 18, cmd: 'use silencer' }, { id: 'shield', name: 'power shield', impulse: 21, cmd: 'use power shield' },
   // default.cfg's messagemode (t): the console with "say " on its line, the words to every player
   { id: 'messagemode', name: 'chat', cmd: 'messagemode' },
+  // bindnames' sidestep (+strafe: held, the turning keys step sideways) and keyboard look (+klook: held, the walking keys
+  // look up and down), as CL_BaseMove and CL_AdjustAngles read them; default.cfg's ALT and INS
+  { id: 'strafe', name: 'sidestep', cmd: '+strafe' }, { id: 'klook', name: 'keyboard look', cmd: '+klook' },
 ];
+/** default.cfg's keys bound to command lines rather than actions (centerview, IN_CenterView: END levels the view). */
+export const DEFAULT_LINES = Object.freeze({ End: 'centerview' });
+/** A fresh copy of the default lines. */
+export const defaultLines = () => ({ ...DEFAULT_LINES });
 /** The action whose `bind` command this is (`+attack`, `weapnext`, `use silencer`…, case and spacing aside), or null. */
 export const actionOfCommand = (cmd) => { const c = String(cmd ?? '').trim().toLowerCase().replace(/\s+/g, ' '); return ACTIONS.find((a) => a.cmd === c) ?? null; };
 // default.cfg's keys for them (and this port's WASD and the page keys), at most two a command as the keys menu shows; the
@@ -48,6 +56,7 @@ export const DEFAULT_BINDS = Object.freeze({
   attack: ['Control', 'Mouse1'], weapnext: ['Slash', 'MWheelDown'], weapprev: ['MWheelUp'], forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
   run: ['Shift'], moveleft: ['KeyA', 'Comma'], moveright: ['KeyD', 'Period'], lookup: ['PageUp'], lookdown: ['PageDown'], moveup: ['Space'], movedown: ['KeyC'],
   inven: ['Tab'], invuse: ['Enter'], invprev: ['BracketLeft'], invnext: ['BracketRight'], help: ['F1'], silencer: ['KeyL'], shield: ['KeyH'], messagemode: ['KeyT'],
+  strafe: ['Alt'], klook: ['Insert'],
 });
 /** A fresh copy of the default binds (each action's keys its own array). */
 export const defaultBinds = () => Object.fromEntries(Object.entries(DEFAULT_BINDS).map(([k, v]) => [k, [...v]]));
@@ -243,10 +252,14 @@ export class Input {
     this.padScreens = padScreens(polled);   // the inventory and help screens the pad's player asked for
     const pad = usePad ? polled : null;
     if (pad) { const pi = padImpulse(pad); if (pi) this.impulse = pi; }
-    let fwd = (b('forward') ? 1 : 0) - (b('back') ? 1 : 0);
-    let side = (b('moveright') ? 1 : 0) - (b('moveleft') ? 1 : 0);
-    const turnKeys = (b('left') ? 1 : 0) - (b('right') ? 1 : 0);
-    const lookKeys = (b('lookdown') ? 1 : 0) - (b('lookup') ? 1 : 0);
+    // CL_BaseMove and CL_AdjustAngles: +strafe held, the turning keys step sideways and turn nothing; +klook held, the
+    // walking keys look up (forward) and down (back) and walk nothing
+    const strafe = b('strafe'), klook = b('klook');
+    const walk = (b('forward') ? 1 : 0) - (b('back') ? 1 : 0), turn = (b('left') ? 1 : 0) - (b('right') ? 1 : 0);
+    let fwd = klook ? 0 : walk;
+    let side = (b('moveright') ? 1 : 0) - (b('moveleft') ? 1 : 0) - (strafe ? turn : 0);
+    const turnKeys = strafe ? 0 : turn;
+    const lookKeys = (b('lookdown') ? 1 : 0) - (b('lookup') ? 1 : 0) - (klook ? walk : 0);
     const shift = b('run');
     let run = settings.alwaysRun ? (shift ? 0 : 1) : (shift ? 1 : 0);    // cl_run: always run with the run key to walk, or the other way
     if (this.touch.move) {
