@@ -52,9 +52,15 @@ let paused = false;
 let lastTic = 0;
 // src/net.js: a game shared over a data channel. The host runs the game here and sends the guest its frames
 // (`host`, a HostLink); the guest paints the host's frames and sends its commands (`guest`, a GuestLink)
-let net = null;          // { role: 'host' | 'guest', peer, host | guest }
-const netHost = () => net?.role === 'host' && !!net.host;      // (connected: before that the page plays alone)
+// hosting: { role: 'host', guests: [{ client, peer, host }], offer: { peer } | null }, a guest a client of 2 to 4 with its own
+// channel and HostLink, and at most one offer out at a time; joined: { role: 'guest', peer, guest }
+let net = null;
+const netHost = () => net?.role === 'host' && net.guests.length > 0;   // (a guest connected: before that the page plays alone)
 const netGuest = () => net?.role === 'guest' && !!net.guest;
+const MAX_GUESTS = 3;    // (MAX_PLAYERS less the host, the first client)
+/** The highest client number a guest drives (the hosted game has that many clients). */
+const hostClients = () => (netHost() ? Math.max(...net.guests.map((g) => g.client)) : 1);
+const IDLE_CMD = [1, 0, 0, 0, 0, 0, 0, 1, 0];
 // src/demo.js: a demo of the pak playing (the attract mode): the view and the entities are the recording's, the
 // faces the SQL's for that view; a key or a click stops it and a new game starts
 let demo = null;         // { name, player: DemoPlayer, time, at, frames, cprint, msg }
@@ -357,7 +363,12 @@ function readInput(tics) {
   const padPlayer = local > 1 ? 1 : 0;
   if (input.padScreens.inventory) toggleScreen(padPlayer, 'inventory');
   if (input.padScreens.help) toggleScreen(padPlayer, 'help');
-  if (netHost()) return [cmd, net.host.takeCommand()];
+  if (netHost()) {
+    // the guests' clients, each the commands its guest sent; a client whose guest left stands
+    const cmds = [cmd];
+    for (let c = 2; c <= session.nclients; c++) cmds.push(net.guests.find((g) => g.client === c)?.host.takeCommand() ?? IDLE_CMD);
+    return cmds;
+  }
   const cmds = [cmd];
   for (let p = 1; p < local; p++) {
     cmds.push(input.readPad(tics, settings, p - 1));
@@ -423,8 +434,12 @@ async function mapLoaded(setup) {
   $('mapname').textContent = map.name;
   $('map').value = map.name;
   // the guest's page sets itself up from the same (SV_SpawnServer's configstrings, sent at the connect)
-  if (netHost()) net.host.sendMap({ name: map.name, sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack, gravity: setup.gravity,
-    speakers: setup.speakers, view: { w: viewWidth(), h: viewHeight(), fov: settings.fov }, nmodels: res.byName.size });
+  if (netHost()) for (const g of net.guests) g.host.sendMap(mapMessage(setup));
+}
+/** The map message a guest sets itself up from (SV_SpawnServer's configstrings): at every map, and at a connect to a game running. */
+function mapMessage(setup = mapSetup) {
+  return { name: map.name, sky: setup.sky, skyRotate: setup.skyRotate, skyAxis: setup.skyAxis, cdTrack: setup.cdTrack, gravity: setup.gravity,
+    speakers: setup.speakers, view: { w: viewWidth(), h: viewHeight(), fov: settings.fov }, nmodels: res.byName.size };
 }
 async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   if (netGuest()) leaveNet();   // a game of this page's own: the joined one is left
@@ -435,7 +450,7 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   // the face vertices are only for the SQL-projecting renderer: left out of the load until it is on; a new
   // game has the players the setting says (one, or two to four in coop or deathmatch; two when a guest is connected)
   // and the deathmatch cvars, a level change keeps the game's
-  const modes = newGame ? { coop: netHost() || settings.coop, deathmatch: !netHost() && settings.deathmatch, players: netHost() ? 2 : settings.players,
+  const modes = newGame ? { coop: netHost() || settings.coop, deathmatch: !netHost() && settings.deathmatch, players: netHost() ? hostClients() : settings.players,
     cvars: { dmflags: settings.dmflags, fraglimit: settings.fraglimit, timelimit: settings.timelimit } } : {};
   await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...modes }));
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);
@@ -513,8 +528,7 @@ async function frame() {
     lastTic += tics * TIC_MS;
 
     let t = performance.now();
-    const [cmd, cmd2] = readInput(tics);
-    last = await session.tic(cmd, cmd2);
+    last = await session.tic(...readInput(tics));   // (every client's command: the pads', or the guests')
     // (a new map began loading while the tic ran: this frame is the old map's, and its tables are going)
     if (!running) { nextFrame(); return; }
     for (let p = 0; p < session.clients.length; p++) if (showInv[p]) invItems[p] = await session.inventory(p + 1);
@@ -537,11 +551,14 @@ async function frame() {
     const f = await session.frame({ sqlRenderer: settings.renderer === 'sql', client: 1 });
     const more = [];   // the other views' frames, the second client's first (a map that began loading meanwhile ends the frame)
     for (let c = 2; c <= views && running; c++) more.push(await session.frame({ sqlRenderer: settings.renderer === 'sql', client: c }));
-    if (netHost() && session.clients.length >= 2) {
-      const h = net.host;   // (the guest may leave during the query: the link is this frame's)
-      const gf = await session.frame({ sqlRenderer: false, client: 2 });
-      const inv = h.wantInv ? await session.inventory(2) : null;
-      if (h.open) h.sendFrame({ ...session.clients[1], SCORES: scoreRows() }, gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
+    if (netHost()) {
+      for (const g of [...net.guests]) {   // (a guest may leave during a query: the list is this frame's)
+        const row = session.clients.find((c) => c.CLIENT === g.client);
+        if (!row || !running) continue;
+        const gf = await session.frame({ sqlRenderer: false, client: g.client });
+        const inv = g.host.wantInv ? await session.inventory(g.client) : null;
+        if (g.host.open) g.host.sendFrame({ ...row, SCORES: scoreRows() }, gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
+      }
     }
     if (!running) { nextFrame(); return; }
     if (recorder) await recordFrame(last, f);
@@ -858,12 +875,12 @@ async function changeLevel(target) {
   // the unit's levels and its cross-level flags (session.leave); then a picture, the next map, or the end
   const c = await session.leave(target);
   if (c.kind === 'pic' && pak.has(`pics/${c.map}`)) {
-    if (netHost()) net.host.sendPic(`pics/${c.map}`);
+    if (netHost()) for (const g of net.guests) g.host.sendPic(`pics/${c.map}`);
     await showPicture(`pics/${c.map}`);
     return c.then ? changeLevel(c.then) : endGame();
   }
   if (c.kind === 'cinematic' && pak.has(`video/${c.map}`)) {
-    if (netHost()) net.host.sendCin(`video/${c.map}`);
+    if (netHost()) for (const g of net.guests) g.host.sendCin(`video/${c.map}`);
     await playCinematic(`video/${c.map}`);
     return c.then ? changeLevel(c.then) : endGame();
   }
@@ -1043,7 +1060,9 @@ function updateStats() {
   fpsN++;
   const now = performance.now();
   if (now - fpsT > 500) { fps = (fpsN * 1000) / (now - fpsT); fpsT = now; fpsN = 0; }
-  const link = netGuest() ? ` · joined: ${net.guest.frames} frames from the host` : netHost() ? ` · hosting: ${net.host.sentFrames} frames sent${net.host.droppedFrames ? `, ${net.host.droppedFrames} dropped` : ''}`
+  const sum = (k) => net.guests.reduce((n, g) => n + g.host[k], 0);
+  const link = netGuest() ? ` · joined: ${net.guest.frames} frames from the host`
+    : netHost() ? ` · hosting: ${sum('sentFrames')} frames sent${net.guests.length > 1 ? ` to ${net.guests.length} guests` : ''}${sum('droppedFrames') ? `, ${sum('droppedFrames')} dropped` : ''}`
     : demo ? ` · demo ${demo.name}: frame ${demo.player.played + 1} of ${demo.frames}` : '';
   const rec = recorder ? ` · recording ${recorder.name}: ${recorder.rec.frames} frames (${(recorder.rec.size / 1024).toFixed(0)} KB)` : '';
   statsEl.textContent = `${fps.toFixed(1)} fps · q2_tic ${perf.tic.toFixed(0)} ms · frame queries ${perf.faces.toFixed(0)} ms (${perf.rows} rows) · raster ${perf.draw.toFixed(0)} ms · ${renderer.particles.length} particles${link}${rec}`;
@@ -1066,20 +1085,38 @@ function netPanel(help, text, go) {
   netEl.go.hidden = !go;
   if (text) { netEl.text.focus(); netEl.text.select(); }
 }
-/** Host: the offer is made, shown to be copied; the guest's answer comes back into the box. */
+/**
+ * Host: the offer is made, shown to be copied; the guest's answer comes back into the box. Hosting already, with
+ * a guest or two connected, Host makes an offer for the next one (up to three guests: four clients), the game
+ * going on; an offer not yet answered is replaced.
+ */
 async function hostGame() {
   if (!res) return;
-  leaveNet();
+  if (net?.role !== 'host') leaveNet();
+  if (net && net.guests.length >= MAX_GUESTS) { netState(`hosting: ${MAX_GUESTS} guests is the most`, true); return; }
   try {
     netState('making the offer…');
+    net?.offer?.peer.close();
     const peer = new Peer();
-    net = { role: 'host', peer, host: null };
+    if (net) net.offer = { peer }; else net = { role: 'host', guests: [], offer: { peer } };
     const offer = await peer.offer();
-    if (net?.peer !== peer) return;
+    if (net?.offer?.peer !== peer) return;
     netStage = 'offer';
-    netPanel('Send this offer to the other player (copy it), then paste their answer here and press Connect.', offer, 'Connect');
-    netState('offer made: waiting for the answer');
-  } catch (err) { console.error(err); netState(err.message, true); leaveNet(); }
+    netPanel(`Send this offer to the ${net.guests.length ? 'next' : 'other'} player (copy it), then paste their answer here and press Connect.`, offer, 'Connect');
+    netState(`offer made: waiting for the answer${net.guests.length ? ` (${guestsState()})` : ''}`);
+  } catch (err) { console.error(err); netState(err.message, true); if (net?.role === 'host' && !net.guests.length) leaveNet(); else if (net) { net.offer?.peer.close(); net.offer = null; } }
+}
+const guestsState = () => `${net.guests.length} guest${net.guests.length === 1 ? '' : 's'} connected`;
+/** A guest's client number: the lowest of 2 to 4 no guest drives (a guest that left leaves its client to the next). */
+const freeClient = () => { for (let c = 2; c <= MAX_PLAYERS; c++) if (!net.guests.some((g) => g.client === c)) return c; return null; };
+/** A guest leaves: its client stands (the next guest, or a pad, drives it); the last one gone, the page plays alone. */
+function guestLeft(g) {
+  if (net?.role !== 'host' || !net.guests.includes(g)) return;
+  net.guests.splice(net.guests.indexOf(g), 1);
+  g.host.close(); g.peer.close();
+  delete session.userinfo[g.client];   // (the guest's name and hand leave with it)
+  if (net.guests.length || net.offer) netState(`a guest left: ${guestsState()}`);
+  else { netState('the guest left'); net = null; netStage = null; netEl.panel.hidden = true; }
 }
 /** Guest: the host's offer goes in the box; the answer is made, shown to be copied back. */
 function joinGame() {
@@ -1094,21 +1131,29 @@ function joinGame() {
 async function netGo() {
   const text = netEl.text.value;
   try {
-    if (netStage === 'offer' && net?.role === 'host' && net.peer) {
+    if (netStage === 'offer' && net?.role === 'host' && net.offer) {
       netState('connecting…');
-      await net.peer.accept(text);
-      const peer = net.peer;
+      const { peer } = net.offer;
+      await peer.accept(text);
       const link = await peer.ready;
-      if (net?.peer !== peer) return;
-      net.host = new HostLink(link);
-      net.host.onClose = () => { if (netHost()) { netState('the guest left'); net = null; delete session.userinfo[2]; netEl.panel.hidden = true; } };
-      // the guest's name and hand are its second client's (ClientUserinfoChanged), now and with every map
-      net.host.onInfo = (info) => { if (netHost()) session.setUserinfo(2, info).catch((err) => console.warn('userinfo:', err.message)); };
+      if (net?.offer?.peer !== peer) return;
+      net.offer = null;
+      netStage = null;
+      const g = { client: freeClient(), peer, host: new HostLink(link) };
+      net.guests.push(g);
+      g.host.onClose = () => guestLeft(g);
+      // the guest's name and hand are its client's (ClientUserinfoChanged), now and with every map
+      g.host.onInfo = (info) => { if (net?.guests.includes(g)) session.setUserinfo(g.client, info).catch((err) => console.warn('userinfo:', err.message)); };
       netEl.panel.hidden = true;
       canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
-      netState('hosting: connected');
-      // a new game with two clients; the guest gets the map from mapLoaded
-      await startMap(session.firstMap(), true);
+      netState(`hosting: ${guestsState()}`);
+      // the first guest: a new game with two clients, the guest getting the map from mapLoaded; another, into the
+      // game running (ClientBegin: its client put in at the level's spot), with the map as it is
+      if (net.guests.length === 1 || !map || !session.twoPlayers) await startMap(session.firstMap(), true);
+      else {
+        await session.addClient(g.client);
+        if (g.host.open) g.host.sendMap(mapMessage());
+      }
     } else if (netStage === 'join') {
       netState('answering…');
       const peer = new Peer();
@@ -1171,12 +1216,12 @@ function leaveNet() {
   guestPred = null;
   netEl.panel.hidden = true;
   if (!was) return;
-  was.host?.close();
+  for (const g of was.guests ?? []) { g.host.close(); g.peer.close(); delete session.userinfo[g.client]; }   // (the guests' names and hands leave with them)
+  was.offer?.peer.close();
   was.guest?.close();
   was.peer?.close();
   netState('');
   if (was.guest) { running = false; map = session.map; }
-  if (was.host) delete session.userinfo[2];   // (the guest's name and hand leave with it)
 }
 $('net-host').addEventListener('click', () => hostGame());
 $('net-join').addEventListener('click', () => joinGame());

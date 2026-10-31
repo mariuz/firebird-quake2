@@ -199,13 +199,75 @@ let threw = false;
 try { await unpackSignal('hello'); } catch { threw = true; }
 check(threw, 'anything else is refused');
 
-// the guest leaves: the host's end closes and says so; the host's game goes on with its second client standing
+// ── a second guest, into the game running: its own channel and HostLink, the third client put in by ClientBegin
+// (session.addClient), the map as it is sent to it, its commands the third client's and its frames its own ──
+const [e, f2] = Loopback.pair();
+const host3 = new HostLink(new Link(e));
+const guest3 = new GuestLink(new Link(f2));
+let maps3 = 0;
+guest3.onMap = () => { maps3++; };
+const nplayers = async () => (await q('SELECT COUNT(*) n FROM player'))[0].N;
+const pents = async () => (await q("SELECT COUNT(*) n FROM ents e WHERE e.classname = 'player' AND e.health > 0"))[0].N;
+check(await nplayers() === 2 && session.players === 2, 'the game has two clients before');
+const added = await session.addClient(3);
+check(added === true && await nplayers() === 3 && await pents() === 3 && session.players === 3 && session.nclients === 3,
+  `addClient(3) puts a third client in, with its entity, the game three clients from then on (${await nplayers()} rows, ${await pents()} player entities)`);
+const p3 = async () => (await q('SELECT e.x, e.y, e.z, p.weapons, p.weapon, e.health FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 3'))[0];
+let r3 = await p3();
+check(r3 && r3.HEALTH === 100 && r3.WEAPONS === 1 && r3.WEAPON === 1, `the new client comes with fresh pers: a hundred of health and the blaster (${JSON.stringify(r3)})`);
+const spot3 = await p3(), spot2 = await p2();
+check(Math.hypot(spot3.X - spot2.X, spot3.Y - spot2.Y) > 1, `at a spot of its own (${spot3.X.toFixed(0)},${spot3.Y.toFixed(0)}; the second client at ${spot2.X.toFixed(0)},${spot2.Y.toFixed(0)})`);
+check(await session.addClient(3) === false && await pents() === 3, 'adding a client the game has changes nothing (no second entity)');
+check(await session.addClient(5) === false && await session.addClient(1) === false, 'a client past four, or the first, is refused');
+host3.sendMap({ name: session.map.name, view, nmodels: res.byName.size });
+check(maps3 === 1 && guest3.map?.name === 'demo2', 'the map as it is goes to the new guest');
+// a host tic with both guests: each client's command its guest's, each guest its own row and frame
+const hostTic2 = async () => {
+  const last = await session.tic(idle, host.takeCommand(), host3.takeCommand());
+  const f = await session.frame({ client: 1 });
+  for (const [h, c] of [[host, 2], [host3, 3]]) {
+    const row = session.clients.find((r) => r.CLIENT === c);
+    if (h.open) h.sendFrame(row, await session.frame({ client: c, sqlRenderer: false }), { sounds: f.sounds, fx: f.fx, dt: 0.05 });
+  }
+  return last;
+};
+await hostTic2();
+const g2 = guest.take(), g3 = guest3.take();
+check(session.clients.length === 3 && g2?.row.CLIENT === 2 && g3?.row.CLIENT === 3 && g3.row.PX === (await p3()).X && g2.row.PX === (await p2()).X,
+  'a tic runs three clients, and each guest gets the frame with its own row');
+// a level change keeps the three clients
+await session.leave('demo1');
+await session.startMap('demo1', {});
+check(await nplayers() === 3 && await pents() === 3 && session.players === 3, `the next level has the three clients (${await nplayers()} rows, ${await pents()} entities)`);
+loadMapModels(pak, gres, 'demo1', { faceVerts: false });
+await hostTic2();
+check(session.clients.length === 3 && guest3.take()?.row.CLIENT === 3, 'and the tics go on with three');
+// (demo1's start is open; the spots are close: the first guest walks off first, then the other, while the first stands)
+for (let i = 0; i < 20; i++) { guest.sendCommand([1, 1, 0, 0, 0, 0, 0, 1, 0]); await hostTic2(); }
+for (let i = 0; i < 10; i++) { guest.sendCommand(idle); await hostTic2(); }   // (friction brings it to rest)
+const b2 = await p2(), b3 = await p3();
+for (let i = 0; i < 20; i++) { guest3.sendCommand([1, 1, 0, 0, 0, 0, 0, 1, 0]); await hostTic2(); }
+const a2 = await p2(), a3 = await p3();
+const walked3 = Math.hypot(a3.X - b3.X, a3.Y - b3.Y), stood2 = Math.hypot(a2.X - b2.X, a2.Y - b2.Y);
+check(walked3 > 100 && stood2 < 1, `the second guest's forward command walks the third client (${walked3.toFixed(0)} units) and the first guest's client stands (${stood2.toFixed(1)})`);
+check(guest3.frames === 52 && guest.frames > 52, 'each guest has had a frame a tic');
+// the second guest leaves: its client stands, the first guest plays on
+let host3Closed = false;
+host3.onClose = () => { host3Closed = true; };
+guest3.close();
+check(host3Closed && !host3.open, 'the second guest closing closes the host\'s end for it');
+const c3 = await p3();
+for (let i = 0; i < 5; i++) { guest.sendCommand([1, 1, 0, 0, 0, 0, 0, 1, 0]); await hostTic2(); }
+const d3 = await p3();
+check(session.clients.length === 3 && Math.hypot(d3.X - c3.X, d3.Y - c3.Y) < 1 && guest.frames > 26, 'the game goes on with three clients, the third standing, the first guest still getting its frames');
+
+// the guest leaves: the host's end closes and says so; the host's game goes on with its clients standing
 let hostClosed = false;
 host.onClose = () => { hostClosed = true; };
 guest.close();
 check(hostClosed && !host.open && !guest.open, 'closing one end closes the other');
-await session.tic(idle, host.takeCommand());
-check(session.clients.length === 2, 'the host\'s game goes on with two clients');
+await session.tic(idle, host.takeCommand(), idle);
+check(session.clients.length === 3, 'the host\'s game goes on with its clients');
 
 console.log(failures ? `${failures} failure(s)` : 'all good');
 process.exit(failures ? 1 : 0);

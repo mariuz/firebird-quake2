@@ -395,13 +395,13 @@ try {
       assert(answer.startsWith('q2net1:') && answer !== offer, `Join answers it with a text to pass back (${answer.length} characters)`);
       await page.fill('#net-text', answer);
       await page.click('#net-go');
-      const hstate = () => page.evaluate(() => ({ role: window.quake2?.net?.role, host: !!window.quake2?.net?.host, clients: window.quake2?.session?.clients?.length,
-        coop: window.quake2?.session?.coop, views: window.quake2?.renderer?.views, sent: window.quake2?.net?.host?.sentFrames ?? 0 })).catch(() => ({}));
+      const hstate = () => page.evaluate(() => ({ role: window.quake2?.net?.role, guests: window.quake2?.net?.guests?.map((g) => g.client), clients: window.quake2?.session?.clients?.length,
+        coop: window.quake2?.session?.coop, views: window.quake2?.renderer?.views, sent: window.quake2?.net?.guests?.reduce((n, g) => n + g.host.sentFrames, 0) ?? 0 })).catch(() => ({}));
       const gstate = () => gp.evaluate(() => ({ role: window.quake2?.net?.role, frames: window.quake2?.net?.guest?.frames ?? 0, map: window.quake2?.net?.guest?.map?.name,
         w: window.quake2?.renderer?.w, h: window.quake2?.renderer?.h })).catch(() => ({}));
       let hs = {}, gs = {};
       for (let i = 0; i < 240 && !(hs.sent > 20 && gs.frames > 20); i++) { await sleep(250); hs = await hstate(); gs = await gstate(); }
-      assert(hs.role === 'host' && hs.host && hs.coop && hs.clients === 2 && hs.views === 1 && hs.sent > 20,
+      assert(hs.role === 'host' && hs.guests?.length === 1 && hs.guests[0] === 2 && hs.coop && hs.clients === 2 && hs.views === 1 && hs.sent > 20,
         `connected, the host runs a game with two clients, one view of its own, and sends the guest its frames (${JSON.stringify(hs)})`);
       assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
         `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
@@ -428,13 +428,59 @@ try {
       const moved = Math.hypot(x1 - x0, y1 - y0);
       assert(moved > 50, `the guest's W walks its player at the host (${moved.toFixed(0)} units)`);
       assert(samples > 5 && ahead > 0 && farthest < 120, `the guest's own move is predicted ahead of the host's frames (${ahead} of ${samples} samples ahead, at most ${farthest.toFixed(1)} units)`);
-      // the guest leaves: the host plays on, the second player standing; the guest's page starts a game of its own
+      // a third page joins the game running: Host makes another offer while hosting, the third answers it, and the
+      // host's game gets a third client (ClientBegin) that the third page drives, each guest sent its own frames
+      const tctx = await browser.newContext({ viewport: { width: 960, height: 720 } });
+      const tp = await tctx.newPage();
+      tp.on('console', (m) => { if (m.type() === 'error') errors.push('third: ' + m.text()); });
+      tp.on('pageerror', (e) => errors.push(`third pageerror: ${e.message}`));
+      await tp.goto(base, { waitUntil: 'load' });
+      const t3 = Date.now();
+      let tready = false;
+      while (Date.now() - t3 < 300_000) { const s = await tp.evaluate(() => document.getElementById('stats')?.textContent ?? '').catch(() => ''); if (/q2_tic \d+ ms/.test(s) && !/^0\.0 fps/.test(s)) { tready = true; break; } await sleep(1000); }
+      assert(tready, 'a third page loads, to join from');
+      if (tready) {
+        await page.evaluate(() => document.exitPointerLock?.());
+        await page.click('#net-host');
+        let offer2 = '';
+        // (the box held the first guest's answer until the new offer is made)
+        for (let i = 0; i < 80 && !(offer2.startsWith('q2net1:') && offer2 !== offer && offer2 !== answer); i++) { await sleep(250); offer2 = await text(page); }
+        assert(offer2.startsWith('q2net1:') && offer2 !== offer && offer2 !== answer, 'Host, while hosting, makes another offer for the next player');
+        const mid = await hstate();
+        assert(mid.role === 'host' && mid.guests?.length === 1 && mid.clients === 2, `and the game with the first guest goes on meanwhile (${JSON.stringify(mid)})`);
+        await tp.click('#net-join');
+        await tp.fill('#net-text', offer2);
+        await tp.click('#net-go');
+        let answer2 = '';
+        for (let i = 0; i < 80 && !(answer2.startsWith('q2net1:') && answer2 !== offer2); i++) { await sleep(250); answer2 = await text(tp); }
+        assert(answer2.startsWith('q2net1:'), 'the third page answers it');
+        await page.fill('#net-text', answer2);
+        await page.click('#net-go');
+        const tstate = () => tp.evaluate(() => ({ role: window.quake2?.net?.role, frames: window.quake2?.net?.guest?.frames ?? 0, map: window.quake2?.net?.guest?.map?.name, client: window.quake2?.net?.guest?.row?.CLIENT })).catch(() => ({}));
+        let h3 = {}, ts = {};
+        for (let i = 0; i < 240 && !(h3.clients === 3 && ts.frames > 20); i++) { await sleep(250); h3 = await hstate(); ts = await tstate(); }
+        assert(h3.role === 'host' && h3.guests?.length === 2 && h3.guests[1] === 3 && h3.clients === 3 && h3.coop && h3.views === 1,
+          `the host's game has a third client, the second guest's, put in as it ran (${JSON.stringify(h3)})`);
+        assert(ts.role === 'guest' && ts.map === 'demo1' && ts.frames > 20 && ts.client === 3, `the third page has the map as it is and its own frames, its row the third client's (${JSON.stringify(ts)})`);
+        const g2f = await gp.evaluate(() => window.quake2?.net?.guest?.frames ?? 0).catch(() => 0);
+        await sleep(700);
+        const g2f2 = await gp.evaluate(() => window.quake2?.net?.guest?.frames ?? 0).catch(() => 0);
+        assert(g2f2 > g2f, `the first guest's frames keep coming (${g2f2 - g2f} in 0.7 s)`);
+        assert(/hosting: \d+ frames sent to 2 guests/.test(await stats()), 'the host\'s stats line counts both guests');
+        // the third leaves: its client stands, the first guest plays on
+        await tp.click('#net-leave');
+        let h4 = await hstate();
+        for (let i = 0; i < 40 && h4.guests?.length !== 1; i++) { await sleep(250); h4 = await hstate(); }
+        assert(h4.role === 'host' && h4.guests?.length === 1 && h4.guests[0] === 2 && h4.clients === 3, `the third page leaves: the host keeps the first guest, its game its three clients (${JSON.stringify(h4)})`);
+      }
+      await tctx.close();
+      // the guest leaves: the host plays on, its other players standing; the guest's page starts a game of its own
       await gp.evaluate(() => document.exitPointerLock?.());   // (the view holds the pointer since the click: a button needs it back)
       await sleep(300);
       await gp.click('#net-leave');
       let left = await hstate();
       for (let i = 0; i < 40 && left.role !== undefined; i++) { await sleep(250); left = await hstate(); }
-      assert(left.role === undefined && left.clients === 2, `the guest leaves and the host's game goes on with its second player (${JSON.stringify(left)})`);
+      assert(left.role === undefined && left.clients === (tready ? 3 : 2), `the guest leaves and the host's game goes on with its other players (${JSON.stringify(left)})`);
       const h1 = await frames(page); await sleep(700); const h2 = await frames(page);
       assert(h2 > h1, `the host's frames keep coming (${h2 - h1} in 0.7 s)`);
       let own = false;

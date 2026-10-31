@@ -131,6 +131,24 @@ export class Session {
     for (const [client, info] of Object.entries(this.userinfo)) await this.db.query('UPDATE player SET netname = ?, hand = ? WHERE id = ?', [info.name, info.hand, Number(client)]);
   }
 
+  /**
+   * ClientConnect and ClientBegin for a client joining a game that is running (a guest connecting to a host whose
+   * game is on): a client the game has already (the row of a guest that left, or one of its players) is driven as it
+   * stands; a new one gets its row with fresh pers (InitClientPersistant) and its entity at the level's spot
+   * (client_begin, `game.spawnpoint`). The game has that many clients from then on, the next level too.
+   */
+  async addClient(client) {
+    if (!this.map || !this.twoPlayers || client < 2 || client > 4) return false;
+    this.players = Math.max(this.players, client);
+    if ((await this.db.query('SELECT 1 FROM player WHERE id = ?', [client])).rows.length) return false;
+    await this.db.query('INSERT INTO player (id) VALUES (?)', [client]);
+    await this.db.query('EXECUTE PROCEDURE init_client_persistant(?)', [client]);
+    const sp = (await this.db.query('SELECT spawnpoint FROM game')).rows[0]?.SPAWNPOINT ?? null;
+    await this.db.query('EXECUTE PROCEDURE client_begin(?, ?)', [client, sp]);
+    await this.applyUserinfo();
+    return true;
+  }
+
   /** The light styles' resting values: the frame lists only the ones that animate or that the map has switched. */
   async loadStyleBase() {
     this.styleBase.fill(0);
