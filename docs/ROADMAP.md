@@ -817,10 +817,15 @@ the server's among them. In the order they are to be taken.
   it was once the switch is off; `test:console` shows, flips, refuses and restores the six and leaves them out of
   config.cfg; the browser test marks every leaf, sets the painter's flag, reads an r_speeds line, and sees the
   defaults back.
-- **`serverinfo`, `userinfo` and `status`**: the server's words: `serverinfo` prints the game's cvars
-  (`mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`, `cheats`, `skill`), `userinfo` this
-  client's (`name`, `hand`, `fov`, `spectator`), `status` the clients with their frags, pings and names as
-  `SV_Status_f` listed them.
+- **`serverinfo`, `userinfo` and `status`**: done. `serverinfo` is `SV_Serverinfo_f`: the game's cvars
+  (`mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`, `cheats`, `skill`) as `Info_Print`
+  listed them, from the game row (the host's `serverInfo`; a joined page runs no server of its own and says
+  so); `userinfo` is `CL_Userinfo_f`: this page's `name`, `hand`, `fov` and `spectator`; `status` is
+  `SV_Status_f`: the map and the clients with their frags, pings and names, a line each in the scrollback as
+  it laid them out and the sum on the line, over the score board's rows (a joined page's from its row).
+  `test:console` reads the three lines and the scrollback's layout, and the refusals; the browser test types
+  them in single player and reads the cvars, the userinfo and the one client, then `status` on the joined page
+  with both clients and `serverinfo` refused there.
 - **`m_yaw`, `cl_gun` and `con_notifytime`**: three small cvars: the turn a mouse count (`m_yaw`, 0.022),
   the view weapon drawn or not (`cl_gun 0`), and the notify lines' seconds (`con_notifytime`, 3).
 - **`vid_gamma` and `vid_fullscreen`**: the video menu's words: the brightness and fullscreen settings as
