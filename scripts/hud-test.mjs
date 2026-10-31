@@ -23,7 +23,8 @@ function recorder(w, h) {
   return {
     w, h, drawn,
     drawPic: (p, x, y) => { if (p) drawn.push({ kind: 'pic', pic: p, x, y, w: p.w, h: p.h }); },
-    drawChar: (c, n, x, y) => { if (n !== 32) drawn.push({ kind: 'char', n, x, y, w: 8, h: 8 }); },
+    drawPicScaled: (p, x, y, w, h) => { if (p) drawn.push({ kind: 'pic', pic: p, x, y, w, h, scaled: true }); },
+    drawChar: (c, n, x, y) => { if (n !== 32 && n !== 160) drawn.push({ kind: 'char', n, x, y, w: 8, h: 8 }); },   // (a space in either font draws nothing)
     drawString(c, s, x, y, alt) { for (let i = 0; i < s.length; i++) this.drawChar(c, (s.charCodeAt(i) & 127) + (alt ? 128 : 0), x + i * 8, y); },
   };
 }
@@ -104,6 +105,55 @@ assert(lines.length === 4 && lines.join(',') === '36,44,52,60' && inside(r) && f
   `at 160 the lines wrap at their spaces into four, each centred and inside ("establish" first, ${firstLine.length} characters)`);
 assert(wrap('a word longer than the view xxxxxxxxxxxxxxxxxxxxxxxxxx', 20).every((l) => l.length <= 20) && wrap('short', 20).length === 1 && wrap('', 20).length === 1,
   'a word longer than the view is cut, a short line stays as it is');
+
+// ── the help computer, the inventory and the score board: the 320×240 layouts as they were, and in a narrow view the
+// panel scaled behind the text laid out to the view's columns, nothing outside, no text over other text ──
+const textOverlaps = (r) => { const d = r.drawn.filter((x) => x.kind === 'char'); let n = 0; for (let i = 0; i < d.length; i++) for (let j = i + 1; j < d.length; j++) if (d[i].x < d[j].x + d[j].w && d[j].x < d[i].x + d[i].w && d[i].y < d[j].y + d[j].h && d[j].y < d[i].y + d[i].h) n++; return n; };
+const textAt = (r, y) => r.drawn.filter((d) => d.kind === 'char' && d.y === y).sort((a, b) => a.x - b.x).map((d) => String.fromCharCode(d.n & 127)).join('');
+const help = { SKILL: 1, LEVEL_MSG: 'Outer Base', HELP_MSG: 'establish communications\nlink to command ship.', HELP_MSG2: 'find the key to\nthe next level', KILLED: 3, TOTAL_MONSTERS: 10, FOUND_GOALS: 0, TOTAL_GOALS: 1, FOUND_SECRETS: 1, TOTAL_SECRETS: 3 };
+r = recorder(320, 240);
+hud.drawHelp(r, help);
+let panel = picAt(r, 'help');
+assert(panel?.x === 32 && panel.y === 8 && !panel.scaled && textAt(r, 12) === 'medium' && textAt(r, 24) === 'OuterBase' && r.drawn.some((d) => d.kind === 'char' && d.y === 164) && inside(r),
+  'at 320 the help computer is as it was: the panel at 32,8, the skill, the level name, the counts');
+r = recorder(160, 120);
+hud.drawHelp(r, help);
+panel = picAt(r, 'help');
+const helpLines = [...new Set(r.drawn.filter((d) => d.kind === 'char').map((d) => d.y))].sort((a, b) => a - b);
+assert(panel?.scaled && panel.w === 128 && panel.h === 96 && panel.x === 16 && panel.y === 4, `at 160×120 the panel is scaled to half behind (${panel?.w}×${panel?.h} at ${panel?.x},${panel?.y})`);
+assert(inside(r) && textOverlaps(r) === 0 && textAt(r, 2) === 'medium' && textAt(r, 10) === 'OuterBase' && helpLines.every((y) => y + 8 <= 120),
+  `the text is inside and clear of itself: the skill at the top right, the level name, ${helpLines.length} lines`);
+assert(textAt(r, 94) === 'kills3/10' && textAt(r, 102) === 'goals0/1' && textAt(r, 110) === 'secrets1/3', 'the counts a line each at the bottom');
+assert(r.drawn.filter((d) => d.kind === 'char' && d.y >= 22 && d.y < 94).every((d) => d.x >= 0 && d.x + 8 <= 160) && helpLines.length >= 7, 'the messages wrap to the width');
+// the inventory
+const items = [[7, 1], [8, 1], [9, 1], [11, 1], [12, 5], [14, 1], [23, 1], [41, 2], [42, 3], [43, 1], [44, 1], [45, 1], [46, 1], [47, 1], [48, 1], [49, 1], [50, 1], [51, 1], [52, 1], [53, 1]];
+r = recorder(320, 240);
+hud.drawInventory(r, items, 14, 0.15);
+panel = picAt(r, 'inventory');
+assert(panel?.x === 32 && panel.y === 8 && !panel.scaled && textAt(r, 24) === 'hotkey###item' && r.drawn.filter((d) => d.kind === 'char' && d.y >= 40).length > 0 && inside(r),
+  'at 320 the inventory is as it was: the panel at 32,8, the header at 24, seventeen lines');
+assert([...new Set(r.drawn.filter((d) => d.kind === 'char' && d.y >= 40).map((d) => d.y))].length === 17, 'seventeen lines scrolled about the selected item');
+r = recorder(160, 120);
+hud.drawInventory(r, items, 14, 0.15);
+panel = picAt(r, 'inventory');
+const invLines = [...new Set(r.drawn.filter((d) => d.kind === 'char' && d.y >= 18).map((d) => d.y))].sort((a, b) => a - b);
+assert(panel?.scaled && panel.w === 128 && inside(r) && textOverlaps(r) === 0 && textAt(r, 2) === 'ky###item', `at 160×120 the panel is scaled behind, the lines inside the view and clear of each other (${invLines.length} lines)`);
+assert(invLines.length === 12 && invLines[invLines.length - 1] + 8 <= 120 && r.drawn.filter((d) => d.kind === 'char').every((d) => d.x + 8 <= 160), 'as many lines as the height holds, each cut to the width');
+assert(r.drawn.some((d) => d.kind === 'char' && d.n === 15 && d.x === 2) && r.drawn.some((d) => d.kind === 'char' && d.n < 128 && d.y > 18), 'the selected item in the plain font with its cursor at the left');
+// the score board
+const scores = [{ id: 1, name: 'Rimmer', score: 5, time: 0 }, { id: 2, name: 'Lister', score: 7, time: 30 }, { id: 3, name: '', score: 0, time: 0 }, { id: 4, name: 'Kryten', score: 2, time: 0 }];
+r = recorder(320, 240);
+hud.drawScores(r, scores, 2, 120);
+assert(picAt(r, 'tag1')?.x === 32 && picAt(r, 'tag1').y === 32 && textAt(r, 32) === 'Lister' && textAt(r, 64) === 'Rimmer' && textAt(r, 40) === 'Score:7' && inside(r),
+  'at 320 the score board is as it was: the clients by score down a column, the tag at 32,32, four lines each');
+r = recorder(160, 120);
+hud.drawScores(r, scores, 2, 120);
+const scoreLines = [...new Set(r.drawn.filter((d) => d.kind === 'char').map((d) => d.y))].sort((a, b) => a - b);
+assert(inside(r) && textOverlaps(r) === 0 && picAt(r, 'tag1')?.x === 2 && picAt(r, 'tag1').y === 4 && textAt(r, 4) === 'Lister' && textAt(r, 12) === 'Score:7Time:1' && textAt(r, 24) === 'Rimmer' && textAt(r, 44) === 'Kryten' && textAt(r, 64) === 'player3',
+  `at 160×120 one column, two lines a client (${scoreLines.join(',')}), the tag where it fits, everything inside`);
+r = recorder(80, 40);
+hud.drawScores(r, scores, 2, 120);
+assert(inside(r) && textOverlaps(r) === 0 && !picAt(r, 'tag1') && textAt(r, 4) === 'Lister' && textAt(r, 12) === 'Score:7' && !textAt(r, 24), 'at 80×40 one client fits, no tag, the time left off');
 
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
 console.log('all good');

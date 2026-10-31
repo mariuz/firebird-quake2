@@ -216,8 +216,8 @@ The second list, from what the entries above and below left: in the order they a
   at the centre. `test:hud` lays the bar out at 640, 320, 240, 160 and 80 wide against a renderer that records
   every picture and character, and checks the classic positions, the rows, and that nothing is outside or over
   another. A centre print's line longer than the view wraps at its spaces (`Hud.drawCenter`;
-  the game's fit 320). The help computer, the inventory and the score board are 256- and 320-wide pictures
-  and layouts and still take the whole 320: a narrower view clips them.
+  the game's fit 320). The help computer, the inventory and the score board lay themselves out to a narrow
+  view too (the third list's fourth entry).
 - **The guest's prediction**: done. A guest saw its own move a round trip late, as a client with
   `cl_predict 0` did; Quake 2 ran pmove ahead on the client. `src/pmove.js` is that pmove: the traces of
   `sql/physics.sql` (`ClipMap`: the BSP's planes, nodes, leaves, brushes and sides with the loader's brush
@@ -333,10 +333,19 @@ The third list, from what is left in the entries above and below: in the order t
   play under its cleaned name and listed, `demos` listing both, `deldemo` dropping one from the list, the
   select and the store, the kept one listed again after the page's reload and playing from the store, and
   dropped after it.
-- **The help computer, the inventory and the score board to a narrow view**: the status bar lays itself out
-  to the view (the second list's entry); these are 256- and 320-wide pictures and layouts and still clip in a
-  quarter view. The inventory and the score board are text and could lay out to the width as the bar does;
-  the help computer's picture scaled.
+- **The help computer, the inventory and the score board to a narrow view**: done. The status bar laid
+  itself out to the view (the second list's entry); these were 256- and 320-wide pictures and layouts that
+  clipped in a quarter view. In a view narrower or shorter than 320×240 (`Hud`'s `narrow`) each screen now
+  scales its panel to the view (`Hud.narrowPanel`: the 320×240 screen at the one scale that fits, centred,
+  the panel with it through `Renderer.drawPicScaled`, nearest texel) as a backdrop, the font not scaling, and
+  lays its text out to the view's columns: the help computer's skill at the top right, the level name and
+  the two messages wrapped at their spaces (`wrap`) down to the counts, which take a line each at the bottom;
+  the inventory's header and lines cut to the width with a two-wide key column, as many lines as the height
+  holds scrolled about the selected item, its cursor at the left; the score board one column of two lines a
+  client (the name over its tag where the tag fits, the score and the minutes), as many as fit. At 320 and
+  wider the three draw as they did, to the pixel. `test:hud` checks the three at 320 against the classic
+  positions and at 160×120 (and the board at 80×40): the panel scaled to half behind, every character inside
+  the view and none over another, the lines where the layout says.
 - **The insane marines and the commander's body as logic**: `misc_insane`'s forms (stand, crawl, cross,
   the fleeing), `misc_deadsoldier`'s poses and `monster_commander_body` are the full game's; the frame tables
   are known, so they can run on model rows without a mesh as the monsters do (see *The full game*).

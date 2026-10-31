@@ -106,10 +106,30 @@ export class Hud {
   }
 
   /**
+   * A screen's panel picture in a view narrower than the 320×240 the layouts were made for: the virtual screen
+   * scaled to fit the view (the same scale both ways, centred), and the panel with it, as a backdrop for the
+   * text laid out to the view's columns, since the font does not scale. Returns the scaled screen's box.
+   */
+  narrowPanel(r, name, px, py) {
+    const s = Math.min(r.w / 320, r.h / 240);
+    const sw = Math.round(320 * s), sh = Math.round(240 * s);
+    const xv = (r.w - sw) >> 1, yv = (r.h - sh) >> 1;
+    const panel = this.pic(name);
+    if (panel) {
+      const dw = Math.round(panel.w * s), dh = Math.round(panel.h * s), x = xv + Math.round(px * s), y = yv + Math.round(py * s);
+      if (r.drawPicScaled) r.drawPicScaled(panel, x, y, dw, dh); else r.drawPic(panel, x, y);
+    }
+    return { xv, yv, sw, sh };
+  }
+
+  /**
    * The help computer (HelpComputer in p_hud.c): the skill, the level's name, the two messages
-   * target_help left, and the level's counts, laid out on the 320×240 virtual screen.
+   * target_help left, and the level's counts, laid out on the 320×240 virtual screen; in a narrower view
+   * (a split screen's quarter) the panel scaled behind and the text to the view's columns, the messages
+   * wrapped, the counts a line each at the bottom.
    */
   drawHelp(r, h) {
+    if (narrow(r)) return this.drawHelpNarrow(r, h);
     const xv = (r.w >> 1) - 160, yv = (r.h >> 1) - 120;
     const panel = this.pic('help');
     if (panel) r.drawPic(panel, xv + 32, yv + 8);
@@ -121,21 +141,49 @@ export class Hud {
     r.drawString(this.conchars, ' kills     goals    secrets', xv + 50, yv + 164, true);
     r.drawString(this.conchars, `${n3(h.KILLED)}/${n3(h.TOTAL_MONSTERS)}     ${h.FOUND_GOALS ?? 0}/${h.TOTAL_GOALS ?? 0}       ${h.FOUND_SECRETS ?? 0}/${h.TOTAL_SECRETS ?? 0}`, xv + 50, yv + 172, true);
   }
+  drawHelpNarrow(r, h) {
+    this.narrowPanel(r, 'help', 32, 8);
+    const cols = Math.max(4, r.w >> 3);
+    const centred = (s, y) => r.drawString(this.conchars, s, (r.w - s.length * 8) >> 1, y, true);
+    const skill = ['easy', 'medium', 'hard'][h.SKILL] ?? 'hard+';
+    r.drawString(this.conchars, skill, r.w - skill.length * 8 - 2, 2, true);
+    let y = 10;
+    const countsY = r.h - 26;   // the three count lines at the bottom
+    const text = (msg) => {
+      if (!msg) return;
+      for (const line of String(msg).split(/\\n|\n/)) for (const part of wrap(line, cols)) { if (y + 8 > countsY - 2) return; centred(part, y); y += 8; }
+      y += 4;
+    };
+    text(h.LEVEL_MSG); text(h.HELP_MSG); text(h.HELP_MSG2);
+    centred(`kills ${h.KILLED ?? 0}/${h.TOTAL_MONSTERS ?? 0}`, countsY);
+    centred(`goals ${h.FOUND_GOALS ?? 0}/${h.TOTAL_GOALS ?? 0}`, countsY + 8);
+    centred(`secrets ${h.FOUND_SECRETS ?? 0}/${h.TOTAL_SECRETS ?? 0}`, countsY + 16);
+  }
 
   /**
    * CL_DrawInventory: every item held with its key and count, 17 lines scrolled around the selected one,
-   * which is drawn in the plain font with a blinking cursor; the rest in the alternate font.
-   * items: [index, count] rows in itemlist order.
+   * which is drawn in the plain font with a blinking cursor; the rest in the alternate font. In a narrower
+   * view the panel is scaled behind, the lines are as many as the height holds and cut to the width, the
+   * key column two wide. items: [index, count] rows in itemlist order.
    */
   drawInventory(r, items, selected, realtime) {
-    let x = (r.w - 256) >> 1, y = (r.h - 240) >> 1;
-    const panel = this.pic('inventory');
-    if (panel) r.drawPic(panel, x, y + 8);
-    y += 24; x += 24;
-    r.drawString(this.conchars, 'hotkey ### item', x, y);
-    r.drawString(this.conchars, '------ --- ----', x, y + 8);
+    const isNarrow = narrow(r);
+    let x, y, lines, keyWidth, cols;
+    if (!isNarrow) {
+      x = (r.w - 256) >> 1; y = (r.h - 240) >> 1;
+      const panel = this.pic('inventory');
+      if (panel) r.drawPic(panel, x, y + 8);
+      y += 24; x += 24; lines = 17; keyWidth = 6; cols = Infinity;
+    } else {
+      this.narrowPanel(r, 'inventory', 32, 8);
+      x = 10; y = 2; keyWidth = 2; cols = Math.max(4, (r.w - x) >> 3);
+      lines = Math.max(1, (r.h - y - 16) >> 3);
+    }
+    const cut = (s) => (s.length > cols ? s.slice(0, cols) : s);
+    r.drawString(this.conchars, cut(keyWidth === 6 ? 'hotkey ### item' : 'ky ### item'), x, y);
+    r.drawString(this.conchars, cut(keyWidth === 6 ? '------ --- ----' : '-- --- ----'), x, y + 8);
     y += 16;
-    const DISPLAY_ITEMS = 17;
+    const DISPLAY_ITEMS = lines;
     let selNum = 0;
     items.forEach(([idx], n) => { if (idx === selected) selNum = n; });
     let top = selNum - (DISPLAY_ITEMS >> 1);
@@ -143,7 +191,7 @@ export class Hud {
     if (top < 0) top = 0;
     for (let i = top; i < items.length && i < top + DISPLAY_ITEMS; i++) {
       const [idx, cnt] = items[i];
-      const line = `${(ITEM_KEYS[idx] ?? '').padStart(6)} ${String(cnt).padStart(3)} ${ITEMS[idx]?.[0] ?? ''}`;
+      const line = cut(`${(ITEM_KEYS[idx] ?? '').padStart(keyWidth)} ${String(cnt).padStart(3)} ${ITEMS[idx]?.[0] ?? ''}`);
       if (idx !== selected) r.drawString(this.conchars, line, x, y, true);
       else {
         if (Math.floor(realtime * 10) & 1) r.drawChar(this.conchars, 15, x - 8, y);
@@ -161,8 +209,24 @@ export class Hud {
    * self: the client whose screen this is.
    */
   drawScores(r, rows, self, time) {
-    const xv = (r.w >> 1) - 160, yv = (r.h >> 1) - 120;
     const sorted = [...rows].sort((a, b) => b.score - a.score || a.id - b.id).slice(0, 12);
+    if (narrow(r)) {
+      // one column, two lines a client (the name over its tag where the tag fits, the score and the minutes), as
+      // many as the height holds
+      const cols = Math.max(4, r.w >> 3), per = 20, fit = Math.max(1, Math.floor((r.h - 4) / per));
+      sorted.slice(0, fit).forEach((c, i) => {
+        const y = 4 + i * per;
+        const tag = this.pic(c.id === self ? 'tag1' : 'tag2');
+        if (tag && tag.w <= r.w - 4) r.drawPic(tag, 2, y);
+        r.drawString(this.conchars, (c.name || `player ${c.id}`).slice(0, cols), 2, y);
+        const score = String(c.score ?? 0), mins = `  Time: ${Math.floor(Math.max(0, time - (c.time ?? 0)) / 60)}`;
+        r.drawString(this.conchars, 'Score: ', 2, y + 8);
+        r.drawString(this.conchars, score, 2 + 7 * 8, y + 8, true);
+        if ((7 + score.length + mins.length) <= cols) r.drawString(this.conchars, mins, 2 + (7 + score.length) * 8, y + 8);
+      });
+      return;
+    }
+    const xv = (r.w >> 1) - 160, yv = (r.h >> 1) - 120;
     sorted.forEach((c, i) => {
       const x = xv + (i >= 6 ? 160 : 0), y = yv + 32 + 32 * (i % 6);
       const tag = this.pic(c.id === self ? 'tag1' : 'tag2');
@@ -197,6 +261,9 @@ export class Hud {
     }
   }
 }
+
+/** A view narrower or shorter than the 320×240 the screens were laid out for: a split screen's quarter at 320×240. */
+const narrow = (r) => r.w < 320 || r.h < 240;
 
 /** A line in pieces of at most `cols` characters, broken at spaces where there are any (a word longer is cut). */
 export function wrap(line, cols) {
