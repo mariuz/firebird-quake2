@@ -468,6 +468,13 @@ try {
     const spdBack = await page.evaluate(() => ({ yaw: window.quake2.settings.clYawspeed, fwd: window.quake2.settings.clForwardspeed })).catch(() => ({}));
     assert(spd.yaw === 280 && spd.fwd === 100 && spdBack.yaw === 140 && spdBack.fwd === 200,
       `cl_yawspeed and cl_forwardspeed reach the settings and go back (${JSON.stringify(spd)} → ${JSON.stringify(spdBack)})`);
+    // gun_z and scr_centertime reach the settings (the gun drawn lower, a centre print's seconds) and the defaults come back
+    await typeCommand('gun_z 10'); await typeCommand('scr_centertime 1');
+    const gun = await page.evaluate(() => ({ z: window.quake2.settings.gunZ, ct: window.quake2.settings.scrCentertime })).catch(() => ({}));
+    await typeCommand('gun_z 0'); await typeCommand('scr_centertime 2.5');
+    const gunBack = await page.evaluate(() => ({ z: window.quake2.settings.gunZ, ct: window.quake2.settings.scrCentertime })).catch(() => ({}));
+    assert(gun.z === 10 && gun.ct === 1 && gunBack.z === 0 && gunBack.ct === 2.5,
+      `gun_z and scr_centertime reach the settings and go back (${JSON.stringify(gun)} → ${JSON.stringify(gunBack)})`);
     // vid_gamma is the brightness (the painter's light scale follows, the control too), vid_fullscreen the page's state (a headless page is not)
     await typeCommand('vid_gamma 1.6');
     const gamma = await page.evaluate(() => ({ setting: window.quake2.settings.brightness, scale: window.quake2.renderer.lightScale, control: document.getElementById('brightness')?.value })).catch(() => ({}));

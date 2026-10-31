@@ -741,6 +741,10 @@ had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), n
 speeds, Quake's defaults 140 and 150 degrees a second, 1.5 with `+speed` held, 200 units a second: `Input.read` turns and looks
 the keys and the right stick by them a tic and scales the walk and the sidestep in the full speed's 200, the command's fraction
 kept within 1; none archived, as Quake's were not),
+`gun_x`, `gun_y` and `gun_z` (`SV_CalcGunOffset`'s development tools, 0: the view weapon drawn moved along the view's right,
+forward and down, `drawFrame`'s) and `scr_centertime` (`SCR_DrawCenterString`: a centre print drawn 2.5 seconds from when it came,
+`CenterPrint` in `src/notify.js`, a view each, whatever the row carries it for: the SQL keeps it three seconds, a demo's frames
+as written; none archived, as Quake's were not),
 `vid_gamma` (the video menu's brightness as a cvar, the control's tenths from 1 to 1.8, a number between snapped and
 clamped to them, archived: the painter's light scale and the control follow through `setSetting`) and `vid_fullscreen` (the page's live fullscreen state shown, `isFullscreen`; 0 or 1 asks the page
 for it or leaves it, as the video menu's box does), `help` (`Cmd_Help_f`: the help computer, or the score board in deathmatch, as

@@ -3,7 +3,7 @@
 //   node scripts/console-test.mjs
 
 import { Console, COMMANDS, writeConfig } from '../src/console.js';
-import { Notify } from '../src/notify.js';
+import { Notify, CenterPrint } from '../src/notify.js';
 import { ACTIONS, defaultBinds } from '../src/input.js';
 
 let failures = 0;
@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp' },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -307,7 +307,7 @@ await con.submit('netgraph 1'); check(s.netgraph === true && last() === 'set net
 await con.submit('netgraph 2'); check(s.netgraph === true && status.at(-1)?.[0] === 'netgraph takes 0 or 1' && status.at(-1)?.[1] === true, 'netgraph 2 is refused');
 await con.submit('netgraph 0'); check(s.netgraph === false, 'netgraph 0 turns it off');
 await con.submit('cvarlist');
-check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · vid_gamma "1.4" · hostname "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+check(/^name "" · hand "2" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · gun_x "0" · gun_y "0" · gun_z "0" · scr_centertime "2.5" · vid_gamma "1.4" · hostname "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
 // hostname (the host's name, at most 32 printable characters), help (Cmd_Help_f) and sv_gravity (the game's gravity)
 await con.submit('hostname'); check(status.at(-1)?.[0] === '"hostname" is ""', 'hostname shows the empty default');
 await con.submit('hostname Hal 9000'); check(s.hostname === 'Hal 9000' && last() === 'set hostname Hal 9000', 'hostname takes a name with spaces');
@@ -378,6 +378,15 @@ await con.submit('cl_forwardspeed 100'); check(s.clForwardspeed === 100 && last(
 await con.submit('cl_forwardspeed 2000'); check(s.clForwardspeed === 100 && status.at(-1)?.[0] === 'cl_forwardspeed takes units a second, 0 to 1000' && status.at(-1)?.[1] === true, 'cl_forwardspeed 2000 is refused');
 await con.submit('cl_sidespeed 0'); check(s.clSidespeed === 0 && last() === 'set clSidespeed 0', 'cl_sidespeed 0 is no sidestep');
 Object.assign(s, { clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200 });
+// gun_x, gun_y and gun_z (the view weapon's offset) and scr_centertime (a centre print's seconds), numbers through the page
+await con.submit('gun_x'); check(status.at(-1)?.[0] === '"gun_x" is "0"', 'gun_x shows 0 by default');
+await con.submit('gun_z 10'); check(s.gunZ === 10 && last() === 'set gunZ 10' && status.at(-1)?.[0] === '"gun_z" is "10"', 'gun_z 10 lowers the gun through the page');
+await con.submit('gun_y -5'); check(s.gunY === -5 && last() === 'set gunY -5', 'gun_y -5 draws it back');
+await con.submit('gun_x 200'); check(s.gunX === 0 && status.at(-1)?.[0] === 'gun_x takes units, -100 to 100' && status.at(-1)?.[1] === true, 'gun_x 200 is refused');
+await con.submit('scr_centertime'); check(status.at(-1)?.[0] === '"scr_centertime" is "2.5"', 'scr_centertime shows 2.5 by default');
+await con.submit('scr_centertime 5'); check(s.scrCentertime === 5 && last() === 'set scrCentertime 5', 'scr_centertime 5 keeps a centre print longer');
+await con.submit('scr_centertime x'); check(s.scrCentertime === 5 && status.at(-1)?.[0] === 'scr_centertime takes seconds, 0 to 60' && status.at(-1)?.[1] === true, 'scr_centertime x is refused');
+Object.assign(s, { gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5 });
 // ref_soft's switches: r_fullbright, r_drawentities, r_drawworld, r_lerpmodels, r_novis and r_speeds, 0 or 1 through the page
 for (const [name, key, dflt] of [['r_fullbright', 'rFullbright', false], ['r_drawentities', 'rDrawentities', true], ['r_drawworld', 'rDrawworld', true], ['r_lerpmodels', 'rLerpmodels', true], ['r_novis', 'rNovis', false], ['r_speeds', 'rSpeeds', false]]) {
   await con.submit(name); const shown = status.at(-1)?.[0] === `"${name}" is "${dflt ? '1' : '0'}"`;
@@ -428,7 +437,7 @@ await con.submit('lookstrafe 2'); check(s.lookstrafe === true && status.at(-1)?.
 await con.submit('m_forward 2'); check(s.mForward === 2 && last() === 'set mForward 2', 'm_forward 2');
 await con.submit('m_side -1'); check(s.mSide === -1 && last() === 'set mSide -1' && status.at(-1)?.[0] === '"m_side" is "-1"', 'm_side -1');
 await con.submit('m_side x'); check(s.mSide === -1 && status.at(-1)?.[1] === true, 'm_side x is refused');
-Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
+Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
 
 // the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
 {
@@ -480,7 +489,7 @@ Object.assign(s, { name: '', hand: 0, sensitivity: 7, alwaysRun: true, invertMou
   check(lines[0].startsWith('//') && lines[1] === 'unbindall' && lines[2] === 'bind k "+attack"' && lines[3] === 'bind MOUSE2 "+attack"' && lines.includes('bind MWHEELDOWN "weapnext"') && !lines.some((l) => l.includes('"+moveup"'))
     && godAt > 3 && godAt < setAt && lines[godAt + 1] === 'bind MOUSE3 "say hello"'
     && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && lines.includes('set freelook "1"') && lines.includes('set lookspring "0"') && lines.includes('set viewsize "100"') && lines.includes('set vid_gamma "1.4"') && lines.includes('set hostname ""') && !lines.some((l) => l.startsWith('set netgraph') || l.startsWith('set m_forward') || l.startsWith('set m_side') || l.startsWith('set cl_predict') || l.startsWith('set cl_showmiss') || l.startsWith('set r_') || l.startsWith('set m_yaw') || l.startsWith('set cl_gun') || l.startsWith('set con_notifytime')) && cfg.endsWith('\n'),
-    'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them (netgraph, m_forward, m_side, m_yaw, cl_gun, con_notifytime, the cl_ speeds, cl_predict, cl_showmiss and the r_ switches, not archived, left out)');
+    'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them (netgraph, m_forward, m_side, m_yaw, cl_gun, con_notifytime, the cl_ speeds, gun_x, gun_y, gun_z, scr_centertime, cl_predict, cl_showmiss and the r_ switches, not archived, left out)');
   let downloaded = null;
   host.download = (name, text) => { downloaded = { name, text }; };
   await con.submit('writeconfig');
@@ -623,6 +632,24 @@ check(status.at(-1)?.[0] === 'no keys bound', 'and bindlist says so');
   check(big.log().join('|') === 'l4|l5|l6|l7|l8', 'the scrollback keeps the last lines alone');
   n.clear();
   check(n.lines(10).length === 0 && n.log().length === 0, 'cleared with the level');
+}
+
+// the centre print's clock (src/notify.js, SCR_DrawCenterString): the row's text stays scr_centertime seconds from when it came
+{
+  const c = new CenterPrint();
+  c.see('ENTERING Outer Base', 0);
+  check(c.text(0) === 'ENTERING Outer Base' && c.text(2.4) === 'ENTERING Outer Base' && c.text(2.5) === null, 'a print is drawn 2.5 seconds, the row carrying it or not');
+  c.see('ENTERING Outer Base', 2.6);
+  check(c.text(2.6) === null, 'the same text the row still carries starts no new clock');
+  c.see(null, 2.7); c.see('ENTERING Outer Base', 2.8);
+  check(c.text(2.8) === 'ENTERING Outer Base' && c.text(5.2) === 'ENTERING Outer Base' && c.text(5.3) === null, 'the text back after the row dropped it is a new print');
+  c.see('You need the blue key', 4);
+  check(c.text(4) === 'You need the blue key' && c.text(6.4) === 'You need the blue key', 'a new text starts the clock again');
+  c.seconds = 1;
+  check(c.text(4.9) === 'You need the blue key' && c.text(5) === null, 'scr_centertime changed, the clock follows');
+  check(c.text(1) === null && c.cur === null, 'a clock behind the print\'s (a new level) drops it');
+  c.see('Hello', 1); c.clear();
+  check(c.text(1) === null, 'cleared with the level');
 }
 
 // `;`, alias and wait (Cbuf_ExecuteText, Cmd_Alias_f, cmd_wait): a line's commands parted at `;` outside quotes run in order,
