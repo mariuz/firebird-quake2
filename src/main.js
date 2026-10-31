@@ -27,7 +27,7 @@ import { SAVE_VERSION } from './savegame.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS, ITEMS, ARMOR_ICONS, TIMER_ICONS } from './gamedata.js';
 import { padMenuKeys, padScreens, BUTTON } from './gamepad.js';
-import { Input, GAME_KEYS, DEFAULT_BINDS, bindKey } from './input.js';
+import { Input, GAME_KEYS, DEFAULT_BINDS, MOUSE_KEYS, bindKey } from './input.js';
 import { CREDITS } from './credits.js';
 import { Console } from './console.js';
 import { DemoRecorder } from './record.js';
@@ -365,6 +365,10 @@ async function loadSaved(save) {
 }
 input.attach(canvas, window, { locked: () => document.pointerLockElement === canvas, settings: () => settings });
 canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } else if (demo && !menu.active) openMenu(() => menu.main()); });
+// the keys menu waiting for a key takes a mouse button or the wheel too ("press a key or button"), as KeyBindingFunc took K_MOUSE1
+canvas.addEventListener('mousedown', (e) => { if (menu.active && menu.current?.grab && MOUSE_KEYS[e.button]) { e.preventDefault(); menu.key(MOUSE_KEYS[e.button]); } });
+canvas.addEventListener('wheel', (e) => { if (menu.active && menu.current?.grab) { e.preventDefault(); menu.key(e.deltaY > 0 ? 'MWheelDown' : 'MWheelUp'); } }, { passive: false });
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());   // (the right button is a key under the lock, and in the keys menu)
 canvas.addEventListener('click', () => {
   if (running && !menu.active && !demo && document.pointerLockElement !== canvas) canvas.requestPointerLock?.()?.catch?.(() => {});
 });

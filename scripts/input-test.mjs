@@ -117,12 +117,47 @@ check(readPad(null) === null, 'no pad reads as null');
   check(inp.binds.invnext.join() === 'KeyM', 'a third makes both go first (KeyBindingFunc unbound the two)');
   inp.binds = defaultBinds();
   inp.clear(); inp.key('KeyW'); c = cmd();
-  check(c[1] === 1 && inp.binds.attack.join() === 'Control,KeyF', 'the defaults put back');
+  check(c[1] === 1 && inp.binds.attack.join() === 'Control,Mouse1', 'the defaults put back');
+  // the mouse buttons and the wheel are keys: MOUSE1 fires by default, the wheel is weapnext down and weapprev up, and
+  // either can be bound to anything, as default.cfg bound K_MOUSE1 and K_MWHEELUP/DOWN
+  inp.clear(); inp.key('Mouse1'); c = cmd();
+  check(c[5] === 1 && inp.bound('Mouse1') === 'attack', 'the left mouse button fires');
+  inp.release('Mouse1'); c = cmd();
+  check(c[5] === 0, 'and stops when let go');
+  inp.wheel(100); check(cmd()[8] === 12, 'the wheel down is the next weapon (12)');
+  inp.wheel(-100); check(cmd()[8] === 22, 'the wheel up the previous (22)');
+  check(cmd()[8] === 0 && inp.keys.size === 0, 'a wheel notch is let go at once');
+  bindKey(inp.binds, 'moveup', 'Mouse2');
+  inp.key('Mouse2'); c = cmd();
+  check(c[6] === 1 && inp.binds.moveup.join() === 'Space,Mouse2', 'the right button bound to jump jumps');
+  inp.release('Mouse2');
+  bindKey(inp.binds, 'moveup', 'MWheelUp');
+  inp.wheel(-100); c = cmd();
+  check(c[6] === 0 && c[8] === 0 && inp.binds.weapprev.length === 0, 'the wheel bound to a held action does nothing (let go at once), and leaves its old action');
+  check(keyName('Mouse1') === 'MOUSE1' && keyName('Mouse3') === 'MOUSE3' && keyName('MWheelUp') === 'MWHEELUP' && keyName('MWheelDown') === 'MWHEELDOWN', 'named as Key_KeynumToString named them');
+  inp.binds = defaultBinds();
+  // the browser events wired by attach: a button under the lock is a key down and up, the wheel a notch, a button outside the lock nothing
+  {
+    const on = {};
+    const el = { addEventListener: (t, f) => { on[t] = f; }, getBoundingClientRect: () => ({ left: 0, width: 640 }) };
+    let locked = true;
+    inp.attach(el, el, { locked: () => locked, settings: () => settings });
+    on.mousedown({ button: 0 }); c = cmd();
+    check(c[5] === 1, 'a mousedown under the lock fires');
+    on.mouseup({ button: 0 }); c = cmd();
+    check(c[5] === 0, 'the mouseup stops it');
+    on.wheel({ deltaY: 120 }); check(cmd()[8] === 12, 'a wheel event down is the next weapon');
+    on.wheel({ deltaY: -120 }); check(cmd()[8] === 22, 'up the previous');
+    locked = false;
+    on.mousedown({ button: 0 }); c = cmd();
+    check(c[5] === 0, 'outside the lock a button is the page\'s, not the game\'s');
+    on.mouseup({ button: 0 });
+  }
   check(keyName('KeyW') === 'w' && keyName('Digit3') === '3' && keyName('ArrowUp') === 'UPARROW' && keyName('ControlLeft') === 'CTRL' && keyName('ShiftRight') === 'SHIFT' && keyName('Space') === 'SPACE'
     && keyName('BracketLeft') === '[' && keyName('PageDown') === 'PGDN' && keyName('F1') === 'F1' && keyName('Numpad5') === 'KP_5' && keyName('Delete') === 'DEL',
     'the keys are named as Key_KeynumToString named them');
   check(normalizeKey('ShiftLeft') === 'Shift' && normalizeKey('AltRight') === 'Alt' && normalizeKey('KeyA') === 'KeyA', 'the two shifts, controls and alts are one key each');
-  check(ACTIONS.length === 20 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
+  check(ACTIONS.length === 21 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
     'every action has its default keys, no key twice');
   inp.clear();
   inp.mouse(100, -50, settings); c = cmd();

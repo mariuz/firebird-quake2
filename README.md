@@ -88,7 +88,7 @@ that names a cinematic plays it from the pak's `video/` (the demo pak has none; 
 unit transitions play as `cl_cin.c` played them).
 
 Escape brings up Quake 2's menus over the game: a new game, the save slots, the credits, the options with
-`customize controls` (the keys menu: Enter then a key rebinds an action, Backspace clears it; the binds are
+`customize controls` (the keys menu: Enter then a key, a mouse button or a wheel notch rebinds an action, Backspace clears it; the binds are
 kept with the settings in this browser), the multiplayer menu's `join network server` and `start network
 server` (the page's Join and Host) and its `player setup` (your name, for the
 obituaries and the score board, and your handedness: a left-hander's shots come from the left and the gun is

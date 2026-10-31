@@ -117,13 +117,13 @@ assert(calls.includes('defaults') && calls.includes('console') && !menu.active, 
 menu.mainCursor = 0; menu.main(); keys('ArrowDown', 'ArrowDown', 'Enter');
 for (let i = 0; i < 6; i++) keys('ArrowDown');
 keys('Enter');
-assert(menu.current.id === 'keys' && menu.current.items.length === 20, `customize controls opens the keys menu with its ${menu.current?.items.length} actions`);
+assert(menu.current.id === 'keys' && menu.current.items.length === 21, `customize controls opens the keys menu with its ${menu.current?.items.length} actions`);
 draw();
 let rows = drawn.filter(([k]) => k === 'str');
-const attack = rows.find(([, s]) => s === 'attack'), ctrl = rows.find(([, s]) => s === 'CTRL'), or = rows.find(([, s]) => s === 'or'), f = rows.find(([, s]) => s === 'f');
+const attack = rows.find(([, s]) => s === 'attack'), ctrl = rows.find(([, s]) => s === 'CTRL'), or = rows.find(([, s]) => s === 'or'), f = rows.find(([, s]) => s === 'MOUSE1');
 assert(attack && attack[4] && ctrl && or && f && ctrl[2] === 160 + 16 && or[2] === ctrl[2] + 8 + 32 && f[2] === or[2] + 24 && attack[3] === ctrl[3],
-  'attack is drawn greyed with "CTRL or f" after the column, as DrawKeyBindingFunc laid them out');
-assert(rows.find(([, s]) => s === 'walk forward')[3] - attack[3] === 18 && drawn.some(([k, p]) => k === 'pic' && p === hud.pic('m_banner_customize')), 'the rows are nine pixels apart under the customize banner');
+  'attack is drawn greyed with "CTRL or MOUSE1" after the column, as DrawKeyBindingFunc laid them out');
+assert(rows.find(([, s]) => s === 'walk forward')[3] - attack[3] === 27 && drawn.some(([k, p]) => k === 'pic' && p === hud.pic('m_banner_customize')), 'the rows are nine pixels apart under the customize banner (walk forward the fourth)');
 assert(drawn.some(([k, s]) => k === 'str' && s === 'enter to change, backspace to clear'), 'the status bar says what to do');
 keys('Enter');
 draw();
@@ -132,15 +132,23 @@ assert(menu.current.grab && drawn.some(([k, n, x]) => k === 'char' && n === 61 &
 keys('KeyK');
 assert(!menu.current.grab && settings.binds.attack.join() === 'KeyK' && calls.at(-1) === 'sound misc/menu3.wav', 'the key pressed binds the action (its two old keys made room, as KeyBindingFunc unbound them first)');
 keys('ArrowDown', 'Enter', 'KeyK');
-assert(settings.binds.weapnext.join() === 'Slash,KeyK' && settings.binds.attack.length === 0, 'bound to another action, the key joins it and leaves the first');
+assert(settings.binds.weapnext.join() === 'KeyK' && settings.binds.attack.length === 0, 'bound to another action, the key takes it (its two defaults, / and the wheel, made room) and leaves the first');
 keys('Enter', 'Escape');
-assert(!menu.current.grab && menu.current.id === 'keys' && settings.binds.weapnext.join() === 'Slash,KeyK', 'Escape while waiting cancels and stays in the menu');
+assert(!menu.current.grab && menu.current.id === 'keys' && settings.binds.weapnext.join() === 'KeyK', 'Escape while waiting cancels and stays in the menu');
 keys('Enter', 'ControlRight');
-assert(settings.binds.weapnext.join() === 'Control', 'a third key makes the two go first (the right control as CTRL)');
+assert(settings.binds.weapnext.join() === 'KeyK,Control', 'a second key joins it (the right control as CTRL)');
+keys('Enter', 'KeyJ');
+assert(settings.binds.weapnext.join() === 'KeyJ', 'a third makes the two go first');
 draw();
 assert(drawn.some(([k, s]) => k === 'str' && s === '???'), 'an action with no key shows ???');
 keys('Backspace');
 assert(settings.binds.weapnext.length === 0, 'Backspace unbinds');
+// a mouse button or a wheel notch while waiting binds too ("press a key or button", as KeyBindingFunc took K_MOUSE1)
+keys('Enter', 'Mouse2');
+assert(!menu.current.grab && settings.binds.weapnext.join() === 'Mouse2', 'a mouse button pressed while waiting binds');
+keys('Enter', 'MWheelDown');
+draw();
+assert(settings.binds.weapnext.join() === 'Mouse2,MWheelDown' && drawn.some(([k, s]) => k === 'str' && s === 'MWHEELDOWN') && drawn.some(([k, s]) => k === 'str' && s === 'MOUSE2'), 'the wheel too, both drawn as Quake named them');
 keys('Escape');
 assert(menu.current.id === 'options', 'Escape goes back to options');
 
