@@ -8,8 +8,8 @@ import { ACTIONS, DEFAULT_BINDS, DEFAULT_LINES, defaultBinds, defaultLines, norm
 export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, skill: 1, fov: 90,
-  renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1,
-  crosshair: 1, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0,
+  renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false,
+  crosshair: 1, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0,
   mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '',
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
@@ -43,6 +43,7 @@ const CHECK = {
   // the mouse look cvars (CL_MouseMove): free look (the mouse looks without +mlook held; off, its vertical walks), lookspring
   // (+mlook let go levels the view, free look off), lookstrafe (+mlook held, its horizontal sidesteps), m_forward and m_side
   freelook: bool, lookspring: bool, lookstrafe: bool, mForward: num(-100, 100), mSide: num(-100, 100),
+  mFilter: bool,         // m_filter: each mouse sample averaged with the one before (CL_MouseMove)
   sensitivity: num(1, 20),
   crosshair: int(0, 3),
   // a guest's prediction (CL_PredictMovement): cl_predict runs it, cl_showmiss prints the misses (CL_CheckPredictionError)
@@ -50,6 +51,7 @@ const CHECK = {
   viewsize: int(40, 100),   // SCR_CalcVrect's viewsize: the 3D view's share of the screen, the backtile around a smaller one
   // ref_soft's switches: the world unlit, the entities or the world left out, the poses unblended, the PVS ignored, the frame's figures printed
   rFullbright: bool, rDrawentities: bool, rDrawworld: bool, rLerpmodels: bool, rNovis: bool, rSpeeds: bool,
+  hostSpeeds: bool,      // host_speeds: a frame's times printed once a second (Qcommon_Frame's all, sv, gm, cl, rf)
   // ref_soft's sw_ switches: every face flat in a colour of its own, the underwater warp, the palette index the view is cleared to
   swDrawflat: bool, swWaterwarp: bool, swClearcolor: int(0, 255),
   // m_yaw (the turn a mouse count, 0.022), cl_gun (the view weapon drawn), con_notifytime (the notify lines' seconds, 3)

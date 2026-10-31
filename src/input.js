@@ -157,6 +157,7 @@ export class Input {
     this.binds = binds;          // action → the keys bound to it (the page's settings.binds, edited in place by the keys menu)
     this.mouseYaw = 0; this.mousePitch = 0;
     this.mouseSide = 0; this.mouseFwd = 0;   // the mouse's sidestep and walk (CL_MouseMove with +strafe, or free look off), in full speeds
+    this.lastDx = 0; this.lastDy = 0;        // the last mouse sample, for m_filter's average with the next (CL_MouseMove's old_mouse_x/y)
     this.liveSettings = null;    // the page's settings, for a key let go (attach gives it; lookspring reads it)
     this.onCenterView = null;    // what levels the view (the page runs centerview): +mlook let go with lookspring on and free look off
     this.fireClick = false;      // 'tap' for a touch's single shot (the mouse buttons are keys, through the binds)
@@ -196,9 +197,11 @@ export class Input {
    * a count), or a sidestep with +strafe held or lookstrafe on under +mlook (m_side, in cl_sidespeed's 200 a tic); its
    * vertical a look (m_pitch, inverted by the option) with +mlook held or free look on (the default here: the mouse
    * always looked; Quake's was off), and not +strafe, else a walk (m_forward, in cl_forwardspeed's 200). All times
-   * the sensitivity.
+   * the sensitivity; under m_filter each sample is averaged with the one before.
    */
   mouse(dx, dy, settings) {
+    // m_filter: each sample averaged with the one before (CL_MouseMove's old_mouse_x/y), smoother and half a sample late
+    if (settings.mFilter) { const fx = (dx + this.lastDx) / 2, fy = (dy + this.lastDy) / 2; this.lastDx = dx; this.lastDy = dy; dx = fx; dy = fy; } else { this.lastDx = dx; this.lastDy = dy; }
     const held = (a) => (this.binds[a] ?? []).some((c) => this.keys.has(c));
     const mlook = held('mlook'), strafe = held('strafe');
     const mx = dx * settings.sensitivity, my = dy * settings.sensitivity;
