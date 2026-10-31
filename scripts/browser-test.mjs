@@ -760,8 +760,9 @@ try {
       assert(samples > 5 && ahead > 0 && farthest < 120, `the guest's own move is predicted ahead of the host's frames (${ahead} of ${samples} samples ahead, at most ${farthest.toFixed(1)} units)`);
       assert(boxed > 0, `the prediction clips against the box entities the frames carry (${boxed} about the guest)`);
       // a recording on the joined page: record at its console writes the frames the host sends it (the stats line counts
-      // them), stop downloads it as a demo, parsed here: its frames, the host's map and the level's name, the brush models
-      // the frames showed by their inline names, and it is kept under its name
+      // them), stop downloads it as a demo, parsed here: its frames, the host's map and the level's name, and it is kept
+      // under its name (the brush models in it are those the frames showed, which hang on where the guest walked: counted
+      // here, held to in test:record)
       await typeOn(gp, 'record grun');
       let grec = null;
       for (let i = 0; i < 40 && !(grec?.frames > 3); i++) { await sleep(250); grec = await gp.evaluate(() => window.quake2?.recorder).catch(() => null); }
@@ -772,7 +773,7 @@ try {
       try { gparsed = gdm2 ? parseDemo(new Uint8Array(gdm2)) : null; } catch (e) { errors.push(`the guest's recording does not parse: ${e.message}`); }
       const gbrushes = gparsed ? new Set(gparsed.frames.flatMap((f) => [...f.ents.values()]).map((s) => gparsed.models[s.modelindex]).filter((n) => n && n[0] === '*')).size : 0;
       const gkept = await gp.evaluate(() => ({ list: window.quake2.recordings(), rec: window.quake2.recorder })).catch(() => ({}));
-      assert(grec?.name === 'grun' && grec.frames > 3 && /recording grun: \d+ frames/.test(gstatsRec) && gdl?.suggestedFilename() === 'grun.dm2' && gparsed && gparsed.frames.length >= grec.frames && gparsed.map === 'maps/demo1.bsp' && gparsed.levelname && gbrushes > 0 && gkept.list?.includes('grun') && gkept.rec === null,
+      assert(grec?.name === 'grun' && grec.frames > 3 && /recording grun: \d+ frames/.test(gstatsRec) && gdl?.suggestedFilename() === 'grun.dm2' && gparsed && gparsed.frames.length >= grec.frames && gparsed.map === 'maps/demo1.bsp' && gparsed.levelname && gkept.list?.includes('grun') && gkept.rec === null,
         `record on the joined page writes the host's frames as a demo: ${grec?.frames} frames so far on the stats line, stop downloads grun.dm2 (${gparsed?.frames.length} frames over ${gparsed?.map} "${gparsed?.levelname}", ${gbrushes} brush models named) and keeps it (${JSON.stringify(gkept.list)})`);
       // the guest ticks spectate: the host puts its client back in as a watcher (no body, noclip); unticked, a player again
       await gp.evaluate(() => document.exitPointerLock?.());
