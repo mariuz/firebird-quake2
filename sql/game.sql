@@ -82,6 +82,18 @@ BEGIN
   UPDATE player p SET p.msg = :msg, p.msg_time = (SELECT g.time_ FROM game g WHERE g.id = 1) + 3 WHERE :pe IS NULL OR p.ent_id = :pe;
 END^
 
+-- Cmd_Say_f: a client's words on every client's message line as "name: text" (PRINT_CHAT; say_team is say here, there
+-- being no model or skin teams). The text as typed, 150 characters at most; nothing said prints nothing.
+CREATE OR ALTER PROCEDURE client_say (client SMALLINT, text VARCHAR(150))
+AS
+DECLARE nm VARCHAR(40); DECLARE t VARCHAR(150);
+BEGIN
+  SELECT COALESCE(NULLIF(p.netname, ''), 'player ' || p.id) FROM player p WHERE p.id = :client INTO nm;
+  t = TRIM(COALESCE(text, ''));
+  IF (nm IS NULL OR t = '') THEN EXIT;
+  EXECUTE PROCEDURE sprint(NULL, nm || ': ' || t);
+END^
+
 -- ent->client: the player row of an entity, NULL for anything that is not a client
 CREATE OR ALTER FUNCTION client_of (eid INTEGER) RETURNS SMALLINT
 AS

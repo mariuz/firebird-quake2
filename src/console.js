@@ -9,14 +9,14 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['bind', 'bindlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 'save', 'screenshot', 'seed', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'unbind', 'unbindall', 'use'];
+export const COMMANDS = ['bind', 'bindlist', 'deldemo', 'demomap', 'demos', 'dmflags', 'drop', 'fov', 'fraglimit', 'give', 'god', 'inven', 'invnext', 'invprev', 'invuse', 'kill', 'load', 'map', 'noclip', 'notarget', 'record', 'rtc_ice', 'rtc_signal', 'save', 'say', 'say_team', 'screenshot', 'seed', 'skill', 'spectator', 'stop', 'timedemo', 'timelimit', 'unbind', 'unbindall', 'use'];
 const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
  *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
- *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot() }
+ *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text) }
  */
 export class Console {
   constructor(host) {
@@ -81,6 +81,14 @@ export class Console {
         const has = h.hasDemo ? h.hasDemo(name) : h.pak.has(`demos/${name}.dm2`);
         if (!name || !has) { say(`no demo "${name}" in this pak`, true); return; }
         await h.timedemo?.(name);
+        return;
+      }
+      case 'say': case 'say_team': {
+        // Cmd_Say_f: the words to every client's message line as "name: text", as typed and not the console's lower
+        // case (a guest's go to the host; say_team is say, there being no model or skin teams here)
+        if (!arg) { say(`${cmd.toLowerCase()} <text>`, true); return; }
+        if (!h.isRunning()) return;
+        await h.say?.(arg);
         return;
       }
       case 'screenshot':

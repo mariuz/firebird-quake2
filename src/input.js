@@ -14,7 +14,7 @@ import { readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON, TURN,
 export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
   'BracketLeft', 'BracketRight', 'Enter',
   'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
-  'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'KeyL', 'KeyH', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
+  'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'KeyL', 'KeyH', 'KeyT', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash']);
 
 // default.cfg: 1-5 blaster to chaingun, 6 grenade launcher … 0 BFG10K, G "use grenades"
 // (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher; 12 and 22 the
@@ -37,6 +37,8 @@ export const ACTIONS = [
   { id: 'help', name: 'help computer', cmd: 'help' },
   // default.cfg's "use silencer" (s) and "use power shield" (p), whose keys the page has (back, pause): bound to l and h
   { id: 'silencer', name: 'silencer', impulse: 18, cmd: 'use silencer' }, { id: 'shield', name: 'power shield', impulse: 21, cmd: 'use power shield' },
+  // default.cfg's messagemode (t): the console with "say " on its line, the words to every player
+  { id: 'messagemode', name: 'chat', cmd: 'messagemode' },
 ];
 /** The action whose `bind` command this is (`+attack`, `weapnext`, `use silencer`…, case and spacing aside), or null. */
 export const actionOfCommand = (cmd) => { const c = String(cmd ?? '').trim().toLowerCase().replace(/\s+/g, ' '); return ACTIONS.find((a) => a.cmd === c) ?? null; };
@@ -45,7 +47,7 @@ export const actionOfCommand = (cmd) => { const c = String(cmd ?? '').trim().toL
 export const DEFAULT_BINDS = Object.freeze({
   attack: ['Control', 'Mouse1'], weapnext: ['Slash', 'MWheelDown'], weapprev: ['MWheelUp'], forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
   run: ['Shift'], moveleft: ['KeyA', 'Comma'], moveright: ['KeyD', 'Period'], lookup: ['PageUp'], lookdown: ['PageDown'], moveup: ['Space'], movedown: ['KeyC'],
-  inven: ['Tab'], invuse: ['Enter'], invprev: ['BracketLeft'], invnext: ['BracketRight'], help: ['F1'], silencer: ['KeyL'], shield: ['KeyH'],
+  inven: ['Tab'], invuse: ['Enter'], invprev: ['BracketLeft'], invnext: ['BracketRight'], help: ['F1'], silencer: ['KeyL'], shield: ['KeyH'], messagemode: ['KeyT'],
 });
 /** A fresh copy of the default binds (each action's keys its own array). */
 export const defaultBinds = () => Object.fromEntries(Object.entries(DEFAULT_BINDS).map(([k, v]) => [k, [...v]]));

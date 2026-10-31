@@ -117,7 +117,7 @@ assert(calls.includes('defaults') && calls.includes('console') && !menu.active, 
 menu.mainCursor = 0; menu.main(); keys('ArrowDown', 'ArrowDown', 'Enter');
 for (let i = 0; i < 6; i++) keys('ArrowDown');
 keys('Enter');
-assert(menu.current.id === 'keys' && menu.current.items.length === 21, `customize controls opens the keys menu with its ${menu.current?.items.length} actions`);
+assert(menu.current.id === 'keys' && menu.current.items.length === 22, `customize controls opens the keys menu with its ${menu.current?.items.length} actions`);
 draw();
 let rows = drawn.filter(([k]) => k === 'str');
 const attack = rows.find(([, s]) => s === 'attack'), ctrl = rows.find(([, s]) => s === 'CTRL'), or = rows.find(([, s]) => s === 'or'), f = rows.find(([, s]) => s === 'MOUSE1');

@@ -342,6 +342,15 @@ try {
     const closed = await page.evaluate(() => document.getElementById('conlog').hidden).catch(() => false);
     assert(nl.lines?.includes('unknown item: nosuch') && nl.log?.includes(']use nosuch') && opened.shown && /\]use nosuch\nunknown item: nosuch/.test(opened.text ?? '') && closed,
       `the print is drawn in the notify lines and kept in the scrollback after the line typed, which the console shows and hides (${JSON.stringify({ lines: nl.lines, log: nl.log })})`);
+    // the chat: T (messagemode) opens the console with "say " on its line, and the words go to the message line by the
+    // player's name (Cmd_Say_f), drawn in the notify lines
+    await page.mouse.click(480, 360); await sleep(200);
+    await page.keyboard.press('KeyT'); await sleep(200);
+    const chatLine = await page.evaluate(() => ({ hidden: document.getElementById('cmdline').hidden, value: document.getElementById('cmdline').value })).catch(() => ({}));
+    await page.keyboard.type('Hello, World!'); await page.keyboard.press('Enter'); await sleep(400);
+    const chat = await page.evaluate(() => { const q = window.quake2; return { lines: q.notify.lines(q.session.last.TIME_), msg: q.session.last.MSG }; }).catch(() => ({}));
+    assert(!chatLine.hidden && chatLine.value === 'say ' && chat.msg === 'player 1: Hello, World!' && chat.lines?.includes('player 1: Hello, World!'),
+      `T opens the console with "say ", and the words reach the message line by the player's name (${JSON.stringify({ chatLine, chat })})`);
     // rtc_ice: the ICE server for the network game, kept in the settings and shown; cleared again before the network
     // section below (a relay that is not there would hold each offer three seconds)
     await typeCommand('rtc_ice turn:relay.example.org:3478 ace secret');
@@ -611,6 +620,11 @@ try {
       assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
         `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
       assert(/joined: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
+      // the guest's say goes to the host, which prints it for the guest's client on every message line
+      await typeOn(gp, 'say hi from the guest');
+      let gsaid = null;
+      for (let i = 0; i < 20 && gsaid !== 'player 2: hi from the guest'; i++) { await sleep(250); gsaid = await page.evaluate(() => window.quake2.session.last.MSG).catch(() => null); }
+      assert(gsaid === 'player 2: hi from the guest', `the guest's say reaches the host's message line by its client's name (${JSON.stringify(gsaid)})`);
       const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
       await typeOn(page, 'rtc_signal none');

@@ -148,6 +148,7 @@ window.addEventListener('keydown', (e) => {
   // the bound actions (settings.binds, the keys menu): the help computer and the inventory screen are the page's,
   // the rest the movement keys, and the weapon, inventory and item keys as impulses
   const act = input.bound(e.code);
+  if (act === 'messagemode') { e.preventDefault(); openConsole('say '); return; }   // (default.cfg's t: the words to every player)
   if (act === 'help') { e.preventDefault(); toggleScreen(0, 'help'); }
   if (act === 'inven') { e.preventDefault(); toggleScreen(0, 'inventory'); }         // inven
   if (act || GAME_KEYS.has(e.code)) e.preventDefault();
@@ -270,6 +271,7 @@ const con = new Console({
   playDemo: (name) => playDemo(name),
   timedemo: (name) => playDemo(name, { timedemo: true }),
   screenshot: () => screenshot(),
+  say: (text) => sayText(text),
   hasDemo: (name) => recordings.has(name) || kept.has(name) || pak.has(`demos/${name}.dm2`),
   listDemos: () => ({ pak: pakDemos(), kept: [...new Set([...kept, ...recordings.keys()])].sort() }),
   dropDemo: (name) => dropRecording(name),
@@ -278,11 +280,11 @@ const con = new Console({
   isRecording: () => !!recorder,
   setSpectator: (on) => setSpectator(on),
 });
-function openConsole() {
+function openConsole(prefill = '') {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
   input.clear();
   cmdline.hidden = false;
-  cmdline.value = '';
+  cmdline.value = prefill;   // ("say " from the chat key: messagemode)
   // the scrollback: the last lines printed, the lines typed and the answers, under the input line
   conlog.textContent = notify.log(12).join('\n');
   conlog.hidden = !conlog.textContent;
@@ -293,6 +295,14 @@ function closeConsole() {
   cmdline.hidden = true;
   conlog.hidden = true;
   canvas.focus();
+}
+/** Cmd_Say_f: the words to every client's message line, by this client's name; a guest's go to the host to say for it. */
+async function sayText(text) {
+  const t = String(text ?? '').replace(/[\r\n]+/g, ' ').trim().slice(0, 150);
+  if (!t) return;
+  if (netGuest()) { net.guest.sendSay(t); return; }
+  if (!map || demo) return;
+  await session.say(1, t);
 }
 cmdline.addEventListener('keydown', async (e) => {
   if (e.key === 'Escape' || e.code === 'Backquote') { e.preventDefault(); closeConsole(); return; }
@@ -1272,6 +1282,7 @@ async function hostAccept(peer, text) {
   g.host.onClose = () => guestLeft(g);
   // the guest's name and hand are its client's (ClientUserinfoChanged), now and with every map
   g.host.onInfo = (info) => { if (net?.guests.includes(g)) session.setUserinfo(g.client, info).catch((err) => console.warn('userinfo:', err.message)); };
+  g.host.onSay = (text) => { if (net?.guests.includes(g) && map && !demo) session.say(g.client, text).catch((err) => console.warn('say:', err.message)); };
   netEl.panel.hidden = true;
   canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
   netState(`hosting: ${guestsState()}`);

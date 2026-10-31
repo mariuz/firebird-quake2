@@ -164,7 +164,8 @@ check(readPad(null) === null, 'no pad reads as null');
   check(['KeyW', 'Digit0', 'ArrowUp', 'Control', 'Mouse2', 'MWheelDown', 'Numpad7', 'F1', 'Comma', 'Slash', 'Backquote', 'Space', 'Tab', 'Delete'].every((c) => keyCode(keyName(c)) === c), 'every code round-trips through its name');
   check(actionOfCommand('+attack')?.id === 'attack' && actionOfCommand('USE  Silencer')?.id === 'silencer' && actionOfCommand('weapprev')?.id === 'weapprev' && actionOfCommand('+speed')?.id === 'run'
     && actionOfCommand('nosuch') === null && ACTIONS.every((a) => a.cmd && actionOfCommand(a.cmd) === a), 'every action has Quake\'s bind command for it, found case and spacing aside');
-  check(ACTIONS.length === 21 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
+  check(inp.bound('KeyT') === 'messagemode' && GAME_KEYS.has('KeyT'), 'T is the chat key (messagemode), a game key');
+  check(ACTIONS.length === 22 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
     'every action has its default keys, no key twice');
   inp.clear();
   inp.mouse(100, -50, settings); c = cmd();

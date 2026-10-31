@@ -661,7 +661,9 @@ of, latched as the cvar was: "skill will be changed for next game."), as are `bi
 `bindlist` over the keys menu's binds (`bind k +attack`: the key by the name the menu shows, `keyCode` being
 `Key_StringToKeynum`, the action by bindnames' command, `actionOfCommand`; `bind k` shows `"k" = "+attack"`
 as `Key_Bind_f` did), `timedemo` (above) and `screenshot` (the view downloaded as `quakeNN.png`, as
-`SCR_ScreenShot_f` wrote `quakeNN.pcx`); the rest go to `player_command(cmd, arg)`
+`SCR_ScreenShot_f` wrote `quakeNN.pcx`), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
+line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the
+guest's client); the rest go to `player_command(cmd, arg)`
 (g_cmds.c: `god`, `notarget`, `noclip`, `give`, `kill`), which answers on the message line. The message line is
 console.c's notify (`src/notify.js`): each print of the first view's row (the tic row's `MSG`, a new one by its
 `MSG_TIME`) is kept with the game's clock, the view draws the last four not yet three seconds old at the top
@@ -681,8 +683,8 @@ both agree. The game menu's `credits` scrolls
 menu.c's `idcredits` (`src/credits.js`) up the screen as `M_Credits_MenuDraw` did: a line every ten
 pixels rising a pixel every 40 ms, the `+` lines in the highlighted font, round again once the last is off
 the top, Escape to leave. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
-high for each of the twenty-one bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
-mouse look, keyboard look, sidestep and centre view, plus the previous weapon, `weapprev`, and the silencer and the power shield, default.cfg's
+high for each of the twenty-two bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
+mouse look, keyboard look, sidestep and centre view, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
 `s` and `p`, which are the page's back and pause: `l` and `h` here) with its keys named as `Key_KeynumToString` named them
 (`keyName`: letters and digits as themselves, `UPARROW`, `CTRL`, `PGDN`, `MOUSE1`, `MWHEELUP`…, "or" between two, `???` for
 none); Enter waits for a key (the cursor an `=`, the status bar asking) and the next key, mouse button or wheel notch pressed binds it
