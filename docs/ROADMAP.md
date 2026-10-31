@@ -465,9 +465,13 @@ The fifth list, from what the entries above and below still leave: in the order 
   refused, a relay that is not there named; `test:settings` and `test:console` the setting and the command;
   the browser test spawns the relay, sets it on both pages, hosts (a code shown) and joins by the code, sees
   the room gone once connected, then clears it for the third page's join by text.
-- **The multiplayer menu's network items**: `join network server` and `start network server` are drawn greyed;
-  the page's Join and Host buttons do the work. The items drive the same functions (the panel opens under the
-  menu, the code field when a relay is set), as `M_Menu_JoinServer_f` and `M_Menu_StartServer_f` opened theirs.
+- **The multiplayer menu's network items**: done. `join network server` and `start network server` were drawn
+  greyed; the page's Join and Host buttons did the work. The items drive the same functions now (the host's
+  `netJoin` and `netHost`: the menu goes away and the page's panel shows under the view, scrolled to, with the
+  offer or the code, or the box for the host's), as `M_Menu_JoinServer_f` and `M_Menu_StartServer_f` opened
+  theirs; the status bar says where the texts go; a page with no network keeps them greyed. `test:menu` sees
+  each item call the page's and the menu go, and a host without them greyed; the browser test hosts from the
+  menu over the attract loop and joins from the guest's menu.
 - **The mouse buttons and the wheel bindable**: the keys menu binds keys alone; the mouse button fires and the
   wheel changes weapon, fixed. `MOUSE1`–`MOUSE3`, `MWHEELUP` and `MWHEELDOWN` as keys of `settings.binds`
   (Enter then a button binds, as `KeyBindingFunc` took `K_MOUSE1`), the defaults MOUSE1 attack and the wheel

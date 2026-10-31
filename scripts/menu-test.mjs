@@ -28,6 +28,7 @@ const host = {
   resetDefaults: () => calls.push('defaults'), resetVideo: () => calls.push('video defaults'),
   bind: (a, code) => bindKey(settings.binds, a, code), unbind: (a) => { settings.binds[a] = []; }, credits: () => CREDITS,
   console: () => calls.push('console'), quit: () => calls.push('quit'), sound: (n) => calls.push(`sound ${n}`),
+  netHost: () => calls.push('net host'), netJoin: () => calls.push('net join'),
 };
 const drawn = [];
 const r = {
@@ -167,11 +168,23 @@ assert(settings.renderer === 'sql' && settings.detail === 'ultra' && settings.br
 keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
 assert(settings.renderer === 'fast' && settings.detail === 'high' && settings.brightness === 1.4 && menu.current.id === 'main', 'cancel puts them back');
 
-// multiplayer: the servers greyed, the player setup live (M_Menu_PlayerConfig_f: the name field and the handedness)
+// multiplayer: join and start network server are the page's Join and Host (the menu goes away for the page's panel),
+// greyed where the page has none; the player setup live (M_Menu_PlayerConfig_f: the name field and the handedness)
 keys('ArrowUp', 'ArrowUp', 'Enter');
-assert(menu.current.id === 'multiplayer' && menu.current.items.filter((i) => i.grayed).length === 2 && !menu.current.items[2].grayed, 'multiplayer shows the servers greyed and player setup live');
+assert(menu.current.id === 'multiplayer' && menu.current.items.every((i) => !i.grayed) && menu.current.items[0].statusbar.startsWith('join a game over the network'),
+  'multiplayer shows join and start network server live, the status bar saying where the texts go');
 keys('Enter');
-assert(menu.current.id === 'multiplayer', 'Enter on a greyed item does nothing');
+assert(calls.at(-2) === 'net join' && !menu.active, 'Enter on join network server is the page\'s Join, the menu gone (the move sound after)');
+menu.mainCursor = 1; menu.main(); keys('Enter', 'ArrowDown', 'Enter');
+assert(calls.at(-2) === 'net host' && !menu.active, 'start network server is the page\'s Host');
+{
+  const bare = new Menu({ ...host, netHost: undefined, netJoin: undefined });
+  bare.multiplayer();
+  bare.key('Enter');
+  assert(bare.current.id === 'multiplayer' && bare.current.items.filter((i) => i.grayed).length === 2 && !bare.current.items[2].grayed && !calls.slice(-1).includes('net join'),
+    'a page with no network has them greyed, and Enter on one does nothing');
+}
+menu.mainCursor = 1; menu.main(); keys('Enter');
 keys('ArrowDown', 'ArrowDown', 'Enter');
 assert(menu.current.id === 'player' && menu.current.items[0].type === 'field' && menu.current.cursor === 0, 'player setup opens on the name field');
 draw();

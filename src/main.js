@@ -196,6 +196,9 @@ const menu = new Menu({
   console: () => openConsole(),
   quit: () => quitGame(),
   sound: (name) => audio.playLocal(name),
+  // the multiplayer menu's join and start network server: the page's Join and Host
+  netHost: () => hostGame(),
+  netJoin: () => joinGame(),
 });
 /** A setting changed from a menu: through the page's own control where there is one, so both agree. */
 function setSetting(k, v) {
@@ -1156,6 +1159,7 @@ function netPanel(help, text, go) {
   netEl.text.value = text;
   netEl.go.textContent = go;
   netEl.go.hidden = !go;
+  netEl.panel.scrollIntoView?.({ block: 'nearest' });   // (from the menu, the view is at the top and the panel below the controls)
   if (text) { netEl.text.focus(); netEl.text.select(); }
 }
 /**
