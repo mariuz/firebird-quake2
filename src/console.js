@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_forwardspeed', 'cl_gun', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundlist', 'spectator', 'status', 'stop', 'sv_gravity', 'sv_rollangle', 'sv_rollspeed', 'timedemo', 'timelimit', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_forwardspeed', 'cl_gun', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_credits', 'menu_game', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'path', 'pause', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'soundlist', 'spectator', 'status', 'stop', 'sv_gravity', 'sv_rollangle', 'sv_rollspeed', 'timedemo', 'timelimit', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -107,7 +107,8 @@ const HISTORY = 32;
  *         modelList() → [{ name, size }] (modellist), imageList() → [{ kind, w, h, name }] (imagelist: P a picture, W a wall texture, M a skin), soundList() → [{ name, size, loop }] (soundlist), version() → the page's version string (version), togglePause() → paused now, null for a shared game or none (pause),
  *         toggleScores() (score: the score board, in a game of more than one client), putAway() (putaway: every screen off),
  *         serverInfo() → the game's cvars as { mapname, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill }, null on a joined page or without a map (serverinfo),
- *         userInfo() → this page's { name, hand, gender, msg, fov, spectator } (userinfo), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
+ *         userInfo() → this page's { name, hand, gender, msg, fov, spectator } (userinfo),
+ *         viewPos() → the first view's { x, y, z, yaw } (viewpos), timeRefresh(flip) → { seconds, fps } after a full turn in 128 frames, null without a game of this page's own (timerefresh), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
  *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
  *         toggleHelp() (help: the help computer, F1's), gravity() → the game's gravity, null on a joined page or without a map, setGravity(n) (sv_gravity),
  *         gameCvar(col) → the game row's column, null on a joined page or without a map, setGameCvar(col, n) (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed: GAME_CVARS),
@@ -344,6 +345,21 @@ export class Console {
         if (!h.isRunning()) { say('screenshot: nothing is on the view', true); return; }
         h.screenshot?.();
         return;
+      case 'viewpos': {
+        // V_Viewpos_f: the eye's position and the yaw, whole numbers as Com_Printf("(%i %i %i) : %i") had them (what screenshot.mjs --at= takes, its z the origin's)
+        const v = h.viewPos?.();
+        if (!v) { say('viewpos: nothing is on the view', true); return; }
+        say(`(${Math.trunc(v.x)} ${Math.trunc(v.y)} ${Math.trunc(v.z)}) : ${Math.trunc(v.yaw)}`, false, 8000);
+        return;
+      }
+      case 'timerefresh': {
+        // SCR_TimeRefresh_f: the view spun a full turn in 128 frames with the painter timed, "seconds (fps)" as Com_Printf("%f") had
+        // them; an argument runs it without page flipping (timerefresh 1: one present at the end)
+        const r = await h.timeRefresh?.(!arg);
+        if (!r) { say('timerefresh: a game of this page\'s own must be running, its menu away', true); return; }
+        say(`${r.seconds.toFixed(6)} seconds (${r.fps.toFixed(6)} fps)`, false, 8000);
+        return;
+      }
       case 'clear':
         // Con_Clear_f: the scrollback emptied, the notify lines with it (the line typed goes too, as the console's own echo of it did)
         h.clearLog?.();
