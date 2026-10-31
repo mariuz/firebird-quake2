@@ -903,6 +903,21 @@ try {
       assert(moved > 50, `the guest's W walks its player at the host (${moved.toFixed(0)} units)`);
       assert(samples > 5 && ahead > 0 && farthest < 120, `the guest's own move is predicted ahead of the host's frames (${ahead} of ${samples} samples ahead, at most ${farthest.toFixed(1)} units)`);
       assert(boxed > 0, `the prediction clips against the box entities the frames carry (${boxed} about the guest)`);
+      // cl_showmiss counts the misses (none expected over a loopback: the pmove is the SQL's), cl_predict 0 stops the prediction (no
+      // state ahead of the frames, the keys still moving the player at the host), cl_predict 1 starts it again
+      await typeOn(gp, 'cl_showmiss 1'); await typeOn(gp, 'cl_predict 0');
+      // (the lock: refused when asked right after the console let the pointer go, so the click is tried until the canvas holds it)
+      const glocked = () => gp.evaluate(() => document.pointerLockElement === document.getElementById('screen')).catch(() => false);
+      for (let i = 0; i < 10 && !(await glocked()); i++) { await gp.locator('#screen').click(); await sleep(500); }
+      await gp.keyboard.down('w');
+      // (the guest may be dead by now, so its command at the host is the measure, not a distance: the usercmd row's forward)
+      let fwdSeen = 0;
+      for (let i = 0; i < 16 && fwdSeen !== 1; i++) { await sleep(100); fwdSeen = await page.evaluate(() => window.quake2.sql('SELECT fwd FROM usercmd WHERE client = 2').then((r) => r[0]?.FWD ?? 0)).catch(() => 0); }
+      const noPred = await gp.evaluate(() => ({ ...window.quake2.prediction, showmiss: window.quake2.settings.clShowmiss, predict: window.quake2.settings.clPredict })).catch(() => ({}));
+      await gp.keyboard.up('w'); await sleep(300);
+      await typeOn(gp, 'cl_predict 1'); await typeOn(gp, 'cl_showmiss 0');
+      assert(noPred.predict === false && noPred.showmiss === true && noPred.pending === 0 && noPred.x === null && Number.isInteger(noPred.misses) && fwdSeen === 1,
+        `cl_predict 0 stops the prediction (${JSON.stringify(noPred)}) while the guest's W still reaches the host as its command (forward ${fwdSeen}); cl_showmiss counts the misses`);
       // a recording on the joined page: record at its console writes the frames the host sends it (the stats line counts
       // them), stop downloads it as a demo, parsed here: its frames, the host's map and the level's name, and it is kept
       // under its name (the brush models in it are those the frames showed, which hang on where the guest walked: counted

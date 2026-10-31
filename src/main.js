@@ -846,7 +846,8 @@ function guestAck(got, now) {
   const p = guestPred;
   if (!p) return;
   const row = got.row;
-  if (row.DEAD || row.INTERMISSION || row.VX == null || row.CHASE) { p.st = null; p.cmds = []; p.error = null; return; }   // (chasing: the view is the host's, PM_FREEZE)
+  // cl_predict 0: no prediction, the frames painted as they come (CL_PredictMovement's early return); chasing: the view is the host's, PM_FREEZE
+  if (!settings.clPredict || row.DEAD || row.INTERMISSION || row.VX == null || row.CHASE) { p.st = null; p.cmds = []; p.error = null; return; }
   const before = p.st ? { x: p.st.x, y: p.st.y, z: p.st.z } : null;
   p.cmds = p.cmds.filter((c) => c.seq > got.ack);
   const solids = [], seen = new Set();
@@ -863,12 +864,17 @@ function guestAck(got, now) {
   if (before && p.st) {
     const dx = before.x - st.x, dy = before.y - st.y, dz = before.z - st.z;
     p.error = Math.hypot(dx, dy, dz) < 640 && (dx || dy || dz) ? { dx, dy, dz, at: now } : null;   // (farther is a teleport: no glide)
+    if (dx || dy || dz) {
+      // CL_CheckPredictionError's count, and with cl_showmiss its line: the frame's tic and the deltas summed in eighths of a unit, as Quake's shorts had them
+      p.misses = (p.misses ?? 0) + 1;
+      if (settings.clShowmiss) notify.add(`prediction miss on ${row.TIC}: ${Math.round((dx + dy + dz) * 8)}`, gameClock());
+    }
   } else p.error = null;
 }
 /** The command just sent, run ahead on the predicted state (its own turn and its share of a tic). */
 function guestPredict(cmd, tics, seq) {
   const p = guestPred;
-  if (!p) return;
+  if (!p || !settings.clPredict) return;   // (cl_predict 0: the command goes, nothing runs ahead)
   const c = { seq, cmd: cmdOf(cmd), dt: tics * 0.05 };
   p.cmds.push(c);
   if (p.st) pmove(p.cm, p.st, c.cmd, c.dt, p.world ?? { gravity: p.gravity });
@@ -1669,7 +1675,7 @@ async function boot() {
       get cinematic() { return cinematic ? { file: cinematic.file, frame: cinematic.frame, fps: CIN_FPS } : null; },
       // (the browser test's: a cinematic from bytes it made, the game going on after as it was)
       cinematicFrom: async (bytes, name = 'test') => { const was = running; await playCinematicFrom(Uint8Array.from(bytes), name); running = was; lastTic = performance.now(); },
-      get prediction() { const p = guestPred; return p ? { seq: p.seq, pending: p.cmds.length, x: p.st?.x ?? null, y: p.st?.y ?? null, z: p.st?.z ?? null, error: p.error ? Math.hypot(p.error.dx, p.error.dy, p.error.dz) : 0, boxes: p.world?.boxes.length ?? 0 } : null; },
+      get prediction() { const p = guestPred; return p ? { seq: p.seq, pending: p.cmds.length, x: p.st?.x ?? null, y: p.st?.y ?? null, z: p.st?.z ?? null, error: p.error ? Math.hypot(p.error.dx, p.error.dy, p.error.dz) : 0, boxes: p.world?.boxes.length ?? 0, misses: p.misses ?? 0 } : null; },
       sql: (q, p) => db.query(q, p).then((r) => r.rows) };
     syncAutoexecBox().catch(() => undefined);
     const forCache = (await useKeptPak()) ? null : await downloadPak();
