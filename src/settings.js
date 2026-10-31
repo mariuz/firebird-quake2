@@ -8,11 +8,12 @@ import { ACTIONS, DEFAULT_BINDS, DEFAULT_LINES, defaultBinds, defaultLines, norm
 export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', skill: 1, fov: 90,
-  renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, crosshair: 1, coop: false, deathmatch: false,
+  renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1,
+  crosshair: 1, coop: false, deathmatch: false,
   dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, rtcIce: '', rtcSignal: '', netgraph: false });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
-export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1 });
+export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, crosshair: 1 });
 export const VIDEO_RESET = Object.freeze({ renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false });
 
 /** The video modes the page offers (the detail setting), as [width, height]. */
@@ -34,6 +35,9 @@ const CHECK = {
   renderer: oneOf('fast', 'sql'),
   brightness: num(0.5, 3),
   alwaysRun: bool, invertMouse: bool,
+  // the mouse look cvars (CL_MouseMove): free look (the mouse looks without +mlook held; off, its vertical walks), lookspring
+  // (+mlook let go levels the view, free look off), lookstrafe (+mlook held, its horizontal sidesteps), m_forward and m_side
+  freelook: bool, lookspring: bool, lookstrafe: bool, mForward: num(-100, 100), mSide: num(-100, 100),
   sensitivity: num(1, 20),
   crosshair: int(0, 3),
   coop: bool,            // a new game with two players: the view split, the gamepad the second's

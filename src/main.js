@@ -456,6 +456,7 @@ async function loadSaved(save) {
   } catch (err) { console.error(err); setStatus(`Load failed: ${err.message}`, true); }
 }
 input.attach(canvas, window, { locked: () => document.pointerLockElement === canvas, settings: () => settings });
+input.onCenterView = () => con.run('centerview').catch((err) => console.error(err));   // (+mlook let go with lookspring on, free look off: IN_CenterView)
 canvas.addEventListener('pointerdown', () => { if (anyKey) { const go = anyKey; anyKey = null; go(); } else if (demo && !menu.active) openMenu(() => menu.main()); });
 // the keys menu waiting for a key takes a mouse button or the wheel too ("press a key or button"), as KeyBindingFunc took K_MOUSE1
 canvas.addEventListener('mousedown', (e) => {

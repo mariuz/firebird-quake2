@@ -195,7 +195,7 @@ check(readPad(null) === null, 'no pad reads as null');
     check(checkLine('  give all ') === 'give all' && checkLine('') === null && checkLine('x'.repeat(128)) !== null && checkLine('x'.repeat(129)) === null && checkLine('say\nhi') === null && checkLine(null) === null,
       'checkLine trims, and refuses nothing, past 128 characters or a control character');
   }
-  check(ACTIONS.length === 25 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
+  check(ACTIONS.length === 26 && ACTIONS.every((a) => DEFAULT_BINDS[a.id]) && new Set(Object.values(DEFAULT_BINDS).flat()).size === Object.values(DEFAULT_BINDS).flat().length,
     'every action has its default keys, no key twice');
   inp.clear();
   inp.mouse(100, -50, settings); c = cmd();
@@ -203,6 +203,26 @@ check(readPad(null) === null, 'no pad reads as null');
   inp.mouse(0, -50, { ...settings, invertMouse: true }); c = cmd();
   check(c[4] > 0, 'inverted, up looks down');
   check(cmd()[3] === 0, 'the movement is spent by the read');
+  // CL_MouseMove's switches: +strafe held, the mouse's horizontal sidesteps (m_side, in cl_sidespeed's 200) and its vertical walks
+  // (m_forward); free look off, its vertical walks unless +mlook is held; lookstrafe with +mlook, its horizontal sidesteps; +mlook
+  // let go with lookspring on and free look off levels the view (IN_MLookUp)
+  inp.key('AltLeft'); inp.mouse(20, -10, settings); c = cmd(); inp.release('AltLeft');
+  check(c[3] === 0 && c[4] === 0 && Math.abs(c[2] - 0.7) < 1e-9 && Math.abs(c[1] - 0.35) < 1e-9, `+strafe held, the mouse sidesteps and walks instead of turning and looking (side ${c[2]}, forward ${c[1]})`);
+  inp.mouse(0, 100, { ...settings, freelook: false }); c = cmd();
+  check(c[4] === 0 && c[1] === -1, 'free look off, the mouse\'s vertical walks (back, no faster than full speed) and looks nothing');
+  inp.key('Backslash'); inp.mouse(0, 100, { ...settings, freelook: false }); c = cmd();
+  check(c[4] > 0 && c[1] === 0, '+mlook held (\\ by default), it looks');
+  inp.mouse(20, 0, { ...settings, lookstrafe: true }); c = cmd();
+  check(c[3] === 0 && Math.abs(c[2] - 0.7) < 1e-9, 'lookstrafe with +mlook, its horizontal sidesteps');
+  inp.mouse(20, 0, { ...settings, lookstrafe: true, mSide: 0.5 }); c = cmd();
+  check(Math.abs(c[2] - 0.35) < 1e-9, 'm_side scales it');
+  let centred = 0;
+  inp.onCenterView = () => { centred++; };
+  inp.liveSettings = () => ({ ...settings, freelook: false, lookspring: true }); inp.release('Backslash');
+  inp.key('Backslash'); inp.liveSettings = () => ({ ...settings, freelook: true, lookspring: true }); inp.release('Backslash');
+  inp.key('Backslash'); inp.liveSettings = () => ({ ...settings, freelook: false, lookspring: false }); inp.release('Backslash');
+  inp.liveSettings = null;
+  check(centred === 1 && !inp.keys.has('Backslash'), 'letting +mlook go levels the view once: with lookspring on and free look off, not otherwise');
   // touches: the left half moves by the drag, the right half looks; a tap jumps or fires
   inp.touchStart(1, 100, 300, true); inp.touchMove(1, 100, 280); c = cmd();
   check(c[1] === 0.5 && c[2] === 0, 'a drag up on the left half is half speed forward');

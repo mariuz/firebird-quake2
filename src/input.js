@@ -15,7 +15,7 @@ export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'Ar
   'BracketLeft', 'BracketRight', 'Enter',
   'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'Tab', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7',
   'Digit8', 'Digit9', 'Digit0', 'KeyF', 'KeyG', 'KeyC', 'KeyL', 'KeyH', 'KeyT', 'Comma', 'Period', 'PageUp', 'PageDown', 'Slash',
-  'AltLeft', 'AltRight', 'Insert', 'End', 'Backspace']);
+  'AltLeft', 'AltRight', 'Insert', 'End', 'Backspace', 'Backslash']);
 
 // default.cfg: 1-5 blaster to chaingun, 6 grenade launcher … 0 BFG10K, G "use grenades"
 // (the impulses are the weapons in item order, hand grenades 6 between the chaingun and the launcher; 12 and 22 the
@@ -44,6 +44,8 @@ export const ACTIONS = [
   // bindnames' sidestep (+strafe: held, the turning keys step sideways) and keyboard look (+klook: held, the walking keys
   // look up and down), as CL_BaseMove and CL_AdjustAngles read them; default.cfg's ALT and INS
   { id: 'strafe', name: 'sidestep', cmd: '+strafe' }, { id: 'klook', name: 'keyboard look', cmd: '+klook' },
+  // bindnames' mouse look (+mlook: held, the mouse looks with free look off, as CL_MouseMove read it); default.cfg's \
+  { id: 'mlook', name: 'mouse look', cmd: '+mlook' },
 ];
 /** default.cfg's keys bound to command lines rather than actions (centerview, IN_CenterView: END levels the view). */
 export const DEFAULT_LINES = Object.freeze({ End: 'centerview' });
@@ -57,7 +59,7 @@ export const DEFAULT_BINDS = Object.freeze({
   attack: ['Control', 'Mouse1'], weapnext: ['Slash', 'MWheelDown'], weapprev: ['MWheelUp'], forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
   run: ['Shift'], moveleft: ['KeyA', 'Comma'], moveright: ['KeyD', 'Period'], lookup: ['PageUp'], lookdown: ['PageDown'], moveup: ['Space'], movedown: ['KeyC'],
   inven: ['Tab'], invuse: ['Enter'], invdrop: ['Backspace'], invprev: ['BracketLeft'], invnext: ['BracketRight'], help: ['F1'], silencer: ['KeyL'], shield: ['KeyH'], messagemode: ['KeyT'],
-  strafe: ['Alt'], klook: ['Insert'],
+  strafe: ['Alt'], klook: ['Insert'], mlook: ['Backslash'],
 });
 /** A fresh copy of the default binds (each action's keys its own array). */
 export const defaultBinds = () => Object.fromEntries(Object.entries(DEFAULT_BINDS).map(([k, v]) => [k, [...v]]));
@@ -146,6 +148,9 @@ export class Input {
     this.keys = new Set();
     this.binds = binds;          // action → the keys bound to it (the page's settings.binds, edited in place by the keys menu)
     this.mouseYaw = 0; this.mousePitch = 0;
+    this.mouseSide = 0; this.mouseFwd = 0;   // the mouse's sidestep and walk (CL_MouseMove with +strafe, or free look off), in full speeds
+    this.liveSettings = null;    // the page's settings, for a key let go (attach gives it; lookspring reads it)
+    this.onCenterView = null;    // what levels the view (the page runs centerview): +mlook let go with lookspring on and free look off
     this.fireClick = false;      // 'tap' for a touch's single shot (the mouse buttons are keys, through the binds)
     this.impulse = 0;
     this.touch = { move: null, look: null };
@@ -165,17 +170,34 @@ export class Input {
     const imp = act ? act.impulse : KEY_IMPULSE[code];
     if (imp) this.impulse = imp;
   }
-  release(code) { this.keys.delete(normalizeKey(code)); }
+  /** A key let go; +mlook's with lookspring on and free look off levels the view (IN_MLookUp: IN_CenterView). */
+  release(code) {
+    code = normalizeKey(code);
+    this.keys.delete(code);
+    const s = this.liveSettings?.();
+    if (s && s.freelook === false && s.lookspring === true && (this.binds.mlook ?? []).includes(code)) this.onCenterView?.();
+  }
   /** The action a key is bound to (the page asks before it keeps a key for itself), or null. */
   bound(code) { return boundAction(this.binds, code); }
   /** Hold a key from somewhere that is not the keyboard (the on-screen buttons). */
   hold(code, on) { if (on) this.keys.add(code); else this.keys.delete(code); }
   clear() { this.keys.clear(); this.fireClick = false; this.touch.move = this.touch.look = null; }
 
-  /** Mouse movement under pointer lock, in counts. */
+  /**
+   * Mouse movement under pointer lock, in counts, as CL_MouseMove read it: its horizontal a turn (m_yaw's 0.022 degrees
+   * a count), or a sidestep with +strafe held or lookstrafe on under +mlook (m_side, in cl_sidespeed's 200 a tic); its
+   * vertical a look (m_pitch, inverted by the option) with +mlook held or free look on (the default here: the mouse
+   * always looked; Quake's was off), and not +strafe, else a walk (m_forward, in cl_forwardspeed's 200). All times
+   * the sensitivity.
+   */
   mouse(dx, dy, settings) {
-    this.mouseYaw -= dx * MOUSE * settings.sensitivity;
-    this.mousePitch += dy * MOUSE * settings.sensitivity * (settings.invertMouse ? -1 : 1);
+    const held = (a) => (this.binds[a] ?? []).some((c) => this.keys.has(c));
+    const mlook = held('mlook'), strafe = held('strafe');
+    const mx = dx * settings.sensitivity, my = dy * settings.sensitivity;
+    if (strafe || (settings.lookstrafe === true && mlook)) this.mouseSide += (settings.mSide ?? 1) * mx / 200;
+    else this.mouseYaw -= mx * MOUSE;
+    if ((mlook || settings.freelook !== false) && !strafe) this.mousePitch += my * MOUSE * (settings.invertMouse ? -1 : 1);
+    else this.mouseFwd -= (settings.mForward ?? 1) * my / 200;
   }
 
   // touches: the left half of the view moves, the right half looks, a tap fires (right) or jumps (left)
@@ -225,6 +247,7 @@ export class Input {
    * (Mouse1-3, through the binds like any key), the wheel MWheelUp and MWheelDown.
    */
   attach(canvas, win, { locked, settings }) {
+    this.liveSettings = settings;
     win.addEventListener('keyup', (e) => this.release(e.code));
     win.addEventListener('blur', () => this.clear());
     canvas.addEventListener('mousedown', (e) => { if (locked() && MOUSE_KEYS[e.button]) this.key(MOUSE_KEYS[e.button]); });
@@ -277,6 +300,9 @@ export class Input {
     const yaw = turnKeys * 7 * tics + this.mouseYaw + padTurn;
     const pitch = lookKeys * 5 * tics + this.mousePitch + padLook;
     this.mouseYaw = 0; this.mousePitch = 0;
+    // the mouse's sidestep and walk (+strafe held, lookstrafe, free look off), on top of the keys', within full speed
+    fwd = Math.max(-1, Math.min(1, fwd + this.mouseFwd)); side = Math.max(-1, Math.min(1, side + this.mouseSide));
+    this.mouseFwd = 0; this.mouseSide = 0;
     const fire = b('attack') || k('TouchFire') || this.fireClick || pad?.fire ? 1 : 0;
     if (this.fireClick === 'tap') this.fireClick = false;   // (a tap fires once)
     // Quake's upmove: jump up, crouch (C) down, both nothing

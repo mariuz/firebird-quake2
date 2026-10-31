@@ -687,7 +687,12 @@ name (`Cmd_Alias_f`, sixteen deep at most, the aliases lasting the session as Qu
 the rest of a line to the next frame (`Console.tick` from the page's frame). `map <name>`, `save`, `load`, `fov`,
 `seed` and `skill` are the page's (`skill 0`–`3`: the next map's skill, 3 the nightmare the menus stop short
 of, latched as the cvar was: "skill will be changed for next game."), as are the settings as cvars (`name`,
-`hand`, `sensitivity`, `cl_run`, `m_pitch`, `crosshair`, `s_volume`, `cd_volume`, and `netgraph`, cl_scrn.c's
+`hand`, `sensitivity`, `cl_run`, `m_pitch`, `crosshair`, `s_volume`, `cd_volume`, the mouse look's `freelook`,
+`lookspring`, `lookstrafe`, `m_forward` and `m_side` (`CL_MouseMove` in `Input.mouse`: the mouse's horizontal a turn,
+or a sidestep with `+strafe` held or lookstrafe on under `+mlook`, `m_side` in `cl_sidespeed`'s 200 a tic; its
+vertical a look with `+mlook` held or free look on, else a walk, `m_forward` in `cl_forwardspeed`'s 200; free look
+is on by default here, as the mouse always looked, off in Quake; the options menu has the three boxes; `m_forward`
+and `m_side` not archived, as Quake's were not), and `netgraph`, cl_scrn.c's
 debug graph along the bottom of a joined page's view, a column a frame from the host, `src/netgraph.js`, not
 archived: shown alone, set with a word through the page's `setSetting` so its controls, the menus and the
 userinfo follow; `cvarlist`; `set <cvar> <value>` as config.cfg sets one), `writeconfig` (the binds and the cvars as `config.cfg`, downloaded, as
@@ -737,8 +742,9 @@ the top, Escape to leave. The console's `menu_main`, `menu_game`, `menu_loadgame
 `menu_options`, `menu_keys`, `menu_video`, `menu_multiplayer`, `menu_playerconfig`, `menu_credits` and
 `menu_quit` open the menus as `M_Init` registered them (the host's `openMenu`), so a key bound to one opens
 it. The options menu's `customize controls` is `M_Menu_Keys_f`: a row nine pixels
-high for each of the twenty-five bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
-mouse look and centre view, "drop item" among them (`invdrop`, BACKSPACE by default) (`centerview` is a game word, END's by default as a command line, `DEFAULT_LINES`), with sidestep (`+strafe`, ALT: held, the turning keys step sideways) and keyboard look (`+klook`, INS: held, the walking keys look up and down) as `CL_BaseMove` read them, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
+high for each of the twenty-six bindable actions (`ACTIONS` in `src/input.js`, menu.c's `bindnames` less
+centre view, "drop item" (`invdrop`, BACKSPACE by default) and "mouse look" among them (`+mlook`, `\` by default: held, the mouse
+looks with free look off, `CL_MouseMove`'s switch; let go with lookspring on, the view levelled, `IN_MLookUp`) (`centerview` is a game word, END's by default as a command line, `DEFAULT_LINES`), with sidestep (`+strafe`, ALT: held, the turning keys step sideways) and keyboard look (`+klook`, INS: held, the walking keys look up and down) as `CL_BaseMove` read them, plus the previous weapon, `weapprev`, the chat key, `messagemode` (`t`: the console with `say ` on its line), and the silencer and the power shield, default.cfg's
 `s` and `p`, which are the page's back and pause: `l` and `h` here) with its keys named as `Key_KeynumToString` named them
 (`keyName`: letters and digits as themselves, `UPARROW`, `CTRL`, `PGDN`, `MOUSE1`, `MWHEELUP`…, "or" between two, `???` for
 none); Enter waits for a key (the cursor an `=`, the status bar asking) and the next key, mouse button or wheel notch pressed binds it

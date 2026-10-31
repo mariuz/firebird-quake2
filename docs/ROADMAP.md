@@ -745,10 +745,18 @@ The ninth list: what the console and a shared game still lack of Quake 2's own w
 The tenth list: what the console, the keys and a shared game still lack of Quake 2's own words, with the demo
 pak. In the order they are to be taken.
 
-- **`+mlook`, `freelook`, `lookspring` and `lookstrafe`**: bindnames' "mouse look" and the options menu's three
-  items. The mouse always looks here; with `freelook 0` its vertical walks the player forward and back
-  (`m_forward`) unless `+mlook` is held, `lookspring` levels the view as `+mlook` is let go (`IN_MLookUp`), and
-  `lookstrafe` makes its horizontal a sidestep under `+mlook` (`CL_MouseMove`).
+- **`+mlook`, `freelook`, `lookspring` and `lookstrafe`**: done. The mouse always looked here. `+mlook` is a
+  bindable action now, bindnames' "mouse look" (`\` by default, the twenty-sixth row of the keys menu), and the
+  options menu has Quake's lookspring, lookstrafe and free look boxes, the cvars `freelook` (on by default, as the
+  mouse always looked; Quake's default was off), `lookspring`, `lookstrafe`, `m_forward` and `m_side` (the last two
+  not archived, as Quake's were not). `Input.mouse` reads the mouse as `CL_MouseMove` did: its horizontal a turn,
+  or a sidestep with `+strafe` held or lookstrafe on under `+mlook` (`m_side`, in `cl_sidespeed`'s 200 a tic); its
+  vertical a look with `+mlook` held or free look on and not `+strafe`, else a walk (`m_forward`, in
+  `cl_forwardspeed`'s 200); the moves add to the keys' within full speed. `+mlook` let go with lookspring on and
+  free look off levels the view (`IN_MLookUp`: the page runs `centerview`, `Input.onCenterView`). `test:input`
+  holds each switch to its numbers and the levelling to its one case; `test:menu` turns the three boxes;
+  `test:console` the five cvars, `cvarlist` and `writeconfig` with them; the browser test types `freelook 0` and
+  `lookspring 1` and reads them in the settings.
 - **`echo`, `cmdlist`, `version` and `pause`**: cmd.c's `echo` prints its words, `cmdlist` the commands and
   their count, `version` says which build the page runs, and `pause` is the P key's word (`CL_Pause_f`).
 - **`wave 0–4`**: `Cmd_Wave_f`: flipoff, salute, taunt, wave and point as the player model's frames (`ANIM_WAVE`

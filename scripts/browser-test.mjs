@@ -172,7 +172,7 @@ try {
     await sleep(1200);
     const scrolled = await page.evaluate(() => performance.now() - (window.quake2.menu.current.start ?? performance.now())).catch(() => 0);
     assert(scrolled > 1000, `which scroll (${scrolled.toFixed(0)} ms in)`);
-    await press('Escape', 'Escape', 'ArrowDown', 'ArrowDown', 'Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
+    await press('Escape', 'Escape', 'ArrowDown', 'ArrowDown', 'Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
     assert((await menuId()) === 'keys', 'options, customize controls opens the keys menu');
     await press('Enter', 'KeyK');
     const bound = await page.evaluate(() => ({ attack: window.quake2.settings.binds.attack, stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).binds.attack, input: window.quake2.input.bound('KeyK') })).catch(() => ({}));
@@ -184,7 +184,7 @@ try {
     await page.keyboard.down('k'); await sleep(700); await page.keyboard.up('k'); await sleep(300);
     const sh1 = await shots();
     assert(sh1 > sh0 && sh0 >= 0, `K now fires the blaster (${sh0} → ${sh1} shots)`);
-    await press('Escape', 'Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');   // (the main menu's cursor stayed on options)
+    await press('Escape', 'Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');   // (the main menu's cursor stayed on options; reset defaults is the eleventh row)
     const reset = await page.evaluate(() => window.quake2.settings.binds.attack.join()).catch(() => '');
     assert(reset === 'Control,Mouse1', `reset defaults puts the keys back (${reset})`);
     await press('Escape', 'Escape');
@@ -204,7 +204,7 @@ try {
     assert(sm1 > sm0, `the left mouse button fires the blaster under the lock (${sm0} → ${sm1} shots)`);
     await page.evaluate(() => document.exitPointerLock?.()); await sleep(400);
     if ((await menuId()) !== 'main') await press('Escape');   // (the pointer let go brings the main menu up by itself)
-    await press('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');   // (the main menu's cursor stayed on options)
+    await press('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');   // (the main menu's cursor stayed on options; customize controls is the tenth row)
     assert((await menuId()) === 'keys', `the keys menu again (${await menuId()})`);
     await press('Enter');
     await page.mouse.click(480, 360, { button: 'right' }); await sleep(200);
@@ -383,6 +383,11 @@ try {
     const cv = await page.evaluate(() => ({ sens: window.quake2.settings.sensitivity, stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).sensitivity, name: window.quake2.settings.name, list: document.getElementById('status')?.textContent })).catch(() => ({}));
     assert(cv.sens === 5 && cv.stored === 5 && cv.name === 'Ace' && cvName === 'Ace' && /sensitivity "5"/.test(cv.list ?? '') && /name "Ace"/.test(cv.list ?? ''),
       `sensitivity and name at the console reach the settings and the game's row, cvarlist shows them (${JSON.stringify(cv)})`);
+    // the mouse look cvars reach the settings (free look is on by default; +mlook on \ by default), the options menu shows them
+    await typeCommand('freelook 0'); await typeCommand('lookspring 1');
+    const ml = await page.evaluate(() => ({ freelook: window.quake2.settings.freelook, lookspring: window.quake2.settings.lookspring, mlook: window.quake2.settings.binds.mlook.join() })).catch(() => ({}));
+    await typeCommand('freelook 1'); await typeCommand('lookspring 0');
+    assert(ml.freelook === false && ml.lookspring === true && ml.mlook === 'Backslash', `freelook 0 and lookspring 1 at the console reach the settings, +mlook on \\ by default (${JSON.stringify(ml)})`);
     // writeconfig downloads config.cfg with the keys and the cvars; the settings put back, the file run through the Config
     // control (exec's picker) brings them again
     const [cfgDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('writeconfig')]);
