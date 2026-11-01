@@ -66,6 +66,7 @@ function paintDue(now) {
   return true;
 }
 let rSpeedsAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
+let hostSpeedsAt = 0;   // when host_speeds last printed a frame's times (once a second here; Qcommon_Frame printed every frame)
 let lastTic = 0;
 // src/net.js: a game shared over a data channel. The host runs the game here and sends the guest its frames
 // (`host`, a HostLink); the guest paints the host's frames and sends its commands (`guest`, a GuestLink)
@@ -1453,6 +1454,13 @@ function updateStats() {
   if (settings.rSpeeds && performance.now() - rSpeedsAt > 1000) {
     rSpeedsAt = performance.now();
     notify.add(`${(perf.faces + perf.draw).toFixed(0)} ms, ${perf.rows} wpoly ${perf.ents ?? 0} epoly (q2_tic ${perf.tic.toFixed(0)} ms)`, gameClock());
+  }
+  // host_speeds: a frame's times as Qcommon_Frame printed "all, sv, gm, cl, rf" (once a second here): the whole, the server frame outside
+  // the game (none: the SQL tic is the game), the game (the tic), the client outside the painter (the frame query), the painter
+  if (settings.hostSpeeds && performance.now() - hostSpeedsAt > 1000) {
+    hostSpeedsAt = performance.now();
+    const p3 = (n) => String(Math.round(n)).padStart(3);
+    notify.add(`all:${p3(perf.tic + perf.faces + perf.draw)} sv:${p3(0)} gm:${p3(perf.tic)} cl:${p3(perf.faces)} rf:${p3(perf.draw)}`, gameClock());
   }
 }
 

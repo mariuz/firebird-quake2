@@ -219,6 +219,13 @@ check(readPad(null) === null, 'no pad reads as null');
   check(c[4] > 0, 'inverted, up looks down');
   inp.mouse(100, 0, { ...settings, mYaw: 0.044 }); c = cmd();
   check(Math.abs(c[3] - (-100 * 0.044 * 7)) < 1e-9, 'm_yaw is the turn a count: doubled, the turn doubles');
+  // m_filter: each sample averaged with the one before (CL_MouseMove's old_mouse_x/y): 100 after 0 counts as 50, 100 after 100 as 100
+  inp.mouse(0, 0, settings); inp.mouse(100, 0, { ...settings, mFilter: true }); c = cmd();
+  check(Math.abs(c[3] - (-50 * 0.022 * 7)) < 1e-9, 'm_filter averages a sample with the last (100 after 0 is 50)');
+  inp.mouse(100, 0, { ...settings, mFilter: true }); c = cmd();
+  check(Math.abs(c[3] - (-100 * 0.022 * 7)) < 1e-9, 'and 100 after 100 is 100');
+  inp.mouse(100, 0, settings); c = cmd();
+  check(Math.abs(c[3] - (-100 * 0.022 * 7)) < 1e-9, 'off, the sample is taken as it is');
   check(cmd()[3] === 0, 'the movement is spent by the read');
   // CL_MouseMove's switches: +strafe held, the mouse's horizontal sidesteps (m_side, in cl_sidespeed's 200) and its vertical walks
   // (m_forward); free look off, its vertical walks unless +mlook is held; lookstrafe with +mlook, its horizontal sidesteps; +mlook

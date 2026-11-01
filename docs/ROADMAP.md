@@ -1012,9 +1012,13 @@ own words with the demo pak. In the order they are to be taken.
   (archived, as Quake's was; the two counts not). `test:audio` ends a track twice under `cd_loopcount 2` and sees it
   again, then the loop track, and the music stopped and back with `cd_nocd`; `test:console` the three cvars,
   `cvarlist` with them; the browser test reads the audio's counts and the music stopped and back, on both builds.
-- **`m_filter` and `host_speeds`**: the mouse averaged over the last two samples (`CL_MouseMove` with `m_filter`),
-  and `host_speeds 1` printing a frame's times on the line as `Qcommon_Frame` did ("all, sv, gm, cl, rf": here the
-  tic, the game logic in it, the frame query and the raster).
+- **`m_filter` and `host_speeds`**: done. `m_filter 1` averages each mouse sample with the one before as
+  `CL_MouseMove` did with `old_mouse_x` and `old_mouse_y` (`Input.mouse`; archived, as Quake's was), and `host_speeds 1`
+  prints a frame's times on the line once a second as `Qcommon_Frame` printed "all, sv, gm, cl, rf": the whole, the
+  server frame outside the game (none: the SQL tic is the game), the game (the tic), the client outside the painter
+  (the frame query) and the painter. `test:input` averages two samples and takes one whole without the switch;
+  `test:console` the two cvars and `config.cfg` with `m_filter`; the browser test reads the line and the setting on
+  both builds.
 - **`timeout` and `cl_timeout`**: the host drops a guest that sent no command for `timeout` seconds
   (`SV_CheckTimeouts`, 125, "timed out"), and a guest leaves a host silent for `cl_timeout` seconds (120, "Server
   connection timed out."), both words at the console.

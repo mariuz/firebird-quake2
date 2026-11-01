@@ -745,7 +745,10 @@ surface cache cleared with the switch), `sw_waterwarp` (0: the view under water 
 `sw_clearcolor` (the palette index the view is cleared to before a frame, `Renderer.clearColor`: 0 here, where Quake's was 2; none of
 the three archived), `cd_loopcount`, `cd_looptrack` and `cd_nocd` (`CDAudio_Update`'s loop: a map's track plays over again at its end
 until it has played `cd_loopcount` times, 4, then `cd_looptrack`, 11, over and over, `Q2Audio.playMusic`'s `onended`; the drone stands
-in for a track with no file as one endless track; `cd_nocd 1` plays no music, archived as Quake's was),
+in for a track with no file as one endless track; `cd_nocd 1` plays no music, archived as Quake's was), `m_filter`
+(`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived) and `host_speeds` (a frame's
+times on the console's line once a second as `Qcommon_Frame` printed "all, sv, gm, cl, rf": the whole, the server frame outside
+the game, none here where the SQL tic is the game, the game, the client outside the painter, the frame query, and the painter),
 `m_yaw` (the turn a mouse count, 0.022 as Quake had it, `Input.mouse`'s), `cl_gun` (0: no view weapon, as `CL_AddViewWeapon`
 had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
 `cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed` and `cl_sidespeed` (`CL_AdjustAngles` and `CL_BaseMove`'s

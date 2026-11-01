@@ -464,6 +464,13 @@ try {
       && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
+    // host_speeds 1 prints a frame's times on the line once a second as Qcommon_Frame did; m_filter reaches the settings
+    await typeCommand('host_speeds 1'); await typeCommand('m_filter 1');
+    let hs = null;
+    for (let i = 0; i < 20 && !hs; i++) { await sleep(200); hs = await page.evaluate(() => window.quake2.notify.log(64).find((l) => /^all: *\d+ sv: *\d+ gm: *\d+ cl: *\d+ rf: *\d+$/.test(l)) ?? null).catch(() => null); }
+    const mf = await page.evaluate(() => window.quake2.settings.mFilter).catch(() => null);
+    await typeCommand('host_speeds 0'); await typeCommand('m_filter 0');
+    assert(typeof hs === 'string' && mf === true, `host_speeds prints the frame's times ("${hs}"), m_filter reaches the settings (${mf})`);
     // cd_nocd 1 stops the music and cd_loopcount, cd_looptrack reach the audio; off again, the map's track plays
     await typeCommand('cd_loopcount 2'); await typeCommand('cd_looptrack 3'); await typeCommand('cd_nocd 1'); await sleep(300);
     const cd1 = await page.evaluate(() => ({ count: window.quake2.audio.loopCount, loop: window.quake2.audio.loopTrack, nocd: window.quake2.audio.nocd, music: window.quake2.audio.music?.kind ?? null })).catch(() => ({}));
