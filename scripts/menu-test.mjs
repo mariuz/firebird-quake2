@@ -193,6 +193,25 @@ assert(calls.at(-2) === 'net host' && !menu.active, 'start network server is the
   assert(bare.current.id === 'multiplayer' && bare.current.items.filter((i) => i.grayed).length === 2 && !bare.current.items[2].grayed && !calls.slice(-1).includes('net join'),
     'a page with no network has them greyed, and Enter on one does nothing');
 }
+// the deathmatch options (M_Menu_DMOptions_f): the fourth row of the multiplayer menu, the dmflags as yes/no rows, the "no" flags
+// inverted (falling damage is yes while DF_NO_FALLING is clear), each turn writing the setting, the status bar saying the value
+settings.dmflags = 0;
+menu.mainCursor = 1; menu.main(); keys('Enter');
+assert(keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter') === 'dmoptions' && menu.current.items.length === 13 && menu.current.items[0].name === 'falling damage' && menu.current.items[0].get() === 1 && menu.current.items[1].get() === 0,
+  'the multiplayer menu\'s deathmatch options open with thirteen rows: falling damage yes, weapons stay no at dmflags 0');
+keys('ArrowLeft');
+assert(settings.dmflags === 8 && menu.current.items[0].get() === 0 && menu.current.statusbar === 'dmflags = 8', `falling damage turned to no sets DF_NO_FALLING (${settings.dmflags}), the status bar says so`);
+keys('ArrowDown', 'ArrowRight', 'ArrowRight');
+assert(settings.dmflags === 12 && menu.current.items[1].get() === 1, `weapons stay yes adds DF_WEAPONS_STAY, a turn past the end stays (${settings.dmflags})`);
+keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowLeft');
+assert(settings.dmflags === 12 + 256 && menu.current.cursor === 12 && menu.current.items[12].name === 'friendly fire', `the last row, friendly fire, turned to no sets DF_NO_FRIENDLY_FIRE (${settings.dmflags})`);
+keys('ArrowUp', 'ArrowRight');
+assert(settings.dmflags === 12 + 256 + 16384, `quad drop yes adds DF_QUAD_DROP (${settings.dmflags})`);
+draw();
+assert(drawn.some(([k, p]) => k === 'pic' && p === hud.pic('m_banner_multiplayer')), 'under the multiplayer banner');
+keys('Escape');
+assert(menu.current.id === 'multiplayer', 'Escape goes back to the multiplayer menu');
+settings.dmflags = 0;
 menu.mainCursor = 1; menu.main(); keys('Enter');
 keys('ArrowDown', 'ArrowDown', 'Enter');
 assert(menu.current.id === 'player' && menu.current.items[0].type === 'field' && menu.current.cursor === 0, 'player setup opens on the name field');

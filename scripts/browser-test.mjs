@@ -692,6 +692,14 @@ try {
     const f4 = await page.evaluate(() => window.quake2.settings.lines.F4 ?? null).catch(() => 'x');
     assert(mOpt === 'options' && mClosed === null && mVid === 'video' && (await menuId()) === null && f4 === null,
       `menu_options at the console opens the options menu, Escape puts it away; F4 bound to menu_video opens the video menu; unbind F4 takes it off (${JSON.stringify({ mOpt, mClosed, mVid, f4 })})`);
+    // menu_dmoptions opens the deathmatch options; a row turned writes the dmflags setting and the game row
+    await typeCommand('dmflags 0'); await typeCommand('menu_dmoptions'); await sleep(300);
+    const mDm = await menuId();
+    await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowRight'); await sleep(300);
+    const dmSet = await page.evaluate(async () => ({ s: window.quake2.settings.dmflags, row: (await window.quake2.sql('SELECT dmflags d FROM game'))[0]?.D })).catch(() => ({}));
+    await page.keyboard.press('Escape'); await sleep(300);   // (one Escape: the menu opened by the word has nothing under it; a second would bring the main menu)
+    await typeCommand('dmflags 0');
+    assert(mDm === 'dmoptions' && dmSet.s === 4 && dmSet.row === 4 && (await menuId()) === null, `menu_dmoptions opens the deathmatch options, weapons stay turned on sets DF_WEAPONS_STAY in the settings and on the game row (${JSON.stringify(dmSet)})`);
 
     // a recording: `record run` at the console writes the game from then on as a demo (src/record.js: the stats line
     // counts its frames), `stop` downloads it as run.dm2 (parsed here as the page parses the pak's: every block read

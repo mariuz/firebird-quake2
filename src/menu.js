@@ -356,9 +356,42 @@ export class Menu {
         action('join network server', 0, join.callback, { left: true, grayed: join.grayed, statusbar: join.statusbar }),
         action('start network server', 10, start.callback, { left: true, grayed: start.grayed, statusbar: start.statusbar }),
         action('player setup', 20, () => this.playerConfig(), { left: true }),
+        action('deathmatch options', 30, () => this.dmOptions(), { left: true, statusbar: 'the dmflags for the next deathmatch, and the one running' }),
       ],
     });
-    m.layout = (r) => { m.x = (r.w >> 1) - 64; m.y = (r.h - 30) >> 1; };
+    m.layout = (r) => { m.x = (r.w >> 1) - 64; m.y = (r.h - 40) >> 1; };
+    this.push(m);
+  }
+
+  /**
+   * M_Menu_DMOptions_f: the deathmatch flags as rows to turn (DMOptions_MenuInit's, less teamplay: there are no model or skin
+   * teams here), each writing the page's dmflags setting as DMFlagCallback wrote the cvar; the status bar says the value.
+   */
+  dmOptions() {
+    const h = this.host;
+    const m = this.framework({ id: 'dmoptions', banner: 'm_banner_multiplayer', items: [] });
+    const value = () => Number(h.get('dmflags')) || 0;
+    m.statusbar = `dmflags = ${value()}`;
+    // a row: the flag's bit, `inverted` for the "no" flags (DF_NO_FALLING is "falling damage: yes" when clear)
+    const row = (name, y, bit, inverted = false) => spin(name, y, YESNO,
+      () => ((((value() & bit) !== 0) !== inverted) ? 1 : 0),
+      (v) => { const on = (v === 1) !== inverted; h.set('dmflags', on ? value() | bit : value() & ~bit); m.statusbar = `dmflags = ${value()}`; });
+    m.items.push(
+      row('falling damage', 0, 8, true),        // DF_NO_FALLING
+      row('weapons stay', 10, 4),               // DF_WEAPONS_STAY
+      row('instant powerups', 20, 16),          // DF_INSTANT_ITEMS
+      row('allow powerups', 30, 2, true),       // DF_NO_ITEMS
+      row('allow health', 40, 1, true),         // DF_NO_HEALTH
+      row('allow armor', 50, 2048, true),       // DF_NO_ARMOR
+      row('spawn farthest', 60, 512),           // DF_SPAWN_FARTHEST
+      row('same map', 70, 32),                  // DF_SAME_LEVEL
+      row('force respawn', 80, 1024),           // DF_FORCE_RESPAWN
+      row('allow exit', 90, 4096),              // DF_ALLOW_EXIT
+      row('infinite ammo', 100, 8192),          // DF_INFINITE_AMMO
+      row('quad drop', 110, 16384),             // DF_QUAD_DROP
+      row('friendly fire', 120, 256, true),     // DF_NO_FRIENDLY_FIRE
+    );
+    m.layout = (r) => { m.x = r.w >> 1; m.y = (r.h >> 1) - 60; };
     this.push(m);
   }
 

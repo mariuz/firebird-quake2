@@ -978,10 +978,15 @@ client's events among them. In the order they are to be taken.
 The fourteenth list: what the menus, the network game, the painter, the music and the console still lack of Quake 2's
 own words with the demo pak. In the order they are to be taken.
 
-- **`menu_dmoptions`**: the deathmatch options menu (`M_Menu_DMOptions_f`, from the multiplayer menu): the dmflags as
-  rows to toggle (falling damage, weapons stay, instant powerups, allow powerups, allow health, allow armor, spawn
-  farthest, same map, force respawn, allow exit, infinite ammo, quad drop, friendly fire), written to the page's
-  `dmflags` setting as `DMFlagCallback` wrote the cvar, the word at the console too.
+- **`menu_dmoptions`**: done. The multiplayer menu's fourth row, `deathmatch options`, is `M_Menu_DMOptions_f`: the
+  dmflags as thirteen yes/no rows (falling damage, weapons stay, instant powerups, allow powerups, allow health,
+  allow armor, spawn farthest, same map, force respawn, allow exit, infinite ammo, quad drop, friendly fire; the
+  "no" flags inverted as `DMOptions_MenuInit` showed them; no teamplay row, there being no model or skin teams
+  here), each turn writing the page's `dmflags` setting as `DMFlagCallback` wrote the cvar, for the next game and
+  the game running (`setSetting` puts it on the game row), the status bar saying the value; `menu_dmoptions` opens
+  it at the console. `test:menu` opens it from the multiplayer menu, turns rows and reads the bits and the status
+  bar; `test:console` the word; the browser test opens it, turns weapons stay and reads the settings and the game
+  row, on both builds.
 - **`password` and `spectator_password`**: the network game's passwords (`SV_DirectConnect`: a guest whose userinfo
   `password` does not match is refused, "Password required or incorrect."; a watcher's `spectator_password`),
   `needpass` in the serverinfo, the guest's word set at its console and sent with its info.
