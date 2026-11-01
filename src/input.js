@@ -164,6 +164,7 @@ export class Input {
     this.impulse = 0;
     this.touch = { move: null, look: null };
     this.pad = { held: new Set(), stick: { x: 0, y: 0 }, last: null };
+    this.joystick = true;   // in_joystick: the pads read (IN_Frame's; 0 leaves them unread)
     this.pads = [];              // the other pads' last reads, by index after the first (the third and fourth players')
     this.menuPressed = false;    // the pad's Start went down at the last read
     this.padScreens = { inventory: false, help: false };   // ... and its Y or Back
@@ -239,6 +240,7 @@ export class Input {
 
   /** The gamepad, read once a frame: a press counts once. */
   pollPad() {
+    if (!this.joystick) { this.pad.last = null; return null; }   // (in_joystick 0: no pad read)
     const pad = readPad(firstPad(this.getPads()), this.pad.held);
     if (pad) this.pad.held = pad.held;
     this.pad.last = pad;
@@ -346,6 +348,7 @@ export class Input {
   }
   /** The pad at `index` among the connected ones (1 the second), read once: a press counts once; null without one. */
   pollPadAt(index) {
+    if (!this.joystick) return null;
     const p = connectedPads(this.getPads())[index];
     const rec = this.pads[index] ?? (this.pads[index] = { held: new Set(), last: null });
     const pad = readPad(p ?? null, rec.held);

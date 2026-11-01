@@ -725,7 +725,9 @@ it, `dumpLog`; the name as typed with a path's characters and a `.txt` taken off
 page's warnings, `console.warn`'s, go to the console's lines and scrollback as well; not archived, as Quake's was not) and `logfile`
 (`Com_Printf`'s write to `qconsole.log`: with `logfile 1` the scrollback's lines go to the file as they come, `Notify.onAdd`, kept in the
 page's file store a second after a line and at the page's end, so a reload's run follows the last; `logfile 0` downloads the file and
-drops it, `setLogfile`; Quake left it in the game directory), `echo` (`Cmd_Echo_f`: its words
+drops it, `setLogfile`; Quake left it in the game directory), `log_stats` (`CL_Frame`'s: with `log_stats 1` a line a painted frame,
+"entities,dlights,parts,frame time" after that header, goes to `stats.log` the same way, `keptLog` serving both; `log_stats 0`
+downloads it), `echo` (`Cmd_Echo_f`: its words
 printed as typed), `cmdlist` (`Cmd_List_f`: every command on a line of the scrollback, the page's `print`, and how
 many), `version` (the page's version and build, which `scripts/build.mjs` stamps into the bundle, the engine
 package's version and the engine line: Firebird's version, threads or not), `quit` (`Com_Quit`: the game ends for the attract loop,
@@ -737,7 +739,7 @@ counted and where it came from, `pakInfo`), `dir <wildcard>` (`FS_Dir_f`: the pa
 `*` and `?` within a directory as the file system's glob had them, `dirList`; on the scrollback by their names under "Directory
 of"), `modellist`, `imagelist` and `soundlist` (`Mod_Modellist_f`, `R_ImageList_f`, `S_SoundList_f`: the models with their size in
 the pak, the pictures, wall textures and skins with their kind and size, the sounds decoded with L on the ones looping, a line
-each on the scrollback as those laid them out and the totals; the page's `modelList`, `imageList`, `soundList`), `pause` (`CL_Pause_f`: a single-player
+each on the scrollback as those laid them out and the totals; the page's `modelList`, `imageList`, `soundList`), `cl_paused` (the pause's state as `CL_Frame` set the cvar: shown, never set), `pause` (`CL_Pause_f`: a single-player
 game running pauses or goes on, `togglePause`; a shared game or none, "Pause command is only valid in single
 player"), `score` (`Cmd_Score_f`: the score board toggled in a game of more than one client, coop, deathmatch or
 shared, the inventory and the help put away; nothing in single player, `toggleScores`) and `putaway`
@@ -775,7 +777,7 @@ music: `cd play <n>` a track once and `cd loop <n>` over and over, whatever `cd_
 from where it was, `Q2Audio.pauseMusic` and `resumeMusic`, `cd off` and `cd on`, `setEnabled`, and `cd info` printing the tracks, what
 plays or is paused and how, and the volume as it did, `musicInfo`), `s_show` (`S_Update`'s print of the channels playing, here a line a
 sound started on the scrollback, "left right name" with the volumes 0 to 255, `Q2Audio.onStart`; not archived), `m_filter`
-(`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived) and `host_speeds` (a frame's
+(`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived), `in_joystick` (`IN_Frame`'s: 0 leaves the pads unread, `Input.joystick`; archived as Quake's was, 1 here where Quake's was 0) and `host_speeds` (a frame's
 times on the console's line once a second as `Qcommon_Frame` printed "all, sv, gm, cl, rf": the whole, the server frame outside
 the game, none here where the SQL tic is the game, the game, the client outside the painter, the frame query, and the painter),
 `timeout` and `cl_timeout` (`SV_CheckTimeouts` and `CL_CheckTimeout`: each link notes when it last heard the other, `heardAt`,

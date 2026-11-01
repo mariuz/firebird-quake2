@@ -130,6 +130,7 @@ function setStatus(msg, isError = false) {
 // ── input ────────────────────────────────────────────────────────────────
 // src/input.js holds the keys, the mouse, the touches and the pad between tics and reads them as the usercmd
 const input = new Input({ binds: settings.binds });   // (the keys menu edits settings.binds in place: the Input reads the same object)
+input.joystick = settings.inJoystick !== false;   // (in_joystick from the settings: the pads read, or not)
 let anyKey = null;      // a picture screen waiting for a key or a click
 // the help computer (F1, or the pad's Back) and the inventory screen (TAB, or the pad's Y), per view: the
 // keys are the first player's, the pad is its player's (the second in coop)
@@ -280,6 +281,7 @@ function setSetting(k, v) {
   if (k === 'cdLoopcount') audio.loopCount = Number(v) || 4;   // (cd_loopcount, cd_looptrack: the music's loop; cd_nocd: none)
   if (k === 'cdLooptrack') audio.loopTrack = Number(v) || 0;
   if (k === 'cdNocd') audio.setNocd(!!v);
+  if (k === 'inJoystick') input.joystick = v !== false;   // (in_joystick: the pads read, or not)
   if (k === 'sShow') audio.onStart = v ? (name, l, r) => notify.add(`${String(l).padStart(3)} ${String(r).padStart(3)} ${name}`, gameClock(), { show: false }) : null;   // (s_show: each sound started on the scrollback as S_Update printed a channel)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
@@ -329,34 +331,62 @@ const warn = console.warn.bind(console);
 console.warn = (...args) => { warn(...args); if (settings.developer) notify.add(args.map((a) => (a instanceof Error ? a.message : String(a))).join(' '), gameClock()); };
 // logfile 1 (Com_Printf's write to qconsole.log): the scrollback's lines as they come, kept in the file store (so a reload's run
 // follows the last), flushed a second after a line and at the page's end; logfile 0 downloads the file and drops it
-const LOG_KEY = 'qconsole.log';
-let logKept = '', logNew = '', logFlush = 0;   // (the file's text so far, the lines since the last flush)
-notify.onAdd = (line) => { if (!settings.logfile) return; logNew += `${line}\n`; if (!logFlush) logFlush = setTimeout(flushLog, 1000); };
-async function flushLog() {
-  logFlush = 0;
-  if (!logNew) return;
-  logKept += logNew; logNew = '';
-  await fileStore.put(LOG_KEY, { name: LOG_KEY, bytes: new TextEncoder().encode(logKept) }).catch((err) => warn('qconsole.log:', err.message));
+/**
+ * A text kept in the file store as it grows (Com_Printf's qconsole.log, CL_Frame's stats.log): lines added while it is on,
+ * flushed a second after a line and at the page's end; on from the last run, its file goes on; stopped, downloaded and dropped.
+ */
+function keptLog(key) {
+  const log = { kept: '', pending: '', timer: 0, on: false };
+  const read = async () => { const f = await fileStore.get(key).catch(() => null); return f ? new TextDecoder().decode(f.bytes) : ''; };
+  log.flush = async () => {
+    log.timer = 0;
+    if (!log.pending) return;
+    log.kept += log.pending; log.pending = '';
+    await fileStore.put(key, { name: key, bytes: new TextEncoder().encode(log.kept) }).catch((err) => warn(`${key}:`, err.message));
+  };
+  log.add = (line) => { if (!log.on) return; log.pending += `${line}\n`; if (!log.timer) log.timer = setTimeout(log.flush, 1000); };
+  log.resume = () => { log.on = true; read().then((text) => { log.kept = text + log.kept; }); };
+  log.start = async () => { log.kept = await read(); log.on = true; };   // (on once the file is read: a line added meanwhile would come before its first)
+  log.stop = async () => {
+    log.on = false;
+    if (log.timer) { clearTimeout(log.timer); log.timer = 0; }
+    const text = log.kept + log.pending;
+    log.kept = ''; log.pending = '';
+    await fileStore.remove(key).catch(() => undefined);
+    if (!text) return 0;
+    downloadText(key, text);
+    return text.split('\n').length - 1;
+  };
+  window.addEventListener('pagehide', () => { if (log.timer) { clearTimeout(log.timer); log.flush(); } });
+  return log;
 }
-async function readLog() { const f = await fileStore.get(LOG_KEY).catch(() => null); return f ? new TextDecoder().decode(f.bytes) : ''; }
-if (settings.logfile) readLog().then((text) => { logKept = text + logKept; });   // (on from the last run: its file goes on)
-window.addEventListener('pagehide', () => { if (logFlush) { clearTimeout(logFlush); flushLog(); } });
+const conLog = keptLog('qconsole.log');   // logfile: the scrollback's lines
+const statsLog = keptLog('stats.log');    // log_stats: a line a painted frame, "entities,dlights,parts,frame time" as CL_Frame wrote it
+notify.onAdd = (line) => conLog.add(line);
+if (settings.logfile) conLog.resume();
+if (settings.logStats) statsLog.resume();
 async function setLogfile(on) {
   if (on) {
     if (settings.logfile) return 'already';
     settings.logfile = true; saveSettings();
-    logKept = await readLog();
+    await conLog.start();
     return 'on';
   }
   if (!settings.logfile) return null;
   settings.logfile = false; saveSettings();
-  if (logFlush) { clearTimeout(logFlush); logFlush = 0; }
-  const text = logKept + logNew;
-  logKept = ''; logNew = '';
-  await fileStore.remove(LOG_KEY).catch(() => undefined);
-  if (!text) return 0;
-  downloadText(LOG_KEY, text);
-  return text.split('\n').length - 1;
+  return conLog.stop();
+}
+async function setLogStats(on) {
+  if (on) {
+    if (settings.logStats) return 'already';
+    settings.logStats = true; saveSettings();
+    await statsLog.start();
+    if (!statsLog.kept) statsLog.add('entities,dlights,parts,frame time');   // (the file's first line, as CL_Frame wrote it)
+    return 'on';
+  }
+  if (!settings.logStats) return null;
+  settings.logStats = false; saveSettings();
+  return statsLog.stop();
 }
 function noteMessage(row) {
   if (!row?.MSG || row.MSG_TIME === lastMsgTime) return;
@@ -468,6 +498,8 @@ const con = new Console({
   download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
   clearLog: () => { notify.clear(); conlog.textContent = ''; conlog.hidden = true; },   // (clear: the scrollback and the notify lines emptied, Con_Clear_f)
   setLogfile: (on) => setLogfile(on),                     // (logfile: the scrollback to qconsole.log in the file store, downloaded with 0)
+  setLogStats: (on) => setLogStats(on),                   // (log_stats: a line a frame to stats.log in the file store, downloaded with 0)
+  isPaused: () => paused,                                 // (cl_paused: the pause's state)
   dumpLog: (name) => { const lines = notify.log(notify.keep); downloadText(`${name}.txt`, lines.join('\n') + '\n'); return lines.length; },   // (condump: the scrollback as <name>.txt, Con_Dump_f)
   print: (text) => notify.add(text, gameClock(), { show: false }),   // (cmdlist: lines into the scrollback alone)
   // version: the page's version and build (scripts/build.mjs stamps them), the engine package's version, and the engine line (Firebird's version, threads or not)
@@ -1630,6 +1662,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   if (settings.clTestblend) tint = [255, 128, 64, 0.5];   // (V_TestBlend: 1, 0.5, 0.25 at half)
   if (settings.clAddBlend === false) tint = null;          // (cl_add_blend 0: no blend)
   if (which === 0) frameInfo = { ents: drawEnts ? ents.length : 0, dlights: r.dlights.length, particles: particles.length, tint };
+  if (which === 0 && settings.logStats) statsLog.add(`${frameInfo.ents},${frameInfo.dlights},${frameInfo.particles},${Math.round(perf.draw)}`);   // (log_stats: CL_Frame's line a frame, the painter's last time)
   // SCR_DrawNet's turtle at the view's corner once three frames in a row took a tenth of a second or more (scr_showturtle), the first view's
   if (which === 0) turtleDrawn = hud.drawTurtle(r, dt, !!settings.scrShowturtle, r.vr.x, r.vr.y);
   r.present(tint, null, which);
@@ -2055,7 +2088,7 @@ async function boot() {
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
-      get logfile() { return { on: !!settings.logfile, kept: logKept.length, pending: logNew.length }; },
+      get logfile() { return { on: !!settings.logfile, kept: conLog.kept.length, pending: conLog.pending.length }; }, get logStats() { return { on: !!settings.logStats, kept: statsLog.kept.length, pending: statsLog.pending.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
       demoStore, fileStore, get pickedPak() { return pickedPak; }, get autoexec() { return autoexec ? { ...autoexec } : null; },

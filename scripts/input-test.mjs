@@ -32,6 +32,15 @@ const fire = readPad(pad([0, 0, 0, 0], [], { [BUTTON.RT]: 0.8 }));
 check(fire.fire && !fire.jump, 'RT past half its travel fires');
 const jump = readPad(pad([0, 0, 0, 0], [BUTTON.A, BUTTON.B]));
 check(jump.jump && jump.crouch, 'A jumps, B crouches');
+// in_joystick 0 (Input.joystick false): the pads are left unread
+{
+  const off = new Input({ getPads: () => [pad([0, 1, 0, 0], [BUTTON.A])] });
+  off.joystick = false;
+  const c = off.read(1, {});
+  check(off.pollPad() === null && off.pollPadAt(0) === null && c[1] === 0 && c[6] === 0, 'with in_joystick 0 the pad is not read: no move, no jump');
+  off.joystick = true;
+  check(off.pollPad() !== null, 'in_joystick 1 reads it again');
+}
 
 // a press is reported once, so a weapon changes once per click of the bumper
 let prev = new Set();

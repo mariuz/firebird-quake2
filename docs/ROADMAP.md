@@ -1180,9 +1180,15 @@ the userinfo still lack of Quake 2's own words with the demo pak. In the order t
 - **`gamemap` and `nextserver`**: `SV_GameMap_f` as the level change with the one running kept aside (an ordinary
   exit's way, `*` wiping the unit), and the `+` chain of `SV_Map` (`map intro.cin+demo1`: the cinematic, then the
   map, `nextserver` holding what follows and read back with `nextserver` at the console).
-- **`in_joystick`, `cl_paused` and `log_stats`**: the pad on or off (`in_joystick`, `IN_Frame`'s), `cl_paused` showing
-  the pause as `CL_Frame` set it, and `log_stats 1` writing a line a frame ("entities, dlights, parts, frames") to
-  `stats.log` in the file store as `logfile` writes the console, downloaded with 0.
+- **`in_joystick`, `cl_paused` and `log_stats`**: done. `in_joystick 0` leaves the pads unread (`IN_Frame`'s;
+  `Input.joystick`, `pollPad` and `pollPadAt` returning none), archived as Quake's was, 1 here where Quake's was 0;
+  `cl_paused` shows the pause's state as `CL_Frame` set the cvar, a value refused (`pause` sets it); `log_stats 1`
+  writes a line a painted frame, "entities,dlights,parts,frame time" after that header, to `stats.log` in the file
+  store as `logfile` writes the console (`keptLog` serves both now), `log_stats 0` downloading it. `test:input` reads
+  no pad with it off and the pad again with it on; `test:settings` the two settings; `test:console` in_joystick shown,
+  set, refused and in config.cfg, cl_paused shown both ways and refused a value, log_stats's cases, Tab; the browser
+  test downloads stats.log with its header and lines, flips in_joystick through to the input and reads cl_paused
+  around pause, on both builds.
 - **`s_khz`, `cl_shownet` and `cl_showclamp`**: the mixer's rate at the next `snd_restart` (`s_khz` 11, 22 or 44:
   the context made at it), a joined page's messages' kinds and sizes printed as `CL_ParseServerMessage` printed them
   under `cl_shownet`, and the clock's clamps under `cl_showclamp` ("high clamp", "low clamp") as `CL_ParseFrame` said.

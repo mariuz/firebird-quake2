@@ -75,6 +75,9 @@ check(DEFAULTS.clAddEntities === true && DEFAULTS.clAddParticles === true && DEF
   && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clAddLights === false && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clTestlights === true
   && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clAddBlend === true && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clTestblend === false,
   'the cl_add switches come back on by default and the cl_test cvars off, anything but a boolean the default');
+// in_joystick on by default, log_stats off, booleans
+check(DEFAULTS.inJoystick === true && DEFAULTS.logStats === false && loadSettings(store(JSON.stringify({ inJoystick: false, logStats: true }))).inJoystick === false && loadSettings(store(JSON.stringify({ inJoystick: false, logStats: true }))).logStats === true
+  && loadSettings(store(JSON.stringify({ inJoystick: 0, logStats: 'yes' }))).inJoystick === true && loadSettings(store(JSON.stringify({ logStats: 'yes' }))).logStats === false, 'in_joystick and log_stats come back as booleans, anything else the default');
 // the debug graph's cvars: timegraph and debuggraph booleans off, graphheight 1..240 (32), graphscale -100..100 (1), graphshift -240..240 (0)
 check(DEFAULTS.timegraph === false && DEFAULTS.debuggraph === false && DEFAULTS.graphheight === 32 && DEFAULTS.graphscale === 1 && DEFAULTS.graphshift === 0
   && loadSettings(store(JSON.stringify({ timegraph: true, debuggraph: true, graphheight: 16, graphscale: -2, graphshift: 3 }))).graphheight === 16 && loadSettings(store(JSON.stringify({ timegraph: true, graphscale: -2, graphshift: 3 }))).graphscale === -2

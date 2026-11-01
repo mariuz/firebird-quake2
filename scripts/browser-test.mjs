@@ -365,6 +365,23 @@ try {
     const lf0 = await page.evaluate(() => window.quake2.logfile).catch(() => ({}));
     assert(lf1.on === true && lf1.kept > 0 && logDl && logDl.suggestedFilename() === 'qconsole.log' && /^\]echo logged line\nlogged line$/m.test(logText) && logText.endsWith(']logfile 0\n') && lf0.on === false && lf0.kept === 0,
       `logfile 1 keeps the scrollback as qconsole.log (${lf1.kept} characters flushed), logfile 0 downloads it (${logText.split('\n').length - 1} lines) and drops it`);
+    // log_stats 1 writes a line a painted frame to stats.log (the header first), 0 downloads it; in_joystick 0 leaves the pads unread;
+    // cl_paused shows the pause's state
+    await typeCommand('log_stats 1'); await sleep(1500);
+    const ls1 = await page.evaluate(() => window.quake2.logStats).catch(() => ({}));
+    const [statsDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('log_stats 0')]);
+    const statsText = statsDl ? fs.readFileSync(await statsDl.path(), 'utf8') : '';
+    const statsLines = statsText.split('\n').filter((l) => l);
+    await typeCommand('in_joystick 0');
+    const joyOff = await page.evaluate(() => ({ s: window.quake2.settings.inJoystick, i: window.quake2.input.joystick })).catch(() => ({}));
+    await typeCommand('in_joystick 1');
+    const joyOn = await page.evaluate(() => ({ s: window.quake2.settings.inJoystick, i: window.quake2.input.joystick })).catch(() => ({}));
+    await typeCommand('cl_paused'); const cp0 = await status();
+    await typeCommand('pause'); await typeCommand('cl_paused'); const cp1 = await status();
+    await typeCommand('pause'); await typeCommand('cl_paused'); const cp2 = await status();
+    assert(ls1.on === true && ls1.kept > 0 && statsDl && statsDl.suggestedFilename() === 'stats.log' && statsLines[0] === 'entities,dlights,parts,frame time' && statsLines.length > 5 && statsLines.slice(1).every((l) => /^\d+,\d+,\d+,\d+$/.test(l))
+      && joyOff.s === false && joyOff.i === false && joyOn.s === true && joyOn.i === true && cp0 === '"cl_paused" is "0"' && cp1 === '"cl_paused" is "1"' && cp2 === '"cl_paused" is "0"',
+      `log_stats keeps a line a frame as stats.log (${statsLines.length} lines downloaded, the header first), in_joystick reaches the input (${JSON.stringify(joyOff)} → ${JSON.stringify(joyOn)}), cl_paused follows pause (${cp0}, ${cp1}, ${cp2})`);
     await typeCommand('developer 1');
     await page.evaluate(() => console.warn('dev note', 7)); await sleep(200);
     const devOn = await page.evaluate(() => window.quake2.notify.log(4)).catch(() => []);
