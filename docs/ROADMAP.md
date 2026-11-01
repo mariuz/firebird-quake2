@@ -1320,9 +1320,13 @@ demo pak. In the order they are to be taken.
   `test:console` impulse set and refused, in_mouse shown, set, refused and in config.cfg, in_restart through the page,
   Tab; the browser test changes the weapon with impulse 12 and back with 22, flips in_mouse through to the input and
   sees in_restart forget the pads, on both builds.
-- **`cl_timedemo` and `sv_showclamp`**: `cl_timedemo` as `CL_Timedemo_f` set it, 1 while a timedemo runs and shown
-  (a value refused, `timedemo` setting it), and `sv_showclamp` (`SV_Frame`'s "sv lowclamp" and "sv highclamp" at a
-  page running the game: the tics it fell behind by, the ones it held), as `cl_showclamp` says a joined page's.
+- **`cl_timedemo` and `sv_showclamp`**: done. `cl_timedemo` is 1 while a timedemo runs, as `CL_Timedemo_f` set it: shown,
+  a value refused (`timedemo` sets it; `isTimedemo`). `sv_showclamp 1` prints `SV_Frame`'s clamps at a page running the
+  game: "sv lowclamp" with the milliseconds dropped when the game is behind the wall past its two tics, "sv highclamp"
+  when a frame runs both its tics to catch up; neither for a joined page or a demo, whose clock is not this page's
+  game; not archived. Both in the console's list for Tab. `test:settings` the setting; `test:console` cl_timedemo both
+  ways and refused, sv_showclamp shown, set, refused, left out of config.cfg, Tab; the browser test reads cl_timedemo
+  with no timedemo and the game's clamps printed, on both builds.
 - **`set`'s flags and `cvarlist`'s**: `set <cvar> <value> [u | s | a]` as `Cvar_Set_f` took them (u the userinfo, s
   the serverinfo, a archived: a cvar the page keeps marked for `userinfo`, `serverinfo` and config.cfg), and
   `cvarlist`'s flag column before each cvar as `Cvar_List_f` printed it ("S", "U", "A", "L" for the serverinfo, the

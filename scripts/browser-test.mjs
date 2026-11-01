@@ -1111,6 +1111,17 @@ try {
     // page's rate) played a frame of the recording a painted frame, no pacing, the frames and the seconds reported at its
     // end and a new game started; screenshot (SCR_ScreenShot_f) downloads the view as quake00.png
     const tdFrames = parsed?.frames.length ?? 0;
+    await typeCommand('cl_timedemo'); const ctd0 = await status();
+    // sv_showclamp 1: the page's own game says its clamps; the main thread held 300 ms makes the next frame owe six tics, four dropped
+    await typeCommand('sv_showclamp 1');
+    let svc = [];
+    for (let i = 0; i < 20 && !svc.some((l) => /^sv lowclamp/.test(l)); i++) {
+      await page.evaluate(() => { const t0 = performance.now(); while (performance.now() - t0 < 300) { /* a stall */ } }).catch(() => undefined);
+      await sleep(250); svc = await page.evaluate(() => window.quake2.notify.log(40)).catch(() => []);
+    }
+    await typeCommand('sv_showclamp 0');
+    assert(ctd0 === '"cl_timedemo" is "0"' && svc.some((l) => /^sv lowclamp \d+$/.test(l)),
+      `cl_timedemo is 0 with no timedemo ("${ctd0}"); sv_showclamp prints the game's clamps (${JSON.stringify(svc.filter((l) => /^sv /.test(l)).slice(-2))})`);
     await typeCommand('timedemo run');
     let td = {};
     const tdState = () => page.evaluate(() => ({ done: window.quake2.lastTimedemo, demo: window.quake2.demo?.name ?? null, running: window.quake2.running, map: document.getElementById('mapname')?.textContent })).catch(() => ({}));
