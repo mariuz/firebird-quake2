@@ -1225,9 +1225,17 @@ the userinfo still lack of Quake 2's own words with the demo pak. In the order t
 The eighteenth list: what the console, the link, the pad, the mixer and the painter still lack of Quake 2's own words
 with the demo pak. In the order they are to be taken.
 
-- **`playerlist` and `cmd`**: 3.20's `Cmd_PlayerList_f` (each client's number, time in the game, ping, score and name,
-  "(spectator)" for a watcher, a line each in the scrollback at the host; a joined page's from its score board rows)
-  and `cmd <words>` (`Cmd_ForwardToServer_f`: the words sent to the host as typed; at a page of its own, run here).
+- **`playerlist` and `cmd`**: done. `playerlist` is 3.20's `Cmd_PlayerList_f`: each client's minutes and seconds in the
+  game, ping, score and name as it laid them out ("%02d:%02d %4d %3d %s%s"), "(spectator)" for a watcher, a line each
+  in the scrollback and the sum on the line; a joined page's from its score board rows. The time in the game is the
+  level clock less the client's `enter_time` (`resp.enterframe`, `InitClientResp`: 0 at the level's start, the level
+  time for a client `client_begin` puts into the game running), a player column in the save (older saves load it at
+  0), in the tic row as `ENTER_TIME` and in the score board's rows, whose "Time" is each client's own now (it was the
+  level's for every client). `cmd <words>` is `Cmd_ForwardToServer_f`: the words go to the host as typed on a joined
+  page (`forward`), and run here on a page of its own. Both in the console's list for Tab. `test:net` sees a third
+  client's enter time at the level time and the first two's at 0, the tic row carrying it; `test:console` playerlist's
+  lines and sum, no game, cmd forwarded, its usage, run here, Tab; the browser test reads playerlist's line and runs cmd
+  god here and, at a joined page, lists both clients and runs cmd god for its client at the host, on both builds.
 - **`rcon` and `rcon_password`**: `CL_Rcon_f` and `SV_RemoteCommand_f`: a joined page running the host's console with
   the host's `rcon_password` (`rcon <command>` with its own `rcon_password` set, over the link), the host's answer
   on the guest's scrollback, "Bad rcon_password" refused and told at the host's console.

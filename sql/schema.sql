@@ -521,7 +521,8 @@ CREATE TABLE player (
   fov             DOUBLE PRECISION,                       -- the fov userinfo (ClientUserinfoChanged, 1..160): the client's own frustum; NULL, the view's
   lastweapon      INTEGER DEFAULT 0 NOT NULL,             -- pers.lastweapon (ChangeWeapon): the weapon bit held before the one in hand, weaplast's; 0 none yet
   flood_locktill  DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- flood_locktill (Cmd_Say_f): the level time the client may talk again from
-  flood_when      VARCHAR(100) DEFAULT '' NOT NULL        -- flood_when: the last ten says' times, each in hundredths of a second on ten characters, the newest last
+  flood_when      VARCHAR(100) DEFAULT '' NOT NULL,       -- flood_when: the last ten says' times, each in hundredths of a second on ten characters, the newest last
+  enter_time      DOUBLE PRECISION DEFAULT 0 NOT NULL     -- resp.enterframe (InitClientResp): the level time the client came in; the score board's and playerlist's time in the game
 );
 
 -- client_respawn_t's coop_respawn: each client's persistent data as it was when the level began

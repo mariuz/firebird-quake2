@@ -852,7 +852,11 @@ going on; the page's coop is more than one client at it, deathmatch them against
 `cheats` and `skill`, as `Info_Print` listed them, the host's `serverInfo`; a joined page runs no server of its own),
 `userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `gender`, `msg`, `fov`, `spectator`, `rate` and `skin`, `userInfo`) and `status` (`SV_Status_f`:
 the map and the clients with their frags, pings and names, a line each in the scrollback and the sum on the line,
-`status` over the score board's rows, a joined page's from its row), `timedemo` (above) and
+`status` over the score board's rows, a joined page's from its row), `playerlist` (3.20's `Cmd_PlayerList_f`: each client's minutes and
+seconds in the game, ping, score and name, "(spectator)" for a watcher, a line each in the scrollback and the sum on the line; the time
+from the level clock and the client's `enter_time`, `resp.enterframe`, set at the level's start and by `client_begin` for a client into the
+game running, in the tic row as `ENTER_TIME` and in the score board's rows, so the board's "Time" is each client's own), `cmd`
+(`Cmd_ForwardToServer_f`: the words after it go to the host as typed on a joined page, `forward`, and run here on a page of its own), `timedemo` (above) and
 `screenshot` (the view downloaded as `quakeNN.png`, as
 `SCR_ScreenShot_f` wrote `quakeNN.pcx`), `viewpos` (`V_Viewpos_f`: the eye's position and the yaw as whole numbers, `viewPos`), `timerefresh`
 (`SCR_TimeRefresh_f`: the view spun a full turn in 128 frames, the player's yaw set on its row for each frame's query and put back,

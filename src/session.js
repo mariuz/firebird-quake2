@@ -170,7 +170,7 @@ export class Session {
     if (!this.map || !this.twoPlayers || client < 2 || client > 4) return false;
     this.players = Math.max(this.players, client);
     if ((await this.db.query('SELECT 1 FROM player WHERE id = ?', [client])).rows.length) return false;
-    await this.db.query('INSERT INTO player (id) VALUES (?)', [client]);
+    await this.db.query('INSERT INTO player (id, enter_time) VALUES (?, (SELECT g.time_ FROM game g WHERE g.id = 1))', [client]);   // (InitClientResp's enterframe: it enters now)
     await this.db.query('EXECUTE PROCEDURE init_client_persistant(?)', [client]);
     const sp = (await this.db.query('SELECT spawnpoint FROM game')).rows[0]?.SPAWNPOINT ?? null;
     await this.db.query('EXECUTE PROCEDURE client_begin(?, ?)', [client, sp]);

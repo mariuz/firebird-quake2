@@ -492,6 +492,14 @@ check(r3 && r3.HEALTH === 100 && r3.WEAPONS === 1 && r3.WEAPON === 1, `the new c
 const spot3 = await p3(), spot2 = await p2();
 check(Math.hypot(spot3.X - spot2.X, spot3.Y - spot2.Y) > 1, `at a spot of its own (${spot3.X.toFixed(0)},${spot3.Y.toFixed(0)}; the second client at ${spot2.X.toFixed(0)},${spot2.Y.toFixed(0)})`);
 check(await session.addClient(3) === false && await pents() === 3, 'adding a client the game has changes nothing (no second entity)');
+{
+  // InitClientResp's enterframe: the new client came in at the level time, the first two at the level's start; the tic row carries it
+  const et = await q('SELECT p.id, p.enter_time FROM player p ORDER BY p.id');
+  const nowT = (await q('SELECT g.time_ FROM game g'))[0].TIME_;
+  await hostTic();
+  check(et.length === 3 && et[0].ENTER_TIME === 0 && et[1].ENTER_TIME === 0 && et[2].ENTER_TIME > 0 && Math.abs(et[2].ENTER_TIME - nowT) < 0.06 && session.clients[2].ENTER_TIME === et[2].ENTER_TIME,
+    `the third client entered at the level time (${et[2].ENTER_TIME.toFixed(2)} s, the level at ${nowT.toFixed(2)}), the first two at 0; the tic row carries it`);
+}
 check(await session.addClient(5) === false && await session.addClient(1) === false, 'a client past four, or the first, is refused');
 host3.sendMap({ name: session.map.name, view, nmodels: res.byName.size });
 check(maps3 === 1 && guest3.map?.name === 'demo2', 'the map as it is goes to the new guest');

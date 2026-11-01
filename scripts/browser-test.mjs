@@ -526,6 +526,15 @@ try {
       && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0" · rate "500000" · skin "male\/grunt"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
+    // playerlist (3.20's) lists the client's time in the game, ping, score and name; cmd god runs god here (Cmd_ForwardToServer_f at a page of its own)
+    await typeCommand('playerlist');
+    const plLine = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(3) })).catch(() => ({}));
+    const godAt = async () => page.evaluate(async () => ((await window.quake2.sql('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1'))[0]?.FLAGS ?? 0) & 16).catch(() => -1);
+    const cg0 = await godAt();
+    await typeCommand('cmd god'); await sleep(300); const cg1 = await godAt();
+    await typeCommand('cmd god'); await sleep(300); const cg2 = await godAt();
+    assert(/^\d\d:\d\d {4}0 {3}0 .+$/.test(plLine.line ?? '') && plLine.log?.some((l) => /^\d\d:\d\d {4}0 {3}0 /.test(l)) && cg0 === 0 && cg1 === 16 && cg2 === 0,
+      `playerlist lists the client's time in the game, ping, score and name ("${plLine.line}", the line in the scrollback), cmd god runs god here and again puts it off (${cg0} → ${cg1} → ${cg2})`);
     // dumpuser 1 prints this page's client's userinfo in the scrollback as Info_Print laid it out; a client not in the game is not
     // active; the flood cvars are on the game row (flood_waitdelay 20 reaches it)
     await typeCommand('dumpuser 1');
@@ -1344,6 +1353,20 @@ try {
       await typeOn(gp, 'serverinfo');
       const gSv = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
       assert(/^map: demo1 · 2 clients: 1 .+ · 2 .+ ms$/.test(gStatus) && /runs no server of its own/.test(gSv), `status on the joined page lists both clients ("${gStatus}"), serverinfo says it runs no server ("${gSv}")`);
+      // playerlist on the joined page lists both clients from its score board rows (their times in the game, pings and scores); cmd god
+      // at its console goes to the host as typed, which runs god for the guest's client
+      await typeOn(gp, 'playerlist');
+      const gpl = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      const guestGod = async () => page.evaluate(async () => ((await window.quake2.sql('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0]?.FLAGS ?? 0) & 16).catch(() => -1);
+      const gg0 = await guestGod();
+      await typeOn(gp, 'cmd god');
+      let gg1 = gg0;
+      for (let i = 0; i < 20 && gg1 !== 16; i++) { await sleep(250); gg1 = await guestGod(); }
+      await typeOn(gp, 'cmd god');
+      let gg2 = gg1;
+      for (let i = 0; i < 20 && gg2 !== 0; i++) { await sleep(250); gg2 = await guestGod(); }
+      assert(/^\d\d:\d\d +\d+ +\d+ .+ · \d\d:\d\d +\d+ +\d+ .+$/.test(gpl) && gg0 === 0 && gg1 === 16 && gg2 === 0,
+        `playerlist on the joined page lists both clients ("${gpl}"); cmd god at its console runs god for its client at the host and again puts it off (${gg0} → ${gg1} → ${gg2})`);
       const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
       await typeOn(page, 'rtc_signal none');

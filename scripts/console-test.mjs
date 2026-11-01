@@ -198,6 +198,15 @@ check(status.at(-1)?.[0] === 'demos: q2demo1; recorded: mine', 'and the list say
   joined = false;
   await con.submit('god');
   check(forwarded.length === 1 && calls.length === n + 1 && last().startsWith('query SELECT msg FROM player_command'), 'alone, it runs here');
+  // cmd (Cmd_ForwardToServer_f): the words after it go to the host as typed on a joined page, run here on a page of its own
+  joined = true;
+  await con.submit('cmd give all');
+  check(forwarded.length === 2 && forwarded[1].join(' ') === 'give all' && calls.length === n + 1, 'joined, cmd give all sends give all to the host');
+  await con.submit('cmd');
+  check(status.at(-1)?.[0] === 'Usage: cmd <command>' && status.at(-1)?.[1] === true && forwarded.length === 2, 'cmd alone shows its usage');
+  joined = false;
+  await con.submit('cmd god');
+  check(forwarded.length === 2 && calls.length === n + 2 && last() === 'query SELECT msg FROM player_command(?, ?) god ' && con.complete('cmd') === 'cmd ', 'alone, cmd god runs god here; Tab completes cmd');
   delete host.forward;
 }
 host.db.query = async () => { throw new Error('boom'); };
@@ -246,7 +255,7 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   rows = [{ num: 1, name: 'player 1', kind: 'page' }, { num: 2, name: 'player 2', kind: 'pad' }];
   await con.submit('players');
   check(status.at(-1)?.[0] === '1 player 1 (this page) · 2 player 2 (a pad)', 'a coop game at one page lists the pad\'s player');
-  check(con.complete('pl') === 'play ' && con.complete('playe') === 'players ' && con.complete('ki') === 'kick ', 'Tab completes play, players and kick');
+  check(con.complete('pl') === 'play ' && con.complete('playe') === 'playerlist ' && con.complete('players') === 'players ' && con.complete('ki') === 'kick ', 'Tab completes play, playerlist (first for playe), players and kick');
   // dumpuser: SV_DumpUser_f's print of a client's userinfo as Info_Print laid it out, in the scrollback, the sum on the line
   let dumped = null;
   const printBefore = host.print;
@@ -650,7 +659,7 @@ for (const [name, key, dflt] of [['r_fullbright', 'rFullbright', false], ['r_dra
   host.print = (text) => { printed = text; };
   host.serverInfo = async () => ({ mapname: 'demo1', deathmatch: 0, coop: 1, dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, skill: 2 });
   host.userInfo = () => ({ name: 'Ace', hand: 1, gender: 'female', msg: 1, fov: 90, spectator: 0, rate: 500000, skin: 'male/grunt' });
-  host.status = () => ({ map: 'demo1', rows: [{ num: 1, score: 3, ping: 0, name: 'Ace' }, { num: 2, score: 1, ping: 12, name: 'player 2' }] });
+  host.status = () => ({ map: 'demo1', rows: [{ num: 1, score: 3, ping: 0, name: 'Ace', time: 125, spectator: 0 }, { num: 2, score: 1, ping: 12, name: 'player 2', time: 7.9, spectator: 1 }] });
   await con.submit('serverinfo');
   check(status.at(-1)?.[0] === 'Server info settings: mapname "demo1" · deathmatch "0" · coop "1" · dmflags "0" · fraglimit "0" · timelimit "0" · cheats "0" · skill "2"', 'serverinfo lists the game\'s cvars as Info_Print listed them');
   await con.submit('userinfo');
@@ -658,6 +667,13 @@ for (const [name, key, dflt] of [['r_fullbright', 'rFullbright', false], ['r_dra
   await con.submit('status');
   check(status.at(-1)?.[0] === 'map: demo1 · 2 clients: 1 Ace 3 frags, 0 ms · 2 player 2 1 frags, 12 ms' && printed === 'num score ping name\n  1     3    0 Ace\n  2     1   12 player 2',
     'status says the map and the clients on the line, and prints them as SV_Status_f laid them out');
+  // playerlist (3.20's Cmd_PlayerList_f): each client's time in the game, ping, score and name, a watcher marked, a line each
+  await con.submit('playerlist');
+  check(printed === '02:05    0   3 Ace\n00:07   12   1 player 2 (spectator)' && status.at(-1)?.[0] === '02:05    0   3 Ace · 00:07   12   1 player 2 (spectator)' && status.at(-1)?.[1] === false,
+    'playerlist prints each client\'s minutes and seconds in the game, ping, score and name as Cmd_PlayerList_f laid them out, a watcher marked, and sums them on the line');
+  host.status = () => null;
+  await con.submit('playerlist');
+  check(status.at(-1)?.[0] === 'playerlist: no game running' && status.at(-1)?.[1] === true && con.complete('playerl') === 'playerlist ', 'with no game it says so; Tab completes playerlist');
   host.serverInfo = async () => null; host.status = () => null;
   await con.submit('serverinfo');
   check(status.at(-1)?.[0] === 'serverinfo: a joined page runs no server of its own' && status.at(-1)?.[1] === true, 'serverinfo on a joined page says so');

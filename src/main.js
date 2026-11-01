@@ -157,10 +157,13 @@ function toggleScreen(p, which) {
   else if (which === 'help') { showHelp[p] = !showHelp[p]; showInv[p] = false; showScores[p] = false; if (row) helpSeen[p] = row.HELP_CHANGED ?? 0; }
   else { showInv[p] = !showInv[p]; showHelp[p] = false; showScores[p] = false; }
 }
-/** The score board's rows: every client's frags and, over the network, its ping (a guest's come with its row). */
+/**
+ * The score board's rows: every client's frags, over the network its ping (a guest's come with its row), the level time it came in
+ * (`enter_time`, resp.enterframe: the board's and playerlist's time in the game) and whether it watches (3.20's spectator, from its userinfo).
+ */
 function scoreRows() {
-  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, name: last?.NETNAME, score: last?.SCORE ?? 0, ping: 0 }];
-  return session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0, ping: net?.guests?.find((g) => g.client === c.CLIENT)?.host.ping ?? 0 }));
+  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, name: last?.NETNAME, score: last?.SCORE ?? 0, ping: 0, time: last?.ENTER_TIME ?? 0, spectator: 0 }];
+  return session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0, ping: net?.guests?.find((g) => g.client === c.CLIENT)?.host.ping ?? 0, time: c.ENTER_TIME ?? 0, spectator: session.userinfo[c.CLIENT]?.spectator ? 1 : 0 }));
 }
 /** A joined page's own round trip, as the host measured it and sent it with the score board's rows; null before one came. */
 const ownPing = () => (netGuest() ? last?.SCORES?.find((s) => s.id === last.CLIENT)?.ping ?? null : null);
@@ -486,7 +489,8 @@ const con = new Console({
   },
   // deathmatch, coop and maxclients: the next game's mode and clients, latched (the settings and the Players select, no game started)
   setGameMode: ({ coop, deathmatch, players }) => { settings.coop = !!coop; settings.deathmatch = !!deathmatch; settings.players = Math.max(2, Math.min(4, Number(players) || 2)); saveSettings(); $('players').value = playersValue(); },
-  status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}` })) } : null),
+  // (the rows' time: the whole seconds in the game, playerlist's, from the level clock and the enter time; spectator: a watcher)
+  status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}`, time: Math.max(0, Math.floor(gameClock() - (s.time ?? 0))), spectator: s.spectator ? 1 : 0 })) } : null),
   isRunning: () => running,
   // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
   setCvar: async (name, value) => { session.cvars[name] = value; if (map && !netGuest()) await db.exec(`UPDATE game SET ${name} = ${value} WHERE id = 1`); },
