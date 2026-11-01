@@ -268,6 +268,9 @@ function setSetting(k, v) {
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
   if (k === 'swDrawflat' && renderer) { renderer.drawflat = !!v; renderer.surfCache.clear(); }   // (sw_drawflat: the surfaces built again flat, or textured)
   if (k === 'swClearcolor' && renderer) renderer.clearColor = Number(v) || 0;   // (sw_clearcolor: the next frame's clear)
+  if (k === 'swMipcap' && renderer) renderer.mipcap = Number(v) || 0;   // (sw_mipcap, sw_mipscale: the next frame's mip levels; sw_stipplealpha: its translucent surfaces)
+  if (k === 'swMipscale' && renderer) renderer.mipscale = Number(v);
+  if (k === 'swStipplealpha' && renderer) renderer.stipplealpha = !!v;
   if (k === 'cdLoopcount') audio.loopCount = Number(v) || 4;   // (cd_loopcount, cd_looptrack: the music's loop; cd_nocd: none)
   if (k === 'cdLooptrack') audio.loopTrack = Number(v) || 0;
   if (k === 'cdNocd') audio.setNocd(!!v);
@@ -1831,6 +1834,7 @@ async function usePak(buffer, label) {
   renderer = new Renderer(canvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
   renderer.fullbright = !!settings.rFullbright;   // (r_fullbright as the settings have it)
   renderer.drawflat = !!settings.swDrawflat; renderer.clearColor = Number(settings.swClearcolor) || 0;   // (sw_drawflat, sw_clearcolor)
+  renderer.mipcap = Number(settings.swMipcap) || 0; renderer.mipscale = Number(settings.swMipscale); renderer.stipplealpha = !!settings.swStipplealpha;   // (sw_mipcap, sw_mipscale, sw_stipplealpha)
   renderer.setSize(viewWidth(), viewHeight());
   renderer.lightScale = settings.brightness;
   hud = new Hud(pak);

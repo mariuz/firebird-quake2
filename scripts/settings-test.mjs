@@ -65,6 +65,11 @@ check(DEFAULTS.rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 'tur
   && loadSettings(store(JSON.stringify({ rtcIce: 'stun:stun.example.org' }))).rtcIce === 'stun:stun.example.org'
   && loadSettings(store(JSON.stringify({ rtcIce: 'http://relay' }))).rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 'turn:relay ace' }))).rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 7 }))).rtcIce === '',
   'the ICE server setting is kept as a url, or a url with a user and a password; another scheme, two words or a number fall back to none');
+// the painter's mip cap and scale and the stipple: within their ranges, else the defaults
+check(DEFAULTS.swMipcap === 0 && DEFAULTS.swMipscale === 1 && DEFAULTS.swStipplealpha === false && loadSettings(store(JSON.stringify({ swMipcap: 3, swMipscale: 2.5, swStipplealpha: true }))).swMipcap === 3
+  && loadSettings(store(JSON.stringify({ swMipcap: 3, swMipscale: 2.5, swStipplealpha: true }))).swMipscale === 2.5 && loadSettings(store(JSON.stringify({ swStipplealpha: true }))).swStipplealpha === true
+  && loadSettings(store(JSON.stringify({ swMipcap: 4, swMipscale: 11, swStipplealpha: 1 }))).swMipcap === 0 && loadSettings(store(JSON.stringify({ swMipscale: 11 }))).swMipscale === 1 && loadSettings(store(JSON.stringify({ swStipplealpha: 1 }))).swStipplealpha === false,
+  'sw_mipcap 0 to 3, sw_mipscale 0 to 10 and sw_stipplealpha a boolean come back, anything else is the default');
 // the address book: up to nine printable texts, a bad one blank, anything else empty (and a fresh array each load)
 check(DEFAULTS.addressBook.length === 0 && loadSettings(store()).addressBook.length === 0 && loadSettings(store()).addressBook !== DEFAULTS.addressBook
   && loadSettings(store(JSON.stringify({ addressBook: ['K9H2', 'http://relay:8787 AB12', 7, 'bad\nline', ...Array(9).fill('X')] }))).addressBook.join('|') === 'K9H2|http://relay:8787 AB12|||X|X|X|X|X'

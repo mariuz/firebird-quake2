@@ -743,7 +743,11 @@ frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_Re
 `sw_drawflat` (`D_DrawflatSurfaces`: every face built in a flat colour of its own, no texture and no light, `Renderer.drawflat`, the
 surface cache cleared with the switch), `sw_waterwarp` (0: the view under water drawn as above it, `D_WarpScreen` skipped) and
 `sw_clearcolor` (the palette index the view is cleared to before a frame, `Renderer.clearColor`: 0 here, where Quake's was 2; none of
-the three archived), `cd_loopcount`, `cd_looptrack` and `cd_nocd` (`CDAudio_Update`'s loop: a map's track plays over again at its end
+the three archived), `sw_mipcap` and `sw_mipscale` (`D_MipLevelForScale`'s `d_minmip` and `d_scalemip`: the least mip level, 0 to 3,
+and the thresholds 1, 0.4 and 0.2 scaled, `mipLevel(scale, mipscale, mipcap)`; neither archived) and `sw_stipplealpha` (translucent
+surfaces drawn stippled in place of the blend through the alpha map, `stippleKeep`: three pixels in four at 66% and one in four at
+33%, as `R_DrawSpanlet66Stipple` and `R_DrawSpanlet33Stipple` kept them, the parity turned each frame; the models' blend stays, as
+ref_soft's did; archived as Quake's was), `cd_loopcount`, `cd_looptrack` and `cd_nocd` (`CDAudio_Update`'s loop: a map's track plays over again at its end
 until it has played `cd_loopcount` times, 4, then `cd_looptrack`, 11, over and over, `Q2Audio.playMusic`'s `onended`; the drone stands
 in for a track with no file as one endless track; `cd_nocd 1` plays no music, archived as Quake's was), `m_filter`
 (`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived) and `host_speeds` (a frame's

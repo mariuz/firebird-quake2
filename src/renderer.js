@@ -34,6 +34,10 @@ export class Renderer {
     this.fullbright = false; // r_fullbright: every surface and model at full light (the surface cache is cleared when it changes)
     this.drawflat = false;   // sw_drawflat: every face a flat colour of its own, no texture (the surface cache is cleared when it changes)
     this.clearColor = 0;     // sw_clearcolor: the palette index the view is cleared to before the frame (Quake's default was 2; 0 here)
+    this.mipcap = 0;         // sw_mipcap: the least mip level (d_minmip, 0 to 3); sw_mipscale scales D_MipLevelForScale's thresholds (d_scalemip)
+    this.mipscale = 1;
+    this.stipplealpha = false;   // sw_stipplealpha: translucent surfaces stippled (every other pixel, R_DrawSpanlet66Stipple and _33Stipple) in place of the blend
+    this.stippleParity = 0;      // r_polydesc.stipple_parity: the stipple's phase, turned each frame
     this.sky = null;             // [6 × { w, h, data }]
     this.lightScale = 1.4;       // ref_gl's intensity: the software lightmaps are dim on their own
     this.dlights = [];           // this frame's dynamic lights: [{ x, y, z, r }] (V_AddLight)
@@ -337,6 +341,7 @@ export class Renderer {
   beginFrame(view) {
     this.view = view;
     const { w, h } = this.vr;   // (the 3D view's rectangle: the whole view at viewsize 100)
+    this.stippleParity ^= 1;
     this.zb.fill(0);
     this.tileClear();
     const yaw = (view.yaw * Math.PI) / 180, pitch = (view.pitch * Math.PI) / 180;
@@ -491,7 +496,7 @@ export class Renderer {
       if (!blend) {
         let nearzi = 0;
         for (let k = 0; k < n; k++) { const iz = 1 / poly[k * 5 + 2]; if (iz > nearzi) nearzi = iz; }
-        mip = mipLevel(nearzi * this.view.scale * mipAdjust(info.ti));
+        mip = mipLevel(nearzi * this.view.scale * mipAdjust(info.ti), this.mipscale, this.mipcap);
       }
       const s = this.surface(face, styles, time, ent ? entFrames.get(ent) ?? 0 : Math.floor(time * 2), mip);
       const scroll = flags & SURF.FLOWING ? -128 * ((time * 0.77) % 1) : 0;
@@ -569,7 +574,8 @@ export class Renderer {
     const sin = this.sinTable;
     const tphase = (time * 20) & 255;
     const am = this.alphamap;
-    const useBlend = blend && am;
+    const stipple = blend && this.stipplealpha, par = this.stippleParity;   // (sw_stipplealpha: a pixel kept or skipped by its place, no blend)
+    const useBlend = blend && am && !stipple;
     const cm = this.colormap;
     for (let y = y0; y <= y1; y++) {
       const o = y * 5;
@@ -602,6 +608,7 @@ export class Renderer {
             else { si = (((ss % sw) + sw) % sw) | 0; ti = (((tt % sh) + sh) % sh) | 0; }
             let c = cm[(8 << 8) | sd[ti * sw + si]];   // unlit water, slightly dimmed
             if (useBlend) { const d = fb[idx]; fb[idx] = blend === 1 ? am[d + (c << 8)] : am[(d << 8) + c]; continue; }
+            if (stipple) { if (stippleKeep(blend, idx - y * w, y, par)) fb[idx] = c; continue; }
             zb[idx] = iz;
             fb[idx] = c;
           }
@@ -613,6 +620,14 @@ export class Renderer {
             if (ti < 0) ti = 0; else if (ti >= sh) ti = shm;
             const c = sd[ti * sw + si], d = fb[idx];
             fb[idx] = blend === 1 ? am[d + (c << 8)] : am[(d << 8) + c];   // translucent surfaces don't write depth
+          }
+        } else if (stipple) {
+          for (let k = 0; k < run; k++, idx++, iz += diz, s += ds, t += dt) {
+            if (iz <= zb[idx] || !stippleKeep(blend, idx - y * w, y, par)) continue;
+            let si = s | 0, ti = t | 0;
+            if (si < 0) si = 0; else if (si >= sw) si = swm;
+            if (ti < 0) ti = 0; else if (ti >= sh) ti = shm;
+            fb[idx] = sd[ti * sw + si];   // (the pixels kept are drawn whole, the depth left as the blend leaves it)
           }
         } else {
           for (let k = 0; k < run; k++, idx++, iz += diz, s += ds, t += dt) {
@@ -1115,11 +1130,22 @@ export function dlightAt(lights, x, y, z) {
 }
 
 /**
- * D_MipLevelForScale with sw_mipscale 1: d_scalemip is 1, 0.5 × 0.8 and 0.25 × 0.8 (a surface drawn at
- * least as large as its texels is mip 0, from 0.4 mip 1, from 0.2 mip 2, below that mip 3).
+ * D_MipLevelForScale: d_scalemip is 1, 0.5 × 0.8 and 0.25 × 0.8 times sw_mipscale (a surface drawn at least as large as
+ * its texels is mip 0, from 0.4 mip 1, from 0.2 mip 2, below that mip 3, at mipscale 1), and the level is at least
+ * sw_mipcap (d_minmip).
  */
-export function mipLevel(scale) {
-  return scale >= 1 ? 0 : scale >= 0.4 ? 1 : scale >= 0.2 ? 2 : 3;
+export function mipLevel(scale, mipscale = 1, mipcap = 0) {
+  const level = scale >= mipscale ? 0 : scale >= 0.4 * mipscale ? 1 : scale >= 0.2 * mipscale ? 2 : 3;
+  return level < mipcap ? mipcap : level;
+}
+
+/**
+ * sw_stipplealpha's pattern (R_DrawSpanlet66Stipple, R_DrawSpanlet33Stipple): at 66% the rows of the parity whole and
+ * every other pixel of the rest (three pixels in four), at 33% every other pixel of the parity's rows alone (one in four).
+ */
+export function stippleKeep(blend, x, y, parity) {
+  const row = (y & 1) === parity, col = (x & 1) === parity;
+  return blend === 2 ? row || col : row && col;
 }
 
 /** Mod_LoadTexinfo's mipadjust: a texture stretched small (long texture vectors) needs less detail. */

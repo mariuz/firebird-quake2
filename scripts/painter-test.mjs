@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak, loadColormap } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
-import { Renderer, dlightAt, mipLevel, skyTurn, entityFrame } from '../src/renderer.js';
+import { Renderer, dlightAt, mipLevel, stippleKeep, skyTurn, entityFrame } from '../src/renderer.js';
+import { SURF } from '../src/bsp.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mapName = process.argv[2] ?? 'demo1';
@@ -73,6 +74,13 @@ assert(Math.abs(dlightAt([{ x: 0, y: 0, z: 0, r: 200, c: 1 }], 50, 0, 0) - 150) 
 // mip levels
 assert(mipLevel(1) === 0 && mipLevel(0.99) === 1 && mipLevel(0.4) === 1 && mipLevel(0.39) === 2 && mipLevel(0.2) === 2 && mipLevel(0.19) === 3,
   'D_MipLevelForScale: 1, 0.4 and 0.2 are where the levels change');
+assert(mipLevel(1, 2) === 1 && mipLevel(0.5, 0.5) === 0 && mipLevel(0.39, 0.5) === 1 && mipLevel(1, 1, 2) === 2 && mipLevel(0.1, 1, 1) === 3 && mipLevel(0.5, 0) === 0,
+  'sw_mipscale scales the thresholds, sw_mipcap is the least level, mipscale 0 is mip 0 everywhere');
+{
+  const keep = (blend, parity) => { let n = 0; for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (stippleKeep(blend, x, y, parity)) n++; return n; };
+  assert(keep(2, 0) === 12 && keep(2, 1) === 12 && keep(1, 0) === 4 && keep(1, 1) === 4 && stippleKeep(1, 0, 0, 0) && !stippleKeep(1, 0, 0, 1) && stippleKeep(2, 1, 0, 0) && !stippleKeep(2, 1, 1, 0),
+    'sw_stipplealpha keeps three pixels in four at 66% and one in four at 33%, the parity turning which');
+}
 r.dlights = [];
 const before = r.surfCache.size;
 const m2 = r.surface(id, styles, 0, 0, 2);
@@ -113,6 +121,31 @@ r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
 const levels = [0, 0, 0, 0];
 for (const k of r.surfCache.keys()) levels[k % 4]++;
 assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws near surfaces at mip 0 and far ones smaller (by level: ${levels.join(' ')})`);
+// sw_mipcap 3: the same frame has every surface at mip 3; sw_stipplealpha: its translucent surfaces drawn stippled, the frame
+// differing where they are (and nowhere, with none in view)
+{
+  const fbBlend = r.fb.slice();
+  const alphaFaces = rows.filter((row) => ((r.faceInfo.get(row[0])?.f.flags ?? 0) & (SURF.TRANS33 | SURF.TRANS66)) !== 0).length;
+  r.mipcap = 3; r.surfCache.clear();
+  r.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: 0, fov: 90 });
+  r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
+  const capped = [0, 0, 0, 0];
+  for (const k of r.surfCache.keys()) capped[k % 4]++;
+  assert(capped[3] > 0 && capped[1] + capped[2] === 0 && capped[0] <= alphaFaces, `sw_mipcap 3 draws every surface at mip 3 but the ${alphaFaces} translucent ones, from the full-size image as R_DrawAlphaSurfaces drew them (by level: ${capped.join(' ')})`);
+  r.mipcap = 0; r.surfCache.clear();
+  r.stipplealpha = true;
+  r.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: 0, fov: 90 });
+  r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
+  let differ = 0;
+  for (let i = 0; i < fbBlend.length; i++) if (fbBlend[i] !== r.fb[i]) differ++;
+  r.stipplealpha = false;
+  assert(alphaFaces ? differ > 0 : differ === 0, `sw_stipplealpha changes the frame where its ${alphaFaces} translucent faces are (${differ} pixels differ)`);
+  r.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: 0, fov: 90 });   // (the frame as it was, for the checks after)
+  r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
+  let same = 0;
+  for (let i = 0; i < fbBlend.length; i++) if (fbBlend[i] === r.fb[i]) same++;
+  assert(same === fbBlend.length, `off again, the frame is pixel for pixel as it was (${fbBlend.length - same} differ)`);
+}
 // SCR_CalcVrect (the viewsize cvar): at 60 the frame is a 192×144 rectangle at 64,48 with the backtile around it and the
 // world inside; at 100 the whole view again, pixel for pixel as before
 {
