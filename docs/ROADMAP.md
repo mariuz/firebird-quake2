@@ -1125,10 +1125,16 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   told a sound started; `test:console` s_show shown, set and refused, cd's words through the page, info laid out and
   summed, an unknown word refused, Tab; `test:settings` the setting; the browser test prints a sound started and drives
   the music with the words, on both builds.
-- **`cl_add_entities`, `cl_add_particles`, `cl_add_lights`, `cl_add_blend` and the `cl_test*` cvars**: `V_RenderView`'s
-  switches leaving the entities, the particles, the dynamic lights or the screen blend out of a frame, and
-  `cl_testentities`, `cl_testparticles`, `cl_testlights` and `cl_testblend` (`V_TestEntities`, `V_TestParticles`,
-  `V_TestLights`, `V_TestBlend`: the rings of models, particles and lights about the eye, a test blend).
+- **`cl_add_entities`, `cl_add_particles`, `cl_add_lights`, `cl_add_blend` and the `cl_test*` cvars**: done. The four
+  switches are `V_RenderView`'s: 0 leaves the entities (the brush models and the view weapon with them, as
+  `r_numentities` 0 did), the particles, the dynamic lights or the palette blend out of a frame. `cl_testentities`,
+  `cl_testlights`, `cl_testparticles` and `cl_testblend` are `V_TestEntities`, `V_TestLights`, `V_TestParticles` and
+  `V_TestBlend`: 32 models (the first model with a mesh, there being no player model in the demo pak) and 32 lights of
+  200 units in four columns 64 apart from 128 on, 4096 particles a quarter unit on in an 8 by 8 spread of 4 units, and a
+  blend of 1, 0.5, 0.25 at half, about the eye each frame; a switch at 0 leaves a test's ring out too. None archived.
+  `test:settings` the eight; `test:console` shown, set, refused and Tab; the browser test reads a frame with the tests
+  on (32 lights and models, 4096 particles, the blend), the switches at 0 (none of them), and back, on both builds.
+  `frameInfo` on the page's debug object says what the first view's last frame had.
 - **`cl_upspeed` and `cl_lightlevel`**: the up and down keys' speed (`CL_InitInput`'s `cl_upspeed`, 200: `+moveup`
   and `+movedown` swimming, flying and in noclip) at the console, and `cl_lightlevel` showing the light at the
   player's feet as `V_RenderView` set it from the lightmap under it.

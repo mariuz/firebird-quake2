@@ -9,7 +9,7 @@ export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false,
-  crosshair: 1, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false,
+  crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false,
   mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '',
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
@@ -48,6 +48,7 @@ const CHECK = {
   crosshair: int(0, 3),
   // a guest's prediction (CL_PredictMovement): cl_predict runs it, cl_showmiss prints the misses (CL_CheckPredictionError)
   clPredict: bool, clShowmiss: bool,
+  clAddEntities: bool, clAddParticles: bool, clAddLights: bool, clAddBlend: bool, clTestentities: bool, clTestparticles: bool, clTestlights: bool, clTestblend: bool,   // V_RenderView's switches and tests
   viewsize: int(40, 100),   // SCR_CalcVrect's viewsize: the 3D view's share of the screen, the backtile around a smaller one
   // ref_soft's switches: the world unlit, the entities or the world left out, the poses unblended, the PVS ignored, the frame's figures printed
   rFullbright: bool, rDrawentities: bool, rDrawworld: bool, rLerpmodels: bool, rNovis: bool, rSpeeds: bool,

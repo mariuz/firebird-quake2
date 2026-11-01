@@ -70,6 +70,11 @@ check(DEFAULTS.swMipcap === 0 && DEFAULTS.swMipscale === 1 && DEFAULTS.swStipple
   && loadSettings(store(JSON.stringify({ swMipcap: 3, swMipscale: 2.5, swStipplealpha: true }))).swMipscale === 2.5 && loadSettings(store(JSON.stringify({ swStipplealpha: true }))).swStipplealpha === true
   && loadSettings(store(JSON.stringify({ swMipcap: 4, swMipscale: 11, swStipplealpha: 1 }))).swMipcap === 0 && loadSettings(store(JSON.stringify({ swMipscale: 11 }))).swMipscale === 1 && loadSettings(store(JSON.stringify({ swStipplealpha: 1 }))).swStipplealpha === false,
   'sw_mipcap 0 to 3, sw_mipscale 0 to 10 and sw_stipplealpha a boolean come back, anything else is the default');
+// V_RenderView's switches on by default and its tests off, booleans
+check(DEFAULTS.clAddEntities === true && DEFAULTS.clAddParticles === true && DEFAULTS.clAddLights === true && DEFAULTS.clAddBlend === true && DEFAULTS.clTestentities === false && DEFAULTS.clTestparticles === false && DEFAULTS.clTestlights === false && DEFAULTS.clTestblend === false
+  && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clAddLights === false && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clTestlights === true
+  && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clAddBlend === true && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clTestblend === false,
+  'the cl_add switches come back on by default and the cl_test cvars off, anything but a boolean the default');
 // s_show: a boolean, off by default
 check(DEFAULTS.sShow === false && loadSettings(store(JSON.stringify({ sShow: true }))).sShow === true && loadSettings(store(JSON.stringify({ sShow: 'yes' }))).sShow === false, 's_show comes back as a boolean, anything else off');
 // sv_noreload: a boolean, off by default

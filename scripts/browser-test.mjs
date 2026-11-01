@@ -520,6 +520,19 @@ try {
     await typeCommand('sw_drawflat 0'); await typeCommand('sw_clearcolor 0'); await typeCommand('sw_waterwarp 1'); await sleep(300);
     const sw0 = await page.evaluate(() => ({ flat: window.quake2.renderer.drawflat, cc: window.quake2.renderer.clearColor, warp: window.quake2.settings.swWaterwarp })).catch(() => ({}));
     assert(sw1.flat === true && sw1.cc === 2 && sw1.warp === false && sw0.flat === false && sw0.cc === 0 && sw0.warp === true, `sw_drawflat, sw_clearcolor and sw_waterwarp reach the painter and the settings and go back (${JSON.stringify(sw1)} → ${JSON.stringify(sw0)})`);
+    // V_RenderView's switches and tests: cl_testlights 1 adds 32 lights to a frame, cl_testentities 32 models, cl_testparticles 4096
+    // particles, cl_testblend the test blend; cl_add_lights 0, cl_add_entities 0, cl_add_particles 0 and cl_add_blend 0 leave them out
+    const frameInfo = () => page.evaluate(() => window.quake2.frameInfo).catch(() => null);
+    await typeCommand('cl_testlights 1'); await typeCommand('cl_testentities 1'); await typeCommand('cl_testparticles 1'); await typeCommand('cl_testblend 1'); await sleep(500);
+    const withTests = await frameInfo();
+    await typeCommand('cl_add_lights 0'); await typeCommand('cl_add_entities 0'); await typeCommand('cl_add_particles 0'); await typeCommand('cl_add_blend 0'); await sleep(500);
+    const without = await frameInfo();
+    await typeCommand('cl_add_lights 1'); await typeCommand('cl_add_entities 1'); await typeCommand('cl_add_particles 1'); await typeCommand('cl_add_blend 1');
+    await typeCommand('cl_testlights 0'); await typeCommand('cl_testentities 0'); await typeCommand('cl_testparticles 0'); await typeCommand('cl_testblend 0'); await sleep(500);
+    const plain = await frameInfo();
+    assert(withTests?.dlights >= 32 && withTests.ents >= 32 && withTests.particles >= 4096 && withTests.tint?.join() === '255,128,64,0.5'
+      && without?.dlights === 0 && without.ents === 0 && without.particles === 0 && without.tint === null && plain?.dlights < 32 && plain.ents < 32 && plain.particles < 4096,
+      `the cl_test cvars add their rings and blend to a frame (${JSON.stringify(withTests)}), the cl_add switches at 0 leave everything out (${JSON.stringify(without)}), back as it was (${JSON.stringify(plain)})`);
     // sw_mipcap, sw_mipscale and sw_stipplealpha reach the painter: under the cap the frame's surfaces are built at mip 3
     await typeCommand('sw_mipcap 3'); await typeCommand('sw_mipscale 2'); await typeCommand('sw_stipplealpha 1'); await sleep(600);
     const mp1 = await page.evaluate(() => { const r = window.quake2.renderer; return { cap: r.mipcap, scale: r.mipscale, stipple: r.stipplealpha, at3: [...r.surfCache.keys()].some((k) => k % 4 === 3), s: [window.quake2.settings.swMipcap, window.quake2.settings.swMipscale, window.quake2.settings.swStipplealpha] }; }).catch(() => ({}));
