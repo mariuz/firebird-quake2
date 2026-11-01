@@ -254,6 +254,8 @@ function setSetting(k, v) {
   if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg' || k === 'password') applyUserinfo();
   if (k === 'viewsize') applyView().catch((err) => console.warn('viewsize:', err.message));   // (the 3D view's rectangle, the SQL's frustum with it)
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
+  if (k === 'swDrawflat' && renderer) { renderer.drawflat = !!v; renderer.surfCache.clear(); }   // (sw_drawflat: the surfaces built again flat, or textured)
+  if (k === 'swClearcolor' && renderer) renderer.clearColor = Number(v) || 0;   // (sw_clearcolor: the next frame's clear)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
   if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
@@ -1320,7 +1322,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   r.dlights = tempEnts.lights(ents, time);
   const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? (last.DEAD ? 40 : 0), fov: viewFov() };
   // RDF_UNDERWATER: the eye in water, slime or lava draws the view into the 320×240 warp buffer and warps it up
-  const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION;
+  const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION && settings.swWaterwarp !== false;   // (sw_waterwarp 0: the view under water drawn as above it)
   if (underwater) r.beginUnderwater();
   r.beginFrame(view);
   if (faces && (settings.rDrawworld || settings.rDrawentities)) {
@@ -1774,6 +1776,7 @@ async function usePak(buffer, label) {
   const cm = loadColormap(pak);
   renderer = new Renderer(canvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
   renderer.fullbright = !!settings.rFullbright;   // (r_fullbright as the settings have it)
+  renderer.drawflat = !!settings.swDrawflat; renderer.clearColor = Number(settings.swClearcolor) || 0;   // (sw_drawflat, sw_clearcolor)
   renderer.setSize(viewWidth(), viewHeight());
   renderer.lightScale = settings.brightness;
   hud = new Hud(pak);

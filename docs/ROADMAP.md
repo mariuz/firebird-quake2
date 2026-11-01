@@ -997,9 +997,14 @@ own words with the demo pak. In the order they are to be taken.
   `test:console` the two cvars, a space refused, `cvarlist` with them; the browser test reads `needpass` as they are
   set and cleared, and has a third page refused with the reason by a host with a password, the first guest kept,
   then let in once it is cleared, on both builds.
-- **`sw_drawflat`, `sw_waterwarp` and `sw_clearcolor`**: ref_soft's: every face flat in a colour of its own, no
-  texture (`sw_drawflat`), the underwater warp off (`sw_waterwarp 0`), and the colour behind what nothing paints
-  (`sw_clearcolor`, 2); painter switches like `r_fullbright`, none archived.
+- **`sw_drawflat`, `sw_waterwarp` and `sw_clearcolor`**: done. ref_soft's three: `sw_drawflat 1` builds every face in
+  a flat colour of its own (`D_DrawflatSurfaces` took the surface pointer's low byte; the face's id here), no texture
+  and no light, the surface cache cleared with the switch; `sw_waterwarp 0` draws the view under water as above it
+  (`D_WarpScreen` skipped); `sw_clearcolor` is the palette index the view is cleared to before a frame (Quake's
+  default 2, 0 here so the goldens stand). Painter switches like `r_fullbright`, none archived. `test:painter`
+  builds a flat surface and another face's in another colour, textured again after, and clears to the index;
+  `test:console` the three cvars, `cvarlist` with them; the browser test flips them and reads the painter and the
+  settings on both builds.
 - **`cd_loopcount`, `cd_looptrack` and `cd_nocd`**: the music as `CDAudio_Play` looped it: a map's track played
   `cd_loopcount` times (4), then `cd_looptrack` (11) over and over, with the page's folder tracks and the synth;
   `cd_nocd 1` plays none.

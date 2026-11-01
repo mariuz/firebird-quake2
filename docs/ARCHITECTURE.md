@@ -740,6 +740,10 @@ skipped) and `r_drawworld` (0: the world's faces left out), `r_lerpmodels` (0: n
 `r_novis` (`viewcfg.novis`: `build_vis_set` marks every leaf, the PVS and the area portals ignored as `R_MarkLeaves` did
 with it, the kept sets dropped with the switch; a guest paints the host's frames as they are) and `r_speeds` (the
 frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame),
+`sw_drawflat` (`D_DrawflatSurfaces`: every face built in a flat colour of its own, no texture and no light, `Renderer.drawflat`, the
+surface cache cleared with the switch), `sw_waterwarp` (0: the view under water drawn as above it, `D_WarpScreen` skipped) and
+`sw_clearcolor` (the palette index the view is cleared to before a frame, `Renderer.clearColor`: 0 here, where Quake's was 2; none of
+the three archived),
 `m_yaw` (the turn a mouse count, 0.022 as Quake had it, `Input.mouse`'s), `cl_gun` (0: no view weapon, as `CL_AddViewWeapon`
 had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
 `cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed` and `cl_sidespeed` (`CL_AdjustAngles` and `CL_BaseMove`'s
