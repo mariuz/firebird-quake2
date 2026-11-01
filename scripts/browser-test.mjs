@@ -410,6 +410,25 @@ try {
     const joycBack = await page.evaluate(() => ({ t: window.quake2.settings.joyYawthreshold, it: window.quake2.input.joy?.yawThreshold, is: window.quake2.input.joy?.pitchSensitivity })).catch(() => ({}));
     assert(joyc.t === 0.5 && joyc.s === -1 && joyc.it === 0.5 && joyc.is === -1 && joycBack.t === 0.15 && joycBack.it === 0.15 && joycBack.is === 1,
       `joy_yawthreshold and joy_pitchsensitivity reach the settings and the pad reading (${JSON.stringify(joyc)}) and the defaults come back (${JSON.stringify(joycBack)})`);
+    // impulse 12 at the console is the next command's: the weapon changes (weapnext's), 22 changes it back; in_mouse 0 leaves the mouse unread
+    // (the input's mouseOn), 1 reads it again; in_restart forgets the pads' presses
+    const weaponNow = () => page.evaluate(() => window.quake2.session.last?.WEAPON ?? null).catch(() => null);
+    const w0 = await weaponNow();
+    await typeCommand('impulse 12');
+    let w1 = w0;
+    for (let i = 0; i < 20 && w1 === w0; i++) { await sleep(150); w1 = await weaponNow(); }
+    await typeCommand('impulse 22');
+    let w2 = w1;
+    for (let i = 0; i < 20 && w2 !== w0; i++) { await sleep(150); w2 = await weaponNow(); }
+    await typeCommand('in_mouse 0');
+    const imOff = await page.evaluate(() => ({ s: window.quake2.settings.inMouse, m: window.quake2.input.mouseOn })).catch(() => ({}));
+    await typeCommand('in_mouse 1');
+    const imOn = await page.evaluate(() => ({ s: window.quake2.settings.inMouse, m: window.quake2.input.mouseOn })).catch(() => ({}));
+    await page.evaluate(() => { window.quake2.input.pads[0] = { held: new Set([1]), last: null }; }).catch(() => undefined);
+    await typeCommand('in_restart');
+    const irs = await page.evaluate(() => window.quake2.input.pads.length).catch(() => -1);
+    assert(w0 !== null && w1 !== w0 && w2 === w0 && imOff.s === false && imOff.m === false && imOn.s === true && imOn.m === true && irs === 0,
+      `impulse 12 changes the weapon (${w0} → ${w1}) and impulse 22 changes it back (${w2}); in_mouse reaches the settings and the input (${JSON.stringify(imOff)} → ${JSON.stringify(imOn)}); in_restart forgets the pads (${irs})`);
     await typeCommand('developer 1');
     await page.evaluate(() => console.warn('dev note', 7)); await sleep(200);
     const devOn = await page.evaluate(() => window.quake2.notify.log(4)).catch(() => []);

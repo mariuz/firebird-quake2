@@ -133,6 +133,7 @@ function setStatus(msg, isError = false) {
 // src/input.js holds the keys, the mouse, the touches and the pad between tics and reads them as the usercmd
 const input = new Input({ binds: settings.binds });   // (the keys menu edits settings.binds in place: the Input reads the same object)
 input.joystick = settings.inJoystick !== false;   // (in_joystick from the settings: the pads read, or not)
+input.mouseOn = settings.inMouse !== false;   // (in_mouse from the settings: the mouse read, or not)
 /** The joy_ cvars as the pad reads them (IN_JoyMove's thresholds and sensitivities; Input.joy, gamepad.js's JOY keys). */
 const joyFromSettings = (s) => ({ forwardThreshold: s.joyForwardthreshold, sideThreshold: s.joySidethreshold, pitchThreshold: s.joyPitchthreshold, yawThreshold: s.joyYawthreshold,
   forwardSensitivity: s.joyForwardsensitivity, sideSensitivity: s.joySidesensitivity, pitchSensitivity: s.joyPitchsensitivity, yawSensitivity: s.joyYawsensitivity });
@@ -290,11 +291,12 @@ function setSetting(k, v) {
   if (k === 'swMipcap' && renderer) renderer.mipcap = Number(v) || 0;   // (sw_mipcap, sw_mipscale: the next frame's mip levels; sw_stipplealpha: its translucent surfaces)
   if (k === 'swMipscale' && renderer) renderer.mipscale = Number(v);
   if (k === 'swStipplealpha' && renderer) renderer.stipplealpha = !!v;
-  if (k === 'swMaxsurfs' && renderer) renderer.maxSurfs = Number(v) || 0;   // (sw_maxsurfs: the surface cache's size, 0 the painter's own)
+  if (k === 'swMaxsurfs' && renderer) { renderer.maxSurfs = Number(v) || 0; renderer.surfCache.clear(); }   // (sw_maxsurfs: the surface cache's size, 0 the painter's own; the cache starts over at it, a full one standing over a still view otherwise)
   if (k === 'cdLoopcount') audio.loopCount = Number(v) || 4;   // (cd_loopcount, cd_looptrack: the music's loop; cd_nocd: none)
   if (k === 'cdLooptrack') audio.loopTrack = Number(v) || 0;
   if (k === 'cdNocd') audio.setNocd(!!v);
   if (k === 'inJoystick') input.joystick = v !== false;   // (in_joystick: the pads read, or not)
+  if (k === 'inMouse') input.mouseOn = v !== false;   // (in_mouse: the mouse read, or not)
   if (k.startsWith('joy')) input.joy = joyFromSettings(settings);   // (the joy_ cvars: the sticks' dead zones and speeds)
   if (k === 'sKhz') audio.khz = Number(v) || 44;   // (s_khz: the rate at the next snd_restart)
   if (k === 'sMixahead') audio.mixahead = Number(v) || 0;   // (s_mixahead: the raw stream's lead)
@@ -516,6 +518,14 @@ const con = new Console({
   // toggleconsole and togglechat (Con_ToggleConsole_f, Con_ToggleChat_f): the console up or down (typed at its line, which Enter closed, it comes
   // back up); togglechat clears the notify lines off the view first, as the function did whatever its name
   toggleConsole: (clearNotify = false) => { if (clearNotify) notify.clearNotify(); if (cmdline.hidden) openConsole(); else closeConsole(); return !cmdline.hidden; },
+  setImpulse: (n) => { input.impulse = n; },   // (impulse: the next command's, as IN_Impulse set in_impulse; a joined page's goes with its command)
+  // in_restart (IN_Restart_f): the keys, the mouse's samples and the pads read anew; the mouse let go and taken again when a game is up
+  inRestart: () => {
+    input.restart();
+    if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
+    if (running && !menu.active && !demo && cmdline.hidden) canvas.requestPointerLock?.()?.catch?.(() => {});
+    return true;
+  },
   setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
   download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
   clearLog: () => { notify.clear(); conlog.textContent = ''; conlog.hidden = true; },   // (clear: the scrollback and the notify lines emptied, Con_Clear_f)

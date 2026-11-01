@@ -165,6 +165,7 @@ export class Input {
     this.touch = { move: null, look: null };
     this.pad = { held: new Set(), stick: { x: 0, y: 0 }, last: null };
     this.joystick = true;   // in_joystick: the pads read (IN_Frame's; 0 leaves them unread)
+    this.mouseOn = true;    // in_mouse: the mouse read (IN_StartupMouse's; 0 leaves it unread, the lock kept)
     this.joy = JOY;         // the joy_ cvars (IN_JoyMove's thresholds and sensitivities), the pads read with them
     this.pads = [];              // the other pads' last reads, by index after the first (the third and fourth players')
     this.menuPressed = false;    // the pad's Start went down at the last read
@@ -173,6 +174,14 @@ export class Input {
     this.now = now;
   }
 
+  /** IN_Restart_f (IN_Shutdown, IN_Init): the keys, the mouse's samples and the pads read anew, a press counting again. */
+  restart() {
+    this.clear();
+    this.lastDx = 0; this.lastDy = 0;
+    this.mouseYaw = 0; this.mousePitch = 0; this.mouseFwd = 0; this.mouseSide = 0;   // (the samples not yet read)
+    this.pad = { held: new Set(), stick: { x: 0, y: 0 }, last: null };
+    this.pads = [];
+  }
   /** A game key went down (the page has routed its own keys first): held for the command, a one-shot one its impulse. */
   key(code) {
     code = normalizeKey(code);
@@ -202,6 +211,7 @@ export class Input {
    * the sensitivity; under m_filter each sample is averaged with the one before.
    */
   mouse(dx, dy, settings) {
+    if (!this.mouseOn) return;   // (in_mouse 0: the mouse unread)
     // m_filter: each sample averaged with the one before (CL_MouseMove's old_mouse_x/y), smoother and half a sample late
     if (settings.mFilter) { const fx = (dx + this.lastDx) / 2, fy = (dy + this.lastDy) / 2; this.lastDx = dx; this.lastDy = dy; dx = fx; dy = fy; } else { this.lastDx = dx; this.lastDy = dy; }
     const held = (a) => (this.binds[a] ?? []).some((c) => this.keys.has(c));

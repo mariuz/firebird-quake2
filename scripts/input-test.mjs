@@ -55,6 +55,20 @@ check(jump.jump && jump.crouch, 'A jumps, B crouches');
   off.joystick = true;
   check(off.pollPad() !== null, 'in_joystick 1 reads it again');
 }
+// in_mouse 0 (Input.mouseOn false): the mouse's samples are dropped; in_restart (restart): the keys, the samples and the pads read anew
+{
+  const im = new Input({ getPads: () => [pad([0, 0, 0, 0], [BUTTON.A])] });
+  im.mouseOn = false; im.mouse(40, 0, { sensitivity: 7 });
+  check(im.read(1, { sensitivity: 7 })[3] === 0, 'with in_mouse 0 a mouse sample turns nothing');
+  im.mouseOn = true; im.mouse(40, 0, { sensitivity: 7 });
+  check(im.read(1, { sensitivity: 7 })[3] !== 0, 'in_mouse 1 reads it again');
+  im.key('KeyW'); im.pollPad(); im.pollPadAt(0); im.mouse(10, 0, { sensitivity: 7, mFilter: true });
+  check(im.keys.has('KeyW') && im.pad.held.size === 1 && im.pads.length === 1, 'a key held, the pad\'s button held, a second pad read');
+  im.restart();
+  const again = im.pollPad();
+  check(im.keys.size === 0 && im.pads.length === 0 && im.lastDx === 0 && again?.pressed.has(BUTTON.A) === true, 'in_restart lets the key go, forgets the pads\' presses (the button counts as pressed again) and the mouse\'s samples');
+  check(im.read(1, { sensitivity: 7 })[3] === 0, 'and the turn the samples owed is gone');
+}
 
 // a press is reported once, so a weapon changes once per click of the bumper
 let prev = new Set();

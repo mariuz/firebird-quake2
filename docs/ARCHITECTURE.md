@@ -799,7 +799,11 @@ a cinematic's, are queued when they start or have fallen behind, `Q2Audio.mixahe
 (`S_TransferPaintBuffer`'s fixed sine in place of the mix: an oscillator at 0.1 radians a sample of the mixer's rate, 20000 of 32768, into the
 output with the sounds' gain muted while it plays and back at the volume after, `setTestsound`; not archived), `s_show` (`S_Update`'s print of the channels playing, here a line a
 sound started on the scrollback, "left right name" with the volumes 0 to 255, `Q2Audio.onStart`; not archived), `m_filter`
-(`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived), `in_joystick` (`IN_Frame`'s: 0 leaves the pads unread, `Input.joystick`; archived as Quake's was, 1 here where Quake's was 0), the `joy_*` cvars
+(`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived), `in_joystick` (`IN_Frame`'s: 0 leaves the pads unread, `Input.joystick`; archived as Quake's was, 1 here where Quake's was 0), `in_mouse` (`IN_StartupMouse`'s: 0 leaves the mouse unread, its samples dropped, `Input.mouseOn`; archived),
+`in_restart` (`IN_Restart_f`: the keys, the mouse's samples and the pads read anew, a press counting again, `Input.restart`; the mouse let
+go and taken again when a game is up, `inRestart`), `impulse` (`IN_Impulse`: the number is the next command's impulse, the weapons 1 to 11
+by number, the inventory's 12 to 15 and the items' 16 to 23 as the keys and the pad send them, `setImpulse`; a joined page's goes with its
+command), the `joy_*` cvars
 (`IN_JoyMove`'s: `joy_forwardthreshold`, `joy_sidethreshold`, `joy_pitchthreshold` and `joy_yawthreshold` each stick axis's dead zone, of its
 throw, 0.15; `joy_forwardsensitivity`, `joy_sidesensitivity`, `joy_pitchsensitivity` and `joy_yawsensitivity` each axis's speed, with Quake's
 signs, -1 forward, side and yaw and 1 pitch giving the move and the turn as the standard mapping points them, clamped to full throw;

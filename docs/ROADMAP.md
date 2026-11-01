@@ -1309,10 +1309,17 @@ demo pak. In the order they are to be taken.
   with togglechat's clearing, Tab; the browser test reads skins' line, brings the console back with toggleconsole and
   closes it, brings it back with togglechat and sees the notify lines gone, and lists both clients' skins at a joined
   page, on both builds.
-- **`impulse`, `in_mouse` and `in_restart`**: `impulse <n>` as the word set `in_impulse` (the usercmd's impulse: the
-  weapons by number as the page's actions have them, the inventory's 12 to 15), `in_mouse 0` leaving the mouse unread
-  (`IN_StartupMouse`'s; archived, as Quake's was) and `in_restart` (`IN_Restart_f`: the mouse let go and taken again,
-  the pads read anew).
+- **`impulse`, `in_mouse` and `in_restart`**: done. `impulse <n>` is `IN_Impulse`: the number is the next command's
+  impulse (the weapons 1 to 11 by number, the inventory's 12 to 15 and the items' 16 to 23, as the keys and the pad
+  send them; `setImpulse`, a joined page's going with its command), 0 to 255, nothing said as Quake said nothing.
+  `in_mouse 0` leaves the mouse unread, its samples dropped (`Input.mouseOn`, `IN_StartupMouse`'s; archived as
+  Quake's was), the lock kept. `in_restart` is `IN_Restart_f`: the keys, the mouse's samples and the pads read anew,
+  a press counting again (`Input.restart`), the mouse let go and taken again when a game is up. All three in the
+  console's list for Tab. `test:input` drops a mouse sample with in_mouse 0 and reads it again, and sees a restart let
+  a key go, forget the pads' presses and the samples, the button counting again; `test:settings` the setting;
+  `test:console` impulse set and refused, in_mouse shown, set, refused and in config.cfg, in_restart through the page,
+  Tab; the browser test changes the weapon with impulse 12 and back with 22, flips in_mouse through to the input and
+  sees in_restart forget the pads, on both builds.
 - **`cl_timedemo` and `sv_showclamp`**: `cl_timedemo` as `CL_Timedemo_f` set it, 1 while a timedemo runs and shown
   (a value refused, `timedemo` setting it), and `sv_showclamp` (`SV_Frame`'s "sv lowclamp" and "sv highclamp" at a
   page running the game: the tics it fell behind by, the ones it held), as `cl_showclamp` says a joined page's.
