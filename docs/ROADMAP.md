@@ -1281,9 +1281,42 @@ with the demo pak. In the order they are to be taken.
   tone made at the rate's frequency and gain with the mix muted, the volume set meanwhile kept, and the mix back when
   off; `test:settings` the two; `test:console` shown, set, refused, cvarlist, config.cfg with s_mixahead and without
   s_testsound, Tab; the browser test sets the lead and plays the tone, the mix muted and back, on both builds.
-- **`sw_aliasstats`, `sw_polymodelstats`, `sw_reportsurfout`, `sw_reportedgeout` and `z_stats`**: the painter's
-  reports (the models drawn and their triangles a frame, the surfaces and edges past the limits) and the memory in use
-  (the engine's heap, the page's).
+- **`sw_aliasstats`, `sw_polymodelstats`, `sw_reportsurfout`, `sw_reportedgeout` and `z_stats`**: done, for what the painter has.
+  `sw_aliasstats 1` prints the polygon models drawn in the frame and their triangles once a second, as `R_PrintAliasStats`
+  printed `r_amodels_drawn` (`Renderer.aliasDrawn` and `aliasTris`, counted from `beginFrame`); `sw_reportsurfout 1` prints
+  "Short %d surfaces" when a frame built surfaces after the painter's cache overflowed and was cleared (`surfShort`, as
+  `r_outofsurfaces` counted the ones past `r_surfaces`), and `sw_maxsurfs` sets the cache's size (0 the painter's own 2000,
+  as Quake's 0 was its 768); none archived. `z_stats` is `Z_Stats_f`: what the page holds, "%i bytes in %i blocks" a line
+  each in the scrollback and the sum on the line (`memStats`: the surfaces built with their pixels, the sounds decoded with
+  their samples, the pak, the page's heap in use where the browser tells it; the engine's heap lives in its Worker, out of
+  reach). Left out: `sw_reportedgeout` and `sw_maxedges` (there is no edge table here), and `sw_polymodelstats`, which was
+  Quake 1's `r_polymodelstats` and not ref_soft's. `test:painter` sees a frame with nothing short, the cache at ten
+  clearing and the surfaces after it short, and two models drawn counted with their triangles; `test:settings` the three;
+  `test:console` shown, set, refused, cvarlist, left out of config.cfg, z_stats laid out and summed, Tab; the browser test
+  reads the models drawn line, the surfaces short at a cache of ten, and z_stats's line and lines, on both builds.
+
+The nineteenth list: what the console, the keys, the mouse and the cvars still lack of Quake 2's own words with the
+demo pak. In the order they are to be taken.
+
+- **`skins`, `toggleconsole` and `togglechat`**: `CL_Skins_f` (each client's number, name and skin as its userinfo has
+  them, "%i: %s" a line each in the scrollback, the sum on the line; a joined page's from its score board rows),
+  `Con_ToggleConsole_f` (the console's own word, the ` key's, so `bind` can name it) and `Con_ToggleChat_f` (the chat
+  prompt's, as `messagemode` is).
+- **`impulse`, `in_mouse` and `in_restart`**: `impulse <n>` as the word set `in_impulse` (the usercmd's impulse: the
+  weapons by number as the page's actions have them, the inventory's 12 to 15), `in_mouse 0` leaving the mouse unread
+  (`IN_StartupMouse`'s; archived, as Quake's was) and `in_restart` (`IN_Restart_f`: the mouse let go and taken again,
+  the pads read anew).
+- **`cl_timedemo` and `sv_showclamp`**: `cl_timedemo` as `CL_Timedemo_f` set it, 1 while a timedemo runs and shown
+  (a value refused, `timedemo` setting it), and `sv_showclamp` (`SV_Frame`'s "sv lowclamp" and "sv highclamp" at a
+  page running the game: the tics it fell behind by, the ones it held), as `cl_showclamp` says a joined page's.
+- **`set`'s flags and `cvarlist`'s**: `set <cvar> <value> [u | s | a]` as `Cvar_Set_f` took them (u the userinfo, s
+  the serverinfo, a archived: a cvar the page keeps marked for `userinfo`, `serverinfo` and config.cfg), and
+  `cvarlist`'s flag column before each cvar as `Cvar_List_f` printed it ("S", "U", "A", "L" for the serverinfo, the
+  userinfo, archived and latched).
+- **`scr_conspeed` and `scr_drawall`**: the console dropping over the view at `scr_conspeed`'s pixels a second as
+  `SCR_RunConsole` moved it (the page's console drawn in the view, `Con_DrawConsole`'s lines and the input line over
+  the frame when up, the page's input line standing in), and `scr_drawall` (`SCR_UpdateScreen`: the whole screen
+  painted each frame, the status bar's dirty rectangles aside).
 
 ## Playing the demo
 

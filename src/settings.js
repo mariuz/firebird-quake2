@@ -9,7 +9,7 @@ export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false,
-  crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rLockpvs: false, rSpeeds: false, rDspeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, logStats: false, svNoreload: false, sShow: false, inJoystick: true, sKhz: 44, sMixahead: 0.05, sTestsound: false, clShownet: 0, clShowclamp: false, showpackets: false, showdrop: false,
+  crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rLockpvs: false, rSpeeds: false, rDspeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, swAliasstats: false, swReportsurfout: false, swMaxsurfs: 0, developer: false, logfile: false, logStats: false, svNoreload: false, sShow: false, inJoystick: true, sKhz: 44, sMixahead: 0.05, sTestsound: false, clShownet: 0, clShowclamp: false, showpackets: false, showdrop: false,
   joyForwardthreshold: 0.15, joySidethreshold: 0.15, joyPitchthreshold: 0.15, joyYawthreshold: 0.15, joyForwardsensitivity: -1, joySidesensitivity: -1, joyPitchsensitivity: 1, joyYawsensitivity: -1,
   mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '', rconPassword: '',
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120,
@@ -56,6 +56,7 @@ const CHECK = {
   hostSpeeds: bool,      // host_speeds: a frame's times printed once a second (Qcommon_Frame's all, sv, gm, cl, rf)
   // ref_soft's sw_ switches: every face flat in a colour of its own, the underwater warp, the palette index the view is cleared to
   swDrawflat: bool, swWaterwarp: bool, swClearcolor: int(0, 255), swMipcap: int(0, 3), swMipscale: num(0, 10), swStipplealpha: bool,   // (the mip cap and scale, the stipple)
+  swAliasstats: bool, swReportsurfout: bool, swMaxsurfs: int(0, 100000),   // the painter's reports (the models drawn, the surfaces short) and the surface cache's size (0 the painter's own)
   developer: bool, logfile: bool,   // the page's warnings on the console (developer), the scrollback kept as qconsole.log (logfile)
   svNoreload: bool,   // sv_noreload: a level of the unit come back to spawns fresh, what was left in it unread
   sShow: bool,        // s_show: each sound started printed on the scrollback

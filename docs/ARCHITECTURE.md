@@ -781,7 +781,14 @@ the three archived), `sw_mipcap` and `sw_mipscale` (`D_MipLevelForScale`'s `d_mi
 and the thresholds 1, 0.4 and 0.2 scaled, `mipLevel(scale, mipscale, mipcap)`; neither archived) and `sw_stipplealpha` (translucent
 surfaces drawn stippled in place of the blend through the alpha map, `stippleKeep`: three pixels in four at 66% and one in four at
 33%, as `R_DrawSpanlet66Stipple` and `R_DrawSpanlet33Stipple` kept them, the parity turned each frame; the models' blend stays, as
-ref_soft's did; archived as Quake's was), `cd_loopcount`, `cd_looptrack` and `cd_nocd` (`CDAudio_Update`'s loop: a map's track plays over again at its end
+ref_soft's did; archived as Quake's was), `sw_aliasstats` (`R_PrintAliasStats`, once a second here: the polygon models drawn in the
+frame and their triangles, `Renderer.aliasDrawn` and `aliasTris`, counted from `beginFrame`), `sw_reportsurfout` ("Short %d surfaces": the
+surfaces built after the painter's cache overflowed and was cleared in the frame, `surfShort`, as `r_outofsurfaces` counted the ones past
+`r_surfaces`; printed once a second when any) and `sw_maxsurfs` (the surface cache's size, `Renderer.maxSurfs`, 0 the painter's own 2000 as
+Quake's 0 was its 768; none of the three archived; there is no edge table here, so `sw_reportedgeout` and `sw_maxedges` have no meaning),
+`z_stats` (`Z_Stats_f`'s "%i bytes in %i blocks": what the page holds, a line each in the scrollback and the sum on the line, `memStats`: the
+surfaces built with their pixels, the sounds decoded with their samples, the pak, and the page's heap in use where the browser tells it;
+the engine's heap lives in its Worker, out of the page's reach), `cd_loopcount`, `cd_looptrack` and `cd_nocd` (`CDAudio_Update`'s loop: a map's track plays over again at its end
 until it has played `cd_loopcount` times, 4, then `cd_looptrack`, 11, over and over, `Q2Audio.playMusic`'s `onended`; the drone stands
 in for a track with no file as one endless track; `cd_nocd 1` plays no music, archived as Quake's was), `cd` (`CD_f`'s words over the
 music: `cd play <n>` a track once and `cd loop <n>` over and over, whatever `cd_loopcount` says, `cd stop`, `cd pause` and `cd resume`

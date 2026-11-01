@@ -16,6 +16,7 @@ export class Q2Audio {
     this.ctx = null;
     this.pak = null;
     this.buffers = new Map();
+    this.decodedBytes = 0;       // z_stats: the decoded sounds' samples as bytes (frames × channels × 4)
     this.volume = 0.7;
     this.musicVolume = 0.5;
     this.channels = new Map();   // `${ent}:${chan}` → source, to cut
@@ -42,7 +43,7 @@ export class Q2Audio {
     this.onStart = null;         // s_show: told each sound started as (name, left, right), the volumes 0 to 255 as S_Update printed the channels
   }
 
-  setPak(pak) { this.stopLoops(); this.pak = pak; this.buffers.clear(); }
+  setPak(pak) { this.stopLoops(); this.pak = pak; this.buffers.clear(); this.decodedBytes = 0; }
   setVolume(v) { this.volume = v; if (this.master && !this.testTone) this.master.gain.value = v; }   // (the tone playing, the mix stays muted: the volume is for after)
   setMusicVolume(v) { this.musicVolume = v; if (this.musicGain) this.musicGain.gain.value = v; }
 
@@ -72,7 +73,7 @@ export class Q2Audio {
     this.stopAll();
     const old = this.ctx;
     this.ctx = null; this.master = null; this.musicGain = null; this.testTone = null;
-    this.buffers.clear();
+    this.buffers.clear(); this.decodedBytes = 0;
     this.music = null; this.pausedMusic = null;
     try { old?.close?.()?.catch?.(() => {}); } catch { /* closed already */ }
     this.unlock();
@@ -94,7 +95,9 @@ export class Q2Audio {
       if (!this.pak.has(file) && name.startsWith('player/female/')) file = 'sound/player/male/' + name.slice('player/female/'.length);
       if (!this.pak.has(file)) return null;
       try {
-        return await this.ctx.decodeAudioData(this.pak.buffer(file));
+        const b = await this.ctx.decodeAudioData(this.pak.buffer(file));
+        if (b) this.decodedBytes += (b.length ?? 0) * (b.numberOfChannels ?? 1) * 4;
+        return b;
       } catch { return null; }
     })();
     this.buffers.set(name, p);

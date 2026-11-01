@@ -68,7 +68,7 @@ function paintDue(now) {
   lastDue = now;
   return true;
 }
-let rSpeedsAt = 0, rDspeedsAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
+let rSpeedsAt = 0, rDspeedsAt = 0, aliasStatsAt = 0, surfOutAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
 let hostSpeedsAt = 0;   // when host_speeds last printed a frame's times (once a second here; Qcommon_Frame printed every frame)
 let lastTic = 0;
 // src/net.js: a game shared over a data channel. The host runs the game here and sends the guest its frames
@@ -290,6 +290,7 @@ function setSetting(k, v) {
   if (k === 'swMipcap' && renderer) renderer.mipcap = Number(v) || 0;   // (sw_mipcap, sw_mipscale: the next frame's mip levels; sw_stipplealpha: its translucent surfaces)
   if (k === 'swMipscale' && renderer) renderer.mipscale = Number(v);
   if (k === 'swStipplealpha' && renderer) renderer.stipplealpha = !!v;
+  if (k === 'swMaxsurfs' && renderer) renderer.maxSurfs = Number(v) || 0;   // (sw_maxsurfs: the surface cache's size, 0 the painter's own)
   if (k === 'cdLoopcount') audio.loopCount = Number(v) || 4;   // (cd_loopcount, cd_looptrack: the music's loop; cd_nocd: none)
   if (k === 'cdLooptrack') audio.loopTrack = Number(v) || 0;
   if (k === 'cdNocd') audio.setNocd(!!v);
@@ -527,6 +528,17 @@ const con = new Console({
   pakInfo: () => (pak ? { name: pickedPak ?? 'pak0.pak', files: pak.files.size, from: pickedPak ? 'picked, kept in the browser' : "the demo's, ./pak/pak0.pak" } : null),
   // modellist: the models loaded (the MD2s and sprites by name, the full game's monsters on a row without a mesh at size 0) with their size in the pak
   modelList: () => (res ? [...res.models.values()].map((m) => ({ name: m.name, size: pak?.files.get(m.name)?.size ?? 0 })) : []),
+  // z_stats: the surfaces the painter holds (each its pixels), the sounds decoded (their samples), the pak (one block), the page's heap where
+  // the browser tells it (Chromium's performance.memory); the engine's heap lives in its Worker, out of reach
+  memStats: () => {
+    const rows = [];
+    if (renderer) { let b = 0; for (const s of renderer.surfCache.values()) b += s.data?.length ?? 0; rows.push({ what: 'surfaces built (the painter\'s cache)', blocks: renderer.surfCache.size, bytes: b }); }
+    rows.push({ what: 'sounds decoded', blocks: audio.buffers.size, bytes: audio.decodedBytes ?? 0 });
+    if (pak) rows.push({ what: `the pak (${pak.files.size} files)`, blocks: 1, bytes: pak.bytes?.byteLength ?? pak.buffer?.byteLength ?? 0 });
+    const mem = typeof performance !== 'undefined' ? performance.memory : null;
+    if (mem?.usedJSHeapSize) rows.push({ what: 'the page\'s heap in use (the engine\'s is its Worker\'s)', blocks: 1, bytes: mem.usedJSHeapSize });
+    return rows;
+  },
   // imagelist: the pictures in use (P: the hud's, the menus' through its cache), the wall textures the painter has built (W) and the models' skins (M), with their sizes
   imageList: () => {
     const out = [];
@@ -1722,6 +1734,16 @@ function updateStats() {
     const w = perf.world ?? 0, e = perf.epoly ?? 0, f = perf.fx ?? 0;
     notify.add(`${w.toFixed(1)} ms world, ${e.toFixed(1)} ms ents, ${f.toFixed(1)} ms fx, ${Math.max(0, perf.draw - w - e - f).toFixed(1)} ms rest`, gameClock());
   }
+  // sw_aliasstats (R_PrintAliasStats, once a second here): the polygon models drawn, and their triangles; sw_reportsurfout ("Short %d surfaces"):
+  // the surfaces built after the painter's cache overflowed in the frame, when any did
+  if (settings.swAliasstats && performance.now() - aliasStatsAt > 1000) {
+    aliasStatsAt = performance.now();
+    notify.add(`${String(renderer.aliasDrawn).padStart(3)} polygon models drawn, ${renderer.aliasTris} triangles`, gameClock());
+  }
+  if (settings.swReportsurfout && renderer.surfShort > 0 && performance.now() - surfOutAt > 1000) {
+    surfOutAt = performance.now();
+    notify.add(`Short ${renderer.surfShort} surfaces`, gameClock());
+  }
   // host_speeds: a frame's times as Qcommon_Frame printed "all, sv, gm, cl, rf" (once a second here): the whole, the server frame outside
   // the game (none: the SQL tic is the game), the game (the tic), the client outside the painter (the frame query), the painter
   if (settings.hostSpeeds && performance.now() - hostSpeedsAt > 1000) {
@@ -2089,7 +2111,7 @@ function makeRenderer() {
   renderer = new Renderer(canvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
   renderer.fullbright = !!settings.rFullbright;   // (r_fullbright as the settings have it)
   renderer.drawflat = !!settings.swDrawflat; renderer.clearColor = Number(settings.swClearcolor) || 0;   // (sw_drawflat, sw_clearcolor)
-  renderer.mipcap = Number(settings.swMipcap) || 0; renderer.mipscale = Number(settings.swMipscale); renderer.stipplealpha = !!settings.swStipplealpha;   // (sw_mipcap, sw_mipscale, sw_stipplealpha)
+  renderer.mipcap = Number(settings.swMipcap) || 0; renderer.mipscale = Number(settings.swMipscale); renderer.stipplealpha = !!settings.swStipplealpha; renderer.maxSurfs = Number(settings.swMaxsurfs) || 0;   // (sw_mipcap, sw_mipscale, sw_stipplealpha)
   renderer.setSize(viewWidth(), viewHeight());
   renderer.lightScale = settings.brightness;
 }

@@ -637,6 +637,18 @@ try {
     const mp0 = await page.evaluate(() => { const r = window.quake2.renderer; return { cap: r.mipcap, scale: r.mipscale, stipple: r.stipplealpha }; }).catch(() => ({}));
     assert(mp1.cap === 3 && mp1.scale === 2 && mp1.stipple === true && mp1.at3 === true && mp1.s?.join() === '3,2,true' && mp0.cap === 0 && mp0.scale === 1 && mp0.stipple === false,
       `sw_mipcap 3, sw_mipscale 2 and sw_stipplealpha 1 reach the painter and the settings, surfaces are built at mip 3 under the cap, and go back (${JSON.stringify(mp1)} → ${JSON.stringify(mp0)})`);
+    // sw_aliasstats prints the models drawn a frame once a second; sw_maxsurfs 10 makes the cache overflow each frame and sw_reportsurfout says the
+    // surfaces short; z_stats prints what the page holds and sums it on the line
+    await typeCommand('sw_aliasstats 1'); await typeCommand('sw_maxsurfs 10'); await typeCommand('sw_reportsurfout 1');
+    let prLog = [];
+    for (let i = 0; i < 20 && !(prLog.some((l) => /^ *\d+ polygon models drawn, \d+ triangles$/.test(l)) && prLog.some((l) => /^Short \d+ surfaces$/.test(l))); i++) { await sleep(250); prLog = await page.evaluate(() => window.quake2.notify.log(30)).catch(() => []); }
+    const prMax = await page.evaluate(() => ({ max: window.quake2.renderer.maxSurfs, size: window.quake2.renderer.surfCache.size, s: window.quake2.settings.swMaxsurfs })).catch(() => ({}));
+    await typeCommand('sw_aliasstats 0'); await typeCommand('sw_reportsurfout 0'); await typeCommand('sw_maxsurfs 0');
+    await typeCommand('z_stats');
+    const zs = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(6) })).catch(() => ({}));
+    assert(prLog.some((l) => /^ *\d+ polygon models drawn, \d+ triangles$/.test(l)) && prLog.some((l) => /^Short \d+ surfaces$/.test(l)) && prMax.max === 10 && prMax.size <= 11 && prMax.s === 10
+      && /^\d+ bytes in \d+ blocks$/.test(zs.line ?? '') && zs.log?.some((l) => /bytes in +\d+ blocks  surfaces built/.test(l)),
+      `sw_aliasstats prints the models drawn (${JSON.stringify(prLog.filter((l) => /polygon/.test(l)).slice(-1))}), sw_maxsurfs 10 and sw_reportsurfout the surfaces short (${JSON.stringify(prLog.filter((l) => /^Short/.test(l)).slice(-1))}, ${JSON.stringify(prMax)}), z_stats what the page holds ("${zs.line}")`);
     // m_yaw, cl_gun and con_notifytime reach the settings, con_notifytime the notify's seconds; back to the defaults after
     await typeCommand('m_yaw 0.044'); await typeCommand('cl_gun 0'); await typeCommand('con_notifytime 1');
     const three = await page.evaluate(() => ({ yaw: window.quake2.settings.mYaw, gun: window.quake2.settings.clGun, notify: window.quake2.settings.conNotifytime, seconds: window.quake2.notify.seconds })).catch(() => ({}));
