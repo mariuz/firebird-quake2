@@ -118,6 +118,7 @@ audio.setMusicStore(fileStore);
 for (const ev of ['keydown', 'pointerdown', 'touchstart']) window.addEventListener(ev, () => audio.unlock(), { capture: true });
 document.addEventListener('visibilitychange', () => audio.suspend(document.hidden));
 const perf = { tic: 0, faces: 0, draw: 0, rows: 0 };
+let frameInfo = null;   // the first view's last frame: { ents, dlights, particles, tint } (the cl_add and cl_test cvars read back)
 
 function setStatus(msg, isError = false) {
   statusEl.textContent = msg;
@@ -1443,26 +1444,62 @@ async function endGame() {
  * One view painted: `which` is 0 for the top (or whole) screen, 1 for a split screen's bottom; `last` the
  * client's Q2_TIC row the view belongs to (the page's `last` for the first player).
  */
+/** The view's forward, right and up as AngleVectors gave them (cl.v_forward, v_right, v_up), for the test rings. */
+function viewAxes(view) {
+  const yaw = (view.yaw * Math.PI) / 180, pitch = (view.pitch * Math.PI) / 180;
+  const sy = Math.sin(yaw), cy = Math.cos(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch);
+  return { fwd: [cp * cy, cp * sy, -sp], right: [sy, -cy, 0], up: [sp * cy, sp * sy, cp] };
+}
+const at = (view, a, f, r, u = 0) => [view.x + a.fwd[0] * f + a.right[0] * r + a.up[0] * u, view.y + a.fwd[1] * f + a.right[1] * r + a.up[1] * u, view.z + a.fwd[2] * f + a.right[2] * r + a.up[2] * u];
+/** V_TestEntities: 32 models in four columns 64 apart, 128 on, in place of the player model (the first model with a mesh here). */
+function testEntities(view, axes) {
+  const model = [...res.models.values()].find((m) => m.kind === 'M' && m.mdl);
+  if (!model) return [];
+  const rows = [];
+  for (let i = 0; i < 32; i++) {
+    const [x, y, z] = at(view, axes, 64 * Math.floor(i / 4) + 128, 64 * ((i % 4) - 1.5));
+    rows.push([0, model.id, 0, 0, x, y, z, 0, 0, 0, 0, 0, 'M', 0, 0, 0]);
+  }
+  return rows;
+}
+/** V_TestLights: 32 lights laid out as the entities, each 200 units (the colours are the 8-bit painter's one). */
+function testLights(view, axes) {
+  const lights = [];
+  for (let i = 0; i < 32; i++) { const [x, y, z] = at(view, axes, 64 * Math.floor(i / 4) + 128, 64 * ((i % 4) - 1.5)); lights.push({ x, y, z, r: 200, c: 1 }); }
+  return lights;
+}
+/** V_TestParticles: MAX_PARTICLES (4096) particles a quarter unit on along the view, in an 8 by 8 spread of 4 units, colour 8. */
+function testParticles(view, axes) {
+  const ps = [];
+  for (let i = 0; i < 4096; i++) { const [x, y, z] = at(view, axes, i * 0.25, 4 * ((i & 7) - 3.5), 4 * (((i >> 3) & 7) - 3.5)); ps.push({ x, y, z, vx: 0, vy: 0, vz: 0, color: 8, die: Infinity, type: 'still' }); }
+  return ps;
+}
 function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   const r = renderer;
-  r.dlights = tempEnts.lights(ents, time);
   const view = { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: last.ROLL ?? (last.DEAD ? 40 : 0), fov: viewFov() };
+  // V_RenderView's tests and switches: cl_testentities, cl_testlights and cl_testparticles add their rings about the eye (V_TestEntities,
+  // V_TestLights, V_TestParticles), cl_testblend a blend; cl_add_entities 0 leaves the entities out (the brush models and the view
+  // weapon with them, as r_numentities 0 did), cl_add_lights 0 the dynamic lights, cl_add_particles 0 the particles, cl_add_blend 0 the blend
+  const axes = viewAxes(view);
+  if (settings.clTestentities) ents = ents.concat(testEntities(view, axes));
+  r.dlights = settings.clAddLights === false ? [] : tempEnts.lights(ents, time).concat(settings.clTestlights ? testLights(view, axes) : []);
+  const drawEnts = settings.rDrawentities && settings.clAddEntities !== false;
   // RDF_UNDERWATER: the eye in water, slime or lava draws the view into the 320×240 warp buffer and warps it up
   const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION && settings.swWaterwarp !== false;   // (sw_waterwarp 0: the view under water drawn as above it)
   if (underwater) r.beginUnderwater();
   r.beginFrame(view);
-  if (faces && (settings.rDrawworld || settings.rDrawentities)) {
+  if (faces && (settings.rDrawworld || drawEnts)) {
     const frames = new Map();
     for (const [id, [f, eff]] of brushFrames) frames.set(id, entityFrame(f, eff, time));
     // r_drawworld 0 leaves the world's faces out, r_drawentities 0 the brush models' (the SQL-projecting rows name the entity last)
-    const rows = settings.rDrawworld && settings.rDrawentities ? faces
-      : faces.filter((row) => ((settings.renderer === 'sql' ? row[9] : row[1]) ? settings.rDrawentities : settings.rDrawworld));
+    const rows = settings.rDrawworld && drawEnts ? faces
+      : faces.filter((row) => ((settings.renderer === 'sql' ? row[9] : row[1]) ? drawEnts : settings.rDrawworld));
     if (settings.renderer === 'sql') r.drawFaces(rows, styles, time, frames);
     else r.drawFaceList(rows, styles, time, frames, brushAngles);
   }
   const bsp = map.bsp;
   perf.ents = ents.length;
-  for (const e of settings.rDrawentities ? ents : []) {   // (r_drawentities 0: R_DrawEntitiesOnList skipped)
+  for (const e of drawEnts ? ents : []) {   // (r_drawentities 0: R_DrawEntitiesOnList skipped; cl_add_entities 0: none to list)
     const [, mid, frame, skin, x, y, z, pitch, yaw, roll, effects, alpha, kindRaw] = e;
     const kind = String(kindRaw).trim();
     const m = res.models.get(mid);
@@ -1483,13 +1520,14 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   // the temporary entities: beams, the parasite's tongue, the explosions (src/effects.js); the particles were
   // run once for the frame
   tempEnts.draw(r, bsp, time);
-  r.drawParticles();
+  const particles = settings.clAddParticles === false ? [] : settings.clTestparticles ? r.particles.concat(testParticles(view, axes)) : r.particles;   // (cl_add_particles 0: none; cl_testparticles: the ring too)
+  if (particles !== r.particles) { const own = r.particles; r.particles = particles; r.drawParticles(); r.particles = own; } else r.drawParticles();
   // the weapon in hand (depth hack: drawn over everything near); none at the intermission
   // (a demo's row names the gun model, its frame and its angles as the server sent them: ps.gunindex, gunframe, gunangles)
   // (the hand: a left-hander's gun is drawn mirrored, a centre-hander's not at all, as ref_soft and ref_gl had hand 1 and 2)
   const wp = WEAPONS[last.WEAPON];
   const gunName = last.GUN_MODEL ?? wp?.view;
-  if (!last.DEAD && !last.INTERMISSION && gunName && last.HAND !== 2 && settings.rDrawentities && settings.clGun !== false) {   // (r_drawentities 0 and cl_gun 0: no view weapon, as CL_AddViewWeapon had them)
+  if (!last.DEAD && !last.INTERMISSION && gunName && last.HAND !== 2 && drawEnts && settings.clGun !== false) {   // (r_drawentities 0, cl_add_entities 0 and cl_gun 0: no view weapon, as CL_AddViewWeapon had them)
     const vm = res.models.get(res.byName.get(gunName));
     if (vm) {
       // SV_CalcGunOffset: the gun sways with the walk cycle and lags behind turns of the view (the delta over a
@@ -1559,6 +1597,9 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   else if (last.INVINCIBLE) tint = [255, 255, 0, 0.3];
   else if (last.ENVIRO) tint = [0, 255, 0, 0.2];
   else if (last.WATERLEVEL >= 3) tint = last.WATERTYPE & 8 ? [255, 80, 0, 0.6] : last.WATERTYPE & 16 ? [0, 25, 5, 0.6] : [0, 40, 100, 0.4];
+  if (settings.clTestblend) tint = [255, 128, 64, 0.5];   // (V_TestBlend: 1, 0.5, 0.25 at half)
+  if (settings.clAddBlend === false) tint = null;          // (cl_add_blend 0: no blend)
+  if (which === 0) frameInfo = { ents: drawEnts ? ents.length : 0, dlights: r.dlights.length, particles: particles.length, tint };
   // SCR_DrawNet's turtle at the view's corner once three frames in a row took a tenth of a second or more (scr_showturtle), the first view's
   if (which === 0) turtleDrawn = hud.drawTurtle(r, dt, !!settings.scrShowturtle, r.vr.x, r.vr.y);
   r.present(tint, null, which);
@@ -1965,7 +2006,7 @@ async function boot() {
     window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
-      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; },
+      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; },
       get logfile() { return { on: !!settings.logfile, kept: logKept.length, pending: logNew.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),

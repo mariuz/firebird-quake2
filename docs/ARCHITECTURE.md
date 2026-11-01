@@ -740,7 +740,13 @@ default.cfg's, as lines beside END's centerview), ref_soft's switches, none arch
 (`Renderer.fullbright`: every surface built at full light, `R_BuildLightMap`'s, no lightmap and no dynamic light, the
 surface cache cleared with the switch; every model at light 255 as `RF_FULLBRIGHT` has it), `r_drawentities` (0: the
 brush models' faces, the models, the sprites and the view weapon left out, `R_DrawEntitiesOnList` and `R_DrawViewModel`
-skipped) and `r_drawworld` (0: the world's faces left out), `r_lerpmodels` (0: no pose blended, `backlerp` 0),
+skipped) and `r_drawworld` (0: the world's faces left out), `cl_add_entities`, `cl_add_particles`, `cl_add_lights` and `cl_add_blend`
+(`V_RenderView`'s switches: 0 leaves the entities, with the brush models and the view weapon as `r_numentities` 0 did, the particles,
+the dynamic lights or the palette blend out of a frame), `cl_testentities`, `cl_testlights`, `cl_testparticles` and `cl_testblend`
+(`V_TestEntities`, `V_TestLights`, `V_TestParticles` and `V_TestBlend`: 32 models of the first model with a mesh, there being no
+player model in the demo pak, and 32 lights of 200 units in four columns 64 apart from 128 on, 4096 particles a quarter unit on in
+an 8 by 8 spread, and a blend of 1, 0.5, 0.25 at half, about the eye each frame; `drawFrame`'s `testEntities`, `testLights`,
+`testParticles`; none of the eight archived), `r_lerpmodels` (0: no pose blended, `backlerp` 0),
 `r_novis` (`viewcfg.novis`: `build_vis_set` marks every leaf, the PVS and the area portals ignored as `R_MarkLeaves` did
 with it, the kept sets dropped with the switch; a guest paints the host's frames as they are) and `r_speeds` (the
 frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame),
