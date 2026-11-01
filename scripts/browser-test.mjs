@@ -589,6 +589,21 @@ try {
     for (let i = 0; i < 240 && !(await page.evaluate(() => window.quake2.running && !window.quake2.demo).catch(() => false)); i++) await sleep(250);
     for (let i = 0; i < 240 && !/q2_tic \d+ ms/.test(await stats()); i++) await sleep(250);
     const backAgain = await page.evaluate(() => ({ running: window.quake2.running, demo: !!window.quake2.demo })).catch(() => ({}));
+    // gamemap keeps the level running aside and loads the next (SV_GameMap_f); map with a picture and "+" shows the picture, nextserver
+    // holding what follows, a key then starting a new game on it, the unit's levels forgotten (SV_Map_f)
+    const mapState = () => page.evaluate(() => ({ map: window.quake2.session?.map?.name ?? null, kept: [...(window.quake2.session?.unitLevels?.keys() ?? [])].sort().join(), running: window.quake2.running, next: window.quake2.nextServer })).catch(() => ({}));
+    await typeCommand('gamemap demo2');
+    let gm = {};
+    for (let i = 0; i < 240 && !(gm.map === 'demo2' && gm.running); i++) { await sleep(250); gm = await mapState(); }
+    for (let i = 0; i < 240 && !/q2_tic \d+ ms/.test(await stats()); i++) await sleep(250);
+    await typeCommand('map victory.pcx+demo1'); await sleep(1500);
+    const pic = await mapState();
+    await page.keyboard.press('Space');
+    let gmBack = {};
+    for (let i = 0; i < 240 && !(gmBack.map === 'demo1' && gmBack.running); i++) { await sleep(250); gmBack = await mapState(); }
+    for (let i = 0; i < 240 && !/q2_tic \d+ ms/.test(await stats()); i++) await sleep(250);
+    assert(gm.map === 'demo2' && gm.kept === 'demo1' && pic.running === false && pic.next === 'demo1' && gmBack.map === 'demo1' && gmBack.kept === '',
+      `gamemap demo2 keeps demo1 aside (${JSON.stringify(gm)}); map victory.pcx+demo1 shows the picture with nextserver holding demo1 (${JSON.stringify(pic)}), a key starts a new game on it, the unit forgotten (${JSON.stringify(gmBack)})`);
     await typeCommand('give all');   // (the new game's inventory as the checks below expect it)
     assert(killed.demo === true && backAgain.running === true && backAgain.demo === false,
       `killserver ends the game for the attract loop (${JSON.stringify(killed)}), the Map select brings a game back (${JSON.stringify(backAgain)})`);

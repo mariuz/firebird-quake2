@@ -690,7 +690,11 @@ loading plaque. `F1` toggles the help computer (`HelpComputer`): skill, level na
 The console: the backquote opens a command line over the view. A line's commands part at `;` outside
 quotes (`splitLine`, as `Cbuf_ExecuteText` parted them), `alias <name> <line>` names a line that runs by its
 name (`Cmd_Alias_f`, sixteen deep at most, the aliases lasting the session as Quake's did), and `wait` holds
-the rest of a line to the next frame (`Console.tick` from the page's frame). `map <name>`, `save`, `load`, `fov`,
+the rest of a line to the next frame (`Console.tick` from the page's frame). `map <string>` (`SV_Map_f`: a new game on the map, the
+unit's levels forgotten; the string as `target_changelevel` writes one, `src/levels.js`: a `$` spawn point, a `.pcx` picture or a
+`.cin` cinematic with `+` what follows, the page's `changeLevel` without the keep), `gamemap <string>` (`SV_GameMap_f`: the level
+running kept aside with the unit's flags as an exit keeps it, `*` wiping the unit, then the string's way), `nextserver` (what follows
+the picture or the cinematic playing, held as `SV_Map` set the cvar; shown and set at the console), `save`, `load`, `fov`,
 `seed` and `skill` are the page's (`skill 0`–`3`: the next map's skill, 3 the nightmare the menus stop short
 of, latched as the cvar was: "skill will be changed for next game."), as are the settings as cvars (`name`,
 `hand`, `sensitivity`, `cl_run`, `m_pitch`, `crosshair`, `s_volume`, `cd_volume`, the mouse look's `freelook`,

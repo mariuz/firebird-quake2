@@ -13,7 +13,7 @@ const calls = [];
 const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
-  pak: { has: (p) => p === 'maps/demo2.bsp', list: () => ['maps/demo1.bsp', 'maps/demo2.bsp', 'pics/conchars.pcx', 'sound/weapons/blastf1a.wav', 'readme.txt'] },
+  pak: { has: (p) => p === 'maps/demo2.bsp' || p === 'pics/victory.pcx', list: () => ['maps/demo1.bsp', 'maps/demo2.bsp', 'pics/conchars.pcx', 'sound/weapons/blastf1a.wav', 'readme.txt'] },
   settings: { fov: 90, skill: 1, detail: 'high', renderer: 'fast', binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
@@ -35,6 +35,26 @@ await con.submit('map demo2');
 check(last() === 'startMap demo2', 'map <name> starts the map');
 await con.submit('map nowhere');
 check(status.at(-1)?.[0] === 'no map "nowhere" in this pak' && status.at(-1)?.[1] === true && last() === 'startMap demo2', 'a map not in the pak is refused with a message, nothing started');
+// map with a map string (a spawn point, a picture or a cinematic, "+" what follows), gamemap keeping the level, nextserver
+{
+  const strings = [];
+  host.mapString = (t) => { strings.push(`map ${t}`); return true; };
+  host.gameMap = (t) => { strings.push(`gamemap ${t}`); return true; };
+  let next = '';
+  host.nextServer = (t) => { if (t != null) next = t; return next; };
+  await con.submit('map demo2$start'); await con.submit('map victory.pcx+demo2'); await con.submit('map *demo2');
+  check(strings.join('|') === 'map demo2$start|map victory.pcx+demo2|map *demo2' && last() === 'startMap demo2', `a spawn point, a picture with what follows, or a unit's end go through the page as a string (${strings.join('|')})`);
+  await con.submit('map nosuch.pcx+demo2'); await con.submit('map ntro.cin+demo2'); await con.submit('map nowhere$start');
+  check(strings.length === 3 && status.at(-3)?.[0] === 'no picture "nosuch.pcx" in this pak' && status.at(-2)?.[0] === 'no cinematic "ntro.cin" in this pak' && status.at(-1)?.[0] === 'no map "nowhere" in this pak' && status.at(-1)?.[1] === true,
+    'a picture, a cinematic or a map the pak lacks is refused');
+  await con.submit('gamemap'); check(status.at(-1)?.[0] === 'usage: gamemap <map>' && status.at(-1)?.[1] === true, 'gamemap alone shows its usage');
+  await con.submit('gamemap demo2'); await con.submit('GameMap *demo2$start');
+  check(strings.slice(3).join('|') === 'gamemap demo2|gamemap *demo2$start', 'gamemap goes through the page with the string as typed, case aside');
+  await con.submit('nextserver'); check(status.at(-1)?.[0] === '"nextserver" is ""', 'nextserver shows nothing to follow');
+  await con.submit('nextserver demo2'); check(next === 'demo2' && status.at(-1)?.[0] === '"nextserver" is "demo2"', 'nextserver demo2 sets what follows');
+  check(con.complete('gam') === 'gamemap ' && con.complete('nex') === 'nextserver ', 'Tab completes gamemap and nextserver');
+  delete host.mapString; delete host.gameMap; delete host.nextServer;
+}
 await con.submit('fov');
 check(status.at(-1)?.[0] === '"fov" is "90"', 'fov alone shows the fov');
 await con.submit('fov 200');

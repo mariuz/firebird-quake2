@@ -22,6 +22,7 @@ import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './render
 import { Effects } from './effects.js';
 import { Hud, viewFrameLerp } from './hud.js';
 import { Menu, saveComment, ADDRESS_BOOK } from './menu.js';
+import { parseChangeMap } from './levels.js';
 import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
 import { SAVE_VERSION } from './savegame.js';
 import { Q2Audio } from './audio.js';
@@ -369,6 +370,11 @@ const con = new Console({
   get db() { return db; }, get pak() { return pak; }, settings, saveSettings,
   setStatus: (msg, isError) => { setStatus(msg, isError); if (msg) notify.add(msg, gameClock(), { show: false }); },
   startMap: (name) => startMap(name, true),
+  // map <string> with a spawn point, a picture or a cinematic and what follows (SV_Map_f: a new game, the unit forgotten), gamemap <string>
+  // (SV_GameMap_f: the level running kept aside), nextserver (what follows the picture or cinematic playing; null shows it)
+  mapString: (target) => { if (!res) return false; changeLevel(target, false).catch((err) => setStatus(err.message, true)); return true; },
+  gameMap: (target) => { if (!res) return false; changeLevel(target, true).catch((err) => setStatus(err.message, true)); return true; },
+  nextServer: (text) => { if (text != null) nextServer = String(text); return nextServer; },
   setView: (fov) => applyView(fov),
   saveGame: () => saveGame(), loadGame: () => loadGame(),
   toggleInventory: () => toggleScreen(0, 'inventory'),
@@ -1366,20 +1372,30 @@ function demoRow(st) {
 
 // ── leaving a level: what the server did with the map string (SV_Map; src/levels.js) ─────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function changeLevel(target) {
-  // the unit's levels and its cross-level flags (session.leave); then a picture, the next map, or the end
-  const c = await session.leave(target);
+let nextServer = '';   // the nextserver cvar: what follows the picture or the cinematic playing (a map string's "+" part), read and set at the console
+/**
+ * SV_Map's work with a map string (src/levels.js): a picture or a cinematic, then what follows it (the nextserver cvar
+ * holds it meanwhile, as SV_Map set it), the next map, or the end. `keep` is SV_GameMap_f's way (an exit's, the gamemap
+ * word's): the level running kept aside with the unit's flags (session.leave, the players carried); without it (the map
+ * word's, SV_Map_f) the string starts a new game, the unit's levels forgotten.
+ */
+async function changeLevel(target, keep = true) {
+  const kept = keep && running && map;
+  const c = kept ? await session.leave(target) : parseChangeMap(target);
+  const after = () => { const next = nextServer || c.then; nextServer = ''; return next ? changeLevel(next, keep) : endGame(); };
   if (c.kind === 'pic' && pak.has(`pics/${c.map}`)) {
     if (netHost()) for (const g of net.guests) g.host.sendPic(`pics/${c.map}`);
+    nextServer = c.then ?? '';
     await showPicture(`pics/${c.map}`);
-    return c.then ? changeLevel(c.then) : endGame();
+    return after();
   }
   if (c.kind === 'cinematic' && pak.has(`video/${c.map}`)) {
     if (netHost()) for (const g of net.guests) g.host.sendCin(`video/${c.map}`);
+    nextServer = c.then ?? '';
     await playCinematic(`video/${c.map}`);
-    return c.then ? changeLevel(c.then) : endGame();
+    return after();
   }
-  if (c.kind !== 'map') return c.then ? changeLevel(c.then) : endGame();   // a cinematic the pak lacks, a demo: not played
+  if (c.kind !== 'map') return after();   // a cinematic the pak lacks, a demo: not played
   if (!pak.has(`maps/${c.map}.bsp`)) {
     setStatus(`${c.map} is not in this pak`);
     await sleep(2500);
@@ -1387,8 +1403,8 @@ async function changeLevel(target) {
   }
   // SCR_DrawLoading: the plaque over the last frame while the next level loads
   const plaque = hud.pic('loading');
-  if (plaque) { renderer.drawPic(plaque, (renderer.w - plaque.w) >> 1, (renderer.h - plaque.h) >> 1); renderer.present(); }
-  await startMap(c.map, false, c.spawn);
+  if (plaque && renderer) { renderer.drawPic(plaque, (renderer.w - plaque.w) >> 1, (renderer.h - plaque.h) >> 1); renderer.present(); }
+  await startMap(c.map, !kept, c.spawn);
 }
 
 /** A full-screen picture with its own palette (the ss_pic server state), until a key after a second. */
@@ -2038,7 +2054,7 @@ async function boot() {
     window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
-      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; },
+      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
       get logfile() { return { on: !!settings.logfile, kept: logKept.length, pending: logNew.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
