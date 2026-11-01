@@ -785,7 +785,13 @@ guest's prediction bobs by the host's, one changed at the host's console reachin
 `sv_airaccelerate` (pmove's air acceleration: 0, `PM_Accelerate` at 1 in the air, a little control as Quake had it; on,
 `PM_AirAccelerate` with the wish speed capped at 30 and the acceleration 10 over the whole of it, a strafe jump; `player_think` and
 `src/pmove.js` alike, a guest's from the map message) and `g_select_empty` (`Use_Weapon` takes a weapon with no ammo for it and the
-cycle visits it), all three on the game row as the bob's; `weapnext` and `weapprev` (`Cmd_WeapNext_f`, `Cmd_WeapPrev_f` as words, the
+cycle visits it), all three on the game row as the bob's, and `flood_msgs`, `flood_persecond` and `flood_waitdelay` with them
+(`Cmd_Say_f`'s flood protection in `client_say`: more than `flood_msgs` says in `flood_persecond` seconds, and the sayer alone is
+told "Flood protection:  You can't talk for N seconds." and, saying again, for how many more; the last ten says' times on the
+player row, `flood_when`, ten characters each, and `flood_locktill`; `flood_msgs 0` no protection; 4, 4 and 10 as Quake's);
+`dumpuser <n>` (`SV_DumpUser_f`: a client's userinfo in the scrollback as `Info_Print` laid it out, each key on twenty characters
+and its value after, the line summing it: this page's, a guest's from its connect, a pad's player's name and hand from its row,
+`dumpUser`; a joined page is sent to the host, a client not in the game "is not active"); `weapnext` and `weapprev` (`Cmd_WeapNext_f`, `Cmd_WeapPrev_f` as words, the
 impulses 12 and 22), `sv_maplist` (a text on the game row, `setGameString`: the deathmatch rotation `end_dm_level` follows
 through `maplist_next`, the map after the one running in the list, round again from the end, a map not in it going where the
 exit leads) and `sky <name> [rotate] [axis x y z]` (`SCR_Sky_f`: the sky box of the map running changed and spun, `setSky`, this

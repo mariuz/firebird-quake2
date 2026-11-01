@@ -174,6 +174,26 @@ check((await msgs())[1] === 'Ace: Hi!', 'a named client speaks by its name, the 
 await db.exec("UPDATE player SET netname = '' WHERE id = 1; UPDATE player SET msg = NULL");
 await session.say(1, '   ');
 check((await msgs()).every((m) => m === null), 'nothing said prints nothing');
+// the flood protection (Cmd_Say_f's flood_msgs, flood_persecond and flood_waitdelay on the game row): more than flood_msgs says in
+// flood_persecond seconds, and the sayer alone is told the flood protection locks it for flood_waitdelay seconds, then for how
+// many more; the lock lifts with the level clock; flood_msgs 0 is no protection
+const t0 = (await one('SELECT time_ FROM game')).TIME_;
+await db.exec("UPDATE game SET flood_msgs = 4, flood_persecond = 4, flood_waitdelay = 10; UPDATE player SET msg = NULL, flood_when = '', flood_locktill = 0");
+for (let i = 0; i < 4; i++) await session.say(1, `line ${i}`);
+check((await msgs()).join('|') === 'player 1: line 3|player 1: line 3' && (await one('SELECT flood_when w FROM player WHERE id = 1')).W.length === 40, 'four says at once pass, each noted on the row');
+await session.say(1, 'line 4');
+check((await msgs()).join('|') === "Flood protection:  You can't talk for 10 seconds.|player 1: line 3" && (await one('SELECT flood_locktill l FROM player WHERE id = 1')).L === t0 + 10,
+  'the fifth is refused: the sayer alone is told the flood protection locks it for 10 seconds, the row says till when');
+await db.exec('UPDATE game SET time_ = time_ + 3');
+await session.say(1, 'still');
+check((await msgs()).join('|') === "You can't talk for 7 more seconds|player 1: line 3", 'three seconds on, it can\'t talk for 7 more');
+await db.exec('UPDATE game SET time_ = time_ + 8');
+await session.say(1, 'free');
+check((await msgs()).join('|') === 'player 1: free|player 1: free', 'past the wait, it talks again');
+await db.exec('UPDATE game SET flood_msgs = 0; UPDATE player SET msg = NULL');
+for (let i = 0; i < 6; i++) await session.say(1, `fast ${i}`);
+check((await msgs()).join('|') === 'player 1: fast 5|player 1: fast 5', 'flood_msgs 0: no protection');
+await db.exec(`UPDATE game SET flood_msgs = 4, time_ = ${t0}; UPDATE player SET flood_when = '', flood_locktill = 0, msg = NULL`);
 
 // ── the obituaries (ClientObituary, coop only): every client's message line says who died of what ──
 const respawn = async () => { for (let i = 0; i < 22; i++) await session.tic(idle, idle); await session.tic(idle, cmd({ jump: 1 })); };

@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_timeout', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'echo', 'exec', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'sky', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_rollangle', 'sv_rollspeed', 'sw_clearcolor', 'sw_drawflat', 'sw_waterwarp', 'timedemo', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_timeout', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'sky', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_rollangle', 'sv_rollspeed', 'sw_clearcolor', 'sw_drawflat', 'sw_waterwarp', 'timedemo', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -126,7 +126,7 @@ export function dirList(names, filter) {
 // and sv_maxvelocity (SV_CheckVelocity's clamp, 2000), sv_airaccelerate (0: PM_Accelerate at 1 in the air; on, PM_AirAccelerate: strafe jumps) and
 // g_select_empty (1: a weapon with no ammo is taken and the cycle visits it)
 export const GAME_CVARS = Object.freeze({ bob_up: [0.005, 0, 1], bob_pitch: [0.002, -1, 1], bob_roll: [0.002, -1, 1], run_pitch: [0.002, -1, 1], run_roll: [0.005, -1, 1], sv_rollangle: [2, -90, 90], sv_rollspeed: [200, 0, 10000],
-  sv_maxvelocity: [2000, 0, 100000], sv_airaccelerate: [0, 0, 100], g_select_empty: [0, 0, 1] });
+  sv_maxvelocity: [2000, 0, 100000], sv_airaccelerate: [0, 0, 100], g_select_empty: [0, 0, 1], flood_msgs: [4, 0, 10], flood_persecond: [4, 0, 3600], flood_waitdelay: [10, 0, 3600] });
 const HISTORY = 32;
 
 /**
@@ -145,13 +145,14 @@ const HISTORY = 32;
  *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
  *         toggleHelp() (help: the help computer, F1's), gravity() → the game's gravity, null on a joined page or without a map, setGravity(n) (sv_gravity),
  *         setGameString(col, text) (sv_maplist), setSky(name, rotate, axis) → true, false for a sky the pak lacks, null without a map (sky),
- *         gameCvar(col) → the game row's column, null on a joined page or without a map, setGameCvar(col, n) (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed, sv_maxvelocity, sv_airaccelerate, g_select_empty: GAME_CVARS),
+ *         gameCvar(col) → the game row's column, null on a joined page or without a map, setGameCvar(col, n) (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed, sv_maxvelocity, sv_airaccelerate, g_select_empty, flood_msgs, flood_persecond, flood_waitdelay: GAME_CVARS),
  *         setGameMode({ coop, deathmatch, players }) (deathmatch, coop, maxclients: the next game's, latched; the Players select follows),
  *         execConfig() (exec: the page's file picker, whose file runs through execText),
  *         execAutoexec() → the lines run, or null when none is kept (exec autoexec), dropAutoexec() → true when one was kept (unautoexec),
  *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
  *         listPlayers() → the clients as [{ num, name, kind: 'page' | 'guest' | 'pad' | 'standing', sent, dropped, spectator }], 'guest' on a joined page, null without a game (players),
  *         kick(n) → the name kicked, or 'none' | 'not-hosting' (kick),
+ *         dumpUser(n) → a client's userinfo as { name, hand, gender, msg, fov, spectator }, or 'guest' (a joined page) | 'none' (no game) | 'slot' | 'inactive' (dumpuser),
  *         connect(text) → true once joining began (false: no pak yet), disconnect() → true when this page was in a shared game,
  *         reconnect(), lastConnect() → what this page last joined with ('' for nothing),
  *         openMenu(name) → true once the menu is up (main, game, loadgame, savegame, options, keys, video, multiplayer, playerconfig, credits, quit; the menu_* commands),
@@ -576,8 +577,9 @@ export class Console {
         return;
       }
       case 'bob_up': case 'bob_pitch': case 'bob_roll': case 'run_pitch': case 'run_roll': case 'sv_rollangle': case 'sv_rollspeed':
-      case 'sv_maxvelocity': case 'sv_airaccelerate': case 'g_select_empty': {
-        // p_view.c's cvars on the game row for the game running (GAME_CVARS), as sv_gravity: shown, or set within their range
+      case 'sv_maxvelocity': case 'sv_airaccelerate': case 'g_select_empty': case 'flood_msgs': case 'flood_persecond': case 'flood_waitdelay': {
+        // p_view.c's cvars on the game row for the game running (GAME_CVARS), as sv_gravity: shown, or set within their range (the
+        // flood cvars with them: Cmd_Say_f's flood protection in client_say)
         const name = cmd.toLowerCase(), [dflt, lo, hi] = GAME_CVARS[name];
         const v = await h.gameCvar?.(name);
         if (v == null) { say(`${name}: a joined page runs no server of its own, and a map must be running`, true); return; }
@@ -728,6 +730,21 @@ export class Console {
         if (!rows) { say('players: no game is running', true); return; }
         const what = (r) => (r.kind === 'page' ? 'this page' : r.kind === 'guest' ? `guest: ${r.sent} frames sent${r.dropped ? `, ${r.dropped} dropped` : ''}${r.ping != null ? `, ping ${r.ping} ms` : ''}${r.spectator ? ', watching' : ''}` : r.kind === 'pad' ? 'a pad' : 'standing');
         say(rows.map((r) => `${r.num} ${r.name} (${what(r)})`).join(' · '), false, 8000);
+        return;
+      }
+      case 'dumpuser': {
+        // SV_DumpUser_f: a client's userinfo in the scrollback as Info_Print laid it out (each key on twenty characters, its value
+        // after), the host's console alone (a joined page's userinfo is at the host); the line sums it
+        const n = Number(arg);
+        if (!arg || !Number.isInteger(n)) { say('Usage: dumpuser <userid>', true); return; }
+        const info = h.dumpUser?.(n) ?? 'none';
+        if (info === 'guest') { say('dumpuser: the host has the userinfos', true); return; }
+        if (info === 'none') { say('dumpuser: no game is running', true); return; }
+        if (info === 'slot') { say(`Bad client slot: ${n}`, true); return; }
+        if (info === 'inactive') { say(`Client ${n} is not active`, true); return; }
+        const pairs = Object.entries(info).filter(([, v]) => v != null);
+        h.print?.(['userinfo', '--------', ...pairs.map(([k, v]) => `${k.padEnd(20)}${v}`)].join('\n'));
+        say(`client ${n}: ${pairs.map(([k, v]) => `${k} "${v}"`).join(' · ')}`, false, 8000);
         return;
       }
       case 'kick': {

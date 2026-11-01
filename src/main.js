@@ -455,6 +455,16 @@ const con = new Console({
     return true;
   },
   kick: (n) => kickGuest(n),                             // (kick <n>: the guest driving client n dropped; its name, or 'none', 'not-hosting')
+  // dumpuser <n>: a client's userinfo as the session keeps it (this page's, a guest's from its connect; a pad's player from its row)
+  dumpUser: (n) => {
+    if (netGuest()) return 'guest';
+    if (!map || !session?.clients?.length || demo) return 'none';
+    if (n < 1 || n > MAX_PLAYERS) return 'slot';
+    const c = session.clients.find((x) => x.CLIENT === n);
+    if (!c) return 'inactive';
+    const info = session.userinfo[n];
+    return info ? { name: info.name, hand: info.hand, gender: info.gender, msg: info.msg, fov: info.fov, spectator: info.spectator } : { name: c.NETNAME ?? '', hand: c.HAND ?? 0 };
+  },
 });
 function openConsole(prefill = '') {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
