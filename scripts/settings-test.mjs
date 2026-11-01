@@ -70,6 +70,10 @@ check(DEFAULTS.swMipcap === 0 && DEFAULTS.swMipscale === 1 && DEFAULTS.swStipple
   && loadSettings(store(JSON.stringify({ swMipcap: 3, swMipscale: 2.5, swStipplealpha: true }))).swMipscale === 2.5 && loadSettings(store(JSON.stringify({ swStipplealpha: true }))).swStipplealpha === true
   && loadSettings(store(JSON.stringify({ swMipcap: 4, swMipscale: 11, swStipplealpha: 1 }))).swMipcap === 0 && loadSettings(store(JSON.stringify({ swMipscale: 11 }))).swMipscale === 1 && loadSettings(store(JSON.stringify({ swStipplealpha: 1 }))).swStipplealpha === false,
   'sw_mipcap 0 to 3, sw_mipscale 0 to 10 and sw_stipplealpha a boolean come back, anything else is the default');
+// developer and logfile: booleans, off by default
+check(DEFAULTS.developer === false && DEFAULTS.logfile === false && loadSettings(store(JSON.stringify({ developer: true, logfile: true }))).developer === true && loadSettings(store(JSON.stringify({ developer: true, logfile: true }))).logfile === true
+  && loadSettings(store(JSON.stringify({ developer: 1, logfile: 'yes' }))).developer === false && loadSettings(store(JSON.stringify({ developer: 1, logfile: 'yes' }))).logfile === false,
+  'developer and logfile come back as booleans, anything else off');
 // the address book: up to nine printable texts, a bad one blank, anything else empty (and a fresh array each load)
 check(DEFAULTS.addressBook.length === 0 && loadSettings(store()).addressBook.length === 0 && loadSettings(store()).addressBook !== DEFAULTS.addressBook
   && loadSettings(store(JSON.stringify({ addressBook: ['K9H2', 'http://relay:8787 AB12', 7, 'bad\nline', ...Array(9).fill('X')] }))).addressBook.join('|') === 'K9H2|http://relay:8787 AB12|||X|X|X|X|X'

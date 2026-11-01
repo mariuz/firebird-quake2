@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp', list: () => ['maps/demo1.bsp', 'maps/demo2.bsp', 'pics/conchars.pcx', 'sound/weapons/blastf1a.wav', 'readme.txt'] },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -386,7 +386,7 @@ await con.submit('netgraph 1'); check(s.netgraph === true && last() === 'set net
 await con.submit('netgraph 2'); check(s.netgraph === true && status.at(-1)?.[0] === 'netgraph takes 0 or 1' && status.at(-1)?.[1] === true, 'netgraph 2 is refused');
 await con.submit('netgraph 0'); check(s.netgraph === false, 'netgraph 0 turns it off');
 await con.submit('cvarlist');
-check(/^name "" · hand "2" · gender "male" · msg "1" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · cd_loopcount "4" · cd_looptrack "11" · cd_nocd "0" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · m_filter "0" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · host_speeds "0" · sw_drawflat "0" · sw_waterwarp "1" · sw_clearcolor "0" · sw_mipcap "0" · sw_mipscale "1" · sw_stipplealpha "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · timeout "125" · cl_timeout "120" · gun_x "0" · gun_y "0" · gun_z "0" · scr_centertime "2.5" · cl_footsteps "1" · scr_showpause "1" · scr_showturtle "0" · cl_maxfps "90" · vid_gamma "1.4" · hostname "" · password "" · spectator_password "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+check(/^name "" · hand "2" · gender "male" · msg "1" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · cd_loopcount "4" · cd_looptrack "11" · cd_nocd "0" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · m_filter "0" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · host_speeds "0" · developer "0" · sw_drawflat "0" · sw_waterwarp "1" · sw_clearcolor "0" · sw_mipcap "0" · sw_mipscale "1" · sw_stipplealpha "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · timeout "125" · cl_timeout "120" · gun_x "0" · gun_y "0" · gun_z "0" · scr_centertime "2.5" · cl_footsteps "1" · scr_showpause "1" · scr_showturtle "0" · cl_maxfps "90" · vid_gamma "1.4" · hostname "" · password "" · spectator_password "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
 // hostname (the host's name, at most 32 printable characters), help (Cmd_Help_f) and sv_gravity (the game's gravity)
 await con.submit('hostname'); check(status.at(-1)?.[0] === '"hostname" is ""', 'hostname shows the empty default');
 await con.submit('hostname Hal 9000'); check(s.hostname === 'Hal 9000' && last() === 'set hostname Hal 9000', 'hostname takes a name with spaces');
@@ -595,7 +595,7 @@ await con.submit('lookstrafe 2'); check(s.lookstrafe === true && status.at(-1)?.
 await con.submit('m_forward 2'); check(s.mForward === 2 && last() === 'set mForward 2', 'm_forward 2');
 await con.submit('m_side -1'); check(s.mSide === -1 && last() === 'set mSide -1' && status.at(-1)?.[0] === '"m_side" is "-1"', 'm_side -1');
 await con.submit('m_side x'); check(s.mSide === -1 && status.at(-1)?.[1] === true, 'm_side x is refused');
-Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
+Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
 
 // the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
 {
@@ -672,6 +672,25 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   check(dumpedAs === 'my log', 'the name as typed, the quotes and a .txt taken off');
   await con.submit('condump ../x:y');
   check(dumpedAs === '..xy', 'a path\'s characters are dropped from the name');
+  // developer: a setting as its cvar (the page's warnings on the console with it); logfile: the scrollback to qconsole.log through the page
+  await con.submit('developer 1'); check(s.developer === true && last() === 'set developer true' && status.at(-1)?.[0] === '"developer" is "1"', 'developer 1 sets it through the page');
+  await con.submit('developer 2'); check(s.developer === true && status.at(-1)?.[0] === 'developer takes 0 or 1' && status.at(-1)?.[1] === true, 'developer 2 is refused');
+  await con.submit('developer 0');
+  let logOn = false, logLines = null;
+  host.setLogfile = async (on) => { if (on) { if (logOn) return 'already'; logOn = true; return 'on'; } if (!logOn) return null; logOn = false; return logLines; };
+  await con.submit('logfile'); check(status.at(-1)?.[0] === '"logfile" is "0"', 'logfile alone shows 0');
+  await con.submit('logfile 2'); check(status.at(-1)?.[0] === 'logfile takes 0 or 1' && status.at(-1)?.[1] === true, 'logfile 2 is refused');
+  await con.submit('logfile 0'); check(status.at(-1)?.[0] === 'logfile: nothing was logged' && status.at(-1)?.[1] === true, 'logfile 0 with nothing logged says so');
+  await con.submit('logfile 1'); check(logOn && status.at(-1)?.[0] === 'logfile: the console goes to qconsole.log' && status.at(-1)?.[1] === false, 'logfile 1 starts the log');
+  s.logfile = true;
+  await con.submit('logfile'); check(status.at(-1)?.[0] === '"logfile" is "1"', 'and shows 1');
+  await con.submit('logfile 1'); check(status.at(-1)?.[0] === 'logfile: already on', 'logfile 1 again says it is on');
+  logLines = 12; s.logfile = false;
+  await con.submit('logfile 0'); check(!logOn && status.at(-1)?.[0] === 'logfile: qconsole.log downloaded, 12 lines' && status.at(-1)?.[1] === false, 'logfile 0 downloads the file and says how many lines');
+  logLines = 1; logOn = true;
+  await con.submit('logfile 0'); check(status.at(-1)?.[0] === 'logfile: qconsole.log downloaded, 1 line', 'one line, singular');
+  check(con.complete('dev') === 'developer ' && con.complete('logf') === 'logfile ', 'Tab completes developer and logfile');
+  delete host.setLogfile;
   // echo, cmdlist, version and pause: cmd.c's, common.c's and cl_main.c's words
   await con.submit('echo Hello, World!');
   check(status.at(-1)?.[0] === 'Hello, World!' && status.at(-1)?.[1] === false, 'echo prints its words as typed');
@@ -803,6 +822,12 @@ check(status.at(-1)?.[0] === 'no keys bound', 'and bindlist says so');
 
 // the notify lines (src/notify.js, Con_DrawNotify): the last four prints, three seconds each, and the scrollback
 {
+  {
+    const told = [], w = new Notify();
+    w.onAdd = (line) => told.push(line);
+    w.add('one\ntwo\n', 0); w.add('three', 1, { show: false });
+    check(told.join('|') === 'one|two|three', 'onAdd is told each line as it comes, the hidden ones too (the logfile)');
+  }
   const n = new Notify();
   n.add('You got the shotgun', 0);
   n.add('Primary objective\nfind the key\n', 1);

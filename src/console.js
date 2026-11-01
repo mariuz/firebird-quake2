@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_timeout', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'sky', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_rollangle', 'sv_rollspeed', 'sw_clearcolor', 'sw_drawflat', 'sw_mipcap', 'sw_mipscale', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_timeout', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'sky', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_rollangle', 'sv_rollspeed', 'sw_clearcolor', 'sw_drawflat', 'sw_mipcap', 'sw_mipscale', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -64,6 +64,8 @@ export const CVARS = {
   r_speeds: { key: 'rSpeeds', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   // host_speeds (Qcommon_Frame's "all, sv, gm, cl, rf" line, once a second here), not archived
   host_speeds: { key: 'hostSpeeds', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  // developer (Com_DPrintf's switch: the page's warnings, console.warn's, on the console too), not archived as Quake's was not
+  developer: { key: 'developer', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   // ref_soft's sw_ switches (none archived): sw_drawflat 1 paints every face in a flat colour of its own (D_DrawflatSurfaces), sw_waterwarp 0 leaves the
   // view under water unwarped (D_WarpScreen skipped), sw_clearcolor is the palette index the view is cleared to (2 in Quake, 0 here)
   sw_drawflat: { key: 'swDrawflat', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
@@ -140,6 +142,7 @@ const HISTORY = 32;
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
  *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), setSetting(key, value) (the cvars: through the page's controls and the userinfo),
  *         download(name, text) (writeconfig), clearLog() (clear: the scrollback emptied), dumpLog(name) (condump: the scrollback downloaded as <name>.txt),
+ *         setLogfile(on) → 'on' | 'already' for on, the lines downloaded or null for nothing for off (logfile),
  *         print(text) (lines into the scrollback alone: cmdlist, dir and the listings), pakInfo() → { name, files, from } (path, dir: the pak's name, how many files, where it came from),
  *         modelList() → [{ name, size }] (modellist), imageList() → [{ kind, w, h, name }] (imagelist: P a picture, W a wall texture, M a skin), soundList() → [{ name, size, loop }] (soundlist), version() → the page's version string (version), togglePause() → paused now, null for a shared game or none (pause),
  *         toggleScores() (score: the score board, in a game of more than one client), putAway() (putaway: every screen off),
@@ -338,7 +341,7 @@ export class Console {
         return;
       case 'name': case 'hand': case 'gender': case 'msg': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume': case 'cd_loopcount': case 'cd_looptrack': case 'cd_nocd':
       case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'm_filter': case 'netgraph': case 'cl_predict': case 'cl_showmiss': case 'viewsize':
-      case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': case 'host_speeds': case 'sw_drawflat': case 'sw_waterwarp': case 'sw_clearcolor': case 'sw_mipcap': case 'sw_mipscale': case 'sw_stipplealpha':
+      case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': case 'host_speeds': case 'developer': case 'sw_drawflat': case 'sw_waterwarp': case 'sw_clearcolor': case 'sw_mipcap': case 'sw_mipscale': case 'sw_stipplealpha':
       case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname': case 'password': case 'spectator_password':
       case 'cl_yawspeed': case 'cl_pitchspeed': case 'cl_anglespeedkey': case 'cl_forwardspeed': case 'cl_sidespeed': case 'timeout': case 'cl_timeout':
       case 'gun_x': case 'gun_y': case 'gun_z': case 'scr_centertime': case 'cl_footsteps': case 'scr_showpause': case 'scr_showturtle': case 'cl_maxfps': {
@@ -427,6 +430,17 @@ export class Console {
         // Con_Clear_f: the scrollback emptied, the notify lines with it (the line typed goes too, as the console's own echo of it did)
         h.clearLog?.();
         return;
+      case 'logfile': {
+        // the logfile cvar: 1 writes the scrollback to qconsole.log as it grows (Com_Printf's logfile write; the page's file store keeps
+        // it, through a reload too), 0 downloads what was written and drops it (Quake left the file in the game directory)
+        if (!arg) { say(`"logfile" is "${h.settings.logfile ? '1' : '0'}"`); return; }
+        if (!/^(0|1)$/.test(arg)) { say('logfile takes 0 or 1', true); return; }
+        const r = await h.setLogfile?.(arg === '1');
+        if (arg === '1') say(r === 'already' ? 'logfile: already on' : 'logfile: the console goes to qconsole.log');
+        else if (r == null) say('logfile: nothing was logged', true);
+        else say(`logfile: qconsole.log downloaded, ${r} line${r === 1 ? '' : 's'}`);
+        return;
+      }
       case 'condump': {
         // Con_Dump_f: the scrollback as a text file, <name>.txt, downloaded (Quake wrote it into the game directory)
         const name = arg.replace(/^"(.*)"$/, '$1').replace(/\.txt$/i, '').replace(/[\\/:*?"<>|]/g, '').trim();

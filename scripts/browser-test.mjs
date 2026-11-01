@@ -356,6 +356,22 @@ try {
     assert(dumpDl && dumpDl.suggestedFilename() === 'mylog.txt' && /^\]use nosuch\nunknown item: nosuch$/m.test(dumpText) && dumpText.endsWith(']condump mylog\n')
       && Array.isArray(clearedLog.log) && clearedLog.log.length === 0 && !clearedLog.shown,
       `condump writes the scrollback as mylog.txt (${dumpText.split('\n').length - 1} lines) and clear empties it (${JSON.stringify(clearedLog)})`);
+    // logfile 1 writes the scrollback to qconsole.log as it grows (the file store keeps it); logfile 0 downloads it: the lines typed and
+    // the answers since. developer 1 puts the page's warnings (console.warn's) on the console, 0 keeps them off it
+    await typeCommand('logfile 1'); await typeCommand('echo logged line'); await sleep(1500);
+    const lf1 = await page.evaluate(() => window.quake2.logfile).catch(() => ({}));
+    const [logDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('logfile 0')]);
+    const logText = logDl ? fs.readFileSync(await logDl.path(), 'utf8') : '';
+    const lf0 = await page.evaluate(() => window.quake2.logfile).catch(() => ({}));
+    assert(lf1.on === true && lf1.kept > 0 && logDl && logDl.suggestedFilename() === 'qconsole.log' && /^\]echo logged line\nlogged line$/m.test(logText) && logText.endsWith(']logfile 0\n') && lf0.on === false && lf0.kept === 0,
+      `logfile 1 keeps the scrollback as qconsole.log (${lf1.kept} characters flushed), logfile 0 downloads it (${logText.split('\n').length - 1} lines) and drops it`);
+    await typeCommand('developer 1');
+    await page.evaluate(() => console.warn('dev note', 7)); await sleep(200);
+    const devOn = await page.evaluate(() => window.quake2.notify.log(4)).catch(() => []);
+    await typeCommand('developer 0');
+    await page.evaluate(() => console.warn('quiet note')); await sleep(200);
+    const devOff = await page.evaluate(() => window.quake2.notify.log(4)).catch(() => []);
+    assert(devOn.includes('dev note 7') && !devOff.includes('quiet note'), `developer 1 puts a warning on the console (${JSON.stringify(devOn)}), developer 0 keeps it off (${JSON.stringify(devOff)})`);
     // echo, cmdlist, version and pause: the words printed, the commands counted (listed in the scrollback), the build named,
     // the game paused and on again
     await typeCommand('echo Hello, World!');
