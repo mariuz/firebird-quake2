@@ -65,6 +65,11 @@ check(DEFAULTS.rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 'tur
   && loadSettings(store(JSON.stringify({ rtcIce: 'stun:stun.example.org' }))).rtcIce === 'stun:stun.example.org'
   && loadSettings(store(JSON.stringify({ rtcIce: 'http://relay' }))).rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 'turn:relay ace' }))).rtcIce === '' && loadSettings(store(JSON.stringify({ rtcIce: 7 }))).rtcIce === '',
   'the ICE server setting is kept as a url, or a url with a user and a password; another scheme, two words or a number fall back to none');
+// the address book: up to nine printable texts, a bad one blank, anything else empty (and a fresh array each load)
+check(DEFAULTS.addressBook.length === 0 && loadSettings(store()).addressBook.length === 0 && loadSettings(store()).addressBook !== DEFAULTS.addressBook
+  && loadSettings(store(JSON.stringify({ addressBook: ['K9H2', 'http://relay:8787 AB12', 7, 'bad\nline', ...Array(9).fill('X')] }))).addressBook.join('|') === 'K9H2|http://relay:8787 AB12|||X|X|X|X|X'
+  && loadSettings(store(JSON.stringify({ addressBook: 'K9H2' }))).addressBook.length === 0,
+  'the address book keeps up to nine printable texts, a bad one blank, and is empty for anything else');
 check(DEFAULTS.rtcSignal === '' && loadSettings(store(JSON.stringify({ rtcSignal: 'https://relay.example.org:8787' }))).rtcSignal === 'https://relay.example.org:8787'
   && loadSettings(store(JSON.stringify({ rtcSignal: 'ws://relay' }))).rtcSignal === '' && loadSettings(store(JSON.stringify({ rtcSignal: 'http://re lay' }))).rtcSignal === '' && loadSettings(store(JSON.stringify({ rtcSignal: 1 }))).rtcSignal === '',
   'the signalling relay setting is an http(s) url; another scheme, a space or a number fall back to none');

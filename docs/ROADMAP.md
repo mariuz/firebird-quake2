@@ -1042,9 +1042,20 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   and the hostname, reads the settings and the mode latched, and begins; `test:console` the word; the browser test
   opens it, turns the rules to deathmatch and types a time limit, reads the settings, the select and the game row with
   the game running on, on both builds.
-- **`menu_joinserver` and `menu_addressbook`**: `M_Menu_JoinServer_f` as the page's Join in a menu (the code or the
-  offer typed in a field, the relay named), and `M_Menu_AddressBook_f` keeping the last codes and relays in the
-  settings as the address book kept servers, one picked joining.
+- **`menu_joinserver` and `menu_addressbook`**: done. The multiplayer menu's sixth row, `join server`, is
+  `M_Menu_JoinServer_f` as `JoinServer_MenuInit` laid it out: `address book` first, then (in place of the server search:
+  no LAN here) the relay (the `rtcSignal` setting typed) and the host's code at it, or its offer text, `connect` joining
+  with it as Join and Answer would (the menu goes, the page's panel shows the answer or waits for the host), and under
+  "connect to..." the address book's entries as the found servers were listed, each joining with its code (a relay named
+  in it, "http://host:8787 K9H2", set first), "<no server>" greyed while the book is empty, the rows reading the book
+  live. `address book` is `M_Menu_AddressBook_f`: nine text fields (`adr0` to `adr8`, sixty characters, thirty shown)
+  kept in the settings (`addressBook`, checked at the load) as the cvars were archived, each key writing the setting; a
+  page that joins by code puts the relay and the code first in the book by itself, once, the last entry off past nine.
+  `menu_joinserver` and `menu_addressbook` open them at the console. `test:menu` opens the join menu from the multiplayer
+  menu, fills two entries of the address book and sees them on the join menu's rows on return, types a relay and a code
+  and connects, and joins an entry with its relay set; `test:settings` the book's check; `test:console` the two words;
+  the browser test types an entry and sees it on the join menu, and the network game's join by code puts the relay and
+  the code in the guest's book, on both builds.
 - **`dumpuser` and the chat's flood cvars**: `dumpuser <n>` prints a client's userinfo on the scrollback as
   `SV_DumpUser_f` laid it out (the host's console), and `flood_msgs`, `flood_persecond` and `flood_waitdelay` are
   `Cmd_Say_f`'s flood protection in `client_say`: more than `flood_msgs` (4) lines in `flood_persecond` (4) seconds

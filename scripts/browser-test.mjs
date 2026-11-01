@@ -739,6 +739,19 @@ try {
     const ssAfter = await page.evaluate(() => ({ select: document.getElementById('players')?.value, tl: window.quake2.settings.timelimit })).catch(() => ({}));
     assert(mSs === 'startserver' && ssSet.dm === true && /^dm[34]?$/.test(ssSet.select ?? '') && ssSet.tl === 5 && ssSet.row === 5 && ssSet.clients === ssBefore.clients && ssAfter.select === ssBefore.select && ssAfter.tl === 0 && (await menuId()) === null,
       `menu_startserver opens the start server menu; rules turned to deathmatch latch the mode on the settings and the Players select, the game running on; time limit 5 typed reaches the settings and the game row (${JSON.stringify({ ssBefore, ssSet, ssAfter })})`);
+    // menu_addressbook opens the address book: a code typed in the first field is the setting; menu_joinserver opens the join server
+    // menu with it on its first row (the network section below sees a join by code put the relay and the code there by itself)
+    await typeCommand('menu_addressbook'); await sleep(300);
+    const mAb = await menuId();
+    await page.keyboard.type('K9H2'); await sleep(300);
+    const abSet = await page.evaluate(() => window.quake2.settings.addressBook?.[0]).catch(() => null);
+    await page.keyboard.press('Escape'); await sleep(300);
+    await typeCommand('menu_joinserver'); await sleep(300);
+    const mJs = await page.evaluate(() => ({ id: window.quake2.menu.current?.id, row: window.quake2.menu.current?.items?.[5]?.name?.(), grayed: window.quake2.menu.current?.items?.[5]?.grayed })).catch(() => ({}));
+    await page.keyboard.press('Escape'); await sleep(300);
+    await page.evaluate(() => { window.quake2.settings.addressBook = []; });
+    assert(mAb === 'addressbook' && abSet === 'K9H2' && mJs.id === 'joinserver' && mJs.row === 'K9H2' && mJs.grayed === false && (await menuId()) === null,
+      `menu_addressbook opens the address book, a code typed is the setting; menu_joinserver opens the join server menu with it on its first row (${JSON.stringify({ mAb, abSet, mJs })})`);
 
     // a recording: `record run` at the console writes the game from then on as a demo (src/record.js: the stats line
     // counts its frames), `stop` downloads it as run.dm2 (parsed here as the page parses the pak's: every block read
@@ -1007,6 +1020,8 @@ try {
       assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
         `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
       assert(/joined[^:]*: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
+      const gbook = await gp.evaluate(() => window.quake2.settings.addressBook).catch(() => null);
+      assert(gbook?.[0] === `http://localhost:${RELAY_PORT} ${offer}` && gbook.length === 1, `the join by code put the relay and the code first in the guest's address book (${JSON.stringify(gbook)})`);
       // the ping: the host measures the guest's round trip a second (a ping, its pong), the guest's score board row and
       // its stats line carry it
       let pinged = {};

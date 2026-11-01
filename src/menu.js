@@ -26,6 +26,8 @@ const separator = () => ({ type: 'separator', x: 0, y: 0 });
 export const HANDS = ['right', 'left', 'center'];
 /** The start server menu's rules (StartServer_MenuInit's dm_coop_names, with the page's single player first). */
 export const RULES = ['single player', 'cooperative', 'deathmatch'];
+/** The address book's entries (NUM_ADDRESSBOOK_ENTRIES). */
+export const ADDRESS_BOOK = 9;
 
 export class Menu {
   /**
@@ -33,7 +35,8 @@ export class Menu {
    *         downloadSlot(i), get(key), set(key, value), resetDefaults(), resetVideo(), bind(action, code), unbind(action),
    *         credits() → lines, console(), quit(), sound(name), netHost(), netJoin() (the last two optional: greyed without),
    *         maps() → the pak's map names, gameMode() → { coop, deathmatch, players }, setGameMode({ coop, deathmatch, players }),
-   *         startServer(map) (the start server menu's) }
+   *         startServer(map) (the start server menu's), connect(text), addressBook() → nine texts, setAddressBook(texts)
+   *         (the join server menu's and the address book's) }
    */
   constructor(host) {
     this.host = host;
@@ -364,9 +367,64 @@ export class Menu {
         action('player setup', 20, () => this.playerConfig(), { left: true }),
         action('deathmatch options', 30, () => this.dmOptions(), { left: true, statusbar: 'the dmflags for the next deathmatch, and the one running' }),
         action('start server', 40, () => this.startServer(), { left: true, statusbar: 'a game at this page: the map, the rules, the limits, the players, the hostname' }),
+        action('join server', 50, () => this.joinServer(), { left: true, statusbar: 'a game over the network joined from a menu: the relay, the code, the address book' }),
       ],
     });
-    m.layout = (r) => { m.x = (r.w >> 1) - 64; m.y = (r.h - 50) >> 1; };
+    m.layout = (r) => { m.x = (r.w >> 1) - 64; m.y = (r.h - 60) >> 1; };
+    this.push(m);
+  }
+
+  /**
+   * M_Menu_JoinServer_f: the page's Join in a menu, as JoinServer_MenuInit laid it out: the address book first, then
+   * (in place of the server search: there is no LAN here) the relay (the rtc_signal setting, typed) and the host's code
+   * at it, or its offer text, and connect, which joins with it as the page's Join and Answer would (the host's `connect`;
+   * the menu goes, the page's panel shows the answer or waits for the host); under "connect to...", the address book's
+   * entries as the found servers were listed, each joining with its code (a relay named in it is set first), "<no
+   * server>" greyed where the book is empty. The rows read the book live, so the address book's edits show on return.
+   */
+  joinServer() {
+    const h = this.host;
+    const book = () => h.addressBook?.() ?? [];
+    const entries = () => book().filter((e) => String(e ?? '').trim());
+    let text = '';
+    const join = (what) => {
+      const at = /^(https?:\/\/\S+)\s+(\S+)$/i.exec(String(what ?? '').trim());   // ("relay code": the relay set, the code joined)
+      if (at) h.set('rtcSignal', at[1]);
+      this.off();
+      h.connect?.(at ? at[2] : String(what ?? '').trim());
+    };
+    const items = [
+      action('address book', 0, () => this.addressBook(), { left: true }),
+      field('relay', 20, 300, 20, () => h.get('rtcSignal') ?? '', (v) => h.set('rtcSignal', v), { statusbar: 'the signalling relay\'s url (rtc_signal); none: the offer and the answer as texts' }),
+      field('code or offer', 30, 4000, 20, () => text, (v) => { text = v; }, { statusbar: 'the host\'s code at the relay, or its offer text' }),
+      action('connect', 40, () => { if (text.trim()) join(text); }, { left: true, statusbar: 'join with the code or the offer typed' }),
+      action('connect to...', 60, null, { left: true }),
+    ];
+    for (let i = 0; i < ADDRESS_BOOK; i++) {
+      const row = action(() => entries()[i] ?? (i === 0 ? '<no server>' : ''), 70 + i * 10, () => { if (entries()[i]) join(entries()[i]); }, { left: true, statusbar: 'an entry of the address book: Enter joins it' });
+      Object.defineProperty(row, 'grayed', { get: () => !entries()[i] });
+      items.push(row);
+    }
+    const m = this.framework({ id: 'joinserver', banner: 'm_banner_join_server', items });
+    m.layout = (r) => { m.x = (r.w >> 1) - 40; m.y = (r.h - 170) >> 1; };
+    this.push(m);
+  }
+
+  /**
+   * M_Menu_AddressBook_f: nine text fields (AddressBook_MenuInit's adr0 to adr8, sixty characters, thirty shown) kept in
+   * the page's settings as the cvars were archived: a host's code at the relay, or a relay and a code ("http://host:8787
+   * K9H2"); a page that joins by code puts the relay and the code first in the book by itself. Each key writes the
+   * setting (AddressBook_MenuKey wrote the cvars on Escape).
+   */
+  addressBook() {
+    const h = this.host;
+    const book = () => { const b = [...(h.addressBook?.() ?? [])]; while (b.length < ADDRESS_BOOK) b.push(''); return b.slice(0, ADDRESS_BOOK); };
+    const items = [];
+    for (let i = 0; i < ADDRESS_BOOK; i++) {
+      items.push(field('', i * 18, 60, 30, () => book()[i], (v) => { const b = book(); b[i] = v; h.setAddressBook?.(b); }));
+    }
+    const m = this.framework({ id: 'addressbook', banner: 'm_banner_addressbook', items, statusbar: 'a code at the relay (K9H2), or a relay and a code (http://host:8787 K9H2)' });
+    m.layout = (r) => { m.x = (r.w >> 1) - 142; m.y = (r.h >> 1) - 58; };
     this.push(m);
   }
 
