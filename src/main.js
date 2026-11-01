@@ -170,8 +170,8 @@ function toggleScreen(p, which) {
  * (`enter_time`, resp.enterframe: the board's and playerlist's time in the game) and whether it watches (3.20's spectator, from its userinfo).
  */
 function scoreRows() {
-  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, name: last?.NETNAME, score: last?.SCORE ?? 0, ping: 0, time: last?.ENTER_TIME ?? 0, spectator: 0 }];
-  return session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0, ping: net?.guests?.find((g) => g.client === c.CLIENT)?.host.ping ?? 0, time: c.ENTER_TIME ?? 0, spectator: session.userinfo[c.CLIENT]?.spectator ? 1 : 0 }));
+  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, name: last?.NETNAME, score: last?.SCORE ?? 0, ping: 0, time: last?.ENTER_TIME ?? 0, spectator: 0, skin: 'male/grunt' }];
+  return session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0, ping: net?.guests?.find((g) => g.client === c.CLIENT)?.host.ping ?? 0, time: c.ENTER_TIME ?? 0, spectator: session.userinfo[c.CLIENT]?.spectator ? 1 : 0, skin: session.userinfo[c.CLIENT]?.skin ?? 'male/grunt' }));   // (skin: the skin userinfo, skins' and a recording's)
 }
 /** A joined page's own round trip, as the host measured it and sent it with the score board's rows; null before one came. */
 const ownPing = () => (netGuest() ? last?.SCORES?.find((s) => s.id === last.CLIENT)?.ping ?? null : null);
@@ -502,7 +502,7 @@ const con = new Console({
   // deathmatch, coop and maxclients: the next game's mode and clients, latched (the settings and the Players select, no game started)
   setGameMode: ({ coop, deathmatch, players }) => { settings.coop = !!coop; settings.deathmatch = !!deathmatch; settings.players = Math.max(2, Math.min(4, Number(players) || 2)); saveSettings(); $('players').value = playersValue(); },
   // (the rows' time: the whole seconds in the game, playerlist's, from the level clock and the enter time; spectator: a watcher)
-  status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}`, time: Math.max(0, Math.floor(gameClock() - (s.time ?? 0))), spectator: s.spectator ? 1 : 0 })) } : null),
+  status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}`, time: Math.max(0, Math.floor(gameClock() - (s.time ?? 0))), spectator: s.spectator ? 1 : 0, skin: s.skin ?? 'male/grunt' })) } : null),
   isRunning: () => running,
   // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
   setCvar: async (name, value) => { session.cvars[name] = value; if (map && !netGuest()) await db.exec(`UPDATE game SET ${name} = ${value} WHERE id = 1`); },
@@ -513,6 +513,9 @@ const con = new Console({
   screenshot: () => screenshot(),
   say: (text) => sayText(text),
   messageMode: (team) => messageMode(team),              // (messagemode, messagemode2: the chat prompt up; false without a game)
+  // toggleconsole and togglechat (Con_ToggleConsole_f, Con_ToggleChat_f): the console up or down (typed at its line, which Enter closed, it comes
+  // back up); togglechat clears the notify lines off the view first, as the function did whatever its name
+  toggleConsole: (clearNotify = false) => { if (clearNotify) notify.clearNotify(); if (cmdline.hidden) openConsole(); else closeConsole(); return !cmdline.hidden; },
   setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
   download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
   clearLog: () => { notify.clear(); conlog.textContent = ''; conlog.hidden = true; },   // (clear: the scrollback and the notify lines emptied, Con_Clear_f)

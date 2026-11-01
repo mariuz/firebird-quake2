@@ -1298,10 +1298,17 @@ with the demo pak. In the order they are to be taken.
 The nineteenth list: what the console, the keys, the mouse and the cvars still lack of Quake 2's own words with the
 demo pak. In the order they are to be taken.
 
-- **`skins`, `toggleconsole` and `togglechat`**: `CL_Skins_f` (each client's number, name and skin as its userinfo has
-  them, "%i: %s" a line each in the scrollback, the sum on the line; a joined page's from its score board rows),
-  `Con_ToggleConsole_f` (the console's own word, the ` key's, so `bind` can name it) and `Con_ToggleChat_f` (the chat
-  prompt's, as `messagemode` is).
+- **`skins`, `toggleconsole` and `togglechat`**: done. `skins` is `CL_Skins_f`: each client's number, name and skin as
+  its userinfo has them, "name\model/skin" as the player skin configstrings it printed were, a line each in the
+  scrollback and the sum on the line; the score board's rows carry the skin now, so a joined page lists them too.
+  `toggleconsole` is `Con_ToggleConsole_f`: the console up or down (`toggleConsole`; typed at its line, which Enter
+  closed, it comes back up; a key bound to it opens and closes it as the ` key does). `togglechat` is
+  `Con_ToggleChat_f`, which toggled the console too whatever its name, the notify lines cleared off the view first
+  (`Notify.clearNotify`, `Con_ClearNotify`'s: the lines stay in the scrollback). All three in the console's list for
+  Tab. `test:console` skins' lines and sum from the status rows and without a game, the two toggles through the page
+  with togglechat's clearing, Tab; the browser test reads skins' line, brings the console back with toggleconsole and
+  closes it, brings it back with togglechat and sees the notify lines gone, and lists both clients' skins at a joined
+  page, on both builds.
 - **`impulse`, `in_mouse` and `in_restart`**: `impulse <n>` as the word set `in_impulse` (the usercmd's impulse: the
   weapons by number as the page's actions have them, the inventory's 12 to 15), `in_mouse 0` leaving the mouse unread
   (`IN_StartupMouse`'s; archived, as Quake's was) and `in_restart` (`IN_Restart_f`: the mouse let go and taken again,

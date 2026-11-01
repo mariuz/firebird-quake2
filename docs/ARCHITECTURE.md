@@ -892,7 +892,11 @@ rate, stereo, the sounds decoded, the ones playing and looping, a line each on t
 "sound system not started" before the first click or key makes the context), `messagemode` and `messagemode2` (`Con_MessageMode_f`, `Con_MessageMode2_f`: the chat prompt up over the view as `Key_Message`
 had it, "say:" or "say_team:" drawn under the notify lines with the line typed after it and a blinking cursor, `drawChat`; every
 key goes to it, Enter saying the line, Escape dropping it, Backspace taking a character off; T's action by default, so `bind y
-messagemode2` does; the page's `messageMode`, a game running), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
+messagemode2` does; the page's `messageMode`, a game running), `toggleconsole` and `togglechat` (`Con_ToggleConsole_f` and
+`Con_ToggleChat_f`: the console up or down, `toggleConsole`; typed at its line, which Enter closed, it comes back up; `togglechat` clears
+the notify lines off the view first, `Notify.clearNotify`, as the function did whatever its name), `skins` (`CL_Skins_f`: each client's
+number, name and skin as its userinfo has them, "name\model/skin" as the player skin configstrings were, a line each in the scrollback
+and the sum on the line; the score board's rows carry the skin, so a joined page lists them too), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the
 guest's client); the rest go to `player_command(cmd, arg)` (on a joined page to the host as a `con` message,
 `GuestLink.sendConsole` and `HostLink.onConsole`, which runs `player_command` for the guest's client, as

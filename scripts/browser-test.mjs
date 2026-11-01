@@ -552,6 +552,19 @@ try {
     await typeCommand('cmd god'); await sleep(300); const cg2 = await godAt();
     assert(/^\d\d:\d\d {4}0 {3}0 .+$/.test(plLine.line ?? '') && plLine.log?.some((l) => /^\d\d:\d\d {4}0 {3}0 /.test(l)) && cg0 === 0 && cg1 === 16 && cg2 === 0,
       `playerlist lists the client's time in the game, ping, score and name ("${plLine.line}", the line in the scrollback), cmd god runs god here and again puts it off (${cg0} → ${cg1} → ${cg2})`);
+    // skins lists the client's name and skin; toggleconsole typed at the console (which Enter closed) brings it back up and Escape closes it;
+    // togglechat does the same with the notify lines cleared off the view
+    await typeCommand('skins');
+    const skLine = await status();
+    await typeCommand('toggleconsole'); await sleep(200);
+    const tcUp = await page.evaluate(() => !document.getElementById('cmdline').hidden).catch(() => null);
+    await page.keyboard.press('Escape'); await sleep(200);
+    const tcDown = await page.evaluate(() => !document.getElementById('cmdline').hidden).catch(() => null);
+    await typeCommand('echo a line to clear'); await typeCommand('togglechat'); await sleep(200);
+    const tch = await page.evaluate(() => ({ up: !document.getElementById('cmdline').hidden, lines: window.quake2.notify.lines(window.quake2.session.last.TIME_).length })).catch(() => ({}));
+    await page.keyboard.press('Escape'); await sleep(200);
+    assert(/^1: .+\\male\/grunt$/.test(skLine) && tcUp === true && tcDown === false && tch.up === true && tch.lines === 0,
+      `skins lists the client's name and skin ("${skLine}"); toggleconsole brings the console up (${tcUp}) and Escape closes it (${tcDown}); togglechat brings it up with the notify lines cleared (${JSON.stringify(tch)})`);
     // dumpuser 1 prints this page's client's userinfo in the scrollback as Info_Print laid it out; a client not in the game is not
     // active; the flood cvars are on the game row (flood_waitdelay 20 reaches it)
     await typeCommand('dumpuser 1');
@@ -1396,6 +1409,10 @@ try {
       for (let i = 0; i < 20 && gg2 !== 0; i++) { await sleep(250); gg2 = await guestGod(); }
       assert(/^\d\d:\d\d +\d+ +\d+ .+ · \d\d:\d\d +\d+ +\d+ .+$/.test(gpl) && gg0 === 0 && gg1 === 16 && gg2 === 0,
         `playerlist on the joined page lists both clients ("${gpl}"); cmd god at its console runs god for its client at the host and again puts it off (${gg0} → ${gg1} → ${gg2})`);
+      // skins at the joined page lists both clients' skins from its score board rows (the host's userinfos)
+      await typeOn(gp, 'skins');
+      const gsk = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      assert(/^1: .+\\male\/grunt · 2: .+\\male\/grunt$/.test(gsk), `skins at the joined page lists both clients' skins ("${gsk}")`);
       // rcon at the joined page: nothing without rcon_password; with the host's, the line runs at the host's console and its prints come back
       // (status's lines on the guest's scrollback, its sum on the line, "Rcon from client 2" on the host's scrollback); with another, "Bad
       // rcon_password." on the guest's line and "Bad rcon from client 2" at the host

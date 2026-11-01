@@ -694,7 +694,7 @@ for (const [name, key, dflt] of [['r_fullbright', 'rFullbright', false], ['r_dra
   host.print = (text) => { printed = text; };
   host.serverInfo = async () => ({ mapname: 'demo1', deathmatch: 0, coop: 1, dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, skill: 2 });
   host.userInfo = () => ({ name: 'Ace', hand: 1, gender: 'female', msg: 1, fov: 90, spectator: 0, rate: 500000, skin: 'male/grunt' });
-  host.status = () => ({ map: 'demo1', rows: [{ num: 1, score: 3, ping: 0, name: 'Ace', time: 125, spectator: 0 }, { num: 2, score: 1, ping: 12, name: 'player 2', time: 7.9, spectator: 1 }] });
+  host.status = () => ({ map: 'demo1', rows: [{ num: 1, score: 3, ping: 0, name: 'Ace', time: 125, spectator: 0, skin: 'male/grunt' }, { num: 2, score: 1, ping: 12, name: 'player 2', time: 7.9, spectator: 1, skin: 'female/athena' }] });
   await con.submit('serverinfo');
   check(status.at(-1)?.[0] === 'Server info settings: mapname "demo1" · deathmatch "0" · coop "1" · dmflags "0" · fraglimit "0" · timelimit "0" · cheats "0" · skill "2"', 'serverinfo lists the game\'s cvars as Info_Print listed them');
   await con.submit('userinfo');
@@ -706,9 +706,15 @@ for (const [name, key, dflt] of [['r_fullbright', 'rFullbright', false], ['r_dra
   await con.submit('playerlist');
   check(printed === '02:05    0   3 Ace\n00:07   12   1 player 2 (spectator)' && status.at(-1)?.[0] === '02:05    0   3 Ace · 00:07   12   1 player 2 (spectator)' && status.at(-1)?.[1] === false,
     'playerlist prints each client\'s minutes and seconds in the game, ping, score and name as Cmd_PlayerList_f laid them out, a watcher marked, and sums them on the line');
+  // skins (CL_Skins_f): each client's player skin configstring, "name\model/skin", a line each
+  await con.submit('skins');
+  check(printed === '1: Ace\\male/grunt\n2: player 2\\female/athena' && status.at(-1)?.[0] === '1: Ace\\male/grunt · 2: player 2\\female/athena' && status.at(-1)?.[1] === false,
+    'skins prints each client\'s name and skin as CL_Skins_f printed the configstrings, and sums them on the line');
   host.status = () => null;
   await con.submit('playerlist');
   check(status.at(-1)?.[0] === 'playerlist: no game running' && status.at(-1)?.[1] === true && con.complete('playerl') === 'playerlist ', 'with no game it says so; Tab completes playerlist');
+  await con.submit('skins');
+  check(status.at(-1)?.[0] === 'skins: no game running' && status.at(-1)?.[1] === true && con.complete('skins') === 'skins ' && con.complete('skin') === 'skin ', 'skins with no game says so; Tab completes skins, and skin first for skin');
   host.serverInfo = async () => null; host.status = () => null;
   await con.submit('serverinfo');
   check(status.at(-1)?.[0] === 'serverinfo: a joined page runs no server of its own' && status.at(-1)?.[1] === true, 'serverinfo on a joined page says so');
@@ -803,6 +809,16 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, rate: 500000, skin
   check(prompts.length === 3 && status.at(-1)?.[0] === 'messagemode: a game must be running' && status.at(-1)?.[1] === true, 'without a game it says so');
   check(con.complete('mess') === 'messagemode ' && con.complete('messagemode2') === 'messagemode2 ', 'Tab completes messagemode and messagemode2');
   delete host.messageMode;
+}
+// toggleconsole and togglechat (Con_ToggleConsole_f, Con_ToggleChat_f): the console up or down through the page, togglechat with the notify
+// lines cleared first
+{
+  const toggles = [], said = status.length;
+  host.toggleConsole = (clearNotify) => { toggles.push(clearNotify); return toggles.length % 2 === 1; };
+  await con.submit('toggleconsole'); await con.submit('togglechat'); await con.submit('ToggleConsole');
+  check(toggles.join() === 'false,true,false' && status.length === said, 'toggleconsole toggles the console, togglechat with the notify lines cleared, case aside, nothing said');
+  check(con.complete('togglec') === 'togglechat ' && con.complete('toggleco') === 'toggleconsole ', 'Tab completes togglechat and toggleconsole');
+  delete host.toggleConsole;
 }
 // fixedtime: the game's clock stepped a fixed number of milliseconds a frame, shown, set within 0..1000, refused for a fraction or a word, a guest told
 {
