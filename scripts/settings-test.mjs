@@ -75,6 +75,9 @@ check(DEFAULTS.clAddEntities === true && DEFAULTS.clAddParticles === true && DEF
   && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clAddLights === false && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clTestlights === true
   && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clAddBlend === true && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clTestblend === false,
   'the cl_add switches come back on by default and the cl_test cvars off, anything but a boolean the default');
+// r_lockpvs and r_dspeeds: booleans off by default
+check(DEFAULTS.rLockpvs === false && DEFAULTS.rDspeeds === false && loadSettings(store(JSON.stringify({ rLockpvs: true, rDspeeds: true }))).rLockpvs === true && loadSettings(store(JSON.stringify({ rLockpvs: true, rDspeeds: true }))).rDspeeds === true
+  && loadSettings(store(JSON.stringify({ rLockpvs: 1, rDspeeds: 'x' }))).rLockpvs === false && loadSettings(store(JSON.stringify({ rDspeeds: 'x' }))).rDspeeds === false, 'r_lockpvs and r_dspeeds come back as booleans, anything else off');
 // s_khz 11, 22 or 44 (44), cl_shownet 0 to 2, cl_showclamp a boolean
 check(DEFAULTS.sKhz === 44 && DEFAULTS.clShownet === 0 && DEFAULTS.clShowclamp === false && loadSettings(store(JSON.stringify({ sKhz: 22, clShownet: 2, clShowclamp: true }))).sKhz === 22 && loadSettings(store(JSON.stringify({ sKhz: 22, clShownet: 2, clShowclamp: true }))).clShownet === 2
   && loadSettings(store(JSON.stringify({ clShowclamp: true }))).clShowclamp === true && loadSettings(store(JSON.stringify({ sKhz: 33, clShownet: 3, clShowclamp: 1 }))).sKhz === 44 && loadSettings(store(JSON.stringify({ clShownet: 3 }))).clShownet === 0 && loadSettings(store(JSON.stringify({ clShowclamp: 1 }))).clShowclamp === false,

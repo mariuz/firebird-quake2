@@ -1199,9 +1199,14 @@ the userinfo still lack of Quake 2's own words with the demo pak. In the order t
   `test:net` the guest told each message's kind and size; `test:settings` the three; `test:console` shown, set,
   refused, config.cfg with s_khz, Tab; the browser test restarts the mixer at 22 kHz and back, and reads the host's
   frames' sizes at a joined page, on both builds.
-- **`r_lockpvs` and `r_dspeeds`**: ref_soft's `r_lockpvs` (the view's PVS kept where it was locked, the leaves marked
-  from there as the eye moves on, `R_MarkLeaves`'s `r_viewcluster` held) and `r_dspeeds` (the painter's times a frame
-  in detail on the line, as `R_RenderFrame` printed "ms"s under it).
+- **`r_lockpvs` and `r_dspeeds`**: done. `r_lockpvs 1` keeps the view's cluster where it was locked (`viewcfg.lockpvs`:
+  `mark_faces` exits with the cluster and the slot as they are, so the leaves stay marked from there while the eye
+  moves on, as `R_MarkLeaves` held `r_viewcluster`); off, the eye's cluster is marked anew. `r_dspeeds 1` prints the
+  painter's times in detail on the line once a second (the world's faces, the models and the sprites, the temporary
+  entities and the particles, and the rest), as `R_RenderFrame` printed its "ms"s under it. Neither archived. The
+  smoke test locks the view on another cluster, draws a frame and sees it held, then let go; `test:settings` the two;
+  `test:console` shown, set, refused and Tab; the browser test sets the lock on the row and reads the times line, on
+  both builds.
 - **`rate` and `skin` userinfos**: `rate` the bytes a second a joined page asks for, the host holding its frames to it
   as `SV_RateDrop` held packets, in the userinfo and at the console (25000); `skin` kept and sent with the userinfo as
   `ClientUserinfoChanged` took it, shown by `userinfo` and `dumpuser`, the model and skin waiting on a pak that has them.

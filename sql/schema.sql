@@ -95,7 +95,8 @@ CREATE TABLE viewcfg (
   lv_leaf INTEGER,                     -- the eye's leaf at lv_ex/ey/ez (no tree walk while the eye stands)
   view_stamp INTEGER DEFAULT 0 NOT NULL, -- counts the frames on which the view changed
   world_lst BLOB SUB_TYPE TEXT CHARACTER SET ASCII,
-  novis  SMALLINT DEFAULT 0 NOT NULL     -- r_novis: 1 marks every leaf, the PVS and the areas ignored (R_MarkLeaves); the sets are dropped when it changes
+  novis  SMALLINT DEFAULT 0 NOT NULL,    -- r_novis: 1 marks every leaf, the PVS and the areas ignored (R_MarkLeaves); the sets are dropped when it changes
+  lockpvs SMALLINT DEFAULT 0 NOT NULL    -- r_lockpvs: 1 keeps the view's cluster where it was locked, the leaves marked from there as the eye moves on (R_MarkLeaves with r_lockpvs)
 );
 
 -- ── resources ───────────────────────────────────────────────────────────

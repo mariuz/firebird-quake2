@@ -505,6 +505,16 @@ try {
     assert(novis.novis === 1 && novis.setting === true && allFaces > withPvs && withPvs > 0 && fb1.flag === true && fb1.setting === true && typeof speeds === 'string'
       && rDefaults.fullbright === false && rDefaults.novis === false && rDefaults.speeds === false && rDefaults.ents === true && rDefaults.world === true,
       `r_novis 1 marks every leaf (the set holds ${allFaces} faces against the PVS's ${withPvs}), r_fullbright 1 sets the painter's flag, r_speeds 1 prints the frame's figures ("${speeds}"), and the switches come back (${JSON.stringify(rDefaults)})`);
+    // r_lockpvs reaches the view's row and the settings; r_dspeeds prints the painter's times in detail
+    await typeCommand('r_lockpvs 1'); await sleep(300);
+    const lock = await page.evaluate(() => window.quake2.sql('SELECT lockpvs l FROM viewcfg').then((r) => ({ row: r[0].L, setting: window.quake2.settings.rLockpvs }))).catch(() => ({}));
+    await typeCommand('r_lockpvs 0'); await sleep(300);
+    const unlock = await page.evaluate(() => window.quake2.sql('SELECT lockpvs l FROM viewcfg').then((r) => r[0].L)).catch(() => null);
+    await typeCommand('r_dspeeds 1');
+    let dspeeds = null;
+    for (let i = 0; i < 20 && !dspeeds; i++) { await sleep(200); dspeeds = await page.evaluate(() => window.quake2.notify.log(64).find((l) => /^[\d.]+ ms world, [\d.]+ ms ents, [\d.]+ ms fx, [\d.]+ ms rest$/.test(l)) ?? null).catch(() => null); }
+    await typeCommand('r_dspeeds 0');
+    assert(lock.row === 1 && lock.setting === true && unlock === 0 && typeof dspeeds === 'string', `r_lockpvs 1 holds the view's cluster on the row (${JSON.stringify(lock)}) and 0 lets it go (${unlock}); r_dspeeds prints the painter's times ("${dspeeds}")`);
     // serverinfo, userinfo and status: the game's cvars, this page's userinfo and the clients, on the line (status's lines in the scrollback too)
     await typeCommand('serverinfo');
     const svInfo = await status();

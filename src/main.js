@@ -68,7 +68,7 @@ function paintDue(now) {
   lastDue = now;
   return true;
 }
-let rSpeedsAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
+let rSpeedsAt = 0, rDspeedsAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
 let hostSpeedsAt = 0;   // when host_speeds last printed a frame's times (once a second here; Qcommon_Frame printed every frame)
 let lastTic = 0;
 // src/net.js: a game shared over a data channel. The host runs the game here and sends the guest its frames
@@ -287,6 +287,7 @@ function setSetting(k, v) {
   if (k === 'sShow') audio.onStart = v ? (name, l, r) => notify.add(`${String(l).padStart(3)} ${String(r).padStart(3)} ${name}`, gameClock(), { show: false }) : null;   // (s_show: each sound started on the scrollback as S_Update printed a channel)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
+  if (k === 'rLockpvs' && db && !netGuest()) db.exec(`UPDATE viewcfg SET lockpvs = ${v ? 1 : 0} WHERE id = 1`).catch((err) => console.warn('r_lockpvs:', err.message));   // (r_lockpvs: the view's cluster held, or marked anew as the eye moves)
   if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
   if (k === 'scrCentertime') for (const c of centerPrints) c.seconds = Number(v) || 0;   // (scr_centertime: a centre print's seconds)
   if (k === 'clFootsteps') audio.footsteps = v !== false;   // (cl_footsteps 0: the footsteps dropped)
@@ -1549,6 +1550,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION && settings.swWaterwarp !== false;   // (sw_waterwarp 0: the view under water drawn as above it)
   if (underwater) r.beginUnderwater();
   r.beginFrame(view);
+  const tWorld = performance.now();
   if (faces && (settings.rDrawworld || drawEnts)) {
     const frames = new Map();
     for (const [id, [f, eff]] of brushFrames) frames.set(id, entityFrame(f, eff, time));
@@ -1558,6 +1560,8 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
     if (settings.renderer === 'sql') r.drawFaces(rows, styles, time, frames);
     else r.drawFaceList(rows, styles, time, frames, brushAngles);
   }
+  perf.world = performance.now() - tWorld;   // (r_dspeeds: the world's faces)
+  const tEnts = performance.now();
   const bsp = map.bsp;
   perf.ents = ents.length;
   for (const e of drawEnts ? ents : []) {   // (r_drawentities 0: R_DrawEntitiesOnList skipped; cl_add_entities 0: none to list)
@@ -1580,9 +1584,12 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   }
   // the temporary entities: beams, the parasite's tongue, the explosions (src/effects.js); the particles were
   // run once for the frame
+  perf.epoly = performance.now() - tEnts;   // (r_dspeeds: the models and the sprites)
+  const tFx = performance.now();
   tempEnts.draw(r, bsp, time);
   const particles = settings.clAddParticles === false ? [] : settings.clTestparticles ? r.particles.concat(testParticles(view, axes)) : r.particles;   // (cl_add_particles 0: none; cl_testparticles: the ring too)
   if (particles !== r.particles) { const own = r.particles; r.particles = particles; r.drawParticles(); r.particles = own; } else r.drawParticles();
+  perf.fx = performance.now() - tFx;   // (r_dspeeds: the temporary entities and the particles)
   // the weapon in hand (depth hack: drawn over everything near); none at the intermission
   // (a demo's row names the gun model, its frame and its angles as the server sent them: ps.gunindex, gunframe, gunangles)
   // (the hand: a left-hander's gun is drawn mirrored, a centre-hander's not at all, as ref_soft and ref_gl had hand 1 and 2)
@@ -1691,6 +1698,13 @@ function updateStats() {
   if (settings.rSpeeds && performance.now() - rSpeedsAt > 1000) {
     rSpeedsAt = performance.now();
     notify.add(`${(perf.faces + perf.draw).toFixed(0)} ms, ${perf.rows} wpoly ${perf.ents ?? 0} epoly (q2_tic ${perf.tic.toFixed(0)} ms)`, gameClock());
+  }
+  // r_dspeeds: the painter's times in detail (once a second here), as R_RenderFrame printed its "ms"s under it: the world's faces, the
+  // models and the sprites, the temporary entities and the particles, the rest (the view weapon, the status bar, the present)
+  if (settings.rDspeeds && performance.now() - rDspeedsAt > 1000) {
+    rDspeedsAt = performance.now();
+    const w = perf.world ?? 0, e = perf.epoly ?? 0, f = perf.fx ?? 0;
+    notify.add(`${w.toFixed(1)} ms world, ${e.toFixed(1)} ms ents, ${f.toFixed(1)} ms fx, ${Math.max(0, perf.draw - w - e - f).toFixed(1)} ms rest`, gameClock());
   }
   // host_speeds: a frame's times as Qcommon_Frame printed "all, sv, gm, cl, rf" (once a second here): the whole, the server frame outside
   // the game (none: the SQL tic is the game), the game (the tic), the client outside the painter (the frame query), the painter

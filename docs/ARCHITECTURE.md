@@ -765,7 +765,11 @@ an 8 by 8 spread, and a blend of 1, 0.5, 0.25 at half, about the eye each frame;
 `testParticles`; none of the eight archived), `r_lerpmodels` (0: no pose blended, `backlerp` 0),
 `r_novis` (`viewcfg.novis`: `build_vis_set` marks every leaf, the PVS and the area portals ignored as `R_MarkLeaves` did
 with it, the kept sets dropped with the switch; a guest paints the host's frames as they are) and `r_speeds` (the
-frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame),
+frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame), `r_lockpvs`
+(ref_soft's: `viewcfg.lockpvs`, `mark_faces` keeps the cluster marked wherever the eye has gone, so the leaves stay as they were
+locked while the view moves on; off, marked anew) and `r_dspeeds` (ref_soft's: the painter's times in detail on the line once a
+second, the world's faces, the models and the sprites, the temporary entities and the particles, and the rest, as `R_RenderFrame`
+printed its "ms"s under it),
 `sw_drawflat` (`D_DrawflatSurfaces`: every face built in a flat colour of its own, no texture and no light, `Renderer.drawflat`, the
 surface cache cleared with the switch), `sw_waterwarp` (0: the view under water drawn as above it, `D_WarpScreen` skipped) and
 `sw_clearcolor` (the palette index the view is cleared to before a frame, `Renderer.clearColor`: 0 here, where Quake's was 2; none of

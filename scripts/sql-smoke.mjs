@@ -55,6 +55,19 @@ for (let i = 0; i < 20; i++) s = await tic([1, 1, 0, 0, 0, 0, 0, 1, 0]);
 console.log(`20 tics walking ${(t() - t0).toFixed(0)} ms`, { x: s.PX, y: s.PY, z: s.PZ });
 const moved = Math.hypot(s.PX - start.x, s.PY - start.y);
 assert(moved > 50, `player walked forward (${moved.toFixed(1)} units)`);
+// r_lockpvs (viewcfg.lockpvs): the cluster marked stays as it is wherever the eye has gone (mark_faces exits), marked anew once off
+{
+  await db.query('SELECT COUNT(*) FROM frame_all(0, 0, 0, 0)');
+  const eye = (await db.query('SELECT vis_cluster c, vis_slot s FROM viewcfg')).rows[0];
+  const other = (await db.query(`SELECT FIRST 1 l.cluster c FROM leaves l WHERE l.cluster >= 0 AND l.cluster <> ${eye.C} ORDER BY l.id DESC`)).rows[0].C;
+  await db.exec(`UPDATE viewcfg SET lockpvs = 1, vis_cluster = ${other} WHERE id = 1`);
+  await db.query('SELECT COUNT(*) FROM frame_all(0, 0, 0, 0)');
+  const locked = (await db.query('SELECT vis_cluster c FROM viewcfg')).rows[0].C;
+  await db.exec('UPDATE viewcfg SET lockpvs = 0 WHERE id = 1');
+  await db.query('SELECT COUNT(*) FROM frame_all(0, 0, 0, 0)');
+  const free = (await db.query('SELECT vis_cluster c FROM viewcfg')).rows[0].C;
+  assert(eye.S !== null && locked === other && free === eye.C, `r_lockpvs holds the cluster marked (${locked}, the eye's being ${eye.C}) and lets it go when off (${free})`);
+}
 assert(Math.abs(s.PZ - start.z) < 64, `player stayed on the floor (dz ${(s.PZ - start.z).toFixed(1)})`);
 
 // a jump held through the air (PMF_JUMP_HELD): the flag keeps, the tic runs; it used to write NULL to jump_released
