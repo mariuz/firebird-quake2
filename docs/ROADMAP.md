@@ -1824,4 +1824,9 @@ picker). Missing for the rest of the game:
   supplied COOP/COEP is retired (what is at its URL now unregisters itself; a caching one came later, see
   *Installable and offline* under *Next*). Measured in a headless
   Chromium on demo1, idle: a 5 ms tic and 3 ms of frame queries on both builds, the first frames in
-  5.6 s without threads against 6.5 s with them.
+  5.6 s without threads against 6.5 s with them. 0.14.0 (from 0.8.0) needs no change here: the page names
+  its engine build itself, so 0.9.0's default without threads changes nothing, and nothing here closes a
+  database it opens again. Its query path packs the result rows in binary (`FBR\x01`) in place of JSON.
+  Measured under Node on demo1, three runs of 200 walking tics each: median 6.98, 7.06 and 7.04 ms
+  against 0.8.0's 7.82, 7.82 and 7.56. That is about 8 % off a walking tic. The perf guard's figures sit
+  inside the baseline's band, so the baseline is not recorded again.

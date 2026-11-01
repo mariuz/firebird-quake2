@@ -37,7 +37,7 @@ await time('point_contents', `SELECT point_contents(${p.X}, ${p.Y}, ${p.Z}) FROM
 await time('link_ent(player)', `EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE link_ent(${pe}); END`);
 await time('check_water(player)', `SELECT * FROM check_water(${pe})`);
 await time('fly_move', `SELECT * FROM fly_move(${pe}, 0.05)`);
-await time('walk_move', `EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE walk_move(${pe}, 0.05); END`);
+await time('walk_move', `EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE walk_move(${pe}, 0.05, 1); END`);
 await time('test_position', `SELECT test_position(${pe}, ${p.X}, ${p.Y}, ${p.Z}) FROM rdb$database`);
 const m = (await q1("SELECT FIRST 1 id FROM ents WHERE mtype IS NOT NULL AND st = 'stand'"))?.ID;
 if (m) {
@@ -56,7 +56,7 @@ await time('frame_lightstyles', 'SELECT * FROM frame_lightstyles');
 await time('frame_all (fast)', 'SELECT * FROM frame_all(0, 0, 0, 1)');
 await time('frame_all (sql)', 'SELECT * FROM frame_all(1, 0, 0, 1)');
 const v = await q1('SELECT * FROM view_setup');
-await time('mark faces (insert distinct)', `EXECUTE BLOCK AS BEGIN DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL; EXECUTE PROCEDURE mark_faces('${v.PVS}', ${v.CLUSTER}, ${v.LEAF}); END`);
+await time('mark faces (a new cluster)', `EXECUTE BLOCK AS DECLARE s SMALLINT; BEGIN UPDATE viewcfg SET vis_cluster = NULL; EXECUTE PROCEDURE mark_faces('${v.PVS}', ${v.CLUSTER}, ${v.LEAF}) RETURNING_VALUES s; END`);
 console.log('monsters:', (await db.query("SELECT mtype, st, COUNT(*) n FROM ents WHERE mtype IS NOT NULL GROUP BY mtype, st")).rows);
 await db.close();
 process.exit(0);

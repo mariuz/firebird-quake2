@@ -65,4 +65,15 @@ console.log('variable first:', diff(d, c));
 await db.query(`SELECT point_contents(${w.X}, ${w.Y}, ${w.Z}) FROM rdb$database`);
 d = await read();
 console.log('point_contents:', diff(c, d));
+// a monster that has seen the player and runs at it (bench.mjs's 'monster_think (running)'): its think's calls, the first and a later one
+const m = (await db.query("SELECT FIRST 1 id FROM ents WHERE mtype IS NOT NULL AND st = 'stand'")).rows[0]?.ID;
+if (m) {
+  await db.exec(`UPDATE ents SET enemy_id = ${pe}, st = 'run', anim = NULL WHERE id = ${m}`);
+  for (let i = 0; i < 3; i++) {
+    c = await read();
+    await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE monster_think(${m}); END`);
+    d = await read();
+    console.log(`one monster_think (running, think ${i + 1}):`, diff(c, d));
+  }
+}
 process.exit(0);
