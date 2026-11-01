@@ -232,7 +232,7 @@ export function writePlayerstate(w, old, ps) {
  * Then `frame(row, f, extra)` for each tic's Q2_TIC row and decoded frame, and `finish()` for the file.
  */
 export class DemoRecorder {
-  constructor({ map, res, bsp, mapBytes = null, setup = {}, playerEnt = 0, brushNames = new Map(), levelname = '', protocol = PROTOCOL, fov = 90, netname = 'player', blockMax = MAX_MSGLEN } = {}) {
+  constructor({ map, res, bsp, mapBytes = null, setup = {}, playerEnt = 0, brushNames = new Map(), levelname = '', protocol = PROTOCOL, fov = 90, netname = 'player', skin = 'male/grunt', blockMax = MAX_MSGLEN } = {}) {
     this.map = map;
     this.res = res;
     this.bsp = bsp;
@@ -277,7 +277,7 @@ export class DemoRecorder {
     for (let i = 1; i <= inline && i + 1 <= 255; i++) { this.modelIndex.set(`*${i}`, i + 1); this.config(CS.MODELS + i + 1, `*${i}`); }
     // the items' names (STAT_PICKUP_STRING points at one) and the client's skin
     for (let i = 1; i < ITEMS.length; i++) if (ITEMS[i]) this.config(CS.ITEMS + i, ITEMS[i][0]);
-    this.config(CS.PLAYERSKINS, `${netname}\\male/grunt`);
+    this.config(CS.PLAYERSKINS, `${netname}\\${skin}`);   // (the skin userinfo, as CL_ParseClientinfo reads it: model/skin after the name)
     this.pending.byte(SVC.stufftext).string('precache\n');
     this.flush(this.pending); this.pending = new Writer(2048);
   }

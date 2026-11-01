@@ -271,7 +271,7 @@ function setSetting(k, v) {
     if (v && !document.fullscreenElement) canvas.requestFullscreen?.().catch(() => {});
     else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   } else { settings[k] = v; saveSettings(); }
-  if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg' || k === 'password') applyUserinfo();
+  if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg' || k === 'rate' || k === 'skin' || k === 'password') applyUserinfo();
   if (k === 'viewsize') applyView().catch((err) => console.warn('viewsize:', err.message));   // (the 3D view's rectangle, the SQL's frustum with it)
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
   if (k === 'swDrawflat' && renderer) { renderer.drawflat = !!v; renderer.surfCache.clear(); }   // (sw_drawflat: the surfaces built again flat, or textured)
@@ -302,7 +302,7 @@ function setSetting(k, v) {
  */
 function applyUserinfo() {
   // (only a joined page watches: the host's and a local game's clients play)
-  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, fov: settings.fov, gender: settings.gender, msg: settings.msg, password: settings.password };
+  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, fov: settings.fov, gender: settings.gender, msg: settings.msg, rate: settings.rate, skin: settings.skin, password: settings.password };
   if (netGuest()) { if (net.guest?.open) net.guest.sendInfo(info); return; }
   session?.setUserinfo(1, info).catch((err) => console.warn('userinfo:', err.message));
 }
@@ -420,7 +420,7 @@ const con = new Console({
     return g ? { mapname: g.MAP_NAME, deathmatch: g.DEATHMATCH, coop: g.COOP, dmflags: g.DMFLAGS, fraglimit: g.FRAGLIMIT, timelimit: g.TIMELIMIT, cheats: g.CHEATS, skill: g.SKILL, hostname: settings.hostname || 'noname',
       needpass: (settings.password ? 1 : 0) + (settings.spectatorPassword && settings.spectatorPassword !== 'none' ? 2 : 0) } : null;   // (needpass: 1 a password, 2 a spectator password, as SV_StatusString set it)
   },
-  userInfo: () => ({ name: settings.name, hand: settings.hand, gender: settings.gender, msg: settings.msg, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 }),
+  userInfo: () => ({ name: settings.name, hand: settings.hand, gender: settings.gender, msg: settings.msg, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, rate: settings.rate, skin: settings.skin }),
   isFullscreen: () => !!document.fullscreenElement,   // (vid_fullscreen: the page's live state; setSetting('fullscreen', …) asks for it)
   // play, stopsound and soundinfo (S_Play, S_StopAllSounds, S_SoundInfo_f): a pak sound at the ear, every sound cut, the mix's figures
   playSound: (name) => { if (!pak?.has(`sound/${name}`)) return false; audio.playLocal(name); return true; },
@@ -568,7 +568,7 @@ const con = new Console({
     const c = session.clients.find((x) => x.CLIENT === n);
     if (!c) return 'inactive';
     const info = session.userinfo[n];
-    return info ? { name: info.name, hand: info.hand, gender: info.gender, msg: info.msg, fov: info.fov, spectator: info.spectator } : { name: c.NETNAME ?? '', hand: c.HAND ?? 0 };
+    return info ? { name: info.name, hand: info.hand, gender: info.gender, msg: info.msg, fov: info.fov, spectator: info.spectator, rate: info.rate, skin: info.skin } : { name: c.NETNAME ?? '', hand: c.HAND ?? 0 };
   },
 });
 /**
@@ -1198,7 +1198,7 @@ async function startRecording(name) {
   const brushNames = guest ? new Map() : new Map((await db.query("SELECT e.id, m.name FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B' AND m.name STARTING WITH '*'", [], { rowMode: 'array' })).rows);
   const setup = guest ? net.guest.map : mapSetup ?? {};
   const rec = new DemoRecorder({ map: map.name, res, bsp: map.bsp, mapBytes: pak.get(`maps/${map.name}.bsp`), setup, playerEnt, brushNames,
-    levelname: guest ? setup.levelname ?? '' : await session.levelName(), fov: viewFov(), netname: settings.name || 'player' });
+    levelname: guest ? setup.levelname ?? '' : await session.levelName(), fov: viewFov(), netname: settings.name || 'player', skin: settings.skin });
   recorder = { name, rec };
   setStatus(`Recording to ${name}.dm2`);
   setTimeout(() => { if (statusEl.textContent.startsWith('Recording to')) setStatus(''); }, 2500);
@@ -1690,7 +1690,7 @@ function updateStats() {
   if (now - fpsT > 500) { fps = (fpsN * 1000) / (now - fpsT); fpsT = now; fpsN = 0; }
   const sum = (k) => net.guests.reduce((n, g) => n + g.host[k], 0);
   const link = netGuest() ? ` · joined${net.guest.map?.hostname ? ` ${net.guest.map.hostname}` : ''}: ${net.guest.frames} frames from the host${ownPing() != null ? `, ping ${ownPing()} ms` : ''}`
-    : netHost() ? ` · hosting: ${sum('sentFrames')} frames sent${net.guests.length > 1 ? ` to ${net.guests.length} guests` : ''}${sum('droppedFrames') ? `, ${sum('droppedFrames')} dropped` : ''}`
+    : netHost() ? ` · hosting: ${sum('sentFrames')} frames sent${net.guests.length > 1 ? ` to ${net.guests.length} guests` : ''}${sum('droppedFrames') ? `, ${sum('droppedFrames')} dropped` : ''}${sum('heldFrames') ? `, ${sum('heldFrames')} held` : ''}`
     : demo ? ` · demo ${demo.name}: frame ${demo.player.played + 1} of ${demo.frames}` : '';
   const rec = recorder ? ` · recording ${recorder.name}: ${recorder.rec.frames} frames (${(recorder.rec.size / 1024).toFixed(0)} KB)` : '';
   statsEl.textContent = `${fps.toFixed(1)} fps · q2_tic ${perf.tic.toFixed(0)} ms · frame queries ${perf.faces.toFixed(0)} ms (${perf.rows} rows) · raster ${perf.draw.toFixed(0)} ms · ${renderer.particles.length} particles${link}${rec}`;
@@ -1829,7 +1829,7 @@ const guestsState = () => `${net.guests.length} guest${net.guests.length === 1 ?
 const freeClient = () => { for (let c = 2; c <= MAX_PLAYERS; c++) if (!net.guests.some((g) => g.client === c)) return c; return null; };
 /**
  * SV_Status_f's list: the game's clients, each with its number, its name and what drives it (this page, a guest with the
- * frames sent and dropped and whether it watches, a pad, or nothing: standing); 'guest' on a joined page, null with no game.
+ * frames sent, dropped and held and whether it watches, a pad, or nothing: standing); 'guest' on a joined page, null with no game.
  */
 function listPlayers() {
   if (netGuest()) return 'guest';
@@ -1838,7 +1838,7 @@ function listPlayers() {
   return session.clients.map((c) => {
     const g = net?.guests?.find((x) => x.client === c.CLIENT);
     const kind = c.CLIENT === 1 ? 'page' : g ? 'guest' : c.CLIENT <= local ? 'pad' : 'standing';
-    return { num: c.CLIENT, name: c.NETNAME || `player ${c.CLIENT}`, kind, sent: g?.host.sentFrames ?? 0, dropped: g?.host.droppedFrames ?? 0, spectator: !!g?.host.info?.spectator, ping: g?.host.ping ?? null };
+    return { num: c.CLIENT, name: c.NETNAME || `player ${c.CLIENT}`, kind, sent: g?.host.sentFrames ?? 0, dropped: g?.host.droppedFrames ?? 0, held: g?.host.heldFrames ?? 0, spectator: !!g?.host.info?.spectator, ping: g?.host.ping ?? null };
   });
 }
 /**

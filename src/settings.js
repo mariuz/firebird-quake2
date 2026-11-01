@@ -14,7 +14,7 @@ export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, m
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
   coop: false, deathmatch: false,
-  dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, gender: 'male', msg: 1, rtcIce: '', rtcSignal: '', addressBook: Object.freeze([]), netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0 });
+  dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, gender: 'male', msg: 1, rate: 500000, skin: 'male/grunt', rtcIce: '', rtcSignal: '', addressBook: Object.freeze([]), netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0 });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, crosshair: 1 });
@@ -93,6 +93,11 @@ const CHECK = {
   // the gender userinfo (a word of at most 15 printable characters, male by default: f… is female, m… male, else neutral)
   gender: (v) => (typeof v === 'string' && /^[\x21-\x7e]{1,15}$/.test(v) ? v : undefined),
   msg: int(0, 3),        // the msg userinfo: the message level a print must reach (0 low, 1 medium, 2 high, 3 chat), 1 as Quake's cvar
+  // the rate userinfo: the bytes a second this client asks the host's frames to keep under (SV_RateDrop holds a frame past it); Quake
+  // clamped it to 100..25000 for frames of a few hundred bytes, here a frame is the face list, kilobytes, twenty a second: 1000 to 1000000, 500000
+  rate: int(1000, 1000000),
+  // the skin userinfo: model/skin (male/grunt by default); the model and skin wait on a pak that has them
+  skin: (v) => (typeof v === 'string' && /^[\w-]{1,15}\/[\w-]{1,15}$/.test(v) ? v : undefined),
   // the ICE server the network game adds to the STUN (rtc_ice at the console): a url, or a url, a user and a password
   rtcIce: (v) => (typeof v === 'string' && v.length <= 300 && (v === '' || /^(stuns?|turns?):[^\s@]+( \S+ \S+)?$/i.test(v)) ? v : undefined),
   // the signalling relay (scripts/signal.mjs) the network game's texts go through under a room code (rtc_signal): its http(s) url

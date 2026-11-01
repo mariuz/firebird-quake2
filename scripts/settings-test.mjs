@@ -33,6 +33,10 @@ check(DEFAULTS.name === '' && DEFAULTS.hand === 0 && loadSettings(store(JSON.str
   && DEFAULTS.gender === 'male' && loadSettings(store(JSON.stringify({ gender: 'female' }))).gender === 'female' && loadSettings(store(JSON.stringify({ gender: 'bad word' }))).gender === 'male' && loadSettings(store(JSON.stringify({ gender: 3 }))).gender === 'male'
   && DEFAULTS.msg === 1 && loadSettings(store(JSON.stringify({ msg: 3 }))).msg === 3 && loadSettings(store(JSON.stringify({ msg: 4 }))).msg === 1,
   'the name is kept up to 15 printable characters (longer, a control character or a number fall back to none), the hand 0 to 2, the gender a word (male by default), the msg level 0 to 3 (1)');
+// the rate userinfo (bytes a second, 1000 to 1000000, 500000: a frame here is the face list) and the skin (model/skin, male/grunt)
+check(DEFAULTS.rate === 500000 && DEFAULTS.skin === 'male/grunt' && loadSettings(store(JSON.stringify({ rate: 25000, skin: 'female/athena' }))).rate === 25000 && loadSettings(store(JSON.stringify({ rate: 25000, skin: 'female/athena' }))).skin === 'female/athena'
+  && loadSettings(store(JSON.stringify({ rate: 100 }))).rate === 500000 && loadSettings(store(JSON.stringify({ rate: 'x' }))).rate === 500000 && loadSettings(store(JSON.stringify({ skin: 'grunt' }))).skin === 'male/grunt' && loadSettings(store(JSON.stringify({ skin: 'a b/c' }))).skin === 'male/grunt',
+  'the rate 1000 to 1000000 (500000), the skin model/skin (male/grunt), anything else the default');
 check(loadSettings(store(JSON.stringify({ skill: 3 }))).skill === 3 && loadSettings(store(JSON.stringify({ skill: 4 }))).skill === 1, 'the skill goes up to 3, nightmare (the console\'s), and no further');
 check(viewSize({ detail: 'low' }).join('x') === '160x120' && viewSize({ detail: 'ultra' }).join('x') === '640x480' && viewSize({ detail: '?' }).join('x') === '320x240', 'the video modes, 320×240 for anything else');
 check(Object.entries(OPTIONS_RESET).every(([k, v]) => DEFAULTS[k] === v) && Object.entries(VIDEO_RESET).every(([k, v]) => k === 'fullscreen' || DEFAULTS[k] === v), 'the menus\' resets put back the defaults');

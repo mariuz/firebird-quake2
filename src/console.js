@@ -10,7 +10,7 @@ import { parseChangeMap } from './levels.js';
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_paused', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showclamp', 'cl_showmiss', 'cl_shownet', 'cl_sidespeed', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gamemap', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'in_joystick', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'killserver', 'load', 'log_stats', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'nextserver', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'players', 'putaway', 'quit', 'r_drawentities', 'r_drawworld', 'r_dspeeds', 'r_fullbright', 'r_lerpmodels', 'r_lockpvs', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_khz', 's_show', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'sky', 'snd_restart', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sw_clearcolor', 'sw_drawflat', 'sw_mipcap', 'sw_mipscale', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'vid_mode', 'vid_ref', 'vid_restart', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_paused', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showclamp', 'cl_showmiss', 'cl_shownet', 'cl_sidespeed', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gamemap', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'in_joystick', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'killserver', 'load', 'log_stats', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'nextserver', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'players', 'putaway', 'quit', 'r_drawentities', 'r_drawworld', 'r_dspeeds', 'r_fullbright', 'r_lerpmodels', 'r_lockpvs', 'r_novis', 'r_speeds', 'rate', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_khz', 's_show', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'skin', 'sky', 'snd_restart', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sw_clearcolor', 'sw_drawflat', 'sw_mipcap', 'sw_mipscale', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'vid_mode', 'vid_ref', 'vid_restart', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -26,6 +26,13 @@ export const CVARS = {
   // the msg userinfo (archived, as Quake's was): the level a print must reach this client, 0 low (every print), 1 medium (Quake's default:
   // the "No shells for shotgun" prints off), 2 high, 3 chat alone, as SV_ClientPrintf filtered them
   msg: { key: 'msg', show: (v) => String(v), read: (w) => (/^[0-3]$/.test(w) ? Number(w) : null), help: '0 to 3' },
+  // the rate userinfo (archived, as Quake's was): the bytes a second this client asks the host's frames to keep under (SV_RateDrop holds a
+  // frame past the sum of the last second's); clamped as SV_UserinfoChanged clamped it, to 1000..1000000 here (Quake's 100..25000 was a
+  // modem's figure for frames of a few hundred bytes: a frame here is the face list, kilobytes, twenty a second)
+  rate: { key: 'rate', show: (v) => String(v), read: (w) => (/^\d{1,7}$/.test(w) ? Math.max(1000, Math.min(1000000, Number(w))) : null), help: 'bytes a second, 1000 to 1000000' },
+  // the skin userinfo (archived, as Quake's was): model/skin, male/grunt by default, kept and sent with the userinfo as ClientUserinfoChanged
+  // took it; the model and skin wait on a pak that has them
+  skin: { key: 'skin', show: (v) => String(v ?? 'male/grunt'), read: (w) => (/^[\w-]{1,15}\/[\w-]{1,15}$/.test(w) ? w : null), help: 'model/skin, as male/grunt' },
   sensitivity: { key: 'sensitivity', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.max(1, Math.min(20, n)) : null; }, help: '1 to 20' },
   cl_run: { key: 'alwaysRun', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1' },
   m_pitch: { key: 'invertMouse', show: (v) => (v ? '-0.022' : '0.022'), read: (w) => { const n = Number(w); return Number.isFinite(n) && n !== 0 ? n < 0 : null; }, help: '0.022, or -0.022 to invert' },
@@ -181,7 +188,7 @@ const HISTORY = 32;
  *         modelList() → [{ name, size }] (modellist), imageList() → [{ kind, w, h, name }] (imagelist: P a picture, W a wall texture, M a skin), soundList() → [{ name, size, loop }] (soundlist), version() → the page's version string (version), togglePause() → paused now, null for a shared game or none (pause),
  *         toggleScores() (score: the score board, in a game of more than one client), putAway() (putaway: every screen off),
  *         serverInfo() → the game's cvars as { mapname, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill }, null on a joined page or without a map (serverinfo),
- *         userInfo() → this page's { name, hand, gender, msg, fov, spectator } (userinfo),
+ *         userInfo() → this page's { name, hand, gender, msg, fov, spectator, rate, skin } (userinfo),
  *         playSound(name) → whether the pak has sound/<name>, played at the ear (play), stopSounds() (stopsound), soundInfo() → { started, rate, stereo, decoded, playing, loops } (soundinfo),
  *         viewPos() → the first view's { x, y, z, yaw } (viewpos), timeRefresh(flip) → { seconds, fps } after a full turn in 128 frames, null without a game of this page's own (timerefresh), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
  *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
@@ -195,9 +202,9 @@ const HISTORY = 32;
  *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
  *         setFixedtime(n | null) → the fixedtime now (null: a guest),
  *         lightLevel() → 150 × the lightmap under the eye over 255, rounded, null without a map (cl_lightlevel),
- *         listPlayers() → the clients as [{ num, name, kind: 'page' | 'guest' | 'pad' | 'standing', sent, dropped, spectator }], 'guest' on a joined page, null without a game (players),
+ *         listPlayers() → the clients as [{ num, name, kind: 'page' | 'guest' | 'pad' | 'standing', sent, dropped, held, spectator }], 'guest' on a joined page, null without a game (players),
  *         kick(n) → the name kicked, or 'none' | 'not-hosting' (kick),
- *         dumpUser(n) → a client's userinfo as { name, hand, gender, msg, fov, spectator }, or 'guest' (a joined page) | 'none' (no game) | 'slot' | 'inactive' (dumpuser),
+ *         dumpUser(n) → a client's userinfo as { name, hand, gender, msg, fov, spectator, rate, skin }, or 'guest' (a joined page) | 'none' (no game) | 'slot' | 'inactive' (dumpuser),
  *         connect(text) → true once joining began (false: no pak yet), disconnect() → true when this page was in a shared game,
  *         reconnect(), lastConnect() → what this page last joined with ('' for nothing),
  *         quit() → true once the game ended for the attract loop (quit), killServer() → the same with a hosted game's guests dropped (killserver),
@@ -397,7 +404,7 @@ export class Console {
         // the kept autoexec.cfg dropped
         say((await h.dropAutoexec?.()) ? 'autoexec.cfg dropped' : 'no autoexec.cfg kept');
         return;
-      case 'name': case 'hand': case 'gender': case 'msg': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 's_khz': case 'cd_volume': case 'cd_loopcount': case 'cd_looptrack': case 'cd_nocd': case 's_show':
+      case 'name': case 'hand': case 'gender': case 'msg': case 'rate': case 'skin': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 's_khz': case 'cd_volume': case 'cd_loopcount': case 'cd_looptrack': case 'cd_nocd': case 's_show':
       case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'm_filter': case 'in_joystick': case 'netgraph': case 'timegraph': case 'debuggraph': case 'graphheight': case 'graphscale': case 'graphshift': case 'cl_predict': case 'cl_showmiss': case 'cl_shownet': case 'cl_showclamp': case 'viewsize':
       case 'cl_add_entities': case 'cl_add_particles': case 'cl_add_lights': case 'cl_add_blend': case 'cl_testentities': case 'cl_testparticles': case 'cl_testlights': case 'cl_testblend':
       case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lockpvs': case 'r_dspeeds': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': case 'host_speeds': case 'developer': case 'sv_noreload': case 'sw_drawflat': case 'sw_waterwarp': case 'sw_clearcolor': case 'sw_mipcap': case 'sw_mipscale': case 'sw_stipplealpha':
@@ -653,7 +660,7 @@ export class Console {
         return;
       }
       case 'userinfo': {
-        // CL_Userinfo_f: this page's userinfo (ClientUserinfoChanged's name, hand, gender, msg, fov and spectator)
+        // CL_Userinfo_f: this page's userinfo (ClientUserinfoChanged's name, hand, gender, msg, fov, spectator, rate and skin)
         const info = h.userInfo?.() ?? {};
         say(`User info settings: ${Object.entries(info).map(([k, v]) => `${k} "${v}"`).join(' · ')}`, false, 8000);
         return;
@@ -905,7 +912,7 @@ export class Console {
         const rows = h.listPlayers?.();
         if (rows === 'guest') { say('players: the host lists them', true); return; }
         if (!rows) { say('players: no game is running', true); return; }
-        const what = (r) => (r.kind === 'page' ? 'this page' : r.kind === 'guest' ? `guest: ${r.sent} frames sent${r.dropped ? `, ${r.dropped} dropped` : ''}${r.ping != null ? `, ping ${r.ping} ms` : ''}${r.spectator ? ', watching' : ''}` : r.kind === 'pad' ? 'a pad' : 'standing');
+        const what = (r) => (r.kind === 'page' ? 'this page' : r.kind === 'guest' ? `guest: ${r.sent} frames sent${r.dropped ? `, ${r.dropped} dropped` : ''}${r.held ? `, ${r.held} held` : ''}${r.ping != null ? `, ping ${r.ping} ms` : ''}${r.spectator ? ', watching' : ''}` : r.kind === 'pad' ? 'a pad' : 'standing');
         say(rows.map((r) => `${r.num} ${r.name} (${what(r)})`).join(' · '), false, 8000);
         return;
       }

@@ -141,7 +141,8 @@ the order they are to be taken.
   userinfo (`Session.setUserinfo`): the session writes them to the client's row after every map load and
   loaded game, a guest sends its own to the host at the connect (an `info` message) and on every change, and
   each `Q2_TIC` row carries its client's `hand` and `netname` for the page. Tested in the menu, settings, coop,
-  net and painter tests. Left: the model and skin (the registered pak), the rate box, the model's preview.
+  net and painter tests. The rate box and the skin's words came with the seventeenth list (`rate` and `skin`); left: the
+  model and skin themselves (a pak with the player model) and the model's preview.
 - **Save files**: done. The page's Saves controls: Download writes the game as it stands to a file
   (`<map>-<time>.q2sav`, the slot text of `src/savestore.js`: the header line, the JSON gzipped and
   base64'd; `Session.packGame`), and Load takes such a file (`Session.unpackText`, the plain JSON of a save
@@ -1207,9 +1208,39 @@ the userinfo still lack of Quake 2's own words with the demo pak. In the order t
   smoke test locks the view on another cluster, draws a frame and sees it held, then let go; `test:settings` the two;
   `test:console` shown, set, refused and Tab; the browser test sets the lock on the row and reads the times line, on
   both builds.
-- **`rate` and `skin` userinfos**: `rate` the bytes a second a joined page asks for, the host holding its frames to it
-  as `SV_RateDrop` held packets, in the userinfo and at the console (25000); `skin` kept and sent with the userinfo as
-  `ClientUserinfoChanged` took it, shown by `userinfo` and `dumpuser`, the model and skin waiting on a pak that has them.
+- **`rate` and `skin` userinfos**: done. `rate` is the bytes a second a joined page asks for: the host holds a frame when
+  the frames of the last second sum past it (`HostLink.sendFrame`, as `SV_RateDrop` held a packet past the last ten's
+  sum; `heldFrames` as its `surpressCount`, on `players`' line and the stats line), clamped as `SV_UserinfoChanged`
+  clamped it, to 1000..1000000 here: Quake's 100..25000 was a modem's figure for frames of a few hundred bytes, and a
+  frame here is the face list, kilobytes, twenty a second, so 500000 by default; the player setup's connection speed
+  spin is `rate_tbl` at twenty times Quake's figures. `skin` is kept and sent with the userinfo as
+  `ClientUserinfoChanged` took it (model/skin, male/grunt), shown by `userinfo` and `dumpuser`, in the setup's model and
+  skin boxes (greyed still) and in a recording's `CS_PLAYERSKINS`; the model and skin themselves wait on a pak that has
+  them. Both archived, as Quake's were. `test:net` sees the rate and the skin reach the host and the session, frames
+  held at 25000 and none at 500000, the clamps; `test:settings` the two; `test:console` shown, set, clamped, refused,
+  cvarlist, config.cfg, `userinfo`, `dumpuser`, `players` with the held count and Tab; `test:menu` the spin and the
+  boxes; `test:record` the skin in the configstring; the browser test sets both and reads the userinfo line and the
+  session's, and at a joined page sees the host hold its frames at 25000 and let them go at 500000, on both builds.
+
+The eighteenth list: what the console, the link, the pad, the mixer and the painter still lack of Quake 2's own words
+with the demo pak. In the order they are to be taken.
+
+- **`playerlist` and `cmd`**: 3.20's `Cmd_PlayerList_f` (each client's number, time in the game, ping, score and name,
+  "(spectator)" for a watcher, a line each in the scrollback at the host; a joined page's from its score board rows)
+  and `cmd <words>` (`Cmd_ForwardToServer_f`: the words sent to the host as typed; at a page of its own, run here).
+- **`rcon` and `rcon_password`**: `CL_Rcon_f` and `SV_RemoteCommand_f`: a joined page running the host's console with
+  the host's `rcon_password` (`rcon <command>` with its own `rcon_password` set, over the link), the host's answer
+  on the guest's scrollback, "Bad rcon_password" refused and told at the host's console.
+- **`showpackets` and `showdrop`**: `Netchan_Transmit`'s and `Netchan_Process`'s prints at either end (each message's
+  direction, size and kind on the scrollback) and the frames held or dropped at the host ("Dropped %i at %i").
+- **The pad's `joy_*` cvars**: `joy_forwardthreshold`, `joy_sidethreshold`, `joy_upthreshold`, `joy_pitchthreshold`
+  and `joy_yawthreshold` (the sticks' dead zone, 0.15) and `joy_forwardsensitivity`, `joy_sidesensitivity`,
+  `joy_upsensitivity`, `joy_pitchsensitivity` and `joy_yawsensitivity` (the sticks' speeds), as `IN_JoyMove` read them.
+- **`s_mixahead` and `s_testsound`**: the mix's lead (how far ahead of the clock the mixer paints, 0.2 s) and the test
+  tone (`S_TransferPaintBuffer`'s sine in place of the mix).
+- **`sw_aliasstats`, `sw_polymodelstats`, `sw_reportsurfout`, `sw_reportedgeout` and `z_stats`**: the painter's
+  reports (the models drawn and their triangles a frame, the surfaces and edges past the limits) and the memory in use
+  (the engine's heap, the page's).
 
 ## Playing the demo
 

@@ -63,7 +63,7 @@ const playerEnt = (await q('SELECT ent_id FROM player WHERE id = 1'))[0][0];
 const brushNames = new Map(await q("SELECT e.id, m.name FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B' AND m.name STARTING WITH '*'"));
 const mapBytes = pak.get('maps/demo1.bsp');
 const levelname = await session.levelName();
-const rec = new DemoRecorder({ map: 'demo1', res, bsp: setup.bsp, mapBytes, setup, playerEnt, brushNames, levelname, fov: 90, netname: 'tester' });
+const rec = new DemoRecorder({ map: 'demo1', res, bsp: setup.bsp, mapBytes, setup, playerEnt, brushNames, levelname, fov: 90, netname: 'tester', skin: 'female/athena' });
 check(rec.blocks >= 2 && rec.size > 1000 && rec.frames === 0, `the header is written at once: ${rec.blocks} blocks, ${rec.size} bytes, no frame yet`);
 // the game: a walk with shots, a turn, a jump (the usercmd as Input.read gives it: tics, fwd, side, yaw, pitch, fire, jump, run, imp)
 const cmd = ({ fwd = 0, side = 0, yaw = 0, fire = 0, jump = 0 } = {}) => [1, fwd, side, yaw, 0, fire, jump, 1, 0];
@@ -96,8 +96,8 @@ check(demo.levelname === levelname && demo.configstrings[CS.NAME] === levelname,
 check(demo.map === 'maps/demo1.bsp' && demo.models[1] === 'maps/demo1.bsp', 'CS_MODELS + 1 is the map');
 check(demo.configstrings[CS.MAPCHECKSUM] === String(blockChecksum(mapBytes)) && /^-?\d+$/.test(demo.configstrings[CS.MAPCHECKSUM]), `CS_MAPCHECKSUM is the map file's Com_BlockChecksum (${demo.configstrings[CS.MAPCHECKSUM]})`);
 check(demo.configstrings[CS.SKY] === setup.sky && demo.configstrings[CS.CDTRACK] === String(setup.cdTrack) && demo.configstrings[CS.SKYROTATE] === String(setup.skyRotate)
-  && demo.configstrings[CS.MAXCLIENTS] === '1' && demo.configstrings[CS.STATUSBAR] === STATUSBAR && demo.configstrings[CS.PLAYERSKINS] === 'tester\\male/grunt',
-  `the sky (${setup.sky}), the CD track, the status bar layout, one client, the player's skin`);
+  && demo.configstrings[CS.MAXCLIENTS] === '1' && demo.configstrings[CS.STATUSBAR] === STATUSBAR && demo.configstrings[CS.PLAYERSKINS] === 'tester\\female/athena',
+  `the sky (${setup.sky}), the CD track, the status bar layout, one client, the player's skin userinfo after its name`);
 const inline = setup.bsp.models.length - 1;
 check(demo.models[2] === '*1' && demo.models[inline + 1] === `*${inline}` && !demo.models[inline + 2]?.startsWith('*'), `the map's ${inline} inline models at 2…, as SV_SpawnServer numbered them`);
 check(ITEMS.every((it, i) => !it || demo.configstrings[CS.ITEMS + i] === it[0]), 'CS_ITEMS carries every item\'s name');

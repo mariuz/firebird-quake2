@@ -1,7 +1,7 @@
 // net-test.mjs – a game shared over a link, headless (src/net.js): the host's Session runs the game with the
 // guest's commands merged into the second client's usercmd, the guest gets the map and its frames and paints
 // from the map's geometry alone (loadMapModels, no database), the texts of the signalling round trip, the
-// chunking of a big message, a slow link's dropped frames, a level change, the ends closing. The two ends
+// chunking of a big message, a slow link's dropped frames, the frames held to the guest's rate, a level change, the ends closing. The two ends
 // are a Loopback in one process: Node has no WebRTC, and HostLink and GuestLink do not know it either.
 //   node scripts/net-test.mjs
 import fs from 'node:fs';
@@ -362,6 +362,33 @@ a.bufferedAmount = BACKLOG + 1;
 r = await hostTic();
 check(!r.sent && host.droppedFrames === 1 && host.sentFrames > 0, 'a frame is dropped when the channel is behind, not queued');
 a.bufferedAmount = 0;
+
+// the rate userinfo: the frames of the last second kept under the guest's bytes a second (SV_RateDrop: a frame past their sum is held,
+// counted as surpressCount counted it, not dropped), clamped as SV_UserinfoChanged clamped it; the skin kept with the info
+guest.sendInfo({ name: 'x', hand: 0, rate: 25000, skin: 'female/athena' });
+check(host.info.rate === 25000 && host.info.skin === 'female/athena', 'the rate and the skin reach the host with the info');
+await session.setUserinfo(2, host.info);
+check(session.userinfo[2].rate === 25000 && session.userinfo[2].skin === 'female/athena', 'and the session keeps them with the client\'s userinfo');
+{
+  await new Promise((r) => setTimeout(r, 1050));   // (the frames sent so far, at 500000, out of the last second's window)
+  const was = { sent: host.sentFrames, held: host.heldFrames, dropped: host.droppedFrames };
+  let sentN = 0;
+  for (let i = 0; i < 8; i++) { if ((await hostTic()).sent) sentN++; }
+  const held = host.heldFrames - was.held, size = host.sizes.at(-1)?.[1] ?? 0;
+  check(sentN >= 1 && held >= 1 && sentN + held === 8 && host.sentFrames - was.sent === sentN && host.droppedFrames === was.dropped && size > 1000,
+    `at a rate of 25000 bytes a second, frames of ${size} characters: ${sentN} of 8 in a row sent, ${held} held, none dropped`);
+}
+guest.sendInfo({ name: 'x', hand: 0, rate: 10, skin: 'grunt' });
+check(host.info.rate === 1000 && host.info.skin === 'male/grunt', 'a rate under 1000 is clamped up to it, a skin without its model is male/grunt');
+guest.sendInfo({ name: 'x', hand: 0, rate: 'x' });
+check(host.info.rate === 500000 && host.info.skin === 'male/grunt', 'none given is 500000 and male/grunt');
+{
+  const was = host.heldFrames;
+  let sentN = 0;
+  for (let i = 0; i < 4; i++) { if ((await hostTic()).sent) sentN++; }
+  check(sentN === 4 && host.heldFrames === was, 'at 500000 four frames in a row go, none held');
+}
+await session.setUserinfo(2, { name: '', hand: 0 });
 
 // a level change: the next map's message, then frames from it
 await session.leave('demo2$base1');

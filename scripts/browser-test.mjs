@@ -523,19 +523,19 @@ try {
     await typeCommand('status');
     const stLine = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(8) })).catch(() => ({}));
     assert(/^Server info settings: mapname "demo1" · deathmatch "0" · coop "0" · dmflags "\d+" · fraglimit "\d+" · timelimit "\d+" · cheats "\d" · skill "\d" · hostname "noname" · needpass "0"$/.test(svInfo)
-      && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
+      && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0" · rate "500000" · skin "male\/grunt"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
     // dumpuser 1 prints this page's client's userinfo in the scrollback as Info_Print laid it out; a client not in the game is not
     // active; the flood cvars are on the game row (flood_waitdelay 20 reaches it)
     await typeCommand('dumpuser 1');
-    const du = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(10) })).catch(() => ({}));
+    const du = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(12) })).catch(() => ({}));   // (the layout's ten lines and the line summing them)
     await typeCommand('dumpuser 3');
     const du3 = await status();
     await typeCommand('flood_waitdelay 20');
     const fl = await page.evaluate(async () => (await window.quake2.sql('SELECT flood_msgs m, flood_waitdelay w FROM game'))[0]).catch(() => ({}));
     await typeCommand('flood_waitdelay 10');
-    assert(/^client 1: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(du.line ?? '') && du.log?.includes('userinfo') && du.log?.includes('--------') && du.log?.some((l) => /^hand {16}0$/.test(l))
+    assert(/^client 1: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0" · rate "500000" · skin "male\/grunt"$/.test(du.line ?? '') && du.log?.includes('userinfo') && du.log?.includes('--------') && du.log?.some((l) => /^hand {16}0$/.test(l))
       && du3 === 'Client 3 is not active' && fl?.M === 4 && fl?.W === 20,
       `dumpuser 1 prints this page's userinfo in the scrollback and sums it on the line ("${du.line}"), client 3 is not active ("${du3}"), flood_waitdelay 20 reaches the game row (${JSON.stringify(fl)})`);
     // host_speeds 1 prints a frame's times on the line once a second as Qcommon_Frame did; m_filter reaches the settings
@@ -750,6 +750,13 @@ try {
     await typeCommand('msg 1');
     const mlvBack = await page.evaluate(async () => (await window.quake2.sql('SELECT msglevel FROM player WHERE id = 1'))[0]?.MSGLEVEL).catch(() => null);
     assert(mlv.m === 0 && /· msg "0" ·/.test(mlv.line ?? '') && mlv.row === 0 && mlvBack === 1, `msg reaches the settings, the userinfo and the row (${JSON.stringify(mlv)} → ${mlvBack})`);
+    // the rate and skin userinfos: the figures reach the settings, the userinfo line and the session's userinfo, and the defaults come back
+    await typeCommand('rate 25000'); await typeCommand('skin female/athena'); await typeCommand('userinfo');
+    const rs = await page.evaluate(() => ({ rate: window.quake2.settings.rate, skin: window.quake2.settings.skin, line: document.getElementById('status').textContent, kept: window.quake2.session.userinfo[1] })).catch(() => ({}));
+    await typeCommand('rate 500000'); await typeCommand('skin male/grunt');
+    const rsBack = await page.evaluate(() => ({ rate: window.quake2.settings.rate, skin: window.quake2.settings.skin })).catch(() => ({}));
+    assert(rs.rate === 25000 && rs.skin === 'female/athena' && /· rate "25000" · skin "female\/athena"$/.test(rs.line ?? '') && rs.kept?.rate === 25000 && rs.kept?.skin === 'female/athena' && rsBack.rate === 500000 && rsBack.skin === 'male/grunt',
+      `rate and skin reach the settings, the userinfo line and the session's userinfo (${JSON.stringify({ ...rs, kept: undefined })}) and the defaults come back (${JSON.stringify(rsBack)})`);
     // gun_z and scr_centertime reach the settings (the gun drawn lower, a centre print's seconds) and the defaults come back
     await typeCommand('gun_z 10'); await typeCommand('scr_centertime 1');
     const gun = await page.evaluate(() => ({ z: window.quake2.settings.gunZ, ct: window.quake2.settings.scrCentertime })).catch(() => ({}));
@@ -1254,6 +1261,18 @@ try {
       const ngAfter = await gp.evaluate(() => window.quake2.netgraph.added).catch(() => -1);
       assert(ng.on === true && ng.added > 10 && ng.last?.colour === 0xd0 && ngOff.on === false && ngAfter === ngOff.added,
         `netgraph 1 on the joined page adds a column a frame (${ng.added}, the last a ping column) and netgraph 0 stops it (${ngOff.added} → ${ngAfter})`);
+      // the guest's rate: rate 25000 at its console goes with its userinfo to the host, which holds its frames to it (SV_RateDrop: the
+      // frames of the last second under the bytes a second, the rest held and counted); rate 500000 lets them all go again
+      await typeOn(gp, 'rate 25000');
+      let rt1 = {};
+      for (let i = 0; i < 40 && !(rt1.rate === 25000 && rt1.held > 5); i++) { await sleep(250); rt1 = await page.evaluate(() => ({ rate: window.quake2.net?.guests?.[0]?.host.info?.rate, held: window.quake2.net?.guests?.[0]?.host.heldFrames })).catch(() => ({})); }
+      await typeOn(gp, 'rate 500000');
+      let rt2 = {};
+      for (let i = 0; i < 40 && rt2.rate !== 500000; i++) { await sleep(250); rt2 = await page.evaluate(() => ({ rate: window.quake2.net?.guests?.[0]?.host.info?.rate, held: window.quake2.net?.guests?.[0]?.host.heldFrames })).catch(() => ({})); }
+      await sleep(1500);
+      const rt3 = await page.evaluate(() => ({ held: window.quake2.net?.guests?.[0]?.host.heldFrames, stats: document.getElementById('stats')?.textContent })).catch(() => ({}));
+      assert(rt1.rate === 25000 && rt1.held > 5 && rt2.rate === 500000 && rt3.held === rt2.held && /\d+ held/.test(rt3.stats ?? ''),
+        `rate 25000 at the guest's console reaches the host, which holds its frames to it (${rt1.held} held); rate 500000 lets them go (${rt2.held} → ${rt3.held}), the host's stats line counts them`);
       // the host's save and load with the guest connected: F6 saves the shared game, F9 loads it; the guest's client is
       // kept and the map sent again, so its frames keep coming (as at a level change)
       await page.evaluate(() => document.activeElement?.blur?.()).catch(() => undefined);
@@ -1450,7 +1469,7 @@ try {
         // players at the host's console lists the three clients and what drives each (SV_Status_f)
         await typeOn(page, 'players');
         const plist = await page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
-        assert(/^1 player 1 \(this page\) · 2 player 2 \(guest: \d+ frames sent(, \d+ dropped)?(, ping \d+ ms)?\) · 3 player 3 \(guest: \d+ frames sent(, \d+ dropped)?(, ping \d+ ms)?\)$/.test(plist), `players lists the host's page and the two guests with their frames and pings (${plist})`);
+        assert(/^1 player 1 \(this page\) · 2 player 2 \(guest: \d+ frames sent(, \d+ dropped)?(, \d+ held)?(, ping \d+ ms)?\) · 3 player 3 \(guest: \d+ frames sent(, \d+ dropped)?(, \d+ held)?(, ping \d+ ms)?\)$/.test(plist), `players lists the host's page and the two guests with their frames, the frames held to the first's rate earlier, and pings (${plist})`);
         // kick 3 at the host's console drops the third page (SV_Kick_f): its client stands, the first guest plays on, the
         // third page says why and offers a game of its own, every message line says who was kicked
         await typeOn(page, 'kick 3');
