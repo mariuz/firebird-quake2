@@ -749,6 +749,10 @@ in for a track with no file as one endless track; `cd_nocd 1` plays no music, ar
 (`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived) and `host_speeds` (a frame's
 times on the console's line once a second as `Qcommon_Frame` printed "all, sv, gm, cl, rf": the whole, the server frame outside
 the game, none here where the SQL tic is the game, the game, the client outside the painter, the frame query, and the painter),
+`timeout` and `cl_timeout` (`SV_CheckTimeouts` and `CL_CheckTimeout`: each link notes when it last heard the other, `heardAt`,
+`silentPast` in `src/net.js`; the host drops a guest silent past `timeout` seconds, 125, "<name> timed out" on every message
+line and "Connection timed out" at its page, and a guest leaves a host silent past `cl_timeout`, 120, "Server connection timed
+out.", its page standing for a key as a kicked one does; 0 never, neither archived),
 `m_yaw` (the turn a mouse count, 0.022 as Quake had it, `Input.mouse`'s), `cl_gun` (0: no view weapon, as `CL_AddViewWeapon`
 had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
 `cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed` and `cl_sidespeed` (`CL_AdjustAngles` and `CL_BaseMove`'s

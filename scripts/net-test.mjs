@@ -11,7 +11,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, connectRefusal, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
@@ -101,6 +101,16 @@ check(((await q('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHE
   check(ph.ping === 37, 'a pong against the clock now reads 37 ms');
   pb.send(JSON.stringify({ t: 'pong', at: 'x' })); pb.send(JSON.stringify({ t: 'pong', at: 2000 }));
   check(ph.ping === 0, 'a pong with no clock is ignored, one from the future reads 0');
+  // timeout and cl_timeout (SV_CheckTimeouts, CL_CheckTimeout): each side notes when it last heard the other; silent past the seconds, it is past its time
+  const pg2 = new GuestLink(new Link(pb), { now: () => clock });
+  clock = 5000; pb.send(JSON.stringify({ t: 'cmd', c: [1, 0, 0, 0, 0, 0, 0, 1, 0] }));
+  check(ph.heardAt === 5000 && !silentPast(ph, 125), 'the host notes when the guest was last heard');
+  clock = 5000 + 126 * 1000;
+  check(silentPast(ph, 125) && !silentPast(ph, 0) && !silentPast(ph, 200), 'silent 126 seconds, the guest is past a timeout of 125, not past 0 (never) or 200');
+  clock = 7000; ph.sendPing();
+  check(pg2.heardAt === 7000 && !silentPast(pg2, 120), 'the guest notes when the host was last heard');
+  clock = 7000 + 121 * 1000;
+  check(silentPast(pg2, 120), 'silent 121 seconds, the host is past cl_timeout 120');
   pg.close();
 }
 guest.sendInfo({ name: 'Rimmer, Arnold J.', hand: 1 });

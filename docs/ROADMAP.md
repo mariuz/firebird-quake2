@@ -1019,9 +1019,37 @@ own words with the demo pak. In the order they are to be taken.
   (the frame query) and the painter. `test:input` averages two samples and takes one whole without the switch;
   `test:console` the two cvars and `config.cfg` with `m_filter`; the browser test reads the line and the setting on
   both builds.
-- **`timeout` and `cl_timeout`**: the host drops a guest that sent no command for `timeout` seconds
-  (`SV_CheckTimeouts`, 125, "timed out"), and a guest leaves a host silent for `cl_timeout` seconds (120, "Server
-  connection timed out."), both words at the console.
+- **`timeout` and `cl_timeout`**: done. Each link notes when it last heard the other (`heardAt`, `silentPast` in
+  `src/net.js`): the host drops a guest silent past `timeout` seconds (`SV_CheckTimeouts`, 125: "<name> timed out" on
+  every message line, "Connection timed out" at its page, its client standing as a kicked guest's), and a guest
+  leaves a host silent past `cl_timeout` seconds (`CL_CheckTimeout`, 120: "Server connection timed out.", its page
+  standing for a key as a kicked one does); 0 never, neither archived, both words at the console. `test:net` moves
+  the clock past each and sees the link past its time, not before; `test:console` the two cvars; the browser test
+  has a joined page hear nothing under `cl_timeout 2` and leave with the reason, on both builds.
+
+The fifteenth list: what the menus, the host's console, the chat, the painter and the page's logs still lack of
+Quake 2's own words with the demo pak. In the order they are to be taken.
+
+- **`menu_startserver`**: `M_Menu_StartServer_f` from the multiplayer menu: the map (the pak's, by name), the rules
+  (single player, coop, deathmatch), the time limit, the frag limit, the players and the hostname as fields and
+  spins writing the page's settings, `deathmatch options` and `begin` starting the game as the select does, the word
+  at the console.
+- **`menu_joinserver` and `menu_addressbook`**: `M_Menu_JoinServer_f` as the page's Join in a menu (the code or the
+  offer typed in a field, the relay named), and `M_Menu_AddressBook_f` keeping the last codes and relays in the
+  settings as the address book kept servers, one picked joining.
+- **`dumpuser` and the chat's flood cvars**: `dumpuser <n>` prints a client's userinfo on the scrollback as
+  `SV_DumpUser_f` laid it out (the host's console), and `flood_msgs`, `flood_persecond` and `flood_waitdelay` are
+  `Cmd_Say_f`'s flood protection in `client_say`: more than `flood_msgs` (4) lines in `flood_persecond` (4) seconds
+  and the client "can't talk for N more seconds" (`flood_waitdelay`, 10).
+- **`sw_mipcap`, `sw_mipscale` and `sw_stipplealpha`**: the painter's mip levels as `D_MipLevelForScale` scaled and
+  capped them (the cap 0, the scale 1), and stippled translucency in place of the blend (`sw_stipplealpha 1`: every
+  other pixel, as ref_soft drew water and glass without the alpha map).
+- **`developer` and `logfile`**: the page's warnings (`console.warn`, `Com_DPrintf`'s kind) on the console's
+  scrollback with `developer 1`, and `logfile 1` keeping the scrollback as it grows in the file store, downloaded as
+  `qconsole.log` with `logfile 0` or at the end.
+- **`fixedtime` and `sv_noreload`**: the game's clock stepped a fixed number of milliseconds a frame whatever the wall
+  says (`Qcommon_Frame`'s `fixedtime`, 0 the wall's), and `sv_noreload 1` making a coop level come back to spawn
+  fresh instead of loading what was left in it (`SV_InitGame`'s, the unit's levels kept aside).
 
 ## Playing the demo
 
