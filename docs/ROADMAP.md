@@ -1801,7 +1801,13 @@ picker). Missing for the rest of the game:
   is nine tenths of it. Brush deduplication (`checkcount`) and a cached start node were measured on
   replayed real traces and rejected (ARCHITECTURE.md §10). A player wedged between two steep
   slopes, falling every tic without moving (as pmove would leave it), costs ~11 ms a tic: each of
-  its traces reaches seven leaves.
+  its traces reaches seven leaves. A running monster's think (counted by `call-counts.mjs` now) makes
+  184 `rhc` calls and 47 leaf clips over five traces, so a quarter of its calls only stepped into a leaf.
+  Clipping a leaf child from the parent, without the call, was measured and rejected. All 31 of demo1's
+  monsters were set to chase, alternating two databases over 40 rounds, three runs: a think took 3.06
+  against 2.91 ms, then 2.69 against 2.76, then 2.85 against 2.68. Walking tics took 7.44 against 7.36 ms
+  on demo1 and 10.12 against 10.10 on demo2. All of that is noise. The call itself is cheap; the node
+  fetches and the leaf's brush query are the cost, as the per-level figure above says.
 - **Tests**: the smoke tests cover movement, weapons, doors, items and the console on all three demo
   maps; `test:monsters` every monster's sight, attacks and death; `test:entities` the full game's entities
   that the demo lacks, put into demo1; `test:walkthrough` every trigger the
@@ -1824,4 +1830,9 @@ picker). Missing for the rest of the game:
   supplied COOP/COEP is retired (what is at its URL now unregisters itself; a caching one came later, see
   *Installable and offline* under *Next*). Measured in a headless
   Chromium on demo1, idle: a 5 ms tic and 3 ms of frame queries on both builds, the first frames in
-  5.6 s without threads against 6.5 s with them.
+  5.6 s without threads against 6.5 s with them. 0.14.0 (from 0.8.0) needs no change here: the page names
+  its engine build itself, so 0.9.0's default without threads changes nothing, and nothing here closes a
+  database it opens again. Its query path packs the result rows in binary (`FBR\x01`) in place of JSON.
+  Measured under Node on demo1, three runs of 200 walking tics each: median 6.98, 7.06 and 7.04 ms
+  against 0.8.0's 7.82, 7.82 and 7.56. That is about 8 % off a walking tic. The perf guard's figures sit
+  inside the baseline's band, so the baseline is not recorded again.
