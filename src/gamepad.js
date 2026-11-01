@@ -8,17 +8,23 @@
 // takes a Gamepad object (or anything with `axes` and `buttons`) and the previous read, and returns
 // the command and the buttons that went down since, so the page's tests can drive it with plain objects.
 
-export const DEAD = 0.2;               // a stick's dead zone, of its throw
+export const DEAD = 0.15;              // a stick's dead zone, of its throw (the joy_*threshold cvars' default, as IN_JoyMove had them)
+/**
+ * IN_JoyMove's cvars as the pad reads them: the thresholds (each stick axis's dead zone, of its throw) and the sensitivities (each
+ * axis's speed, with Quake's signs: -1 forward, side and yaw and 1 pitch give the move and the turn as the standard mapping points
+ * them, the side axis taken negated as the Windows joystick's x was; 2 doubles a stick, the other sign turns it).
+ */
+export const JOY = Object.freeze({ forwardThreshold: 0.15, sideThreshold: 0.15, pitchThreshold: 0.15, yawThreshold: 0.15, forwardSensitivity: -1, sideSensitivity: -1, pitchSensitivity: 1, yawSensitivity: -1 });
 export const RUN_AT = 0.9;             // a stick this far out runs (the right stick turns and looks at the keyboard's speeds: input.js's cl_yawspeed and cl_pitchspeed)
 
 // the standard mapping's buttons, by index
 export const BUTTON = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, LS: 10, RS: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 
-/** A stick axis with its dead zone taken out and the rest rescaled to 0..1. */
-export function axis(v) {
+/** A stick axis with its dead zone (`dead`, a joy_*threshold) taken out and the rest rescaled to 0..1. */
+export function axis(v, dead = DEAD) {
   const a = Math.abs(v ?? 0);
-  if (a < DEAD) return 0;
-  return Math.sign(v) * Math.min(1, (a - DEAD) / (1 - DEAD));
+  if (a < dead) return 0;
+  return Math.sign(v) * Math.min(1, (a - dead) / ((1 - dead) || 1));
 }
 
 /** Whether a button is down: pressed, or (a trigger) past half its travel. */
@@ -32,19 +38,23 @@ export function down(pad, i) {
  * Read a pad. `prev` is the last read's `held` (a Set of button indices), so a press is reported once.
  * Returns { fwd, side, turn, look, fire, jump, crouch, run, held, pressed } with turn/look as fractions
  * of full throw (the caller multiplies by the keyboard's speeds a tic, cl_yawspeed and cl_pitchspeed's, and the tics), or null without a pad.
+ * `joy` is the joy_ cvars (JOY's keys; one missing or no number is the default): the sticks' dead zones and speeds, clamped to full throw.
  */
-export function readPad(pad, prev = new Set()) {
+export function readPad(pad, prev = new Set(), joy = JOY) {
   if (!pad || !pad.axes) return null;
   const held = new Set();
   for (let i = 0; i < 16; i++) if (down(pad, i)) held.add(i);
   const pressed = new Set([...held].filter((i) => !prev.has(i)));
-  const lx = axis(pad.axes[0]), ly = axis(pad.axes[1]);
-  const rx = axis(pad.axes[2]), ry = axis(pad.axes[3]);
+  const j = {};
+  for (const k of Object.keys(JOY)) j[k] = Number.isFinite(joy?.[k]) ? joy[k] : JOY[k];
+  const lx = axis(pad.axes[0], j.sideThreshold), ly = axis(pad.axes[1], j.forwardThreshold);
+  const rx = axis(pad.axes[2], j.yawThreshold), ry = axis(pad.axes[3], j.pitchThreshold);
+  const clamp = (v) => Math.max(-1, Math.min(1, v));
   return {
-    fwd: -ly,
-    side: lx,
-    turn: -rx,
-    look: ry,
+    fwd: clamp(ly * j.forwardSensitivity),
+    side: clamp(-lx * j.sideSensitivity),
+    turn: clamp(rx * j.yawSensitivity),
+    look: clamp(ry * j.pitchSensitivity),
     fire: held.has(BUTTON.RT) || held.has(BUTTON.X),
     jump: held.has(BUTTON.A),
     crouch: held.has(BUTTON.B),

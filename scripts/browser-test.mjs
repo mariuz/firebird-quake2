@@ -393,6 +393,13 @@ try {
     assert(ls1.on === true && ls1.kept > 0 && statsDl && statsDl.suggestedFilename() === 'stats.log' && statsLines[0] === 'entities,dlights,parts,frame time' && statsLines.length > 5 && statsLines.slice(1).every((l) => /^\d+,\d+,\d+,\d+$/.test(l))
       && joyOff.s === false && joyOff.i === false && joyOn.s === true && joyOn.i === true && cp0 === '"cl_paused" is "0"' && cp1 === '"cl_paused" is "1"' && cp2 === '"cl_paused" is "0"',
       `log_stats keeps a line a frame as stats.log (${statsLines.length} lines downloaded, the header first; ${JSON.stringify(ls1)}; the first line out of shape: ${JSON.stringify(statsLines.find((l, i) => i > 0 && !/^\d+,\d+,\d+,\d+$/.test(l)) ?? null)}), in_joystick reaches the input (${JSON.stringify(joyOff)} → ${JSON.stringify(joyOn)}), cl_paused follows pause (${cp0}, ${cp1}, ${cp2})`);
+    // the joy_ cvars reach the settings and the input's pad reading (Input.joy), and the defaults come back
+    await typeCommand('joy_yawthreshold 0.5'); await typeCommand('joy_pitchsensitivity -1');
+    const joyc = await page.evaluate(() => ({ t: window.quake2.settings.joyYawthreshold, s: window.quake2.settings.joyPitchsensitivity, it: window.quake2.input.joy?.yawThreshold, is: window.quake2.input.joy?.pitchSensitivity })).catch(() => ({}));
+    await typeCommand('joy_yawthreshold 0.15'); await typeCommand('joy_pitchsensitivity 1');
+    const joycBack = await page.evaluate(() => ({ t: window.quake2.settings.joyYawthreshold, it: window.quake2.input.joy?.yawThreshold, is: window.quake2.input.joy?.pitchSensitivity })).catch(() => ({}));
+    assert(joyc.t === 0.5 && joyc.s === -1 && joyc.it === 0.5 && joyc.is === -1 && joycBack.t === 0.15 && joycBack.it === 0.15 && joycBack.is === 1,
+      `joy_yawthreshold and joy_pitchsensitivity reach the settings and the pad reading (${JSON.stringify(joyc)}) and the defaults come back (${JSON.stringify(joycBack)})`);
     await typeCommand('developer 1');
     await page.evaluate(() => console.warn('dev note', 7)); await sleep(200);
     const devOn = await page.evaluate(() => window.quake2.notify.log(4)).catch(() => []);

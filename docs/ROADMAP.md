@@ -1259,9 +1259,18 @@ with the demo pak. In the order they are to be taken.
   `test:settings` the two; `test:console` shown, set, refused, cvarlist, left out of config.cfg, Tab; the browser test
   reads the frames received and the commands sent at the joined page, the frames held at the host at a rate of 25000
   and the frames missed at the guest, on both builds.
-- **The pad's `joy_*` cvars**: `joy_forwardthreshold`, `joy_sidethreshold`, `joy_upthreshold`, `joy_pitchthreshold`
-  and `joy_yawthreshold` (the sticks' dead zone, 0.15) and `joy_forwardsensitivity`, `joy_sidesensitivity`,
-  `joy_upsensitivity`, `joy_pitchsensitivity` and `joy_yawsensitivity` (the sticks' speeds), as `IN_JoyMove` read them.
+- **The pad's `joy_*` cvars**: done. `joy_forwardthreshold`, `joy_sidethreshold`, `joy_pitchthreshold` and
+  `joy_yawthreshold` are each stick axis's dead zone, of its throw (0.15, as `IN_JoyMove` had them; the one dead zone
+  was 0.2), and `joy_forwardsensitivity`, `joy_sidesensitivity`, `joy_pitchsensitivity` and `joy_yawsensitivity`
+  each axis's speed, with Quake's signs (-1 forward, side and yaw, 1 pitch: the move and the turn as the standard
+  mapping points them, the side axis taken negated as the Windows joystick's x was; 2 doubles a stick, the other
+  sign turns it, the result clamped to full throw). `gamepad.js`'s `JOY` and `readPad`'s third argument, `Input.joy`
+  from the settings on every change; none archived, as Quake's were not; all in the console's list for Tab. There is
+  no up axis (A jumps, B crouches), so `joy_upthreshold` and `joy_upsensitivity` are left out. `test:input` holds a
+  stick inside its threshold still and the pitch past its own looking, a sensitivity scaling and turning each axis,
+  the Input's joy reaching both pads; `test:settings` the eight within their ranges; `test:console` shown, set,
+  refused, cvarlist with them, left out of config.cfg, Tab; the browser test sets a threshold and a sensitivity and
+  reads them on the settings and the input, and the defaults back, on both builds.
 - **`s_mixahead` and `s_testsound`**: the mix's lead (how far ahead of the clock the mixer paints, 0.2 s) and the test
   tone (`S_TransferPaintBuffer`'s sine in place of the mix).
 - **`sw_aliasstats`, `sw_polymodelstats`, `sw_reportsurfout`, `sw_reportedgeout` and `z_stats`**: the painter's

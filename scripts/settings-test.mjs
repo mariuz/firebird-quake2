@@ -91,6 +91,11 @@ check(DEFAULTS.sKhz === 44 && DEFAULTS.clShownet === 0 && DEFAULTS.clShowclamp =
   's_khz, cl_shownet and cl_showclamp come back within their ranges, else the defaults');
 check(DEFAULTS.showpackets === false && DEFAULTS.showdrop === false && loadSettings(store(JSON.stringify({ showpackets: true, showdrop: true }))).showpackets === true && loadSettings(store(JSON.stringify({ showpackets: true, showdrop: true }))).showdrop === true
   && loadSettings(store(JSON.stringify({ showpackets: 1, showdrop: 'x' }))).showpackets === false && loadSettings(store(JSON.stringify({ showdrop: 'x' }))).showdrop === false, 'showpackets and showdrop come back as booleans, anything else off');
+// the joy_ cvars: the thresholds 0 to 0.9 (0.15), the sensitivities -10 to 10 (Quake's signs: -1 forward, side and yaw, 1 pitch)
+check(DEFAULTS.joyForwardthreshold === 0.15 && DEFAULTS.joyYawthreshold === 0.15 && DEFAULTS.joyForwardsensitivity === -1 && DEFAULTS.joySidesensitivity === -1 && DEFAULTS.joyPitchsensitivity === 1 && DEFAULTS.joyYawsensitivity === -1
+  && loadSettings(store(JSON.stringify({ joyYawthreshold: 0.5, joyPitchsensitivity: -2.5 }))).joyYawthreshold === 0.5 && loadSettings(store(JSON.stringify({ joyYawthreshold: 0.5, joyPitchsensitivity: -2.5 }))).joyPitchsensitivity === -2.5
+  && loadSettings(store(JSON.stringify({ joyYawthreshold: 1 }))).joyYawthreshold === 0.15 && loadSettings(store(JSON.stringify({ joySidethreshold: -0.1 }))).joySidethreshold === 0.15 && loadSettings(store(JSON.stringify({ joyForwardsensitivity: 11 }))).joyForwardsensitivity === -1 && loadSettings(store(JSON.stringify({ joyPitchsensitivity: 'x' }))).joyPitchsensitivity === 1,
+  'the joy_ thresholds come back within 0 to 0.9 and the sensitivities within -10 to 10, else the defaults');
 // in_joystick on by default, log_stats off, booleans
 check(DEFAULTS.inJoystick === true && DEFAULTS.logStats === false && loadSettings(store(JSON.stringify({ inJoystick: false, logStats: true }))).inJoystick === false && loadSettings(store(JSON.stringify({ inJoystick: false, logStats: true }))).logStats === true
   && loadSettings(store(JSON.stringify({ inJoystick: 0, logStats: 'yes' }))).inJoystick === true && loadSettings(store(JSON.stringify({ logStats: 'yes' }))).logStats === false, 'in_joystick and log_stats come back as booleans, anything else the default');

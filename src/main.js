@@ -133,6 +133,10 @@ function setStatus(msg, isError = false) {
 // src/input.js holds the keys, the mouse, the touches and the pad between tics and reads them as the usercmd
 const input = new Input({ binds: settings.binds });   // (the keys menu edits settings.binds in place: the Input reads the same object)
 input.joystick = settings.inJoystick !== false;   // (in_joystick from the settings: the pads read, or not)
+/** The joy_ cvars as the pad reads them (IN_JoyMove's thresholds and sensitivities; Input.joy, gamepad.js's JOY keys). */
+const joyFromSettings = (s) => ({ forwardThreshold: s.joyForwardthreshold, sideThreshold: s.joySidethreshold, pitchThreshold: s.joyPitchthreshold, yawThreshold: s.joyYawthreshold,
+  forwardSensitivity: s.joyForwardsensitivity, sideSensitivity: s.joySidesensitivity, pitchSensitivity: s.joyPitchsensitivity, yawSensitivity: s.joyYawsensitivity });
+input.joy = joyFromSettings(settings);
 audio.khz = Number(settings.sKhz) || 44;   // (s_khz from the settings)
 let anyKey = null;      // a picture screen waiting for a key or a click
 // the help computer (F1, or the pad's Back) and the inventory screen (TAB, or the pad's Y), per view: the
@@ -288,6 +292,7 @@ function setSetting(k, v) {
   if (k === 'cdLooptrack') audio.loopTrack = Number(v) || 0;
   if (k === 'cdNocd') audio.setNocd(!!v);
   if (k === 'inJoystick') input.joystick = v !== false;   // (in_joystick: the pads read, or not)
+  if (k.startsWith('joy')) input.joy = joyFromSettings(settings);   // (the joy_ cvars: the sticks' dead zones and speeds)
   if (k === 'sKhz') audio.khz = Number(v) || 44;   // (s_khz: the rate at the next snd_restart)
   if (k === 'sShow') audio.onStart = v ? (name, l, r) => notify.add(`${String(l).padStart(3)} ${String(r).padStart(3)} ${name}`, gameClock(), { show: false }) : null;   // (s_show: each sound started on the scrollback as S_Update printed a channel)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are

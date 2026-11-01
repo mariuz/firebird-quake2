@@ -8,7 +8,7 @@
 // (menus, the console, the F keys) and hands the rest to key(). Nothing here touches the page's
 // state, so a test can drive it with plain calls.
 
-import { readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON } from './gamepad.js';
+import { JOY, readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON } from './gamepad.js';
 
 // default.cfg's keys the browser must not act on itself (scrolling, the menu bar, tabbing away)
 export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
@@ -165,6 +165,7 @@ export class Input {
     this.touch = { move: null, look: null };
     this.pad = { held: new Set(), stick: { x: 0, y: 0 }, last: null };
     this.joystick = true;   // in_joystick: the pads read (IN_Frame's; 0 leaves them unread)
+    this.joy = JOY;         // the joy_ cvars (IN_JoyMove's thresholds and sensitivities), the pads read with them
     this.pads = [];              // the other pads' last reads, by index after the first (the third and fourth players')
     this.menuPressed = false;    // the pad's Start went down at the last read
     this.padScreens = { inventory: false, help: false };   // ... and its Y or Back
@@ -241,7 +242,7 @@ export class Input {
   /** The gamepad, read once a frame: a press counts once. */
   pollPad() {
     if (!this.joystick) { this.pad.last = null; return null; }   // (in_joystick 0: no pad read)
-    const pad = readPad(firstPad(this.getPads()), this.pad.held);
+    const pad = readPad(firstPad(this.getPads()), this.pad.held, this.joy);
     if (pad) this.pad.held = pad.held;
     this.pad.last = pad;
     return pad;
@@ -351,7 +352,7 @@ export class Input {
     if (!this.joystick) return null;
     const p = connectedPads(this.getPads())[index];
     const rec = this.pads[index] ?? (this.pads[index] = { held: new Set(), last: null });
-    const pad = readPad(p ?? null, rec.held);
+    const pad = readPad(p ?? null, rec.held, this.joy);
     if (pad) rec.held = pad.held;
     rec.last = pad;
     return pad;

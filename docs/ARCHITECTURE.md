@@ -788,7 +788,12 @@ music: `cd play <n>` a track once and `cd loop <n>` over and over, whatever `cd_
 from where it was, `Q2Audio.pauseMusic` and `resumeMusic`, `cd off` and `cd on`, `setEnabled`, and `cd info` printing the tracks, what
 plays or is paused and how, and the volume as it did, `musicInfo`), `s_khz` (`S_Init`'s rate: 11 or 22 asks the next `snd_restart`'s context for 11025 or 22050, 44 leaves the browser's own, the default here; archived), `s_show` (`S_Update`'s print of the channels playing, here a line a
 sound started on the scrollback, "left right name" with the volumes 0 to 255, `Q2Audio.onStart`; not archived), `m_filter`
-(`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived), `in_joystick` (`IN_Frame`'s: 0 leaves the pads unread, `Input.joystick`; archived as Quake's was, 1 here where Quake's was 0) and `host_speeds` (a frame's
+(`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived), `in_joystick` (`IN_Frame`'s: 0 leaves the pads unread, `Input.joystick`; archived as Quake's was, 1 here where Quake's was 0), the `joy_*` cvars
+(`IN_JoyMove`'s: `joy_forwardthreshold`, `joy_sidethreshold`, `joy_pitchthreshold` and `joy_yawthreshold` each stick axis's dead zone, of its
+throw, 0.15; `joy_forwardsensitivity`, `joy_sidesensitivity`, `joy_pitchsensitivity` and `joy_yawsensitivity` each axis's speed, with Quake's
+signs, -1 forward, side and yaw and 1 pitch giving the move and the turn as the standard mapping points them, clamped to full throw;
+`gamepad.js`'s `JOY` and `readPad`'s third argument, `Input.joy` from the settings; none archived, as Quake's were not; no up axis, A and B
+being the jump and the crouch, so `joy_upthreshold` and `joy_upsensitivity` have no meaning here and are left out) and `host_speeds` (a frame's
 times on the console's line once a second as `Qcommon_Frame` printed "all, sv, gm, cl, rf": the whole, the server frame outside
 the game, none here where the SQL tic is the game, the game, the client outside the painter, the frame query, and the painter),
 `timeout` and `cl_timeout` (`SV_CheckTimeouts` and `CL_CheckTimeout`: each link notes when it last heard the other, `heardAt`,
