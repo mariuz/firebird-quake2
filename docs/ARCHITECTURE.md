@@ -802,7 +802,8 @@ and its value after, the line summing it: this page's, a guest's from its connec
 `dumpUser`; a joined page is sent to the host, a client not in the game "is not active"); `weapnext` and `weapprev` (`Cmd_WeapNext_f`, `Cmd_WeapPrev_f` as words, the
 impulses 12 and 22), `sv_maplist` (a text on the game row, `setGameString`: the deathmatch rotation `end_dm_level` follows
 through `maplist_next`, the map after the one running in the list, round again from the end, a map not in it going where the
-exit leads) and `sky <name> [rotate] [axis x y z]` (`SCR_Sky_f`: the sky box of the map running changed and spun, `setSky`, this
+exit leads), `sv_noreload` (3.20's: with it a level of the unit come back to spawns fresh, what was left in it unread, as a coop
+game wants its monsters back; `Session.startMap`'s `noreload`, the kept level staying aside; not archived) and `sky <name> [rotate] [axis x y z]` (`SCR_Sky_f`: the sky box of the map running changed and spun, `setSky`, this
 page's alone; one the pak lacks is refused and the one up stays) and `hostname` (the host's name, archived as Quake's was,
 "noname" when empty: the serverinfo's, and the map message carries it so a joined page's stats line names the host),
 `password` and `spectator_password` (the network game's: a guest's info carries its `password`, and the host judges it as
@@ -929,7 +930,9 @@ conversion was off by an ulp for one value in six, and doubles went over as
 The loop: each animation frame computes the tics the wall clock owes (20 Hz; at most two, a stall being
 slow motion rather than a leap; `timescale` at the console scales the clock, as the cvar scaled
 `Qcommon_Frame`'s milliseconds: a tic every `TIC_MS / timescale`, the fraction between tics and a demo's
-clock with it, a guest's clock being the host's), runs `q2_tic` for them, then one `frame_all` per view, splits its rows by
+clock with it, a guest's clock being the host's; `fixedtime` steps the clock a fixed number of milliseconds an animation frame
+whatever the wall says, as `Qcommon_Frame`'s `fixedtime` did, at most two tics' worth kept so past 100 it runs as 100, the
+fraction between tics from what is left, a demo's clock with it; 0 the wall's, neither archived), runs `q2_tic` for them, then one `frame_all` per view, splits its rows by
 kind, plays sounds and effects, and paints; a frame that owes no tic paints again. Every paint goes through
 `src/lerp.js` (`FrameLerp`, one per view, holding the last two tics' frames): the frame shown is the last
 tic's moved toward the current one by the fraction of the tic gone by, as the Quake 2 client drew the

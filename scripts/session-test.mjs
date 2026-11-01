@@ -133,6 +133,23 @@ const health = (await db.query(`SELECT health FROM ents WHERE id = ${marked}`)).
 check(health === 1234, 'a level of the unit comes back as it was left');
 check(session.unitLevels.has('demo2'), 'and the one just left is kept in its turn');
 check((await db.query('SELECT e.health FROM ents e WHERE e.id = (SELECT ent_id FROM player WHERE id = 1)')).rows[0].HEALTH === 37, 'the player comes back to it with its health too');
+// sv_noreload (startMap's noreload): the level come back to spawns fresh, what was left in it unread, the kept level staying aside
+await session.tic(cmd());
+const leave2 = await session.leave('demo2');
+await session.startMap('demo2', { skill: 2, spawnpoint: leave2.spawn });
+// (a level come back to a second time: a level entered by a spawn point puts the player amid its entities, so the fresh ids run
+// past it; the import's moves must clear the whole table, not the kept ids and the players' alone)
+const third = (await db.query('SELECT (SELECT MAX(e.id) FROM ents e) m, (SELECT p.ent_id FROM player p WHERE p.id = 1) pe FROM rdb$database')).rows[0];
+check(session.map.name === 'demo2' && third.PE === third.M, `demo2 comes back a second time, the player's id above every entity's (${third.PE} of ${third.M})`);
+const back2 = await session.leave('demo1');
+await session.startMap('demo1', { skill: 2, spawnpoint: back2.spawn, noreload: true });
+const keptDemo1 = session.unitLevels.get('demo1');
+const keptMarked = keptDemo1.ents.rows.some((r) => r[keptDemo1.ents.cols.indexOf('HEALTH')] === 1234);
+const inMap = (await db.query('SELECT COUNT(*) n FROM ents WHERE health = 1234')).rows[0].N;
+const freshGame = (await db.query('SELECT killed, time_ FROM game')).rows[0];
+check(keptMarked && inMap === 0 && freshGame.KILLED === 0 && freshGame.TIME_ < 0.2 && session.unitLevels.has('demo2'),
+  `with noreload the level spawns fresh: the marked monster is in the kept level alone (${inMap} in the map), the clock (${freshGame.TIME_}) and the kills (${freshGame.KILLED}) at 0, the kept levels staying aside`);
+check((await db.query('SELECT e.health FROM ents e WHERE e.id = (SELECT ent_id FROM player WHERE id = 1)')).rows[0].HEALTH === 37, 'the player still comes with its health');
 
 // a save carries the unit's other levels
 await session.writeSave(SLOT_KEY(5), 'with levels');

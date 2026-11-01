@@ -688,6 +688,19 @@ try {
     const normal = await measure();
     assert(fast.scale === 2 && (fast.fps < 20 ? fast.rate <= 2.6 : fast.rate > 1.3 && fast.rate < 2.6) && slow.scale === 0.5 && slow.rate > 0.3 && slow.rate < 0.7 && normal.scale === 1 && normal.rate > 0.6 && normal.rate < 1.3,
       `timescale 2 runs the clock at ${fast.rate.toFixed(2)}× the wall's (${fast.fps.toFixed(0)} fps), 0.5 at ${slow.rate.toFixed(2)}×, 1 at ${normal.rate.toFixed(2)}×`);
+    // fixedtime 50: the game's clock steps a tic (0.05 s) an animation frame whatever the wall says; 0 the wall's again. sv_noreload
+    // reaches the settings
+    await typeCommand('fixedtime 50'); await sleep(300);
+    const fa = await clock2(); await sleep(2000); const fb = await clock2();
+    const perPaint = (fb.game - fa.game) / Math.max(1, fb.paints - fa.paints);
+    const fixedNow = await page.evaluate(() => window.quake2.fixedtime).catch(() => null);
+    await typeCommand('fixedtime 0'); await sleep(300);
+    const fixedOff = await page.evaluate(() => window.quake2.fixedtime).catch(() => null);
+    await typeCommand('sv_noreload 1');
+    const nr = await page.evaluate(() => window.quake2.settings.svNoreload).catch(() => null);
+    await typeCommand('sv_noreload 0');
+    assert(fixedNow === 50 && fb.paints - fa.paints > 2 && perPaint > 0.045 && perPaint < 0.055 && fixedOff === 0 && nr === true,
+      `fixedtime 50 steps the clock ${perPaint.toFixed(3)} s a painted frame (${fb.paints - fa.paints} frames), 0 is the wall clock again; sv_noreload 1 reaches the settings (${nr})`);
     // bind and unbind at the console: Quake's words over the keys menu's binds, kept in the settings and read by the input
     await typeCommand('bind j +attack');
     const bj = await page.evaluate(() => ({ attack: window.quake2.settings.binds.attack.join(), stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).binds.attack.join(), input: window.quake2.input.bound('KeyJ'), status: document.getElementById('status')?.textContent })).catch(() => ({}));
