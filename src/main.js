@@ -532,6 +532,7 @@ const con = new Console({
   setLogfile: (on) => setLogfile(on),                     // (logfile: the scrollback to qconsole.log in the file store, downloaded with 0)
   setLogStats: (on) => setLogStats(on),                   // (log_stats: a line a frame to stats.log in the file store, downloaded with 0)
   isPaused: () => paused,                                 // (cl_paused: the pause's state)
+  isTimedemo: () => !!demo?.timedemo,                     // (cl_timedemo: a timedemo running)
   dumpLog: (name) => { const lines = notify.log(notify.keep); downloadText(`${name}.txt`, lines.join('\n') + '\n'); return lines.length; },   // (condump: the scrollback as <name>.txt, Con_Dump_f)
   print: (text) => { if (rconOut) rconOut.push(text); notify.add(text, gameClock(), { show: false }); },   // (cmdlist: lines into the scrollback alone; an rcon line's for the guest too)
   // version: the page's version and build (scripts/build.mjs stamps them), the engine package's version, and the engine line (Firebird's version, threads or not)
@@ -991,7 +992,7 @@ async function frame() {
     // that owes none paints the last tic's frame again, moved toward the current one (src/lerp.js)
     // (timescale: a tic every TIC_MS / timescale of the wall's; 0.5 is slow motion, 2 twice the pace; fixedtime: the frame owes
     // fixedtime ms whatever the wall says, at most two tics' worth kept, the fraction between tics from what is left)
-    let owed;
+    let owed, svClamp = null;   // (sv_showclamp: SV_Frame's clamp this frame, said once the frame is known to be this page's own game)
     if (fixedtime > 0) {
       fixedAcc = Math.min(2 * TIC_MS, fixedAcc + fixedtime);
       owed = Math.floor(fixedAcc / TIC_MS);
@@ -1001,12 +1002,14 @@ async function frame() {
       owed = Math.floor((now - lastTic) * timescale / TIC_MS);
       if (owed > 2) {
         if (settings.clShowclamp) notify.add(`high clamp ${Math.round((owed - 2) * TIC_MS / timescale)}`, gameClock(), { show: false });   // (cl_showclamp: the wall ahead of the game, the tics past two dropped, as CL_ParseFrame said of its clock)
+        svClamp = `sv lowclamp ${Math.round((owed - 2) * TIC_MS / timescale)}`;   // (the game behind the wall past its two tics, the rest dropped)
         owed = 2; lastTic = now - 2 * TIC_MS / timescale;
-      }
+      } else if (owed === 2) svClamp = 'sv highclamp';   // (a frame running both its tics: the game catching up at its most)
     }
 
     if (netGuest()) { guestFrame(now); nextFrame(); return; }
     if (demo) { await demoFrame(now); nextFrame(); return; }
+    if (svClamp && settings.svShowclamp) notify.add(svClamp, gameClock(), { show: false });
     if (owed === 0) {
       if (lerps[0].frame && settings.renderer !== 'sql' && !document.hidden && paintDue(now)) { paintFrames(now); overlayMenu(); }   // (the SQL-projecting mode paints a tic's frame as it is; cl_maxfps caps the rest)
       nextFrame();
