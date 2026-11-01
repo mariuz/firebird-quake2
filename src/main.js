@@ -113,6 +113,7 @@ audio.setVolume(settings.sfx / 100);
 audio.setMusicVolume(settings.music / 100);
 audio.musicMode = settings.musicMode;
 audio.loopCount = Number(settings.cdLoopcount) || 4; audio.loopTrack = Number(settings.cdLooptrack) || 0; audio.nocd = !!settings.cdNocd;   // (cd_loopcount, cd_looptrack, cd_nocd)
+if (settings.sShow) audio.onStart = (name, l, r) => notify.add(`${String(l).padStart(3)} ${String(r).padStart(3)} ${name}`, gameClock(), { show: false });   // (s_show from the settings)
 audio.setMusicStore(fileStore);
 for (const ev of ['keydown', 'pointerdown', 'touchstart']) window.addEventListener(ev, () => audio.unlock(), { capture: true });
 document.addEventListener('visibilitychange', () => audio.suspend(document.hidden));
@@ -277,6 +278,7 @@ function setSetting(k, v) {
   if (k === 'cdLoopcount') audio.loopCount = Number(v) || 4;   // (cd_loopcount, cd_looptrack: the music's loop; cd_nocd: none)
   if (k === 'cdLooptrack') audio.loopTrack = Number(v) || 0;
   if (k === 'cdNocd') audio.setNocd(!!v);
+  if (k === 'sShow') audio.onStart = v ? (name, l, r) => notify.add(`${String(l).padStart(3)} ${String(r).padStart(3)} ${name}`, gameClock(), { show: false }) : null;   // (s_show: each sound started on the scrollback as S_Update printed a channel)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
   if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
@@ -384,6 +386,18 @@ const con = new Console({
   playSound: (name) => { if (!pak?.has(`sound/${name}`)) return false; audio.playLocal(name); return true; },
   stopSounds: () => audio.stopAll(),
   soundInfo: () => audio.info(),
+  // the cd word (CD_f): the music played, looped, stopped, paused, resumed, on and off, and its state; the text to say, null for an unknown word
+  cd: (word, n) => {
+    if (word === 'on') { audio.setEnabled(true); return 'cd on'; }
+    if (word === 'off') { audio.setEnabled(false); return 'cd off: no music until cd on'; }
+    if (word === 'info') { const i = audio.musicInfo(); return { tracks: i.tracks, state: i.playing ? `Currently ${i.looping ? 'looping' : 'playing'} track ${i.track}` : i.paused ? `Paused ${i.looping ? 'looping' : 'playing'} track ${i.track}` : null, volume: settings.music / 100, enabled: i.enabled }; }
+    if (settings.musicMode === 'off') return 'cd: the music is off at the Music control';
+    if (word === 'play' || word === 'loop') { if (!Number.isInteger(n) || n < 1 || n > 99) return `cd ${word} <track>: a track number, 1 to 99`; audio.unlock(); audio.playMusic(n, 0, word === 'play' ? 'once' : 'loop'); return `${word === 'play' ? 'playing' : 'looping'} track ${n}`; }
+    if (word === 'stop') { audio.stopMusic(); audio.pausedMusic = null; return 'the music stopped'; }
+    if (word === 'pause') return audio.pauseMusic() ? 'the music paused' : 'cd pause: nothing is playing';
+    if (word === 'resume') return audio.resumeMusic() ? 'the music resumed' : 'cd resume: nothing is paused';
+    return null;
+  },
   // viewpos: the first view's eye and yaw, from the last tic row (a guest's: the host's frame row)
   viewPos: () => (running && last ? { x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW } : null),
   // timerefresh (SCR_TimeRefresh_f): the view spun a full turn in 128 frames, the player's yaw set on its row for each frame's query and

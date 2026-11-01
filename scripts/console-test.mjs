@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp', list: () => ['maps/demo1.bsp', 'maps/demo2.bsp', 'pics/conchars.pcx', 'sound/weapons/blastf1a.wav', 'readme.txt'] },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -381,12 +381,40 @@ await con.submit('cd_loopcount 0'); check(s.cdLoopcount === 2 && status.at(-1)?.
 await con.submit('cd_looptrack 3'); check(s.cdLooptrack === 3 && last() === 'set cdLooptrack 3', 'cd_looptrack 3 is the track after them');
 await con.submit('cd_nocd 1'); check(s.cdNocd === true && last() === 'set cdNocd true', 'cd_nocd 1 plays no music');
 await con.submit('cd_nocd 0'); await con.submit('cd_loopcount 4'); await con.submit('cd_looptrack 11');
+// s_show: a setting as its cvar
+await con.submit('s_show 1'); check(s.sShow === true && last() === 'set sShow true' && status.at(-1)?.[0] === '"s_show" is "1"', 's_show 1 prints the sounds started, through the page');
+await con.submit('s_show 2'); check(s.sShow === true && status.at(-1)?.[0] === 's_show takes 0 or 1' && status.at(-1)?.[1] === true, 's_show 2 is refused');
+await con.submit('s_show 0');
+// the cd word (CD_f): its words through the page, the info laid out on the scrollback and summed on the line, an unknown word refused
+{
+  const asked = [];
+  let info = { tracks: 11, state: 'Currently playing track 9', volume: 0.5, enabled: true };
+  host.cd = (word, n) => { asked.push(`${word}${n == null ? '' : ` ${n}`}`); return word === 'info' ? info : word === 'nosuch' ? null : word === 'play' && n == null ? 'cd play <track>: a track number, 1 to 99' : `${word} done`; };
+  let cdPrinted = null;
+  const printBefore = host.print;
+  host.print = (t) => { cdPrinted = t; };
+  await con.submit('cd');
+  check(asked.length === 0 && status.at(-1)?.[0] === 'cd play|loop <track> · stop · pause · resume · on · off · info' && status.at(-1)?.[1] === true, 'cd alone shows its words');
+  await con.submit('cd play 9'); await con.submit('CD Loop 10'); await con.submit('cd stop'); await con.submit('cd pause'); await con.submit('cd resume'); await con.submit('cd on'); await con.submit('cd off');
+  check(asked.join('|') === 'play 9|loop 10|stop|pause|resume|on|off' && status.at(-1)?.[0] === 'off done' && status.at(-1)?.[1] === false, 'cd play, loop (case aside), stop, pause, resume, on and off reach the page, which says what it did');
+  await con.submit('cd play');
+  check(status.at(-1)?.[0] === 'cd play <track>: a track number, 1 to 99' && status.at(-1)?.[1] === true, 'cd play without a number is told');
+  await con.submit('cd nosuch');
+  check(status.at(-1)?.[0] === 'cd: no "nosuch" (play, loop, stop, pause, resume, on, off, info)' && status.at(-1)?.[1] === true, 'an unknown word is refused');
+  await con.submit('cd info');
+  check(cdPrinted === '11 tracks\nCurrently playing track 9\nVolume is 0.500000' && status.at(-1)?.[0] === '11 tracks · Currently playing track 9 · volume 0.50', 'cd info prints the tracks, what plays and the volume as CD_f did, and sums them on the line');
+  info = { tracks: 11, state: null, volume: 0.5, enabled: false };
+  await con.submit('cd info');
+  check(cdPrinted === '11 tracks\nVolume is 0.500000' && status.at(-1)?.[0] === '11 tracks · the cd is off · volume 0.50', 'off, nothing plays');
+  check(con.complete('cd') === 'cd ' && con.complete('s_s') === 's_show ', 'Tab completes cd and s_show');
+  host.print = printBefore; delete host.cd;
+}
 await con.submit('netgraph'); check(status.at(-1)?.[0] === '"netgraph" is "0"', 'netgraph shows 0 by default');
 await con.submit('netgraph 1'); check(s.netgraph === true && last() === 'set netgraph true' && status.at(-1)?.[0] === '"netgraph" is "1"', 'netgraph 1 turns the graph on through the page');
 await con.submit('netgraph 2'); check(s.netgraph === true && status.at(-1)?.[0] === 'netgraph takes 0 or 1' && status.at(-1)?.[1] === true, 'netgraph 2 is refused');
 await con.submit('netgraph 0'); check(s.netgraph === false, 'netgraph 0 turns it off');
 await con.submit('cvarlist');
-check(/^name "" · hand "2" · gender "male" · msg "1" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · cd_loopcount "4" · cd_looptrack "11" · cd_nocd "0" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · m_filter "0" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · host_speeds "0" · developer "0" · sv_noreload "0" · sw_drawflat "0" · sw_waterwarp "1" · sw_clearcolor "0" · sw_mipcap "0" · sw_mipscale "1" · sw_stipplealpha "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · timeout "125" · cl_timeout "120" · gun_x "0" · gun_y "0" · gun_z "0" · scr_centertime "2.5" · cl_footsteps "1" · scr_showpause "1" · scr_showturtle "0" · cl_maxfps "90" · vid_gamma "1.4" · hostname "" · password "" · spectator_password "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+check(/^name "" · hand "2" · gender "male" · msg "1" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · cd_loopcount "4" · cd_looptrack "11" · cd_nocd "0" · s_show "0" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · m_filter "0" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · host_speeds "0" · developer "0" · sv_noreload "0" · sw_drawflat "0" · sw_waterwarp "1" · sw_clearcolor "0" · sw_mipcap "0" · sw_mipscale "1" · sw_stipplealpha "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · timeout "125" · cl_timeout "120" · gun_x "0" · gun_y "0" · gun_z "0" · scr_centertime "2.5" · cl_footsteps "1" · scr_showpause "1" · scr_showturtle "0" · cl_maxfps "90" · vid_gamma "1.4" · hostname "" · password "" · spectator_password "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
 // hostname (the host's name, at most 32 printable characters), help (Cmd_Help_f) and sv_gravity (the game's gravity)
 await con.submit('hostname'); check(status.at(-1)?.[0] === '"hostname" is ""', 'hostname shows the empty default');
 await con.submit('hostname Hal 9000'); check(s.hostname === 'Hal 9000' && last() === 'set hostname Hal 9000', 'hostname takes a name with spaces');
@@ -595,7 +623,7 @@ await con.submit('lookstrafe 2'); check(s.lookstrafe === true && status.at(-1)?.
 await con.submit('m_forward 2'); check(s.mForward === 2 && last() === 'set mForward 2', 'm_forward 2');
 await con.submit('m_side -1'); check(s.mSide === -1 && last() === 'set mSide -1' && status.at(-1)?.[0] === '"m_side" is "-1"', 'm_side -1');
 await con.submit('m_side x'); check(s.mSide === -1 && status.at(-1)?.[1] === true, 'm_side x is refused');
-Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
+Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
 
 // the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
 {

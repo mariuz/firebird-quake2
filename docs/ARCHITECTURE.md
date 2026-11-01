@@ -753,7 +753,11 @@ surfaces drawn stippled in place of the blend through the alpha map, `stippleKee
 33%, as `R_DrawSpanlet66Stipple` and `R_DrawSpanlet33Stipple` kept them, the parity turned each frame; the models' blend stays, as
 ref_soft's did; archived as Quake's was), `cd_loopcount`, `cd_looptrack` and `cd_nocd` (`CDAudio_Update`'s loop: a map's track plays over again at its end
 until it has played `cd_loopcount` times, 4, then `cd_looptrack`, 11, over and over, `Q2Audio.playMusic`'s `onended`; the drone stands
-in for a track with no file as one endless track; `cd_nocd 1` plays no music, archived as Quake's was), `m_filter`
+in for a track with no file as one endless track; `cd_nocd 1` plays no music, archived as Quake's was), `cd` (`CD_f`'s words over the
+music: `cd play <n>` a track once and `cd loop <n>` over and over, whatever `cd_loopcount` says, `cd stop`, `cd pause` and `cd resume`
+from where it was, `Q2Audio.pauseMusic` and `resumeMusic`, `cd off` and `cd on`, `setEnabled`, and `cd info` printing the tracks, what
+plays or is paused and how, and the volume as it did, `musicInfo`), `s_show` (`S_Update`'s print of the channels playing, here a line a
+sound started on the scrollback, "left right name" with the volumes 0 to 255, `Q2Audio.onStart`; not archived), `m_filter`
 (`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived) and `host_speeds` (a frame's
 times on the console's line once a second as `Qcommon_Frame` printed "all, sv, gm, cl, rf": the whole, the server frame outside
 the game, none here where the SQL tic is the game, the game, the client outside the painter, the frame query, and the painter),

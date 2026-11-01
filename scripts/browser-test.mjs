@@ -550,6 +550,27 @@ try {
     assert(/^\(-?\d+ -?\d+ -?\d+\) : -?\d+$/.test(vpos) && /^\d+\.\d{6} seconds \(\d+\.\d{6} fps\)$/.test(tref) && tAfter > tBefore,
       `viewpos says the eye and the yaw (${vpos}), timerefresh times a full turn (${tref}) and the game goes on (${tBefore} → ${tAfter})`);
     // play plays a pak sound at the ear, soundinfo says the mix's figures (the context exists: the page was clicked), stopsound cuts every sound
+    // s_show 1: a sound started is printed on the scrollback with its volumes; the cd word plays, pauses, resumes and stops the
+    // music (the drone standing in for a track with no file), info on the line, off and on
+    await typeCommand('s_show 1'); await typeCommand('play weapons/blastf1a'); await sleep(300);
+    const sShown = await page.evaluate(() => window.quake2.notify.log(6)).catch(() => []);
+    await typeCommand('s_show 0');
+    await typeCommand('cd play 9'); await sleep(400);
+    const cdPlay = await page.evaluate(() => ({ track: window.quake2.audio.music?.track, how: window.quake2.audio.music?.how, line: document.getElementById('status')?.textContent })).catch(() => ({}));
+    await typeCommand('cd pause'); await sleep(200);
+    const cdPause = await page.evaluate(() => ({ music: window.quake2.audio.music, paused: window.quake2.audio.pausedMusic?.track })).catch(() => ({}));
+    await typeCommand('cd resume'); await sleep(400);
+    const cdResume = await page.evaluate(() => window.quake2.audio.music?.track).catch(() => null);
+    await typeCommand('cd info'); const cdInfo = await status();
+    await typeCommand('cd off'); await sleep(200);
+    const cdOff = await page.evaluate(() => ({ music: window.quake2.audio.music, enabled: window.quake2.audio.enabled })).catch(() => ({}));
+    await typeCommand('cd on'); await sleep(400);
+    const cdOn = await page.evaluate(() => ({ track: window.quake2.audio.music?.track, enabled: window.quake2.audio.enabled })).catch(() => ({}));
+    await typeCommand('cd stop'); await sleep(200);
+    const cdStop = await page.evaluate(() => window.quake2.audio.music).catch(() => 'x');
+    assert(sShown.some((l) => /^\s*\d+\s+\d+ weapons\/blastf1a\.wav$/.test(l)) && cdPlay.track === 9 && cdPlay.how === 'once' && /playing track 9/.test(cdPlay.line ?? '') && cdPause.music === null && cdPause.paused === 9 && cdResume === 9
+      && /^11 tracks · Currently playing track 9 · volume/.test(cdInfo) && cdOff.music === null && cdOff.enabled === false && cdOn.track === 9 && cdOn.enabled === true && cdStop === null,
+      `s_show prints the sound started, cd play 9, pause, resume, info, off, on and stop drive the music (${JSON.stringify({ sShown: sShown.slice(-2), cdPlay, cdPause, cdResume, cdInfo, cdOff, cdOn })})`);
     await typeCommand('play weapons/blastf1a'); const played = await status();
     await typeCommand('soundinfo'); const sinfo = await status();
     await typeCommand('stopsound'); const sstop = await status();

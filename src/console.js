@@ -9,7 +9,7 @@
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_timeout', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'sky', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sw_clearcolor', 'sw_drawflat', 'sw_mipcap', 'sw_mipscale', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_timeout', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_show', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'sky', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sw_clearcolor', 'sw_drawflat', 'sw_mipcap', 'sw_mipscale', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -35,6 +35,8 @@ export const CVARS = {
   cd_loopcount: { key: 'cdLoopcount', show: (v) => String(v), read: (w) => (/^\d{1,2}$/.test(w) && Number(w) >= 1 ? Number(w) : null), help: '1 to 99', archive: false },
   cd_looptrack: { key: 'cdLooptrack', show: (v) => String(v), read: (w) => (/^\d{1,2}$/.test(w) ? Number(w) : null), help: 'a track, 0 to 99', archive: false },
   cd_nocd: { key: 'cdNocd', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1' },
+  // s_show (S_Update's print of the channels playing: here a line a sound started, "left right name"), not archived as Quake's was not
+  s_show: { key: 'sShow', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   // the mouse look cvars (CL_MouseMove, IN_MLookUp): free look (the mouse looks without +mlook held; off, its vertical walks the
   // player, as Quake's default had it; on here, as the mouse always looked), lookspring (+mlook let go levels the view, free look
   // off), lookstrafe (+mlook held, the mouse's horizontal sidesteps), and m_forward and m_side, the walk and the sidestep a count
@@ -155,6 +157,7 @@ const HISTORY = 32;
  *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
  *         toggleHelp() (help: the help computer, F1's), gravity() → the game's gravity, null on a joined page or without a map, setGravity(n) (sv_gravity),
  *         setGameString(col, text) (sv_maplist), setSky(name, rotate, axis) → true, false for a sky the pak lacks, null without a map (sky),
+ *         cd(word, n) → the text to say (play, loop, stop, pause, resume, on, off), the info's { tracks, state, volume, enabled }, null for an unknown word (cd),
  *         gameCvar(col) → the game row's column, null on a joined page or without a map, setGameCvar(col, n) (bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_rollangle, sv_rollspeed, sv_maxvelocity, sv_airaccelerate, g_select_empty, flood_msgs, flood_persecond, flood_waitdelay: GAME_CVARS),
  *         setGameMode({ coop, deathmatch, players }) (deathmatch, coop, maxclients: the next game's, latched; the Players select follows),
  *         execConfig() (exec: the page's file picker, whose file runs through execText),
@@ -342,7 +345,7 @@ export class Console {
         // the kept autoexec.cfg dropped
         say((await h.dropAutoexec?.()) ? 'autoexec.cfg dropped' : 'no autoexec.cfg kept');
         return;
-      case 'name': case 'hand': case 'gender': case 'msg': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume': case 'cd_loopcount': case 'cd_looptrack': case 'cd_nocd':
+      case 'name': case 'hand': case 'gender': case 'msg': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume': case 'cd_loopcount': case 'cd_looptrack': case 'cd_nocd': case 's_show':
       case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'm_filter': case 'netgraph': case 'cl_predict': case 'cl_showmiss': case 'viewsize':
       case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': case 'host_speeds': case 'developer': case 'sv_noreload': case 'sw_drawflat': case 'sw_waterwarp': case 'sw_clearcolor': case 'sw_mipcap': case 'sw_mipscale': case 'sw_stipplealpha':
       case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname': case 'password': case 'spectator_password':
@@ -417,6 +420,20 @@ export class Console {
         const missing = names.filter((n) => !h.playSound?.(n));
         if (missing.length) say(`play: no ${missing.join(', ')} in the pak`, true);
         else say(`playing ${names.join(', ')}`);
+        return;
+      }
+      case 'cd': {
+        // CD_f: the music as the CD player's words had it: play or loop a track by its number, stop, pause, resume, on and off,
+        // and info (the tracks, what plays or is paused and how, the volume) on the scrollback as it printed them
+        const [sub, num] = arg.split(/\s+/);
+        const word = (sub ?? '').toLowerCase();
+        if (!word) { say('cd play|loop <track> · stop · pause · resume · on · off · info', true); return; }
+        const r = h.cd?.(word, num === undefined ? null : Number(num));
+        if (r == null) { say(`cd: no "${word}" (play, loop, stop, pause, resume, on, off, info)`, true); return; }
+        if (typeof r === 'string') { say(r, /^cd /.test(r) && !/^cd o/.test(r)); return; }
+        const lines = [`${r.tracks} tracks`, ...(r.state ? [r.state] : []), `Volume is ${r.volume.toFixed(6)}`];
+        h.print?.(lines.join('\n'));
+        say(`${r.tracks} tracks · ${r.state ?? (r.enabled ? 'nothing playing' : 'the cd is off')} · volume ${r.volume.toFixed(2)}`, false, 8000);
         return;
       }
       case 'stopsound':

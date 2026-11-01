@@ -33,6 +33,9 @@ export class Q2Audio {
     this.musicStore = null;      // src/demostore.js's FileStore: a picked folder's tracks kept as they play, played at the next start
     this.music = null;
     this.track = 0;
+    this.enabled = true;         // the cd word's on and off (CD_f): off, no music until on again
+    this.pausedMusic = null;     // cd pause: { track, plays, how, offset } to resume from
+    this.onStart = null;         // s_show: told each sound started as (name, left, right), the volumes 0 to 255 as S_Update printed the channels
   }
 
   setPak(pak) { this.stopLoops(); this.pak = pak; this.buffers.clear(); }
@@ -135,6 +138,7 @@ export class Q2Audio {
       if (!buf) continue;
       const { gain, pan } = this.spatialize(x, y, z, attn);
       if (gain <= 0) continue;
+      if (this.onStart) { const v = Math.min(255, Math.round(gain * vol * 255)); this.onStart(name, Math.round(v * (1 - Math.max(0, pan))), Math.round(v * (1 + Math.min(0, pan)))); }
       const key = `${ent}:${chan}`;
       if (ent != null && chan !== 0) {
         const old = this.channels.get(key);
@@ -262,14 +266,19 @@ export class Q2Audio {
     if (this.track && this.ctx) { this.stopMusic(); this.playMusic(this.track); }
   }
 
-  /** Start the CD track of the map (worldspawn "sounds"); `plays` how many times it has played already (the loop's count). */
-  async playMusic(track, plays = 0) {
+  /**
+   * Start the CD track of the map (worldspawn "sounds"); `plays` how many times it has played already (the loop's count).
+   * `how` is the cd word's: 'once' (cd play: the track once, then nothing), 'loop' (cd loop: over and over), else the map's
+   * rule (cd_loopcount times, then the loop track); `offset` seconds into the track (cd resume).
+   */
+  async playMusic(track, plays = 0, how = null, offset = 0) {
     this.track = track;
-    if (!this.ctx || this.musicMode === 'off' || this.nocd || !track) { this.stopMusic(); return; }
-    if (this.music && this.music.track === track) return;
+    this.pausedMusic = null;
+    if (!this.ctx || this.musicMode === 'off' || this.nocd || !this.enabled || !track) { this.stopMusic(); return; }
+    if (this.music && this.music.track === track) { this.music.how = how; return; }
     this.stopMusic();
     const name = `track${String(track).padStart(2, '0')}`;
-    const token = { track, plays };
+    const token = { track, plays, how };
     this.music = token;
     let buf = null;
     if (this.musicMode === 'tracks') {
@@ -299,11 +308,14 @@ export class Q2Audio {
         if (this.music !== token) return;
         const n = token.plays + 1;
         this.music = null;
+        if (token.how === 'once') return;   // (cd play: once, then nothing)
+        if (token.how === 'loop') { this.playMusic(track, n, 'loop'); return; }   // (cd loop: over and over)
         this.playMusic(n >= this.loopCount ? this.loopTrack : track, n);
       };
       src.connect(this.musicGain);
-      src.start();
+      src.start(0, offset);
       token.src = src;
+      token.startedAt = this.ctx.currentTime - offset;
       token.kind = 'track';
     } else if (this.musicMode !== 'off') {
       token.kind = 'synth';
@@ -323,6 +335,37 @@ export class Q2Audio {
     try { this.music.src?.stop(); } catch { /* ended */ }
     this.music.stop?.();
     this.music = null;
+  }
+
+  /** cd pause: the music stopped where it is, to resume from there; false with none playing. */
+  pauseMusic() {
+    const m = this.music;
+    if (!m) return false;
+    this.pausedMusic = { track: m.track, plays: m.plays, how: m.how, offset: m.kind === 'track' && this.ctx ? Math.max(0, this.ctx.currentTime - m.startedAt) : 0 };
+    this.stopMusic();
+    return true;
+  }
+
+  /** cd resume: the paused music from where it was; false with none paused. */
+  resumeMusic() {
+    const p = this.pausedMusic;
+    if (!p) return false;
+    this.pausedMusic = null;
+    this.playMusic(p.track, p.plays, p.how, p.offset);
+    return true;
+  }
+
+  /** cd on and cd off (CD_f's enabled): off stops the music and plays none; on plays the track again. */
+  setEnabled(on) {
+    this.enabled = !!on;
+    if (!this.enabled) { this.stopMusic(); this.pausedMusic = null; }
+    else if (this.track && this.ctx) this.playMusic(this.track);
+  }
+
+  /** cd info: the tracks the page can play (a picked folder's, else the CD's eleven), what plays or is paused, and how. */
+  musicInfo() {
+    const m = this.music, p = this.pausedMusic;
+    return { tracks: this.musicFiles.size || 11, track: m?.track ?? p?.track ?? 0, playing: !!m, paused: !m && !!p, looping: (m ?? p)?.how === 'loop', enabled: this.enabled };
   }
 
   /** An industrial drone when no track file is available: a low pulse, a filtered saw pad and machine noise. */
