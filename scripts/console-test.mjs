@@ -675,6 +675,22 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   delete host.setCvar;
 }
 
+// quit, killserver, vid_restart and snd_restart through the page, each refused before it can be done
+{
+  const done = [];
+  let ready = false;
+  host.quit = () => ready && (done.push('quit'), true); host.killServer = () => ready && (done.push('kill'), true);
+  host.vidRestart = () => ready && (done.push('vid'), true); host.sndRestart = () => ready && (done.push('snd'), true);
+  await con.submit('quit'); check(done.length === 0 && status.at(-1)?.[0] === 'quit: no pak is loaded yet' && status.at(-1)?.[1] === true, 'quit before the pak says so');
+  await con.submit('vid_restart'); check(status.at(-1)?.[0] === 'vid_restart: no painter yet (a pak must be loaded)' && status.at(-1)?.[1] === true, 'vid_restart without a painter says so');
+  await con.submit('snd_restart'); check(status.at(-1)?.[0] === 'snd_restart: sound system not started (a click or a key makes it)' && status.at(-1)?.[1] === true, 'snd_restart before the mixer says so');
+  ready = true;
+  await con.submit('quit'); await con.submit('killserver'); await con.submit('vid_restart'); await con.submit('snd_restart');
+  check(done.join() === 'quit,kill,vid,snd' && status.at(-4)?.[0] === 'the game ends: the attract loop' && status.at(-3)?.[0] === 'Server was killed' && status.at(-2)?.[0] === 'vid_restart: the painter made again' && status.at(-1)?.[0] === 'snd_restart: sound system restarted',
+    'quit ends the game, killserver kills the server, vid_restart and snd_restart remake the painter and the mixer, each saying so');
+  check(con.complete('qu') === 'quit ' && con.complete('kills') === 'killserver ' && con.complete('vid_r') === 'vid_restart ' && con.complete('snd') === 'snd_restart ', 'Tab completes the four');
+  delete host.quit; delete host.killServer; delete host.vidRestart; delete host.sndRestart;
+}
 // messagemode and messagemode2: the chat prompt through the page (team for the second), refused without a game
 {
   let prompts = [], up = true;

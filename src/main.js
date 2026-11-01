@@ -503,6 +503,10 @@ const con = new Console({
   listPlayers: () => listPlayers(),                      // (players: the game's clients and what drives each; 'guest' on a joined page, null without a game)
   connect: (text) => connectTo(text),                    // (connect <code or offer>: Join with it, as the box and Answer would)
   disconnect: () => disconnect(),                        // (disconnect: Leave; true when this page was in a shared game)
+  quit: () => { if (!res) return false; quitGame(); return true; },                 // (quit: Com_Quit's, the quit menu's yes: the game ends for the attract loop)
+  killServer: () => { if (!res) return false; disconnect(); quitGame(); return true; },   // (killserver: SV_KillServer_f: a hosted game's guests dropped, the game ended)
+  vidRestart: () => vidRestart(),                        // (vid_restart: the painter made anew from the settings)
+  sndRestart: () => audio.restart(),                     // (snd_restart: the mixer made anew, the sounds decoded again as they play)
   reconnect: () => (lastConnect ? connectTo(lastConnect) : false),   // (reconnect: Join again with what this page last joined with)
   lastConnect: () => lastConnect,
   // M_Init's menu_* commands: the menu opens over the view as the key or the menu's item would open it
@@ -1970,6 +1974,30 @@ async function openDatabase() {
   return instance;
 }
 
+/** The painter made from the pak and the settings (R_Init); vid_restart makes it again, the map's sky and the view's rectangle put back. */
+function makeRenderer() {
+  const cm = loadColormap(pak);
+  renderer = new Renderer(canvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
+  renderer.fullbright = !!settings.rFullbright;   // (r_fullbright as the settings have it)
+  renderer.drawflat = !!settings.swDrawflat; renderer.clearColor = Number(settings.swClearcolor) || 0;   // (sw_drawflat, sw_clearcolor)
+  renderer.mipcap = Number(settings.swMipcap) || 0; renderer.mipscale = Number(settings.swMipscale); renderer.stipplealpha = !!settings.swStipplealpha;   // (sw_mipcap, sw_mipscale, sw_stipplealpha)
+  renderer.setSize(viewWidth(), viewHeight());
+  renderer.lightScale = settings.brightness;
+}
+/** VID_Restart_f: the painter made anew from the settings, the sky, its spin, the backtile and the view's rectangle as they were. True once remade. */
+function vidRestart() {
+  if (!renderer || !pak) return false;
+  const old = renderer;
+  makeRenderer();
+  if (res) renderer.setResources(res);   // (the map's geometry, as mapLoaded gives it)
+  if (old.skyName) renderer.setSky(old.skyName);
+  renderer.skyRotate = old.skyRotate; renderer.skyAxis = old.skyAxis;
+  renderer.backtile = hud?.backtile ?? null;
+  renderer.setSize(old.screenW ?? viewWidth(), old.screenH ?? viewHeight(), old.views ?? 1);
+  renderer.setViewSize(settings.viewsize);
+  for (const L of lerps) { L.prev = null; L.cur = null; }   // (the frames held were the old painter's)
+  return true;
+}
 async function usePak(buffer, label) {
   running = false;
   pak = new Pak(buffer);
@@ -1978,13 +2006,7 @@ async function usePak(buffer, label) {
   setStatus(`Copying ${label} models into Firebird…`);
   res = await loadResources(db, pak, { width: viewWidth(), height: viewHeight(), fov: settings.fov });
   session.use(pak, res);
-  const cm = loadColormap(pak);
-  renderer = new Renderer(canvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
-  renderer.fullbright = !!settings.rFullbright;   // (r_fullbright as the settings have it)
-  renderer.drawflat = !!settings.swDrawflat; renderer.clearColor = Number(settings.swClearcolor) || 0;   // (sw_drawflat, sw_clearcolor)
-  renderer.mipcap = Number(settings.swMipcap) || 0; renderer.mipscale = Number(settings.swMipscale); renderer.stipplealpha = !!settings.swStipplealpha;   // (sw_mipcap, sw_mipscale, sw_stipplealpha)
-  renderer.setSize(viewWidth(), viewHeight());
-  renderer.lightScale = settings.brightness;
+  makeRenderer();
   hud = new Hud(pak);
   audio.setPak(pak);
   $('map').innerHTML = maps.map((m) => `<option>${m}</option>`).join('');

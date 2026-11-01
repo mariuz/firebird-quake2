@@ -231,6 +231,15 @@ await audio.playMusic(10); await settle();
 check(audio.music === null, '... and plays none');
 audio.setEnabled(true); await settle();
 check(audio.music?.track === 10, 'cd on plays the track again');
+// snd_restart (restart): the context closed and made anew, the sounds forgotten, the music back
+{
+  const before = audio.ctx;
+  await audio.playEvents([[0, 0, 7, 1, 'weapons/blastf1a.wav', 1, 0, null, null, null]], audio.listener);
+  const hadBuffers = audio.buffers.size > 0;
+  const restarted = audio.restart();
+  await settle();
+  check(restarted && audio.ctx && audio.ctx !== before && hadBuffers && audio.buffers.size === 0 && audio.music?.track === 10, `restart makes a new context (${audio.ctx !== before}), forgets the ${hadBuffers ? 'decoded' : 'no'} sounds and plays the track again (${audio.music?.track})`);
+}
 // s_show: each sound started told with its volumes
 {
   const shown = [];

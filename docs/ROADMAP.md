@@ -1155,10 +1155,38 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   height with a shift; `test:settings` the five within their ranges; `test:console` shown, set, refused and Tab; the
   browser test sees a column added a painted frame under `timegraph 1` and the layout cvars in the settings and back,
   on both builds.
-- **`quit`, `killserver`, `vid_restart` and `snd_restart`**: `quit` ending the game as the quit menu's yes does
-  (`Com_Quit`), `killserver` stopping the game for the attract loop (`SV_KillServer_f`), `vid_restart` making the
-  painter again from the settings (`VID_Restart_f`) and `snd_restart` the mixer (`CL_Snd_Restart_f`), the sounds
-  loaded again.
+- **`quit`, `killserver`, `vid_restart` and `snd_restart`**: done. `quit` ends the game for the attract loop as the quit
+  menu's yes does (`Com_Quit`; the page stays), `killserver` drops a hosted game's guests first and does the same
+  (`SV_KillServer_f`, "Server was killed"), `vid_restart` makes the painter anew from the settings (`VID_Restart_f`:
+  `makeRenderer`, shared with the pak's load; the map's geometry given again, its sky, its spin, the backtile and the
+  view's rectangle put back, the held frames dropped) and `snd_restart` the mixer (`CL_Snd_Restart_f`: `Q2Audio.restart` closes the context and
+  makes it anew, the decoded sounds forgotten and decoded again as they play, the music played again). `test:audio`
+  restarts the mixer and sees a new context, no sounds decoded and the track back; `test:console` the four through the
+  page, each refused before it can be done, Tab; the browser test remakes the painter (another object, the sky and the
+  size kept, the game painting on) and the mixer (another context), and kills the server for the attract loop and
+  brings a game back with `map`, on both builds.
+
+The seventeenth list: what the video menu's cvars, the level words, the mixer, the pad, the painter's switches and
+the userinfo still lack of Quake 2's own words with the demo pak. In the order they are to be taken.
+
+- **`vid_mode` and `vid_ref`**: the video menu's cvars at the console (`VID_MenuInit`'s: `vid_mode` the mode as the
+  Detail select has it, `vid_ref` the driver as the renderer mode, `soft` the face picker and `sql` the projector),
+  `vid_restart` following as the menu's apply did.
+- **`gamemap` and `nextserver`**: `SV_GameMap_f` as the level change with the one running kept aside (an ordinary
+  exit's way, `*` wiping the unit), and the `+` chain of `SV_Map` (`map intro.cin+demo1`: the cinematic, then the
+  map, `nextserver` holding what follows and read back with `nextserver` at the console).
+- **`in_joystick`, `cl_paused` and `log_stats`**: the pad on or off (`in_joystick`, `IN_Frame`'s), `cl_paused` showing
+  the pause as `CL_Frame` set it, and `log_stats 1` writing a line a frame ("entities, dlights, parts, frames") to
+  `stats.log` in the file store as `logfile` writes the console, downloaded with 0.
+- **`s_khz`, `cl_shownet` and `cl_showclamp`**: the mixer's rate at the next `snd_restart` (`s_khz` 11, 22 or 44:
+  the context made at it), a joined page's messages' kinds and sizes printed as `CL_ParseServerMessage` printed them
+  under `cl_shownet`, and the clock's clamps under `cl_showclamp` ("high clamp", "low clamp") as `CL_ParseFrame` said.
+- **`r_lockpvs` and `r_dspeeds`**: ref_soft's `r_lockpvs` (the view's PVS kept where it was locked, the leaves marked
+  from there as the eye moves on, `R_MarkLeaves`'s `r_viewcluster` held) and `r_dspeeds` (the painter's times a frame
+  in detail on the line, as `R_RenderFrame` printed "ms"s under it).
+- **`rate` and `skin` userinfos**: `rate` the bytes a second a joined page asks for, the host holding its frames to it
+  as `SV_RateDrop` held packets, in the userinfo and at the console (25000); `skin` kept and sent with the userinfo as
+  `ClientUserinfoChanged` took it, shown by `userinfo` and `dumpuser`, the model and skin waiting on a pak that has them.
 
 ## Playing the demo
 

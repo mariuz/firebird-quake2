@@ -724,7 +724,11 @@ page's file store a second after a line and at the page's end, so a reload's run
 drops it, `setLogfile`; Quake left it in the game directory), `echo` (`Cmd_Echo_f`: its words
 printed as typed), `cmdlist` (`Cmd_List_f`: every command on a line of the scrollback, the page's `print`, and how
 many), `version` (the page's version and build, which `scripts/build.mjs` stamps into the bundle, the engine
-package's version and the engine line: Firebird's version, threads or not), `path` (`FS_Path_f`: the pak in use, its files
+package's version and the engine line: Firebird's version, threads or not), `quit` (`Com_Quit`: the game ends for the attract loop,
+as the quit menu's yes does; the page stays), `killserver` (`SV_KillServer_f`: a hosted game's guests dropped, then the same,
+"Server was killed"), `vid_restart` (`VID_Restart_f`: the painter made anew from the settings, `makeRenderer`, the map's geometry given
+again, its sky, its spin, the backtile and the view's rectangle put back) and `snd_restart` (`CL_Snd_Restart_f`: the mixer's context closed and made
+anew, `Q2Audio.restart`, the decoded sounds forgotten and decoded again as they play, the music played again), `path` (`FS_Path_f`: the pak in use, its files
 counted and where it came from, `pakInfo`), `dir <wildcard>` (`FS_Dir_f`: the pak's files the wildcard names, `*.*` without one,
 `*` and `?` within a directory as the file system's glob had them, `dirList`; on the scrollback by their names under "Directory
 of"), `modellist`, `imagelist` and `soundlist` (`Mod_Modellist_f`, `R_ImageList_f`, `S_SoundList_f`: the models with their size in

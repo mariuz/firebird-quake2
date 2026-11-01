@@ -533,6 +533,18 @@ try {
     assert(withTests?.dlights >= 32 && withTests.ents >= 32 && withTests.particles >= 4096 && withTests.tint?.join() === '255,128,64,0.5'
       && without?.dlights === 0 && without.ents === 0 && without.particles === 0 && without.tint === null && plain?.dlights < 32 && plain.ents < 32 && plain.particles < 4096,
       `the cl_test cvars add their rings and blend to a frame (${JSON.stringify(withTests)}), the cl_add switches at 0 leave everything out (${JSON.stringify(without)}), back as it was (${JSON.stringify(plain)})`);
+    // vid_restart makes the painter anew (another object, the sky and the view kept, the game painting on); snd_restart the mixer
+    // (another context, the decoded sounds forgotten, the music back)
+    const painterBefore = await page.evaluate(() => ({ r: window.quake2.renderer, sky: window.quake2.renderer.skyName, w: window.quake2.renderer.screenW, paints: window.quake2.paints })).then((x) => x).catch(() => ({}));
+    const sameRenderer = await page.evaluate(() => { window.__r0 = window.quake2.renderer; return true; }).catch(() => false);
+    await typeCommand('vid_restart'); await sleep(700);
+    const painterAfter = await page.evaluate(() => ({ same: window.quake2.renderer === window.__r0, sky: window.quake2.renderer.skyName, w: window.quake2.renderer.screenW, paints: window.quake2.paints, line: document.getElementById('status')?.textContent })).catch(() => ({}));
+    await page.evaluate(() => { window.__c0 = window.quake2.audio.ctx; }).catch(() => undefined);
+    await typeCommand('snd_restart'); await sleep(500);
+    const mixer = await page.evaluate(() => ({ same: window.quake2.audio.ctx === window.__c0, up: !!window.quake2.audio.ctx, music: !!window.quake2.audio.music, line: document.getElementById('status')?.textContent })).catch(() => ({}));
+    assert(sameRenderer && painterAfter.same === false && painterAfter.sky === painterBefore.sky && painterAfter.w === painterBefore.w && painterAfter.paints > painterBefore.paints && /painter made again/.test(painterAfter.line ?? '')
+      && mixer.same === false && mixer.up && /sound system restarted/.test(mixer.line ?? ''),
+      `vid_restart remakes the painter with the sky and the size kept and the game painting on (${JSON.stringify(painterAfter)}), snd_restart remakes the mixer (${JSON.stringify(mixer)})`);
     // timegraph 1 adds a frame's time as a column each painted frame (colour 0, cls.frametime × 300); debuggraph, graphheight,
     // graphscale and graphshift reach the settings, and back
     await typeCommand('timegraph 1'); await sleep(300);
@@ -559,6 +571,18 @@ try {
     const threeBack = await page.evaluate(() => ({ yaw: window.quake2.settings.mYaw, gun: window.quake2.settings.clGun, seconds: window.quake2.notify.seconds })).catch(() => ({}));
     assert(three.yaw === 0.044 && three.gun === false && three.notify === 1 && three.seconds === 1 && threeBack.yaw === 0.022 && threeBack.gun === true && threeBack.seconds === 3,
       `m_yaw, cl_gun and con_notifytime reach the settings, the last the notify's seconds (${JSON.stringify(three)} → ${JSON.stringify(threeBack)})`);
+    // killserver ends the game for the attract loop (SV_KillServer_f), as quit does; a map brings a game back
+    // (a key during the attract loop brings the menu up, not the console: the Map select starts the game again)
+    await typeCommand('killserver');
+    let killed = {};
+    for (let i = 0; i < 80 && !killed.demo; i++) { await sleep(250); killed = await page.evaluate(() => ({ demo: !!window.quake2.demo, map: window.quake2.session?.map?.name ?? null })).catch(() => ({})); }
+    await page.selectOption('#map', 'demo1');
+    for (let i = 0; i < 240 && !(await page.evaluate(() => window.quake2.running && !window.quake2.demo).catch(() => false)); i++) await sleep(250);
+    for (let i = 0; i < 240 && !/q2_tic \d+ ms/.test(await stats()); i++) await sleep(250);
+    const backAgain = await page.evaluate(() => ({ running: window.quake2.running, demo: !!window.quake2.demo })).catch(() => ({}));
+    await typeCommand('give all');   // (the new game's inventory as the checks below expect it)
+    assert(killed.demo === true && backAgain.running === true && backAgain.demo === false,
+      `killserver ends the game for the attract loop (${JSON.stringify(killed)}), the Map select brings a game back (${JSON.stringify(backAgain)})`);
     // the keys' speeds (cl_yawspeed, cl_forwardspeed) reach the settings and the defaults come back
     await typeCommand('cl_yawspeed 280'); await typeCommand('cl_forwardspeed 100');
     const spd = await page.evaluate(() => ({ yaw: window.quake2.settings.clYawspeed, fwd: window.quake2.settings.clForwardspeed })).catch(() => ({}));

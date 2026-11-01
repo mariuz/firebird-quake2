@@ -56,6 +56,22 @@ export class Q2Audio {
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
 
+  /**
+   * CL_Snd_Restart_f (S_Shutdown, S_Init, the sounds registered again): the context closed and made anew, the decoded sounds
+   * forgotten (decoded again as they play), the music played again. True once a context is up again (none before the first
+   * click or key: the restart waits for it like the first start).
+   */
+  restart() {
+    this.stopAll();
+    const old = this.ctx;
+    this.ctx = null; this.master = null; this.musicGain = null;
+    this.buffers.clear();
+    this.music = null; this.pausedMusic = null;
+    try { old?.close?.()?.catch?.(() => {}); } catch { /* closed already */ }
+    this.unlock();
+    return !!this.ctx;
+  }
+
   suspend(hidden) {
     if (!this.ctx) return;
     if (hidden) this.silenceLoops();
