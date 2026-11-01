@@ -17,7 +17,9 @@ const assert = (ok, msg) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${msg}`); if 
 
 // a host that records what the menus ask for, and a renderer that records what they draw
 const calls = [];
-const settings = { sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, crosshair: 1, renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false, binds: defaultBinds(), name: '', hand: 0 };
+const settings = { sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, crosshair: 1, renderer: 'fast', detail: 'high', brightness: 1.4, fullscreen: false, binds: defaultBinds(), name: '', hand: 0,
+  map: 'demo2', timelimit: 0, fraglimit: 0, hostname: '' };
+const mode = { coop: false, deathmatch: false, players: 2 };   // the start server menu's rules and max players (the page's latched mode)
 const slots = Array.from({ length: 15 }, (_, i) => (i === 0 ? { valid: true, name: 'ENTERING Outer Base' } : i === 3 ? { valid: true, name: ' 9:05 10/ 8  Outer Base' } : { valid: false }));
 const cache = new Map();
 const hud = { conchars: pic(pak, 'conchars'), pic: (n) => (cache.has(n) ? cache.get(n) : (cache.set(n, pic(pak, n)), cache.get(n))) };
@@ -29,6 +31,11 @@ const host = {
   bind: (a, code) => bindKey(settings.binds, a, code), unbind: (a) => { settings.binds[a] = []; }, credits: () => CREDITS,
   console: () => calls.push('console'), quit: () => calls.push('quit'), sound: (n) => calls.push(`sound ${n}`),
   netHost: () => calls.push('net host'), netJoin: () => calls.push('net join'),
+  // the start server menu's: the pak's maps, the mode latched (the page's setGameMode clamps the players to two to four), begin
+  maps: () => ['demo1', 'demo2', 'demo3'],
+  gameMode: () => ({ ...mode }),
+  setGameMode: ({ coop, deathmatch, players }) => { mode.coop = !!coop; mode.deathmatch = !!deathmatch; mode.players = Math.max(2, Math.min(4, Number(players) || 2)); calls.push(`mode ${mode.coop ? 1 : 0}${mode.deathmatch ? 1 : 0}${mode.players}`); },
+  startServer: (name) => calls.push(`start ${name}`),
 };
 const drawn = [];
 const r = {
@@ -211,6 +218,43 @@ draw();
 assert(drawn.some(([k, p]) => k === 'pic' && p === hud.pic('m_banner_multiplayer')), 'under the multiplayer banner');
 keys('Escape');
 assert(menu.current.id === 'multiplayer', 'Escape goes back to the multiplayer menu');
+// the start server menu (M_Menu_StartServer_f): the multiplayer menu's fifth row; the pak's maps on the initial map spin, the
+// rules spin latching the page's mode (the game not started), the limits as numbers-only fields writing the settings as typed,
+// the max players two to four, the hostname, the deathmatch flags greyed outside a deathmatch, begin starting the map chosen
+Object.assign(settings, { map: 'demo2', timelimit: 0, fraglimit: 0, hostname: '' }); Object.assign(mode, { coop: false, deathmatch: false, players: 2 });
+menu.mainCursor = 1; menu.main(); keys('Enter');
+assert(keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter') === 'startserver' && menu.current.items.length === 8 && menu.current.items[0].items.join() === 'demo1,demo2,demo3' && menu.current.items[0].get() === 1,
+  'the multiplayer menu\'s start server opens with the pak\'s maps on the initial map spin, the settings\' map chosen');
+draw();
+assert(drawn.some(([k, p]) => k === 'pic' && p === hud.pic('m_banner_start_server')) && drawn.some(([k, s]) => k === 'str' && s === '0 = no limit') === false, 'under the start server banner');
+keys('ArrowRight');
+assert(menu.current.items[0].get() === 2 && settings.map === 'demo2', 'right turns the initial map to the next, the setting untouched until begin');
+keys('ArrowDown');
+assert(menu.current.items[1].name === 'rules' && menu.current.items[1].get() === 0 && menu.current.items[6].grayed === true && menu.current.items[4].get() === '1',
+  'rules says single player, max players one, the deathmatch flags greyed');
+keys('ArrowRight');
+assert(mode.coop === true && mode.deathmatch === false && calls.at(-2) === 'mode 102' && menu.current.items[6].grayed === true && menu.current.items[4].get() === '2',
+  `cooperative latches the mode for the next game, two players, the flags still greyed (${calls.at(-2)})`);
+keys('ArrowRight', 'ArrowRight');
+assert(mode.deathmatch === true && menu.current.items[1].get() === 2 && menu.current.items[6].grayed === false, 'deathmatch, no further, and the flags come live');
+keys('ArrowDown');
+draw();
+assert(menu.current.items[2].numbers === true && drawn.some(([k, s]) => k === 'str' && s === '0 = no limit'), 'the time limit field is numbers only, its status bar says 0 = no limit');
+keys('Backspace'); type('5x0');
+assert(settings.timelimit === 50 && menu.current.items[2].get() === '50', `Backspace clears the 0, 5 and 0 typed make 50 (the x ignored), the setting written as typed (${settings.timelimit})`);
+keys('ArrowDown', 'Backspace'); type('20');
+assert(settings.fraglimit === 20, `the frag limit the same (${settings.fraglimit})`);
+keys('ArrowDown', 'Backspace'); type('3');
+assert(mode.players === 3 && calls.at(-1) === 'mode 113', `max players 3 latches three players (${calls.at(-1)})`);
+type('9');
+assert(mode.players === 3 && menu.current.items[4].get() === '39', 'a number past four shows and latches nothing');
+keys('ArrowDown'); type('Hal');
+assert(settings.hostname === 'Hal', `the hostname typed is the setting (${JSON.stringify(settings.hostname)})`);
+keys('ArrowDown');
+assert(keys('Enter') === 'dmoptions' && keys('Escape') === 'startserver', 'Enter on deathmatch flags opens the deathmatch options, Escape comes back');
+keys('ArrowDown', 'Enter');
+assert(calls.at(-2) === 'start demo3' && !menu.active, `begin starts the map chosen, the menu gone (${calls.at(-2)})`);
+Object.assign(settings, { map: 'demo2', timelimit: 0, fraglimit: 0, hostname: '' }); Object.assign(mode, { coop: false, deathmatch: false, players: 2 });
 settings.dmflags = 0;
 menu.mainCursor = 1; menu.main(); keys('Enter');
 keys('ArrowDown', 'ArrowDown', 'Enter');

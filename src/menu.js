@@ -19,17 +19,21 @@ export const PLAYERS = ['one', 'two (coop)', 'three (coop)', 'four (coop)', 'two
 const action = (name, y, callback, extra = {}) => ({ type: 'action', name, x: 0, y, callback, ...extra });
 const slider = (name, y, min, max, get, set) => ({ type: 'slider', name, x: 0, y, min, max, get, set });
 const spin = (name, y, items, get, set) => ({ type: 'spin', name, x: 0, y, items, get, set });
-/** menufield_s: a text of at most `length` characters, `visible` of them shown. */
-const field = (name, y, length, visible, get, set) => ({ type: 'field', name, x: 0, y, length, visible, get, set });
+/** menufield_s: a text of at most `length` characters, `visible` of them shown (`numbers`: QMF_NUMBERSONLY, the digits alone typed). */
+const field = (name, y, length, visible, get, set, extra = {}) => ({ type: 'field', name, x: 0, y, length, visible, get, set, ...extra });
 const separator = () => ({ type: 'separator', x: 0, y: 0 });
 /** The handedness spin's choices (M_Menu_PlayerConfig_f's handedness_box), in the hand cvar's order. */
 export const HANDS = ['right', 'left', 'center'];
+/** The start server menu's rules (StartServer_MenuInit's dm_coop_names, with the page's single player first). */
+export const RULES = ['single player', 'cooperative', 'deathmatch'];
 
 export class Menu {
   /**
    * host: { hud, playing(), newGame(skill), slots() → [{ valid, name }] × 15, loadSlot(i), saveSlot(i),
    *         downloadSlot(i), get(key), set(key, value), resetDefaults(), resetVideo(), bind(action, code), unbind(action),
-   *         credits() → lines, console(), quit(), sound(name), netHost(), netJoin() (the last two optional: greyed without) }
+   *         credits() → lines, console(), quit(), sound(name), netHost(), netJoin() (the last two optional: greyed without),
+   *         maps() → the pak's map names, gameMode() → { coop, deathmatch, players }, setGameMode({ coop, deathmatch, players }),
+   *         startServer(map) (the start server menu's) }
    */
   constructor(host) {
     this.host = host;
@@ -151,6 +155,7 @@ export class Menu {
     if (it?.type === 'field') {
       if (code === 'Backspace') { const t = String(it.get() ?? ''); if (t.length) it.set(t.slice(0, -1)); return null; }
       if (typeof char === 'string' && char.length === 1 && char >= ' ' && char <= '~' && code !== 'Tab') {
+        if (it.numbers && !(char >= '0' && char <= '9')) return null;
         const t = String(it.get() ?? '');
         if (t.length < it.length) it.set(t + char);
         return null;
@@ -344,7 +349,8 @@ export class Menu {
   /**
    * M_Menu_Multiplayer_f: join and start network server are the page's Join and Host (the host's netJoin and
    * netHost: the menu goes away and the page's panel shows under the view, as M_Menu_JoinServer_f and
-   * M_Menu_StartServer_f opened theirs; greyed where the page has none), the player setup live
+   * M_Menu_StartServer_f opened theirs; greyed where the page has none), the player setup live, the deathmatch
+   * options, and start server: M_Menu_StartServer_f's menu for a game at this page
    */
   multiplayer() {
     const h = this.host;
@@ -357,9 +363,52 @@ export class Menu {
         action('start network server', 10, start.callback, { left: true, grayed: start.grayed, statusbar: start.statusbar }),
         action('player setup', 20, () => this.playerConfig(), { left: true }),
         action('deathmatch options', 30, () => this.dmOptions(), { left: true, statusbar: 'the dmflags for the next deathmatch, and the one running' }),
+        action('start server', 40, () => this.startServer(), { left: true, statusbar: 'a game at this page: the map, the rules, the limits, the players, the hostname' }),
       ],
     });
-    m.layout = (r) => { m.x = (r.w >> 1) - 64; m.y = (r.h - 40) >> 1; };
+    m.layout = (r) => { m.x = (r.w >> 1) - 64; m.y = (r.h - 50) >> 1; };
+    this.push(m);
+  }
+
+  /**
+   * M_Menu_StartServer_f: a game at this page as StartServer_MenuInit laid it out: the initial map (the pak's maps by
+   * name, in place of maps.lst; the settings' map first), the rules (single player, cooperative, deathmatch: the page's
+   * mode, latched for the next game as the coop and deathmatch cvars were), the time limit and the frag limit (numbers-only
+   * fields, QMF_NUMBERSONLY, each key writing the cvar: the next game's and the game running's), the max players (two to
+   * four at this page, the rules allowing), the hostname (twelve characters, as its field had), the deathmatch flags
+   * (M_Menu_DMOptions_f, greyed outside a deathmatch as RulesChangeFunc greyed them) and begin, which starts the game on
+   * the map as StartServerActionFunc ran `map`. A field's text is the menu's own (menufield_s's buffer): the setting is
+   * written at every key, the text shows what was typed.
+   */
+  startServer() {
+    const h = this.host;
+    const maps = h.maps?.() ?? [];
+    let mapIndex = Math.max(0, maps.indexOf(h.get('map')));
+    const mode = () => h.gameMode?.() ?? { coop: false, deathmatch: false, players: 2 };
+    const rules = () => { const g = mode(); return g.deathmatch ? 2 : g.coop ? 1 : 0; };
+    const buffer = (initial, write) => { let text = String(initial ?? ''); return [() => text, (v) => { text = v; write(v); }, (v) => { text = v; }]; };
+    const limit = (name) => buffer(h.get(name) ?? 0, (v) => h.set(name, Math.max(0, Math.min(999, Number(v) || 0))));
+    const [getTime, setTime] = limit('timelimit');
+    const [getFrag, setFrag] = limit('fraglimit');
+    const players = () => (rules() ? mode().players : 1);
+    const [getMax, setMax, showMax] = buffer(players(), (v) => { const n = Number(v); if (rules() && n >= 2 && n <= 4) h.setGameMode?.({ ...mode(), players: n }); });
+    const flags = action('deathmatch flags', 108, () => this.dmOptions(), { x: 24 });
+    const setFlags = () => { flags.grayed = rules() !== 2; flags.statusbar = flags.grayed ? 'N/A outside a deathmatch' : null; };
+    setFlags();
+    const setRules = (v) => { h.setGameMode?.({ ...mode(), coop: v > 0, deathmatch: v === 2 }); setFlags(); showMax(String(players())); };
+    const m = this.framework({
+      id: 'startserver', banner: 'm_banner_start_server', items: [
+        spin('initial map', 0, maps.length ? maps : ['-'], () => mapIndex, (v) => { mapIndex = v; }),
+        spin('rules', 20, RULES, rules, setRules),
+        field('time limit', 36, 3, 3, getTime, setTime, { numbers: true, statusbar: '0 = no limit' }),
+        field('frag limit', 54, 3, 3, getFrag, setFrag, { numbers: true, statusbar: '0 = no limit' }),
+        field('max players', 72, 3, 3, getMax, setMax, { numbers: true, statusbar: 'two to four at this page in coop or deathmatch' }),
+        field('hostname', 90, 12, 12, () => h.get('hostname') ?? '', (v) => h.set('hostname', v)),
+        flags,
+        action('begin', 128, () => { this.off(); h.startServer?.(maps[mapIndex]); }, { x: 24 }),
+      ],
+    });
+    m.layout = (r) => { m.x = r.w >> 1; m.y = (r.h - 138) >> 1; };   // (Menu_Center: the last item at 128, ten under it)
     this.push(m);
   }
 

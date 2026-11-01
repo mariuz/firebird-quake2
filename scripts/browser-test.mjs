@@ -725,6 +725,20 @@ try {
     await page.keyboard.press('Escape'); await sleep(300);   // (one Escape: the menu opened by the word has nothing under it; a second would bring the main menu)
     await typeCommand('dmflags 0');
     assert(mDm === 'dmoptions' && dmSet.s === 4 && dmSet.row === 4 && (await menuId()) === null, `menu_dmoptions opens the deathmatch options, weapons stay turned on sets DF_WEAPONS_STAY in the settings and on the game row (${JSON.stringify(dmSet)})`);
+    // menu_startserver opens the start server menu: the rules spin turned to deathmatch latches the next game's mode on the settings
+    // and the Players select (the game running goes on), a time limit typed writes the setting and the game row; then single player again
+    const ssBefore = await page.evaluate(() => ({ select: document.getElementById('players')?.value, clients: window.quake2.session.clients?.length })).catch(() => ({}));
+    await typeCommand('menu_startserver'); await sleep(300);
+    const mSs = await menuId();
+    await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await sleep(200);
+    await page.keyboard.press('ArrowDown'); await page.keyboard.press('Backspace'); await page.keyboard.type('5'); await sleep(400);
+    const ssSet = await page.evaluate(async () => ({ dm: window.quake2.settings.deathmatch, select: document.getElementById('players')?.value, tl: window.quake2.settings.timelimit,
+      row: (await window.quake2.sql('SELECT timelimit t FROM game'))[0]?.T, clients: window.quake2.session.clients?.length })).catch(() => ({}));
+    await page.keyboard.press('Escape'); await sleep(300);
+    await typeCommand('timelimit 0'); await typeCommand('deathmatch 0'); await typeCommand('coop 0');
+    const ssAfter = await page.evaluate(() => ({ select: document.getElementById('players')?.value, tl: window.quake2.settings.timelimit })).catch(() => ({}));
+    assert(mSs === 'startserver' && ssSet.dm === true && /^dm[34]?$/.test(ssSet.select ?? '') && ssSet.tl === 5 && ssSet.row === 5 && ssSet.clients === ssBefore.clients && ssAfter.select === ssBefore.select && ssAfter.tl === 0 && (await menuId()) === null,
+      `menu_startserver opens the start server menu; rules turned to deathmatch latch the mode on the settings and the Players select, the game running on; time limit 5 typed reaches the settings and the game row (${JSON.stringify({ ssBefore, ssSet, ssAfter })})`);
 
     // a recording: `record run` at the console writes the game from then on as a demo (src/record.js: the stats line
     // counts its frames), `stop` downloads it as run.dm2 (parsed here as the page parses the pak's: every block read
