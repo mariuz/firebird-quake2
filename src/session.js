@@ -133,11 +133,11 @@ export class Session {
    * msg (the message level, 0 to 3: a print below it is dropped, as SV_ClientPrintf did; 1 as Quake's cvar, so PRINT_LOW's stay off). Kept, and written to the client's row after every
    * map load and loaded game, as the userinfo came with the client and not with the level; written at once to a game running.
    */
-  async setUserinfo(client, { name = '', hand = 0, spectator = 0, fov = null, gender = 'male', msg = 1 } = {}) {
+  async setUserinfo(client, { name = '', hand = 0, spectator = 0, fov = null, gender = 'male', msg = 1, password = '' } = {}) {
     const f = Number(fov);
     const info = { name: String(name ?? '').replace(/[^\x20-\x7e]/g, '').slice(0, 15), hand: [0, 1, 2].includes(hand) ? hand : 0, spectator: spectator ? 1 : 0,
       fov: fov == null || !Number.isFinite(f) ? null : Math.max(1, Math.min(160, Math.round(f))), gender: String(gender ?? 'male').replace(/[^\x20-\x7e]/g, '').slice(0, 15) || 'male',
-      msg: [0, 1, 2, 3].includes(Number(msg)) ? Number(msg) : 1 };
+      msg: [0, 1, 2, 3].includes(Number(msg)) ? Number(msg) : 1, password: String(password ?? '').slice(0, 32) };   // (the password: kept with the info, on no row)
     this.userinfo[client] = info;
     if (this.map) await this.writeUserinfo(client, info);
     return info;

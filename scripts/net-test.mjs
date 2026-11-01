@@ -11,7 +11,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, connectRefusal, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
@@ -120,6 +120,17 @@ check(host.info.msg === 2 && (await q('SELECT msglevel FROM player WHERE id = 2'
 guest.sendInfo({ name: 'x', hand: 0, msg: 7 });
 await session.setUserinfo(2, host.info);
 check(host.info.msg === 1 && (await q('SELECT msglevel FROM player WHERE id = 2'))[0].MSGLEVEL === 1, 'a level past 3, or none, is 1');
+// the password userinfo: carried with the info; SV_DirectConnect's and ClientConnect's check (connectRefusal): a player's against the host's
+// password, a watcher's against its spectator_password ("none" or empty lets anyone watch), the reason to refuse or nothing
+guest.sendInfo({ name: 'x', hand: 0, password: 'secret' });
+check(host.info.password === 'secret', 'the password reaches the host with the info');
+check(connectRefusal({ password: '' }, { password: '' }) === null && connectRefusal({ password: 'secret' }, { password: 'secret' }) === null && connectRefusal({ password: 'wrong' }, { password: 'secret' }) === 'Password required or incorrect' && connectRefusal({}, { password: 'secret' }) === 'Password required or incorrect',
+  'a player is refused without the host\'s password, let in with it or with none set');
+check(connectRefusal({ spectator: 1, password: 'wrong' }, { password: 'secret', spectatorPassword: '' }) === null && connectRefusal({ spectator: 1, password: 'x' }, { spectatorPassword: 'watch' }) === 'Spectator password required or incorrect'
+  && connectRefusal({ spectator: 1, password: 'watch' }, { spectatorPassword: 'watch' }) === null && connectRefusal({ spectator: 1, password: '' }, { password: 'secret', spectatorPassword: 'none' }) === null,
+  'a watcher is judged by the spectator password alone: none or "none" lets it in, a wrong one refuses it');
+guest.sendInfo({ name: 'x', hand: 0 });
+check(host.info.password === '', 'no password given is none');
 check(host.info.hand === 0 && host.info.spectator === 0 && host.info.fov === null, 'a hand that is not 0, 1 or 2 is right-handed; a guest plays unless it says it watches; no fov given is the view\'s');
 // the fov userinfo: the guest's own, clamped as ClientUserinfoChanged clamped it, on its row, and its frame at that fov
 // (fewer faces in a narrow view than in a wide one at the same eye)

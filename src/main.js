@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
-import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, iceServers } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, iceServers, connectRefusal } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
@@ -251,7 +251,7 @@ function setSetting(k, v) {
     if (v && !document.fullscreenElement) canvas.requestFullscreen?.().catch(() => {});
     else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   } else { settings[k] = v; saveSettings(); }
-  if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg') applyUserinfo();
+  if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg' || k === 'password') applyUserinfo();
   if (k === 'viewsize') applyView().catch((err) => console.warn('viewsize:', err.message));   // (the 3D view's rectangle, the SQL's frustum with it)
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
@@ -269,7 +269,7 @@ function setSetting(k, v) {
  */
 function applyUserinfo() {
   // (only a joined page watches: the host's and a local game's clients play)
-  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, fov: settings.fov, gender: settings.gender, msg: settings.msg };
+  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, fov: settings.fov, gender: settings.gender, msg: settings.msg, password: settings.password };
   if (netGuest()) { if (net.guest?.open) net.guest.sendInfo(info); return; }
   session?.setUserinfo(1, info).catch((err) => console.warn('userinfo:', err.message));
 }
@@ -317,7 +317,8 @@ const con = new Console({
   serverInfo: async () => {
     if (netGuest() || !db || !map) return null;
     const g = (await db.query('SELECT map_name, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill FROM game')).rows[0];
-    return g ? { mapname: g.MAP_NAME, deathmatch: g.DEATHMATCH, coop: g.COOP, dmflags: g.DMFLAGS, fraglimit: g.FRAGLIMIT, timelimit: g.TIMELIMIT, cheats: g.CHEATS, skill: g.SKILL, hostname: settings.hostname || 'noname' } : null;
+    return g ? { mapname: g.MAP_NAME, deathmatch: g.DEATHMATCH, coop: g.COOP, dmflags: g.DMFLAGS, fraglimit: g.FRAGLIMIT, timelimit: g.TIMELIMIT, cheats: g.CHEATS, skill: g.SKILL, hostname: settings.hostname || 'noname',
+      needpass: (settings.password ? 1 : 0) + (settings.spectatorPassword && settings.spectatorPassword !== 'none' ? 2 : 0) } : null;   // (needpass: 1 a password, 2 a spectator password, as SV_StatusString set it)
   },
   userInfo: () => ({ name: settings.name, hand: settings.hand, gender: settings.gender, msg: settings.msg, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 }),
   isFullscreen: () => !!document.fullscreenElement,   // (vid_fullscreen: the page's live state; setSetting('fullscreen', …) asks for it)
@@ -1524,7 +1525,20 @@ async function hostAccept(peer, text) {
   paused = false;   // (a shared game does not pause)
   g.host.onClose = () => guestLeft(g);
   // the guest's name and hand are its client's (ClientUserinfoChanged), now and with every map
-  g.host.onInfo = (info) => { if (net?.guests.includes(g)) session.setUserinfo(g.client, info).catch((err) => console.warn('userinfo:', err.message)); };
+  g.host.onInfo = (info) => {
+    if (!net?.guests.includes(g)) return;
+    // SV_DirectConnect and ClientConnect: a guest without the host's password (a watcher without the spectator password) is refused, told why
+    if (g.refused) return;
+    const why = connectRefusal(info, settings);
+    if (why) {
+      // (the channel closes a moment after the reason is sent, so the guest's page reads it before the close; a kick's does the same)
+      g.refused = true;
+      if (g.host.open) g.host.sendKick(why);
+      setTimeout(() => guestLeft(g), 300);
+      return;
+    }
+    session.setUserinfo(g.client, info).catch((err) => console.warn('userinfo:', err.message));
+  };
   g.host.onSay = (text) => { if (net?.guests.includes(g) && map && !demo) session.say(g.client, text).catch((err) => console.warn('say:', err.message)); };
   // the guest's game commands run here for its client (the answer goes to its message line, as player_command prints it)
   g.host.onConsole = (cmd, arg) => { if (net?.guests.includes(g) && map && !demo && running) db.query('SELECT msg FROM player_command(?, ?, ?)', [cmd, arg, g.client]).catch((err) => console.warn('a guest\'s command:', err.message)); };
@@ -1566,7 +1580,7 @@ function kickGuest(n) {
   if (!g) return 'none';
   const name = session.clients.find((c) => c.CLIENT === n)?.NETNAME || `player ${n}`;
   if (g.host.open) g.host.sendKick('You were kicked from the game');
-  guestLeft(g);
+  setTimeout(() => guestLeft(g), 300);   // (the reason first, the close a moment after: the guest's page reads it)
   if (map && running) db.query('EXECUTE PROCEDURE sprint(NULL, ?)', [`${name} was kicked`]).catch((err) => console.warn('kick:', err.message));   // (SV_BroadcastPrintf)
   return name;
 }

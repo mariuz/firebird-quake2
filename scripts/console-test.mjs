@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp', list: () => ['maps/demo1.bsp', 'maps/demo2.bsp', 'pics/conchars.pcx', 'sound/weapons/blastf1a.wav', 'readme.txt'] },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
+  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -327,6 +327,12 @@ await con.submit('m_pitch'); check(status.at(-1)?.[0] === '"m_pitch" is "0.022"'
 await con.submit('m_pitch -0.022'); check(s.invertMouse === true && status.at(-1)?.[0] === '"m_pitch" is "-0.022"', 'a negative m_pitch inverts the mouse');
 await con.submit('m_pitch 0.022'); check(s.invertMouse === false, 'a positive one puts it back');
 await con.submit('m_pitch 0'); check(s.invertMouse === false && status.at(-1)?.[1] === true, 'm_pitch 0 is refused');
+// password (the network game's, a guest's userinfo and the host's requirement) and spectator_password (a watcher's)
+await con.submit('password'); check(status.at(-1)?.[0] === '"password" is ""', 'password shows none by default');
+await con.submit('password secret'); check(s.password === 'secret' && last() === 'set password secret', 'password secret sets it through the page (a guest\'s info carries it, the host requires it)');
+await con.submit('password two words'); check(s.password === 'secret' && status.at(-1)?.[0] === 'password takes at most 32 characters, no spaces' && status.at(-1)?.[1] === true, 'a password with a space is refused');
+await con.submit('spectator_password watch'); check(s.spectatorPassword === 'watch', 'spectator_password watch sets the watchers\' one');
+await con.submit('password ""'); await con.submit('spectator_password ""'); check(s.password === '' && s.spectatorPassword === '', '"" clears them');
 // the gender userinfo: a word (f… female, m… male, else neutral), male by default, archived
 await con.submit('gender'); check(status.at(-1)?.[0] === '"gender" is "male"', 'gender shows male by default');
 await con.submit('gender Female'); check(s.gender === 'Female' && last() === 'set gender Female' && status.at(-1)?.[0] === '"gender" is "Female"', 'gender Female sets the word as typed through the page');
@@ -348,7 +354,7 @@ await con.submit('netgraph 1'); check(s.netgraph === true && last() === 'set net
 await con.submit('netgraph 2'); check(s.netgraph === true && status.at(-1)?.[0] === 'netgraph takes 0 or 1' && status.at(-1)?.[1] === true, 'netgraph 2 is refused');
 await con.submit('netgraph 0'); check(s.netgraph === false, 'netgraph 0 turns it off');
 await con.submit('cvarlist');
-check(/^name "" · hand "2" · gender "male" · msg "1" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · gun_x "0" · gun_y "0" · gun_z "0" · scr_centertime "2.5" · cl_footsteps "1" · scr_showpause "1" · scr_showturtle "0" · cl_maxfps "90" · vid_gamma "1.4" · hostname "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+check(/^name "" · hand "2" · gender "male" · msg "1" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · netgraph "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · gun_x "0" · gun_y "0" · gun_z "0" · scr_centertime "2.5" · cl_footsteps "1" · scr_showpause "1" · scr_showturtle "0" · cl_maxfps "90" · vid_gamma "1.4" · hostname "" · password "" · spectator_password "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
 // hostname (the host's name, at most 32 printable characters), help (Cmd_Help_f) and sv_gravity (the game's gravity)
 await con.submit('hostname'); check(status.at(-1)?.[0] === '"hostname" is ""', 'hostname shows the empty default');
 await con.submit('hostname Hal 9000'); check(s.hostname === 'Hal 9000' && last() === 'set hostname Hal 9000', 'hostname takes a name with spaces');
@@ -527,7 +533,7 @@ await con.submit('lookstrafe 2'); check(s.lookstrafe === true && status.at(-1)?.
 await con.submit('m_forward 2'); check(s.mForward === 2 && last() === 'set mForward 2', 'm_forward 2');
 await con.submit('m_side -1'); check(s.mSide === -1 && last() === 'set mSide -1' && status.at(-1)?.[0] === '"m_side" is "-1"', 'm_side -1');
 await con.submit('m_side x'); check(s.mSide === -1 && status.at(-1)?.[1] === true, 'm_side x is refused');
-Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
+Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, crosshair: 1, sfx: 70, music: 50, netgraph: false, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
 
 // the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
 {
@@ -684,7 +690,7 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, sensitivity: 7, al
   await con.submit('set bogus 1');
   check(status.at(-1)?.[0] === '"bogus" is not a cvar this page keeps' && status.at(-1)?.[1] === true, 'set on a cvar the page has not is refused');
   host.settings.fov = 160; host.settings.binds = defaultBinds(); host.settings.lines = {};
-  Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 });
+  Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, sfx: 70, music: 50 });
 }
 
 // bind and its kin: Key_Bind_f, Key_Unbind_f, Key_Unbindall_f and Key_Bindlist_f over the keys menu's binds

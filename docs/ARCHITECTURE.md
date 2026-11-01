@@ -778,6 +778,10 @@ through `maplist_next`, the map after the one running in the list, round again f
 exit leads) and `sky <name> [rotate] [axis x y z]` (`SCR_Sky_f`: the sky box of the map running changed and spun, `setSky`, this
 page's alone; one the pak lacks is refused and the one up stays) and `hostname` (the host's name, archived as Quake's was,
 "noname" when empty: the serverinfo's, and the map message carries it so a joined page's stats line names the host),
+`password` and `spectator_password` (the network game's: a guest's info carries its `password`, and the host judges it as
+`SV_DirectConnect` and `ClientConnect` did, `connectRefusal` in `src/net.js`: a player's against the host's `password`, a
+watcher's against its `spectator_password`, empty or "none" asking nothing; a guest refused is kicked with the reason before it
+is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived),
 `deathmatch`, `coop` and `maxclients` (the Players select's words, latched as Quake latched them: the next game's mode and
 clients go to the settings and the select through `setGameMode`, "will be changed for next game." said, the game running
 going on; the page's coop is more than one client at it, deathmatch them against each other, `maxclients 1` single player),

@@ -460,7 +460,7 @@ try {
     const usInfo = await status();
     await typeCommand('status');
     const stLine = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(8) })).catch(() => ({}));
-    assert(/^Server info settings: mapname "demo1" · deathmatch "0" · coop "0" · dmflags "\d+" · fraglimit "\d+" · timelimit "\d+" · cheats "\d" · skill "\d" · hostname "noname"$/.test(svInfo)
+    assert(/^Server info settings: mapname "demo1" · deathmatch "0" · coop "0" · dmflags "\d+" · fraglimit "\d+" · timelimit "\d+" · cheats "\d" · skill "\d" · hostname "noname" · needpass "0"$/.test(svInfo)
       && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
@@ -564,6 +564,11 @@ try {
     const fsLine = await status();
     assert(gamma.setting === 1.6 && gamma.scale === 1.6 && gamma.control === '1.6' && /^"vid_fullscreen" is "0"$/.test(fsLine), `vid_gamma 1.6 sets the brightness, the painter's scale and the control (${JSON.stringify(gamma)}); vid_fullscreen shows the page's state ("${fsLine}")`);
     // hostname goes into the serverinfo, sv_gravity onto the game row (the level's gravity), help brings the help computer and putaway takes it away
+    // password and spectator_password: the serverinfo's needpass counts them (1 a password, 2 a spectator password), "" clears
+    await typeCommand('password secret'); await typeCommand('serverinfo'); const np1 = await status();
+    await typeCommand('spectator_password watch'); await typeCommand('serverinfo'); const np3 = await status();
+    await typeCommand('password ""'); await typeCommand('spectator_password ""'); await typeCommand('serverinfo'); const np0 = await status();
+    assert(/needpass "1"/.test(np1) && /needpass "3"/.test(np3) && /needpass "0"/.test(np0), `password and spectator_password set the serverinfo's needpass (${np1.slice(-14)}, ${np3.slice(-14)}, ${np0.slice(-14)})`);
     await typeCommand('hostname Hal');
     await typeCommand('serverinfo');
     const svHost = await status();
@@ -1210,6 +1215,26 @@ try {
         assert(h4.role === 'host' && h4.guests?.length === 1 && h4.guests[0] === 2 && h4.clients === 3, `kick 3 at the host's console drops the third page: the host keeps the first guest, its game its three clients (${JSON.stringify(h4)})`);
         assert(tk.role === undefined && tk.status === 'You were kicked from the game. Press a key or click the view for a game of your own.' && tk.state === 'kicked' && tk.running === false && kickSeen,
           `the third page says it was kicked and stands for a key, and every client's message line says who (${JSON.stringify({ tk, kickMsg })})`);
+        // with a password at the host, the kicked third page's join again is refused (SV_DirectConnect: kicked with the reason before it is
+        // in, its client standing as it stood), the host keeping its first guest; the password cleared after
+        await tp.keyboard.press('Space');
+        for (let i = 0; i < 120 && (await tp.evaluate(() => !!window.quake2?.net || document.getElementById('net-state')?.textContent === 'kicked').catch(() => true)); i++) await sleep(250);
+        await page.evaluate(() => document.exitPointerLock?.());
+        await typeOn(page, 'password secret');
+        const boxBefore = await text(page);   // (the box holds the last answer pasted until the new offer is made)
+        await page.click('#net-host');
+        let offerP = '';
+        for (let i = 0; i < 80 && !(offerP.startsWith('q2net1:') && offerP !== boxBefore && offerP !== offer && offerP !== answer); i++) { await sleep(250); offerP = await text(page); }
+        await tp.click('#net-join'); await tp.fill('#net-text', offerP); await tp.click('#net-go');
+        let answerP = '';
+        for (let i = 0; i < 80 && !(answerP.startsWith('q2net1:') && answerP !== offerP); i++) { await sleep(250); answerP = await text(tp); }
+        await page.fill('#net-text', answerP); await page.click('#net-go');
+        let refused = {};
+        for (let i = 0; i < 120 && refused.state !== 'kicked'; i++) { await sleep(250); refused = await tp.evaluate(() => ({ status: document.getElementById('status')?.textContent, state: document.getElementById('net-state')?.textContent, role: window.quake2?.net?.role })).catch(() => ({})); }
+        const hP = await hstate();
+        assert(refused.state === 'kicked' && refused.status === 'Password required or incorrect. Press a key or click the view for a game of your own.' && refused.role === undefined && hP.role === 'host' && hP.guests?.length === 1 && hP.clients === 3,
+          `a page without the host's password is refused with the reason (${JSON.stringify(refused)}), the host keeping its first guest (${JSON.stringify(hP)})`);
+        await typeOn(page, 'password ""');
       }
       await tctx.close();
       // the guest leaves (disconnect at its console, the Leave button's word): the host plays on, its other players standing;
