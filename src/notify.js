@@ -9,11 +9,12 @@ export class Notify {
     this.seconds = seconds;  // con_notifytime
     this.keep = keep;        // the scrollback's lines
     this.entries = [];       // { text, at, show }
+    this.onAdd = null;       // told each line as it comes (the page's logfile: Com_Printf's write to qconsole.log)
   }
 
   /** A print at `now`: each of its lines an entry (show: false keeps it for the scrollback alone); the oldest past `keep` forgotten. */
   add(text, now, { show = true } = {}) {
-    for (const line of String(text ?? '').replace(/\n+$/, '').split('\n')) this.entries.push({ text: line, at: now, show });
+    for (const line of String(text ?? '').replace(/\n+$/, '').split('\n')) { this.entries.push({ text: line, at: now, show }); if (this.onAdd) this.onAdd(line); }
     if (this.entries.length > this.keep) this.entries.splice(0, this.entries.length - this.keep);
   }
 

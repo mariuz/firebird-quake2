@@ -1080,9 +1080,15 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   faces are; `test:settings` the three checked; `test:console` shown, set, refused, Tab and config.cfg (the stipple
   archived, the two not); the browser test sets the three, sees surfaces built at mip 3 under the cap and puts them
   back, on both builds.
-- **`developer` and `logfile`**: the page's warnings (`console.warn`, `Com_DPrintf`'s kind) on the console's
-  scrollback with `developer 1`, and `logfile 1` keeping the scrollback as it grows in the file store, downloaded as
-  `qconsole.log` with `logfile 0` or at the end.
+- **`developer` and `logfile`**: done. `developer 1` is `Com_DPrintf`'s switch: the page's warnings (`console.warn`'s,
+  wrapped once at the start) go to the console's lines and scrollback as well; not archived, as Quake's was not.
+  `logfile 1` is `Com_Printf`'s write to `qconsole.log`: the scrollback's lines go to the file as they come
+  (`Notify.onAdd`), kept in the page's file store a second after a line and at the page's end (`pagehide`), so a
+  reload's run follows the last; `logfile 0` downloads the file and drops it (`setLogfile`; Quake left it in the game
+  directory), "nothing was logged" when there is none. `test:settings` the two as booleans; `test:console` developer
+  shown, set and refused, logfile's cases (shown, refused, nothing logged, on, already on, downloaded with its lines)
+  and Tab, and `onAdd` told each line; the browser test logs a line and downloads `qconsole.log` with it, and sees a
+  warning on the console with `developer 1` and not without, on both builds.
 - **`fixedtime` and `sv_noreload`**: the game's clock stepped a fixed number of milliseconds a frame whatever the wall
   says (`Qcommon_Frame`'s `fixedtime`, 0 the wall's), and `sv_noreload 1` making a coop level come back to spawn
   fresh instead of loading what was left in it (`SV_InitGame`'s, the unit's levels kept aside).

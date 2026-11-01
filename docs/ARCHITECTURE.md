@@ -714,7 +714,11 @@ key's binding into the command buffer; the `+` actions stay the held ones; `unbi
 `writeconfig` and the keys menu's reset cover the lines, and a key the menu binds to an action loses its
 line), `clear` (`Con_Clear_f`: the scrollback and the notify lines emptied, the page's `clearLog`) and
 `condump <name>` (`Con_Dump_f`: the scrollback downloaded as `<name>.txt`, the lines typed and the answers in
-it, `dumpLog`; the name as typed with a path's characters and a `.txt` taken off), `echo` (`Cmd_Echo_f`: its words
+it, `dumpLog`; the name as typed with a path's characters and a `.txt` taken off), `developer` (`Com_DPrintf`'s switch: with it the
+page's warnings, `console.warn`'s, go to the console's lines and scrollback as well; not archived, as Quake's was not) and `logfile`
+(`Com_Printf`'s write to `qconsole.log`: with `logfile 1` the scrollback's lines go to the file as they come, `Notify.onAdd`, kept in the
+page's file store a second after a line and at the page's end, so a reload's run follows the last; `logfile 0` downloads the file and
+drops it, `setLogfile`; Quake left it in the game directory), `echo` (`Cmd_Echo_f`: its words
 printed as typed), `cmdlist` (`Cmd_List_f`: every command on a line of the scrollback, the page's `print`, and how
 many), `version` (the page's version and build, which `scripts/build.mjs` stamps into the bundle, the engine
 package's version and the engine line: Firebird's version, threads or not), `path` (`FS_Path_f`: the pak in use, its files

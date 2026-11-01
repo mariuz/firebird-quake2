@@ -317,6 +317,40 @@ const centerPrints = perPlayer(() => new CenterPrint({ seconds: Number(settings.
 audio.footsteps = settings.clFootsteps !== false;   // (cl_footsteps)   // (scr_centertime: each view's centre print's seconds)
 let lastMsgTime = null;
 const gameClock = () => last?.TIME_ ?? 0;
+// developer 1 (Com_DPrintf's switch): the page's warnings (console.warn's) go to the console's lines and scrollback as well
+const warn = console.warn.bind(console);
+console.warn = (...args) => { warn(...args); if (settings.developer) notify.add(args.map((a) => (a instanceof Error ? a.message : String(a))).join(' '), gameClock()); };
+// logfile 1 (Com_Printf's write to qconsole.log): the scrollback's lines as they come, kept in the file store (so a reload's run
+// follows the last), flushed a second after a line and at the page's end; logfile 0 downloads the file and drops it
+const LOG_KEY = 'qconsole.log';
+let logKept = '', logNew = '', logFlush = 0;   // (the file's text so far, the lines since the last flush)
+notify.onAdd = (line) => { if (!settings.logfile) return; logNew += `${line}\n`; if (!logFlush) logFlush = setTimeout(flushLog, 1000); };
+async function flushLog() {
+  logFlush = 0;
+  if (!logNew) return;
+  logKept += logNew; logNew = '';
+  await fileStore.put(LOG_KEY, { name: LOG_KEY, bytes: new TextEncoder().encode(logKept) }).catch((err) => warn('qconsole.log:', err.message));
+}
+async function readLog() { const f = await fileStore.get(LOG_KEY).catch(() => null); return f ? new TextDecoder().decode(f.bytes) : ''; }
+if (settings.logfile) readLog().then((text) => { logKept = text + logKept; });   // (on from the last run: its file goes on)
+window.addEventListener('pagehide', () => { if (logFlush) { clearTimeout(logFlush); flushLog(); } });
+async function setLogfile(on) {
+  if (on) {
+    if (settings.logfile) return 'already';
+    settings.logfile = true; saveSettings();
+    logKept = await readLog();
+    return 'on';
+  }
+  if (!settings.logfile) return null;
+  settings.logfile = false; saveSettings();
+  if (logFlush) { clearTimeout(logFlush); logFlush = 0; }
+  const text = logKept + logNew;
+  logKept = ''; logNew = '';
+  await fileStore.remove(LOG_KEY).catch(() => undefined);
+  if (!text) return 0;
+  downloadText(LOG_KEY, text);
+  return text.split('\n').length - 1;
+}
 function noteMessage(row) {
   if (!row?.MSG || row.MSG_TIME === lastMsgTime) return;
   lastMsgTime = row.MSG_TIME;
@@ -408,6 +442,7 @@ const con = new Console({
   setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
   download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
   clearLog: () => { notify.clear(); conlog.textContent = ''; conlog.hidden = true; },   // (clear: the scrollback and the notify lines emptied, Con_Clear_f)
+  setLogfile: (on) => setLogfile(on),                     // (logfile: the scrollback to qconsole.log in the file store, downloaded with 0)
   dumpLog: (name) => { const lines = notify.log(notify.keep); downloadText(`${name}.txt`, lines.join('\n') + '\n'); return lines.length; },   // (condump: the scrollback as <name>.txt, Con_Dump_f)
   print: (text) => notify.add(text, gameClock(), { show: false }),   // (cmdlist: lines into the scrollback alone)
   // version: the page's version and build (scripts/build.mjs stamps them), the engine package's version, and the engine line (Firebird's version, threads or not)
@@ -1869,6 +1904,7 @@ async function boot() {
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; },
+      get logfile() { return { on: !!settings.logfile, kept: logKept.length, pending: logNew.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
       demoStore, fileStore, get pickedPak() { return pickedPak; }, get autoexec() { return autoexec ? { ...autoexec } : null; },
