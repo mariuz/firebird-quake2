@@ -1367,6 +1367,25 @@ try {
       for (let i = 0; i < 20 && gg2 !== 0; i++) { await sleep(250); gg2 = await guestGod(); }
       assert(/^\d\d:\d\d +\d+ +\d+ .+ · \d\d:\d\d +\d+ +\d+ .+$/.test(gpl) && gg0 === 0 && gg1 === 16 && gg2 === 0,
         `playerlist on the joined page lists both clients ("${gpl}"); cmd god at its console runs god for its client at the host and again puts it off (${gg0} → ${gg1} → ${gg2})`);
+      // rcon at the joined page: nothing without rcon_password; with the host's, the line runs at the host's console and its prints come back
+      // (status's lines on the guest's scrollback, its sum on the line, "Rcon from client 2" on the host's scrollback); with another, "Bad
+      // rcon_password." on the guest's line and "Bad rcon from client 2" at the host
+      await typeOn(gp, 'rcon status');
+      const rcNo = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      await typeOn(gp, 'rcon_password secret'); await typeOn(page, 'rcon_password secret');
+      await typeOn(gp, 'rcon status');
+      let rcOk = {};
+      for (let i = 0; i < 40 && !/^map: demo1/.test(rcOk.line ?? ''); i++) { await sleep(250); rcOk = await gp.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(6) })).catch(() => ({})); }
+      const rcHost = await page.evaluate(() => window.quake2.notify.log(8)).catch(() => []);
+      await typeOn(page, 'rcon_password other');
+      await typeOn(gp, 'rcon status');
+      let rcBad = '';
+      for (let i = 0; i < 40 && rcBad !== 'Bad rcon_password.'; i++) { await sleep(250); rcBad = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => ''); }
+      const rcHostBad = await page.evaluate(() => window.quake2.notify.log(8)).catch(() => []);
+      await typeOn(gp, 'rcon_password ""'); await typeOn(page, 'rcon_password ""');
+      assert(rcNo === "You must set 'rcon_password' before issuing an rcon command" && /^map: demo1 · 2 clients/.test(rcOk.line ?? '') && rcOk.log?.includes('num score ping name') && rcHost.includes('Rcon from client 2: status')
+        && rcBad === 'Bad rcon_password.' && rcHostBad.includes('Bad rcon from client 2: status'),
+        `rcon at the joined page asks for rcon_password first ("${rcNo}"), runs status at the host with it ("${rcOk.line}", the lines on its scrollback, the host's saying ${JSON.stringify(rcHost.filter((l) => /rcon/i.test(l)))}) and is refused with another ("${rcBad}", ${JSON.stringify(rcHostBad.filter((l) => /rcon/i.test(l)))})`);
       const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
       await typeOn(page, 'rtc_signal none');

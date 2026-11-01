@@ -33,6 +33,9 @@ check(DEFAULTS.name === '' && DEFAULTS.hand === 0 && loadSettings(store(JSON.str
   && DEFAULTS.gender === 'male' && loadSettings(store(JSON.stringify({ gender: 'female' }))).gender === 'female' && loadSettings(store(JSON.stringify({ gender: 'bad word' }))).gender === 'male' && loadSettings(store(JSON.stringify({ gender: 3 }))).gender === 'male'
   && DEFAULTS.msg === 1 && loadSettings(store(JSON.stringify({ msg: 3 }))).msg === 3 && loadSettings(store(JSON.stringify({ msg: 4 }))).msg === 1,
   'the name is kept up to 15 printable characters (longer, a control character or a number fall back to none), the hand 0 to 2, the gender a word (male by default), the msg level 0 to 3 (1)');
+// rcon_password: none by default, at most 32 characters with no spaces, anything else none
+check(DEFAULTS.rconPassword === '' && loadSettings(store(JSON.stringify({ rconPassword: 'secret' }))).rconPassword === 'secret' && loadSettings(store(JSON.stringify({ rconPassword: 'two words' }))).rconPassword === '' && loadSettings(store(JSON.stringify({ rconPassword: 7 }))).rconPassword === '',
+  'rcon_password is kept up to 32 characters with no spaces, none by default');
 // the rate userinfo (bytes a second, 1000 to 1000000, 500000: a frame here is the face list) and the skin (model/skin, male/grunt)
 check(DEFAULTS.rate === 500000 && DEFAULTS.skin === 'male/grunt' && loadSettings(store(JSON.stringify({ rate: 25000, skin: 'female/athena' }))).rate === 25000 && loadSettings(store(JSON.stringify({ rate: 25000, skin: 'female/athena' }))).skin === 'female/athena'
   && loadSettings(store(JSON.stringify({ rate: 100 }))).rate === 500000 && loadSettings(store(JSON.stringify({ rate: 'x' }))).rate === 500000 && loadSettings(store(JSON.stringify({ skin: 'grunt' }))).skin === 'male/grunt' && loadSettings(store(JSON.stringify({ skin: 'a b/c' }))).skin === 'male/grunt',

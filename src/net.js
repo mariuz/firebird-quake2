@@ -123,6 +123,7 @@ export class HostLink {
     this.onInfo = null;
     this.onSay = null;      // the guest's chat (Cmd_Say_f): the host says it for the guest's client
     this.onConsole = null;  // the guest's console command (Cmd_ForwardToServer): the host runs it for the guest's client
+    this.onRcon = null;     // the guest's rcon (CL_Rcon_f): the password it sent and the line, for the host's SV_RemoteCommand_f
     this.onClose = null;
     this.sentFrames = 0;
     this.droppedFrames = 0;
@@ -147,6 +148,7 @@ export class HostLink {
       }
       else if (m.t === 'say' && typeof m.text === 'string') { const text = m.text.replace(/[\r\n]+/g, ' ').trim().slice(0, 150); if (text) this.onSay?.(text); }
       else if (m.t === 'con' && typeof m.cmd === 'string') { const cmd = m.cmd.trim().slice(0, 32), arg = String(m.arg ?? '').trim().slice(0, 64); if (cmd) this.onConsole?.(cmd, arg); }
+      else if (m.t === 'rcon' && typeof m.cmd === 'string') { const line = m.cmd.trim().slice(0, 256); if (line) this.onRcon?.(String(m.password ?? '').slice(0, 32), line); }
     };
     link.onClose = () => this.onClose?.();
   }
@@ -176,6 +178,8 @@ export class HostLink {
   sendPic(file) { this.link.send({ t: 'pic', file }); }
   /** A cinematic at a level's end (the guest plays its own copy until the next map). */
   sendCin(file) { this.link.send({ t: 'cin', file }); }
+  /** A print for the guest's console (Com_BeginRedirect's RD_PACKET: what the host's console said to an rcon line, "Bad rcon_password." for a wrong one). */
+  sendPrint(text) { this.link.send({ t: 'print', text: String(text ?? '').slice(0, 4000) }); }
   /** SV_Kick_f: the guest is told it was kicked (its page says so), then the channel closes. */
   sendKick(reason = 'kicked') { this.link.send({ t: 'kick', reason: String(reason ?? '').slice(0, 80) }); }
   /** A ping (the host's clock in it): the guest answers with a pong carrying it back, and `ping` is the round trip (the score board's). */
@@ -218,6 +222,7 @@ export class GuestLink {
     this.onPic = null;
     this.onCin = null;
     this.onKick = null;     // the host kicked this guest (SV_Kick_f): the reason, before the channel closes
+    this.onPrint = null;    // a print from the host's console (an rcon line's answer, CL_ConnectionlessPacket's "print")
     this.onClose = null;
     link.onMessage = (m) => this.receive(m);
     link.onClose = () => this.onClose?.();
@@ -237,6 +242,7 @@ export class GuestLink {
       case 'pic': this.onPic?.(m.file); break;
       case 'cin': this.onCin?.(m.file); break;
       case 'kick': this.kicked = String(m.reason ?? 'kicked'); this.onKick?.(this.kicked); break;
+      case 'print': if (typeof m.text === 'string') this.onPrint?.(m.text.slice(0, 4000)); break;
       case 'ping': if (typeof m.at === 'number') this.link.send({ t: 'pong', at: m.at }); break;   // (answered at once: the host's clock goes back as it came)
       default: break;
     }
@@ -252,6 +258,8 @@ export class GuestLink {
   sendSay(text) { this.link.send({ t: 'say', text: String(text ?? '').slice(0, 150) }); }
   /** A game command typed at the guest's console (god, give, kill…): the host runs it for the guest's client, as Cmd_ForwardToServer sent it. */
   sendConsole(cmd, arg = '') { this.link.send({ t: 'con', cmd: String(cmd ?? '').slice(0, 32), arg: String(arg ?? '').slice(0, 64) }); }
+  /** CL_Rcon_f: a line for the host's console with the password (the host's Rcon_Validate judges it, its prints come back as a print message). */
+  sendRcon(password, line) { this.link.send({ t: 'rcon', password: String(password ?? '').slice(0, 32), cmd: String(line ?? '').slice(0, 256) }); }
   /** The newest frame since the last take, with its row, or null. */
   take() {
     if (!this.fresh) return null;

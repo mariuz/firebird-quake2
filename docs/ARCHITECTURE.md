@@ -844,7 +844,12 @@ page's alone; one the pak lacks is refused and the one up stays) and `hostname` 
 `password` and `spectator_password` (the network game's: a guest's info carries its `password`, and the host judges it as
 `SV_DirectConnect` and `ClientConnect` did, `connectRefusal` in `src/net.js`: a player's against the host's `password`, a
 watcher's against its `spectator_password`, empty or "none" asking nothing; a guest refused is kicked with the reason before it
-is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived),
+is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived), `rcon` and `rcon_password`
+(`CL_Rcon_f` and `SV_RemoteCommand_f`: a joined page's `rcon <line>` goes to the host with its `rcon_password`, `GuestLink.sendRcon`; the
+host's `Rcon_Validate` is its own `rcon_password`, none set taking none, and the line runs at its console with the prints and the status
+line kept meanwhile, `Com_BeginRedirect` as `rconOut`, and sent back as a `print` message onto the guest's scrollback and line; a wrong
+password answers "Bad rcon_password." and the host's scrollback says "Bad rcon from client N", a right one "Rcon from client N"; no
+password set, or no game joined (there is no `rcon_address`), the page says so; the cvar not archived, as neither of Quake's was),
 `deathmatch`, `coop` and `maxclients` (the Players select's words, latched as Quake latched them: the next game's mode and
 clients go to the settings and the select through `setGameMode`, "will be changed for next game." said, the game running
 going on; the page's coop is more than one client at it, deathmatch them against each other, `maxclients 1` single player),

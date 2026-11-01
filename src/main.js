@@ -121,7 +121,9 @@ document.addEventListener('visibilitychange', () => audio.suspend(document.hidde
 const perf = { tic: 0, faces: 0, draw: 0, rows: 0 };
 let frameInfo = null;   // the first view's last frame: { ents, dlights, particles, tint } (the cl_add and cl_test cvars read back)
 
+let rconOut = null;   // Com_BeginRedirect: while an rcon line runs at the host's console, its prints and its line are kept for the guest (RD_PACKET)
 function setStatus(msg, isError = false) {
+  if (rconOut && msg) rconOut.push(msg);
   statusEl.textContent = msg;
   statusEl.classList.toggle('error', isError);
   statusEl.hidden = !msg;
@@ -508,7 +510,7 @@ const con = new Console({
   setLogStats: (on) => setLogStats(on),                   // (log_stats: a line a frame to stats.log in the file store, downloaded with 0)
   isPaused: () => paused,                                 // (cl_paused: the pause's state)
   dumpLog: (name) => { const lines = notify.log(notify.keep); downloadText(`${name}.txt`, lines.join('\n') + '\n'); return lines.length; },   // (condump: the scrollback as <name>.txt, Con_Dump_f)
-  print: (text) => notify.add(text, gameClock(), { show: false }),   // (cmdlist: lines into the scrollback alone)
+  print: (text) => { if (rconOut) rconOut.push(text); notify.add(text, gameClock(), { show: false }); },   // (cmdlist: lines into the scrollback alone; an rcon line's for the guest too)
   // version: the page's version and build (scripts/build.mjs stamps them), the engine package's version, and the engine line (Firebird's version, threads or not)
   version: () => `Firebird Quake 2 ${typeof __VERSION__ === 'string' ? __VERSION__ : 'dev'} build ${typeof __BUILD__ === 'string' ? __BUILD__ : 'dev'}, firebird-wasm ${typeof __FBWASM__ === 'string' ? __FBWASM__ : 'dev'}, ${$('engine').textContent}`,   // eslint-disable-line no-undef
   togglePause: () => { if (netHost() || netGuest() || !running) return null; paused = !paused; return paused; },   // (pause: a single-player game running, as CL_Pause_f allowed)
@@ -530,6 +532,7 @@ const con = new Console({
   soundList: () => [...audio.buffers.keys()].map((name) => ({ name, size: pak?.files.get(`sound/${name}`)?.size ?? 0, loop: audio.loops.has(name) })),
   // a joined page's game commands (god, give, kill…) go to the host, which runs them for this page's client (Cmd_ForwardToServer)
   forward: (cmd, arg) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendConsole(cmd, arg); return true; },
+  rcon: (line) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendRcon(settings.rconPassword, line); return true; },   // (CL_Rcon_f: the line to the host with rcon_password)
   // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)
   setTimescale: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; timescale = n; lastTic = performance.now(); } return timescale; },
   // the fixedtime cvar: shown (null leaves it), set (a guest's clock is the host's); the ms owed start over with it
@@ -1817,6 +1820,18 @@ async function hostAccept(peer, text) {
   g.host.onSay = (text) => { if (net?.guests.includes(g) && map && !demo) session.say(g.client, text).catch((err) => console.warn('say:', err.message)); };
   // the guest's game commands run here for its client (the answer goes to its message line, as player_command prints it)
   g.host.onConsole = (cmd, arg) => { if (net?.guests.includes(g) && map && !demo && running) db.query('SELECT msg FROM player_command(?, ?, ?)', [cmd, arg, g.client]).catch((err) => console.warn('a guest\'s command:', err.message)); };
+  // SV_RemoteCommand_f: the guest's rcon line runs at this console when its password is rcon_password's (Rcon_Validate: none set, none
+  // taken), the prints and the line kept for it meanwhile (Com_BeginRedirect) and sent back; a bad one is told so, and this console says
+  // "Bad rcon from" as the server's did
+  g.host.onRcon = async (pw, line) => {
+    if (!net?.guests.includes(g)) return;
+    const ok = !!settings.rconPassword && pw === settings.rconPassword;
+    notify.add(`${ok ? 'Rcon' : 'Bad rcon'} from client ${g.client}: ${line}`, gameClock(), { show: false });
+    if (!ok) { if (g.host.open) g.host.sendPrint('Bad rcon_password.'); return; }
+    const out = []; rconOut = out;
+    try { await con.run(line); } catch (err) { out.push(`${line}: ${err.message}`); } finally { if (rconOut === out) rconOut = null; }
+    if (g.host.open) g.host.sendPrint(out.join('\n'));
+  };
   netEl.panel.hidden = true;
   canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
   netState(`hosting: ${guestsState()}`);
@@ -1923,6 +1938,8 @@ async function netGo() {
       net.guest.onMap = (m) => guestMap(m).catch((err) => { console.error(err); setStatus(err.message, true); });
       net.guest.onPic = (file) => { if (pak.has(file)) { running = false; const p = loadPcx(pak.get(file)); renderer.drawPicFull(p); renderer.present(null, p.palette); } };
       net.guest.onCin = (file) => { if (pak.has(file) && !cinematic) playCinematic(file).catch((err) => console.error(err)); };
+      // a print from the host's console (an rcon line's answer): its lines on the scrollback, the last on the line, as Com_Printf put them on the console
+      net.guest.onPrint = (text) => { const lines = text.split('\n').filter((l) => l); for (const l of lines) notify.add(l, gameClock(), { show: false }); setStatus(lines.at(-1) ?? '', /^Bad rcon_password/.test(text)); };
       net.guest.onClose = () => {
         if (!netGuest()) return;
         const why = net.guest.kicked ? `${net.guest.kicked}.` : 'The host left.';   // (SV_Kick_f told this page before the channel closed)

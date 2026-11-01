@@ -92,6 +92,19 @@ check(forwarded[1][0].length === 32 && forwarded[1][1].length === 64, 'a command
 guest.sendConsole('god', '');
 await new Promise((r) => setTimeout(r, 50));
 check(((await q('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0].FLAGS & 16) === 0, 'and god again puts it off');
+// rcon (CL_Rcon_f): the password and the line reach the host cut to their sizes, for its SV_RemoteCommand_f; its answer comes back as a print
+{
+  const rcons = [], prints = [];
+  host.onRcon = (pw, line) => rcons.push([pw, line]);
+  guest.onPrint = (t) => prints.push(t);
+  guest.sendRcon('secret', ' status ');
+  guest.sendRcon('x'.repeat(40), 'y'.repeat(300));
+  guest.sendRcon('secret', '   ');
+  host.sendPrint('map: demo1\n1 client');
+  check(rcons.length === 2 && rcons[0][0] === 'secret' && rcons[0][1] === 'status' && rcons[1][0].length === 32 && rcons[1][1].length === 256 && prints.length === 1 && prints[0] === 'map: demo1\n1 client',
+    'a guest\'s rcon reaches the host with its password and line (trimmed, cut to 32 and 256), an empty line not at all, and the host\'s print reaches the guest');
+  host.onRcon = null; guest.onPrint = null;
+}
 // the ping: the host's clock goes to the guest and comes back at once, the round trip read against the host's clock
 {
   let clock = 1000;

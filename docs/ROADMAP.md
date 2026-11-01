@@ -1236,9 +1236,18 @@ with the demo pak. In the order they are to be taken.
   client's enter time at the level time and the first two's at 0, the tic row carrying it; `test:console` playerlist's
   lines and sum, no game, cmd forwarded, its usage, run here, Tab; the browser test reads playerlist's line and runs cmd
   god here and, at a joined page, lists both clients and runs cmd god for its client at the host, on both builds.
-- **`rcon` and `rcon_password`**: `CL_Rcon_f` and `SV_RemoteCommand_f`: a joined page running the host's console with
-  the host's `rcon_password` (`rcon <command>` with its own `rcon_password` set, over the link), the host's answer
-  on the guest's scrollback, "Bad rcon_password" refused and told at the host's console.
+- **`rcon` and `rcon_password`**: done. `rcon <line>` at a joined page is `CL_Rcon_f`: the line goes to the host with
+  the page's `rcon_password` (the client's cvar and the server's were one name; one setting here, not archived), and
+  the host's `SV_RemoteCommand_f` runs it at its own console when the password is its `rcon_password` (`Rcon_Validate`:
+  none set, none taken), keeping the prints and the status line meanwhile (`Com_BeginRedirect`) and sending them back
+  as a `print` message, onto the guest's scrollback with the last on its line; a wrong password answers "Bad
+  rcon_password." and the host's scrollback says "Bad rcon from client N", a right one "Rcon from client N". No
+  password set, the page says so as Quake did; no game joined (there is no `rcon_address` here), it says so too. Both
+  words in the console's list for Tab. `test:net` sees the password and the line reach the host cut to their sizes
+  and a print reach the guest; `test:settings` the setting; `test:console` the cvar shown, set and refused, rcon
+  without a password, on a page of its own, joined (the line as typed), its usage and Tab; the browser test runs
+  status at the host from the joined page and reads its lines there, then is refused with another password, both
+  scrollbacks saying so, on both builds.
 - **`showpackets` and `showdrop`**: `Netchan_Transmit`'s and `Netchan_Process`'s prints at either end (each message's
   direction, size and kind on the scrollback) and the frames held or dropped at the host ("Dropped %i at %i").
 - **The pad's `joy_*` cvars**: `joy_forwardthreshold`, `joy_sidethreshold`, `joy_upthreshold`, `joy_pitchthreshold`
