@@ -703,7 +703,11 @@ or a sidestep with `+strafe` held or lookstrafe on under `+mlook`, `m_side` in `
 vertical a look with `+mlook` held or free look on, else a walk, `m_forward` in `cl_forwardspeed`'s 200; free look
 is on by default here, as the mouse always looked, off in Quake; the options menu has the three boxes; `m_forward`
 and `m_side` not archived, as Quake's were not), `cl_shownet` (`CL_ParseServerMessage`'s prints on a joined page: 1 each message's size, 2 its size and kind, "f" the host's
-frames, on the scrollback as each comes, `GuestLink.onNet`), `cl_showclamp` (`CL_ParseFrame`'s "high clamp" and "low clamp": the
+frames, on the scrollback as each comes, `GuestLink.onNet`), `showpackets` (`Netchan_Transmit`'s and `Netchan_Process`'s prints at either
+end of a shared game: each message sent or received with its size and kind, "send  1234 : f", `onPacket` on `HostLink` and `GuestLink`, the
+host's lines naming the client), `showdrop` (`Netchan_Process`'s "Dropped %i packets at %i": at the host each frame dropped, the channel
+behind, or held to the guest's rate, with its tic, `HostLink.onDrop`; at a joined page the frames missed before one, counted by the tics
+between its tic and the last's past the tics it ran, `GuestLink.onDrop`; neither archived), `cl_showclamp` (`CL_ParseFrame`'s "high clamp" and "low clamp": the
 wall ahead of the game past the two tics a frame runs, the rest dropped, and a host's frame past its time at a joined page; neither
 archived), and `netgraph`, cl_scrn.c's
 debug graph along the bottom of a joined page's view, a column a frame from the host, `src/netgraph.js`, not

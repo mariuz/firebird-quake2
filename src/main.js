@@ -1832,6 +1832,10 @@ async function hostAccept(peer, text) {
     try { await con.run(line); } catch (err) { out.push(`${line}: ${err.message}`); } finally { if (rconOut === out) rconOut = null; }
     if (g.host.open) g.host.sendPrint(out.join('\n'));
   };
+  // showpackets and showdrop at the host: each message to or from the guest ("send  1234 : f client 2", as Netchan_Transmit printed "send %4i : …"),
+  // and each frame dropped (the channel behind) or held (the guest's rate) with its tic, on the scrollback
+  g.host.onPacket = (dir, kind, size) => { if (settings.showpackets) notify.add(`${dir} ${String(size).padStart(5)} : ${kind} client ${g.client}`, gameClock(), { show: false }); };
+  g.host.onDrop = (what, tic) => { if (settings.showdrop) notify.add(`client ${g.client}: ${what === 'held' ? 'Held' : 'Dropped'} frame at ${tic}`, gameClock(), { show: false }); };
   netEl.panel.hidden = true;
   canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
   netState(`hosting: ${guestsState()}`);
@@ -1939,6 +1943,9 @@ async function netGo() {
       net.guest.onPic = (file) => { if (pak.has(file)) { running = false; const p = loadPcx(pak.get(file)); renderer.drawPicFull(p); renderer.present(null, p.palette); } };
       net.guest.onCin = (file) => { if (pak.has(file) && !cinematic) playCinematic(file).catch((err) => console.error(err)); };
       // a print from the host's console (an rcon line's answer): its lines on the scrollback, the last on the line, as Com_Printf put them on the console
+      // showpackets and showdrop at a joined page: each message to or from the host, and the frames missed before one ("Dropped %i packets at %i")
+      net.guest.onPacket = (dir, kind, size) => { if (settings.showpackets) notify.add(`${dir} ${String(size).padStart(5)} : ${kind}`, gameClock(), { show: false }); };
+      net.guest.onDrop = (n, tic) => { if (settings.showdrop) notify.add(`Dropped ${n} frames at ${tic}`, gameClock(), { show: false }); };
       net.guest.onPrint = (text) => { const lines = text.split('\n').filter((l) => l); for (const l of lines) notify.add(l, gameClock(), { show: false }); setStatus(lines.at(-1) ?? '', /^Bad rcon_password/.test(text)); };
       net.guest.onClose = () => {
         if (!netGuest()) return;

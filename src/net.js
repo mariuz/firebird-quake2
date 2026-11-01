@@ -124,6 +124,8 @@ export class HostLink {
     this.onSay = null;      // the guest's chat (Cmd_Say_f): the host says it for the guest's client
     this.onConsole = null;  // the guest's console command (Cmd_ForwardToServer): the host runs it for the guest's client
     this.onRcon = null;     // the guest's rcon (CL_Rcon_f): the password it sent and the line, for the host's SV_RemoteCommand_f
+    this.onPacket = null;   // showpackets (Netchan_Transmit's and Netchan_Process's prints): each message's direction ('send' | 'recv'), kind and size
+    this.onDrop = null;     // showdrop: a frame not sent, 'dropped' (the channel behind) or 'held' (the guest's rate), with its tic
     this.onClose = null;
     this.sentFrames = 0;
     this.droppedFrames = 0;
@@ -131,9 +133,10 @@ export class HostLink {
     this.sizes = [];        // the frames sent in the last second as [at, size] (SV_RateDrop's message_size ring, by the clock here)
     this.ping = null;       // the guest's round trip in whole milliseconds, from its last pong (null until one came)
     this.now = now;
-    link.onMessage = (m) => {
+    link.onMessage = (m, size = 0) => {
       if (!m) return;
       this.heardAt = this.now();
+      this.onPacket?.('recv', String(m.t ?? '?'), size || JSON.stringify(m).length);
       if (m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; if (Number.isInteger(m.seq)) this.pendingSeq = m.seq; }
       else if (m.t === 'pong' && typeof m.at === 'number') this.ping = Math.max(0, Math.round(this.now() - m.at));
       else if (m.t === 'info') {
@@ -153,6 +156,8 @@ export class HostLink {
     link.onClose = () => this.onClose?.();
   }
   get open() { return this.link.open; }
+  /** A message to the guest, its kind and size told (showpackets); the size, 0 when the link is closed. */
+  send(obj) { const n = this.link.send(obj); this.onPacket?.('send', String(obj.t ?? '?'), n); return n; }
   /**
    * The guest's usercmd for this tic: the commands that arrived since the last one merged (the turns summed,
    * the buttons any that were pressed, the movement and the run the latest, the last impulse); none arrived,
@@ -173,17 +178,17 @@ export class HostLink {
     return c;
   }
   /** A map is in: its name and what the guest's page sets up from (the sky, the music, the speakers, the view). */
-  sendMap(setup) { this.link.send({ t: 'map', ...setup }); }
+  sendMap(setup) { this.send({ t: 'map', ...setup }); }
   /** A picture screen at a level's end (the guest shows it until the next map). */
-  sendPic(file) { this.link.send({ t: 'pic', file }); }
+  sendPic(file) { this.send({ t: 'pic', file }); }
   /** A cinematic at a level's end (the guest plays its own copy until the next map). */
-  sendCin(file) { this.link.send({ t: 'cin', file }); }
+  sendCin(file) { this.send({ t: 'cin', file }); }
   /** A print for the guest's console (Com_BeginRedirect's RD_PACKET: what the host's console said to an rcon line, "Bad rcon_password." for a wrong one). */
-  sendPrint(text) { this.link.send({ t: 'print', text: String(text ?? '').slice(0, 4000) }); }
+  sendPrint(text) { this.send({ t: 'print', text: String(text ?? '').slice(0, 4000) }); }
   /** SV_Kick_f: the guest is told it was kicked (its page says so), then the channel closes. */
-  sendKick(reason = 'kicked') { this.link.send({ t: 'kick', reason: String(reason ?? '').slice(0, 80) }); }
+  sendKick(reason = 'kicked') { this.send({ t: 'kick', reason: String(reason ?? '').slice(0, 80) }); }
   /** A ping (the host's clock in it): the guest answers with a pong carrying it back, and `ping` is the round trip (the score board's). */
-  sendPing() { this.link.send({ t: 'ping', at: this.now() }); }
+  sendPing() { this.send({ t: 'ping', at: this.now() }); }
   /**
    * The guest's frame: its player row, its frame's rows (packed), the tic's sounds and effects (they come with
    * the host's own frame query, the first of the tic), the tic's length, the newest command the tic took (`ack`:
@@ -192,11 +197,11 @@ export class HostLink {
    * the guest's rate userinfo (its bytes a second), counted in `heldFrames` as surpressCount counted them.
    */
   sendFrame(row, frame, { sounds = [], fx = [], dt = 0.05, inv = null } = {}) {
-    if (this.link.buffered > BACKLOG) { this.droppedFrames++; return false; }
+    if (this.link.buffered > BACKLOG) { this.droppedFrames++; this.onDrop?.('dropped', row?.TIC ?? 0); return false; }
     const at = this.now();
     while (this.sizes.length && this.sizes[0][0] <= at - 1000) this.sizes.shift();
-    if (this.sizes.reduce((n, s) => n + s[1], 0) > (this.info?.rate ?? 500000)) { this.heldFrames++; return false; }
-    const size = this.link.send({ t: 'f', row, f: packFrame(frame), sounds, fx, dt, ack: this.ack, ...(inv ? { inv } : {}) });
+    if (this.sizes.reduce((n, s) => n + s[1], 0) > (this.info?.rate ?? 500000)) { this.heldFrames++; this.onDrop?.('held', row?.TIC ?? 0); return false; }
+    const size = this.send({ t: 'f', row, f: packFrame(frame), sounds, fx, dt, ack: this.ack, ...(inv ? { inv } : {}) });
     this.sizes.push([at, size]);
     this.sentFrames++;
     return true;
@@ -223,43 +228,54 @@ export class GuestLink {
     this.onCin = null;
     this.onKick = null;     // the host kicked this guest (SV_Kick_f): the reason, before the channel closes
     this.onPrint = null;    // a print from the host's console (an rcon line's answer, CL_ConnectionlessPacket's "print")
+    this.onPacket = null;   // showpackets: each message's direction ('send' | 'recv'), kind and size
+    this.onDrop = null;     // showdrop (Netchan_Process's "Dropped %i packets at %i"): the frames missed before one, by the tics between, and its tic
+    this.lastTic = null;    // the last frame's tic (the drops counted from it)
     this.onClose = null;
     link.onMessage = (m) => this.receive(m);
     link.onClose = () => this.onClose?.();
   }
   get open() { return this.link.open; }
+  /** A message to the host, its kind and size told (showpackets); the size, 0 when the link is closed. */
+  send(obj) { const n = this.link.send(obj); this.onPacket?.('send', String(obj.t ?? '?'), n); return n; }
   receive(m, size = 0) {
     if (!m || typeof m !== 'object') return;
     this.heardAt = this.now();
+    this.onPacket?.('recv', String(m.t ?? '?'), size || JSON.stringify(m).length);
     if (this.onNet) this.onNet(String(m.t ?? '?'), size || JSON.stringify(m).length);   // (cl_shownet: each message's kind and size, as CL_ParseServerMessage printed them; a link in one process gives no text, so its size is the JSON's)
     switch (m.t) {
-      case 'map': this.map = m; this.frame = null; this.fresh = false; this.onMap?.(m); break;
-      case 'f':
+      case 'map': this.map = m; this.frame = null; this.fresh = false; this.lastTic = null; this.onMap?.(m); break;
+      case 'f': {
+        // (showdrop: a frame's tic past the last one's by more than the tics it ran is frames the host held or dropped, Netchan_Process's gap)
+        const tic = m.row?.TIC, ran = Math.max(1, Math.round((m.dt ?? 0.05) / 0.05));
+        if (Number.isInteger(tic) && Number.isInteger(this.lastTic) && tic - this.lastTic > ran) this.onDrop?.(tic - this.lastTic - ran, tic);
+        if (Number.isInteger(tic)) this.lastTic = tic;
         this.row = m.row; this.frame = unpackFrame(m.f, m.sounds ?? [], m.fx ?? []); this.dt = m.dt ?? 0.05; this.ack = Number.isInteger(m.ack) ? m.ack : -1;
         if (m.inv) this.inv = m.inv;
         this.fresh = true; this.frames++;
         break;
+      }
       case 'pic': this.onPic?.(m.file); break;
       case 'cin': this.onCin?.(m.file); break;
       case 'kick': this.kicked = String(m.reason ?? 'kicked'); this.onKick?.(this.kicked); break;
       case 'print': if (typeof m.text === 'string') this.onPrint?.(m.text.slice(0, 4000)); break;
-      case 'ping': if (typeof m.at === 'number') this.link.send({ t: 'pong', at: m.at }); break;   // (answered at once: the host's clock goes back as it came)
+      case 'ping': if (typeof m.at === 'number') this.send({ t: 'pong', at: m.at }); break;   // (answered at once: the host's clock goes back as it came)
       default: break;
     }
   }
   /** This tic's usercmd (Input.read's array); `inv` asks for the inventory rows with the frames; `seq` numbers it for the ack. */
-  sendCommand(cmd, { inv = false, seq } = {}) { this.link.send({ t: 'cmd', c: cmd, inv: !!inv, ...(Number.isInteger(seq) ? { seq } : {}) }); }
+  sendCommand(cmd, { inv = false, seq } = {}) { this.send({ t: 'cmd', c: cmd, inv: !!inv, ...(Number.isInteger(seq) ? { seq } : {}) }); }
   /** The guest's userinfo (the name and the hand of its player setup, whether it only watches, its fov, its rate and skin), at the connect and whenever it changes. */
   sendInfo({ name = '', hand = 0, spectator = 0, fov = null, gender = 'male', msg = 1, rate = null, skin = null, password = '' } = {}) {
-    this.link.send({ t: 'info', name: String(name).slice(0, 15), hand, spectator: spectator ? 1 : 0, ...(Number.isFinite(fov) ? { fov } : {}), gender: String(gender ?? 'male').slice(0, 15), msg,
+    this.send({ t: 'info', name: String(name).slice(0, 15), hand, spectator: spectator ? 1 : 0, ...(Number.isFinite(fov) ? { fov } : {}), gender: String(gender ?? 'male').slice(0, 15), msg,
       ...(Number.isFinite(rate) ? { rate } : {}), ...(skin != null ? { skin: String(skin).slice(0, 31) } : {}), password: String(password ?? '').slice(0, 32) });
   }
   /** The guest's chat (`say` at its console): the host prints it for the guest's client. */
-  sendSay(text) { this.link.send({ t: 'say', text: String(text ?? '').slice(0, 150) }); }
+  sendSay(text) { this.send({ t: 'say', text: String(text ?? '').slice(0, 150) }); }
   /** A game command typed at the guest's console (god, give, kill…): the host runs it for the guest's client, as Cmd_ForwardToServer sent it. */
-  sendConsole(cmd, arg = '') { this.link.send({ t: 'con', cmd: String(cmd ?? '').slice(0, 32), arg: String(arg ?? '').slice(0, 64) }); }
+  sendConsole(cmd, arg = '') { this.send({ t: 'con', cmd: String(cmd ?? '').slice(0, 32), arg: String(arg ?? '').slice(0, 64) }); }
   /** CL_Rcon_f: a line for the host's console with the password (the host's Rcon_Validate judges it, its prints come back as a print message). */
-  sendRcon(password, line) { this.link.send({ t: 'rcon', password: String(password ?? '').slice(0, 32), cmd: String(line ?? '').slice(0, 256) }); }
+  sendRcon(password, line) { this.send({ t: 'rcon', password: String(password ?? '').slice(0, 32), cmd: String(line ?? '').slice(0, 256) }); }
   /** The newest frame since the last take, with its row, or null. */
   take() {
     if (!this.fresh) return null;

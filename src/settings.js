@@ -9,7 +9,7 @@ export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false,
-  crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rLockpvs: false, rSpeeds: false, rDspeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, logStats: false, svNoreload: false, sShow: false, inJoystick: true, sKhz: 44, clShownet: 0, clShowclamp: false,
+  crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rLockpvs: false, rSpeeds: false, rDspeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, logStats: false, svNoreload: false, sShow: false, inJoystick: true, sKhz: 44, clShownet: 0, clShowclamp: false, showpackets: false, showdrop: false,
   mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '', rconPassword: '',
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
@@ -60,6 +60,7 @@ const CHECK = {
   sShow: bool,        // s_show: each sound started printed on the scrollback
   logStats: bool, inJoystick: bool,   // log_stats: a line a frame kept as stats.log; in_joystick: the pads read (1 here, where Quake's was 0)
   sKhz: oneOf(11, 22, 44), clShownet: int(0, 2), clShowclamp: bool,
+  showpackets: bool, showdrop: bool,   // Netchan_Transmit's and Netchan_Process's prints: each message's direction, size and kind; the frames dropped, held or missed
   rLockpvs: bool, rDspeeds: bool,   // r_lockpvs: the view's cluster held where it was locked; r_dspeeds: the painter's times in detail   // s_khz: the mixer's rate; cl_shownet: a joined page's messages printed; cl_showclamp: the clock's clamps printed
   // m_yaw (the turn a mouse count, 0.022), cl_gun (the view weapon drawn), con_notifytime (the notify lines' seconds, 3)
   mYaw: num(-10, 10), clGun: bool, conNotifytime: num(0, 60),

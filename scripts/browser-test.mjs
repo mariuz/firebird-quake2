@@ -1383,6 +1383,19 @@ try {
       for (let i = 0; i < 40 && rcBad !== 'Bad rcon_password.'; i++) { await sleep(250); rcBad = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => ''); }
       const rcHostBad = await page.evaluate(() => window.quake2.notify.log(8)).catch(() => []);
       await typeOn(gp, 'rcon_password ""'); await typeOn(page, 'rcon_password ""');
+      // showpackets at the joined page prints each message sent and received ("recv  6504 : f", "send    60 : cmd"); showdrop at the host says each frame
+      // held to the guest's rate at 25000 ("client 2: Held frame at N"), at the guest the frames missed before one ("Dropped N frames at T")
+      await typeOn(gp, 'showpackets 1'); await sleep(600);
+      const spk = await gp.evaluate(() => window.quake2.notify.log(24)).catch(() => []);
+      await typeOn(gp, 'showpackets 0');
+      await typeOn(page, 'showdrop 1'); await typeOn(gp, 'showdrop 1'); await typeOn(gp, 'rate 25000');
+      let sdh = [], sdg = [];
+      for (let i = 0; i < 40 && !(sdh.some((l) => /^client 2: Held frame at \d+$/.test(l)) && sdg.some((l) => /^Dropped \d+ frames at \d+$/.test(l))); i++) {
+        await sleep(250); sdh = await page.evaluate(() => window.quake2.notify.log(24)).catch(() => []); sdg = await gp.evaluate(() => window.quake2.notify.log(24)).catch(() => []);
+      }
+      await typeOn(gp, 'rate 500000'); await typeOn(page, 'showdrop 0'); await typeOn(gp, 'showdrop 0');
+      assert(spk.some((l) => /^recv +\d+ : f$/.test(l)) && spk.some((l) => /^send +\d+ : cmd$/.test(l)) && sdh.some((l) => /^client 2: Held frame at \d+$/.test(l)) && sdg.some((l) => /^Dropped \d+ frames at \d+$/.test(l)),
+        `showpackets at the joined page prints the frames received and the commands sent (${JSON.stringify(spk.filter((l) => /^(send|recv) /.test(l)).slice(-3))}); showdrop says the frames held at the host (${JSON.stringify(sdh.filter((l) => /Held/.test(l)).slice(-1))}) and missed at the guest (${JSON.stringify(sdg.filter((l) => /Dropped/.test(l)).slice(-1))})`);
       assert(rcNo === "You must set 'rcon_password' before issuing an rcon command" && /^map: demo1 · 2 clients/.test(rcOk.line ?? '') && rcOk.log?.includes('num score ping name') && rcHost.includes('Rcon from client 2: status')
         && rcBad === 'Bad rcon_password.' && rcHostBad.includes('Bad rcon from client 2: status'),
         `rcon at the joined page asks for rcon_password first ("${rcNo}"), runs status at the host with it ("${rcOk.line}", the lines on its scrollback, the host's saying ${JSON.stringify(rcHost.filter((l) => /rcon/i.test(l)))}) and is refused with another ("${rcBad}", ${JSON.stringify(rcHostBad.filter((l) => /rcon/i.test(l)))})`);

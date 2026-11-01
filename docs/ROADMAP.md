@@ -1248,8 +1248,17 @@ with the demo pak. In the order they are to be taken.
   without a password, on a page of its own, joined (the line as typed), its usage and Tab; the browser test runs
   status at the host from the joined page and reads its lines there, then is refused with another password, both
   scrollbacks saying so, on both builds.
-- **`showpackets` and `showdrop`**: `Netchan_Transmit`'s and `Netchan_Process`'s prints at either end (each message's
-  direction, size and kind on the scrollback) and the frames held or dropped at the host ("Dropped %i at %i").
+- **`showpackets` and `showdrop`**: done. `showpackets 1` prints each message sent or received at either end of a shared
+  game on the scrollback with its size and kind, as `Netchan_Transmit` and `Netchan_Process` printed "send %4i" and
+  "recv %4i" (`HostLink.send` and `GuestLink.send` tell `onPacket`, the receives too; the host's lines name the client).
+  `showdrop 1` is `Netchan_Process`'s "Dropped %i packets at %i": at the host each frame dropped (the channel behind)
+  or held (the guest's rate) with its tic (`HostLink.onDrop`), at a joined page the frames missed before one, counted by
+  the tics between its tic and the last frame's past the tics it ran (`GuestLink.onDrop`, `lastTic`). Neither archived,
+  as Quake's were not; both in the console's list for Tab. `test:net` sees either end told each message with its kind
+  and size, the host told a frame dropped and one held at their tics, the guest the frame it missed at the next;
+  `test:settings` the two; `test:console` shown, set, refused, cvarlist, left out of config.cfg, Tab; the browser test
+  reads the frames received and the commands sent at the joined page, the frames held at the host at a rate of 25000
+  and the frames missed at the guest, on both builds.
 - **The pad's `joy_*` cvars**: `joy_forwardthreshold`, `joy_sidethreshold`, `joy_upthreshold`, `joy_pitchthreshold`
   and `joy_yawthreshold` (the sticks' dead zone, 0.15) and `joy_forwardsensitivity`, `joy_sidesensitivity`,
   `joy_upsensitivity`, `joy_pitchsensitivity` and `joy_yawsensitivity` (the sticks' speeds), as `IN_JoyMove` read them.

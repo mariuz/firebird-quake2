@@ -401,6 +401,26 @@ check(host.info.rate === 500000 && host.info.skin === 'male/grunt', 'none given 
   for (let i = 0; i < 4; i++) { if ((await hostTic()).sent) sentN++; }
   check(sentN === 4 && host.heldFrames === was, 'at 500000 four frames in a row go, none held');
 }
+// showpackets and showdrop: either end is told each message sent and received with its kind and size (Netchan_Transmit's and
+// Netchan_Process's prints); the host is told a frame dropped (the channel behind) or held (the rate) with its tic, the guest the
+// frames it missed at the next one that comes, by the tics between ("Dropped %i packets at %i")
+{
+  const hp = [], gpk = [], hd = [], gd = [];
+  host.onPacket = (d, k, n) => hp.push([d, k, n]); guest.onPacket = (d, k, n) => gpk.push([d, k, n]);
+  host.onDrop = (what, tic) => hd.push([what, tic]); guest.onDrop = (n, tic) => gd.push([n, tic]);
+  guest.sendSay('hi'); host.sendPing();
+  check(gpk.some(([d, k, n]) => d === 'send' && k === 'say' && n > 10) && hp.some(([d, k, n]) => d === 'recv' && k === 'say' && n > 10) && hp.some(([d, k]) => d === 'send' && k === 'ping')
+    && gpk.some(([d, k]) => d === 'recv' && k === 'ping') && gpk.some(([d, k]) => d === 'send' && k === 'pong') && hp.some(([d, k]) => d === 'recv' && k === 'pong'),
+    'showpackets: either end is told each message sent and received, its kind and size');
+  a.bufferedAmount = BACKLOG + 1; const dr = await hostTic(); a.bufferedAmount = 0; const nx = await hostTic();
+  check(!dr.sent && nx.sent && hd.length === 1 && hd[0][0] === 'dropped' && hd[0][1] === dr.last.TIC && gd.length === 1 && gd[0][0] === 1 && gd[0][1] === nx.last.TIC,
+    `showdrop: the host is told the frame dropped at its tic (${hd[0]?.[1]}), the guest the one frame it missed at the next (${JSON.stringify(gd[0])})`);
+  guest.sendInfo({ name: 'x', hand: 0, rate: 1000 });
+  const hl = await hostTic();
+  check(!hl.sent && hd.length === 2 && hd[1][0] === 'held' && hd[1][1] === hl.last.TIC, `at a rate of 1000 the next frame is held, the host told so at its tic (${hd[1]?.[1]})`);
+  guest.sendInfo({ name: 'x', hand: 0 });
+  host.onPacket = null; guest.onPacket = null; host.onDrop = null; guest.onDrop = null;
+}
 await session.setUserinfo(2, { name: '', hand: 0 });
 
 // a level change: the next map's message, then frames from it
