@@ -533,6 +533,15 @@ try {
     assert(withTests?.dlights >= 32 && withTests.ents >= 32 && withTests.particles >= 4096 && withTests.tint?.join() === '255,128,64,0.5'
       && without?.dlights === 0 && without.ents === 0 && without.particles === 0 && without.tint === null && plain?.dlights < 32 && plain.ents < 32 && plain.particles < 4096,
       `the cl_test cvars add their rings and blend to a frame (${JSON.stringify(withTests)}), the cl_add switches at 0 leave everything out (${JSON.stringify(without)}), back as it was (${JSON.stringify(plain)})`);
+    // vid_mode and vid_ref reach the Detail and renderer controls (the painter remade): 0 is 160×120, sql the projector, and back
+    await typeCommand('vid_mode 0'); await sleep(700);
+    const vm0 = await page.evaluate(() => ({ detail: window.quake2.settings.detail, select: document.getElementById('detail')?.value, w: window.quake2.renderer.screenW, line: document.getElementById('status')?.textContent })).catch(() => ({}));
+    await typeCommand('vid_ref sql'); await sleep(300);
+    const vr = await page.evaluate(() => ({ renderer: window.quake2.settings.renderer, select: document.getElementById('renderer')?.value })).catch(() => ({}));
+    await typeCommand('vid_mode 1'); await typeCommand('vid_ref soft'); await sleep(700);
+    const vm1 = await page.evaluate(() => ({ detail: window.quake2.settings.detail, renderer: window.quake2.settings.renderer, w: window.quake2.renderer.screenW })).catch(() => ({}));
+    assert(vm0.detail === 'low' && vm0.select === 'low' && vm0.w === 160 && /"vid_mode" is "0"/.test(vm0.line ?? '') && vr.renderer === 'sql' && vr.select === 'sql' && vm1.detail === 'high' && vm1.renderer === 'fast' && vm1.w === 320,
+      `vid_mode 0 is 160×120 through the Detail control (${JSON.stringify(vm0)}), vid_ref sql the projector (${JSON.stringify(vr)}), and back (${JSON.stringify(vm1)})`);
     // vid_restart makes the painter anew (another object, the sky and the view kept, the game painting on); snd_restart the mixer
     // (another context, the decoded sounds forgotten, the music back)
     const painterBefore = await page.evaluate(() => ({ r: window.quake2.renderer, sky: window.quake2.renderer.skyName, w: window.quake2.renderer.screenW, paints: window.quake2.paints })).then((x) => x).catch(() => ({}));

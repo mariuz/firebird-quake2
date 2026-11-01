@@ -800,7 +800,10 @@ have passed since the last painted, `paintDue`, 90 as Quake had it, 0 every anim
 them either way, and the SQL-projecting mode paints a tic's frame as it is); none archived, as Quake's were not,
 `vid_gamma` (the video menu's brightness as a cvar, the control's tenths from 1 to 1.8, a number between snapped and
 clamped to them, archived: the painter's light scale and the control follow through `setSetting`) and `vid_fullscreen` (the page's live fullscreen state shown, `isFullscreen`; 0 or 1 asks the page
-for it or leaves it, as the video menu's box does), `help` (`Cmd_Help_f`: the help computer, or the score board in deathmatch, as
+for it or leaves it, as the video menu's box does), `vid_mode` and `vid_ref` (`VID_MenuInit`'s cvars: the mode as the Detail select has
+it, 0 160×120, 1 320×240, 2 640×480, and the refresh as the renderer mode, `soft` the painter with SQL picking the faces and `sql` the
+projector; a change goes through the page's control and restarts the painter as `VID_CheckChanges` did; both archived, in config.cfg
+as Quake's were), `help` (`Cmd_Help_f`: the help computer, or the score board in deathmatch, as
 F1 brings it, `toggleHelp`), `sv_gravity` (the game row's gravity for the game running, `gravity` and `setGravity`; a new map
 takes its worldspawn's again, and a joined page runs no server), `bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle` and
 `sv_rollspeed` (p_view.c's cvars on the game row the same way, `gameCvar` and `setGameCvar`, Quake's defaults: `player_think` bobs

@@ -1169,9 +1169,14 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
 The seventeenth list: what the video menu's cvars, the level words, the mixer, the pad, the painter's switches and
 the userinfo still lack of Quake 2's own words with the demo pak. In the order they are to be taken.
 
-- **`vid_mode` and `vid_ref`**: the video menu's cvars at the console (`VID_MenuInit`'s: `vid_mode` the mode as the
-  Detail select has it, `vid_ref` the driver as the renderer mode, `soft` the face picker and `sql` the projector),
-  `vid_restart` following as the menu's apply did.
+- **`vid_mode` and `vid_ref`**: done. `vid_mode` is the mode as the Detail select has it (0 160×120, 1 320×240, 2
+  640×480, the video menu's spin) and `vid_ref` the refresh as the renderer mode (`soft` the painter with SQL picking
+  the faces and JS projecting, `sql` the projector); a change goes through the page's control (`setSetting`, so the
+  menus and the selects agree) and restarts the painter as `VID_CheckChanges` did, the same value again doing nothing;
+  both archived in config.cfg as Quake's were (`CONFIG_CVARS` maps them onto the detail and renderer settings).
+  `test:console` shows, sets (case aside), refuses, counts the restarts, reads config.cfg and Tab; the browser test
+  sets the mode to 160×120 and the refresh to the projector and sees the controls and the painter follow, and back,
+  on both builds.
 - **`gamemap` and `nextserver`**: `SV_GameMap_f` as the level change with the one running kept aside (an ordinary
   exit's way, `*` wiping the unit), and the `+` chain of `SV_Map` (`map intro.cin+demo1`: the cinematic, then the
   map, `nextserver` holding what follows and read back with `nextserver` at the console).

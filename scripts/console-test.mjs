@@ -14,7 +14,7 @@ const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
   pak: { has: (p) => p === 'maps/demo2.bsp', list: () => ['maps/demo1.bsp', 'maps/demo2.bsp', 'pics/conchars.pcx', 'sound/weapons/blastf1a.wav', 'readme.txt'] },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
+  settings: { fov: 90, skill: 1, detail: 'high', renderer: 'fast', binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -675,6 +675,23 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   delete host.setCvar;
 }
 
+// vid_mode and vid_ref: the video menu's cvars, through the page's controls, the painter restarted on a change; archived
+{
+  let restarts = 0;
+  host.vidRestart = () => { restarts++; return true; };
+  await con.submit('vid_mode'); check(status.at(-1)?.[0] === '"vid_mode" is "1"', 'vid_mode shows 1 for 320×240');
+  await con.submit('vid_mode 2'); check(s.detail === 'ultra' && last() === 'set detail ultra' && restarts === 1 && status.at(-1)?.[0] === '"vid_mode" is "2"', 'vid_mode 2 is 640×480 through the page, the painter restarted');
+  await con.submit('vid_mode 2'); check(restarts === 1, 'the same mode again restarts nothing');
+  await con.submit('vid_mode 5'); check(s.detail === 'ultra' && status.at(-1)?.[0] === 'vid_mode takes 0 (160×120), 1 (320×240) or 2 (640×480)' && status.at(-1)?.[1] === true, 'vid_mode 5 is refused');
+  await con.submit('vid_ref'); check(status.at(-1)?.[0] === '"vid_ref" is "soft"', 'vid_ref shows soft for the face picker');
+  await con.submit('vid_ref SQL'); check(s.renderer === 'sql' && last() === 'set renderer sql' && restarts === 2 && status.at(-1)?.[0] === '"vid_ref" is "sql"', 'vid_ref sql is the projector, case aside, the painter restarted');
+  await con.submit('vid_ref gl'); check(s.renderer === 'sql' && status.at(-1)?.[0] === 'vid_ref takes soft (SQL picks the faces, JS projects) or sql (SQL projects every vertex)' && status.at(-1)?.[1] === true, 'vid_ref gl is refused');
+  await con.submit('vid_mode 1'); await con.submit('vid_ref soft');
+  const cfgLines = writeConfig(s).split('\n');
+  check(cfgLines.includes('set vid_mode "1"') && cfgLines.includes('set vid_ref "soft"'), 'config.cfg carries vid_mode and vid_ref, archived as Quake\'s were');
+  check(con.complete('vid_m') === 'vid_mode ' && con.complete('vid_ref') === 'vid_ref ', 'Tab completes vid_mode and vid_ref');
+  delete host.vidRestart;
+}
 // quit, killserver, vid_restart and snd_restart through the page, each refused before it can be done
 {
   const done = [];
@@ -688,7 +705,7 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   await con.submit('quit'); await con.submit('killserver'); await con.submit('vid_restart'); await con.submit('snd_restart');
   check(done.join() === 'quit,kill,vid,snd' && status.at(-4)?.[0] === 'the game ends: the attract loop' && status.at(-3)?.[0] === 'Server was killed' && status.at(-2)?.[0] === 'vid_restart: the painter made again' && status.at(-1)?.[0] === 'snd_restart: sound system restarted',
     'quit ends the game, killserver kills the server, vid_restart and snd_restart remake the painter and the mixer, each saying so');
-  check(con.complete('qu') === 'quit ' && con.complete('kills') === 'killserver ' && con.complete('vid_r') === 'vid_restart ' && con.complete('snd') === 'snd_restart ', 'Tab completes the four');
+  check(con.complete('qu') === 'quit ' && con.complete('kills') === 'killserver ' && con.complete('vid_res') === 'vid_restart ' && con.complete('snd') === 'snd_restart ', 'Tab completes the four');
   delete host.quit; delete host.killServer; delete host.vidRestart; delete host.sndRestart;
 }
 // messagemode and messagemode2: the chat prompt through the page (team for the second), refused without a game
