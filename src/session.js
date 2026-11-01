@@ -100,16 +100,17 @@ export class Session {
    * left (SV_ReadLevelFile), the players put in afresh at the spawn point. Returns what the page sets up from:
    * the sky, the CD track, the worldspawn and the looped speakers. `coop` puts more clients in (`players` of them,
    * two to four, at their info_player_coop), `deathmatch` as many against each other (at deathmatch spots, with
-   * the cvars in `cvars`); either holds for the game, so a level change keeps it unless told otherwise.
+   * the cvars in `cvars`); either holds for the game, so a level change keeps it unless told otherwise. `noreload`
+   * (the sv_noreload cvar) leaves a kept level unread: the map spawns fresh, the kept level staying aside.
    */
-  async startMap(name, { newGame = false, spawnpoint = null, skill = 1, faceVerts = false, seed, coop = this.coop, deathmatch = this.deathmatch, players = this.players, cvars = this.cvars } = {}) {
+  async startMap(name, { newGame = false, spawnpoint = null, skill = 1, faceVerts = false, seed, coop = this.coop, deathmatch = this.deathmatch, players = this.players, cvars = this.cvars, noreload = false } = {}) {
     if (newGame) this.unitLevels.clear();
     this.deathmatch = !!deathmatch;
     this.coop = !!coop && !this.deathmatch;
     this.players = Math.max(2, Math.min(4, Math.floor(players) || 2));
     this.cvars = { ...this.cvars, ...cvars };
     const bsp = await loadMap(this.db, this.pak, this.res, name, { skill, newGame, spawnpoint, faceVerts, seed, coop: this.coop, deathmatch: this.deathmatch, players: this.players, ...this.cvars });
-    if (!newGame && this.unitLevels.has(name)) await importLevel(this.db, this.unitLevels.get(name));
+    if (!newGame && !noreload && this.unitLevels.has(name)) await importLevel(this.db, this.unitLevels.get(name));   // (sv_noreload: the level as kept left unread, the map's fresh spawn instead)
     await this.applyUserinfo();
     this.map = { name, bsp };
     const g = (await this.db.query('SELECT sky, cd_track, gravity, bob_up, bob_pitch, bob_roll, run_pitch, run_roll, sv_airaccelerate FROM game')).rows[0];

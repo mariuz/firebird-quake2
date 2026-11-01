@@ -44,6 +44,7 @@ const statusEl = $('status');
 const statsEl = $('stats');
 const TIC_MS = 50;
 let timescale = 1;   // the timescale cvar: the game's clock against the wall's (Qcommon_Frame scaled the frame's milliseconds); the host's rules a guest
+let fixedtime = 0, fixedAcc = 0;   // the fixedtime cvar: the game's clock stepped fixedtime ms an animation frame whatever the wall says (Qcommon_Frame's), 0 the wall's; the ms owed not yet run
 
 let db, pak, res, renderer, hud;
 // src/session.js: the game without the page (maps, tics, the frame, the unit's levels, the slots);
@@ -468,6 +469,8 @@ const con = new Console({
   forward: (cmd, arg) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendConsole(cmd, arg); return true; },
   // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)
   setTimescale: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; timescale = n; lastTic = performance.now(); } return timescale; },
+  // the fixedtime cvar: shown (null leaves it), set (a guest's clock is the host's); the ms owed start over with it
+  setFixedtime: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; fixedtime = n; fixedAcc = 0; lastTic = performance.now(); } return fixedtime; },
   execConfig: () => $('cfg-file').click(),              // (exec: the Config control's picker; its file runs through execText)
   execAutoexec: () => execAutoexec(),                    // (exec autoexec: the kept autoexec.cfg run again; null when none is kept)
   dropAutoexec: () => dropAutoexec(),                    // (unautoexec: the kept one dropped; false when none was)
@@ -783,7 +786,7 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   // the game's
   const modes = newGame ? { coop: netHost() ? !settings.deathmatch : settings.coop, deathmatch: settings.deathmatch, players: netHost() ? hostClients() : settings.players,
     cvars: { dmflags: settings.dmflags, fraglimit: settings.fraglimit, timelimit: settings.timelimit, cheats: settings.cheats } } : {};
-  await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', ...modes }));
+  await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', noreload: !!settings.svNoreload, ...modes }));   // (sv_noreload: a level come back to spawns fresh)
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);
   setStatus('');
   if (autosave) {
@@ -852,9 +855,18 @@ async function frame() {
     const now = performance.now();
     // the tics owed by the wall clock (20 Hz), at most two a frame: a stall is slow motion, never a leap; a frame
     // that owes none paints the last tic's frame again, moved toward the current one (src/lerp.js)
-    // (timescale: a tic every TIC_MS / timescale of the wall's; 0.5 is slow motion, 2 twice the pace)
-    let owed = Math.floor((now - lastTic) * timescale / TIC_MS);
-    if (owed > 2) { owed = 2; lastTic = now - 2 * TIC_MS / timescale; }
+    // (timescale: a tic every TIC_MS / timescale of the wall's; 0.5 is slow motion, 2 twice the pace; fixedtime: the frame owes
+    // fixedtime ms whatever the wall says, at most two tics' worth kept, the fraction between tics from what is left)
+    let owed;
+    if (fixedtime > 0) {
+      fixedAcc = Math.min(2 * TIC_MS, fixedAcc + fixedtime);
+      owed = Math.floor(fixedAcc / TIC_MS);
+      fixedAcc -= owed * TIC_MS;
+      lastTic = now - fixedAcc / timescale;
+    } else {
+      owed = Math.floor((now - lastTic) * timescale / TIC_MS);
+      if (owed > 2) { owed = 2; lastTic = now - 2 * TIC_MS / timescale; }
+    }
 
     if (netGuest()) { guestFrame(now); nextFrame(); return; }
     if (demo) { await demoFrame(now); nextFrame(); return; }
@@ -864,7 +876,7 @@ async function frame() {
       return;
     }
     const tics = owed;
-    lastTic += tics * TIC_MS / timescale;
+    if (fixedtime <= 0) lastTic += tics * TIC_MS / timescale;
 
     let t = performance.now();
     last = await session.tic(...readInput(tics));   // (every client's command: the pads', or the guests')
@@ -1238,7 +1250,7 @@ function stopDemo() {
 async function demoFrame(now) {
   const d = demo;
   // a timedemo steps a frame of the recording a painted frame, whatever the wall clock says (CL_Timedemo_f's cl.time)
-  const dt = d.timedemo ? (d.timedemo.frames ? DEMO_FRAME : 0) : Math.min(0.2, Math.max(0, now - d.at) / 1000) * timescale;   // (timescale: the demo's clock too)
+  const dt = d.timedemo ? (d.timedemo.frames ? DEMO_FRAME : 0) : fixedtime > 0 ? fixedtime / 1000 : Math.min(0.2, Math.max(0, now - d.at) / 1000) * timescale;   // (timescale and fixedtime: the demo's clock too)
   d.at = now;
   d.time += dt;
   if (d.timedemo) d.timedemo.frames++;
@@ -1903,7 +1915,7 @@ async function boot() {
     window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
-      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; },
+      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; },
       get logfile() { return { on: !!settings.logfile, kept: logKept.length, pending: logNew.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),

@@ -1089,9 +1089,42 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   shown, set and refused, logfile's cases (shown, refused, nothing logged, on, already on, downloaded with its lines)
   and Tab, and `onAdd` told each line; the browser test logs a line and downloads `qconsole.log` with it, and sees a
   warning on the console with `developer 1` and not without, on both builds.
-- **`fixedtime` and `sv_noreload`**: the game's clock stepped a fixed number of milliseconds a frame whatever the wall
-  says (`Qcommon_Frame`'s `fixedtime`, 0 the wall's), and `sv_noreload 1` making a coop level come back to spawn
-  fresh instead of loading what was left in it (`SV_InitGame`'s, the unit's levels kept aside).
+- **`fixedtime` and `sv_noreload`**: done. `fixedtime <ms>` steps the game's clock a fixed number of milliseconds an
+  animation frame whatever the wall says, as `Qcommon_Frame`'s `fixedtime` did (the ms owed kept to two tics' worth, as
+  the loop runs at most two a frame, so past 100 it runs as 100; the fraction between tics from what is left, a demo's
+  clock with it; 0 the wall's; a guest's clock is the host's; not archived, as Quake's was not). `sv_noreload 1` (3.20's)
+  makes a level of the unit come back to spawn fresh, what was left in it unread (`Session.startMap`'s `noreload`, the
+  kept levels staying aside), as a coop game wants its monsters back; not archived. On the way, a level come back to a
+  second time failed to import: a level entered by a spawn point puts the player amid its entities, so the fresh load's
+  ids run past it, and `importLevel`'s moves of the players' ids collided with a fresh entity still in the table; the
+  base clears the table's highest id as well now. `test:session` comes back to demo2 a second time (the player's id
+  above every entity's), then leaves demo1 marked, comes back under `noreload` and finds the map's fresh spawn with the
+  kept levels still aside and the player's health carried; `test:console` fixedtime shown, set, refused (a fraction, past 1000, a word), a guest told, and sv_noreload
+  shown, set and refused, Tab for both; `test:settings` the setting; the browser test steps the clock a tic a painted
+  frame under `fixedtime 50` and the wall's again at 0, and reads sv_noreload in the settings, on both builds.
+
+The sixteenth list: what the chat, the music, the view, the keys, the graphs and the page's ends still lack of
+Quake 2's own words with the demo pak. In the order they are to be taken.
+
+- **`messagemode` and `messagemode2`**: the chat prompt as `Con_MessageMode_f` and `Key_Message` had it: "say:" at the
+  top of the view with the line typed after it, Enter saying it (`say`; `messagemode2` is `say_team`), Escape dropping
+  it, in place of the console opened with "say " typed; both words at the console, so `bind y messagemode2` does.
+- **`cd` and `s_show`**: `CD_f`'s word over the music (`cd play <n>`, `cd loop <n>`, `cd stop`, `cd pause`, `cd resume`,
+  `cd info`, `cd on`, `cd off`), and `s_show 1` printing each sound started on the scrollback as `S_StartSound` printed
+  it (the entity, the channel, the name).
+- **`cl_add_entities`, `cl_add_particles`, `cl_add_lights`, `cl_add_blend` and the `cl_test*` cvars**: `V_RenderView`'s
+  switches leaving the entities, the particles, the dynamic lights or the screen blend out of a frame, and
+  `cl_testentities`, `cl_testparticles`, `cl_testlights` and `cl_testblend` (`V_TestEntities`, `V_TestParticles`,
+  `V_TestLights`, `V_TestBlend`: the rings of models, particles and lights about the eye, a test blend).
+- **`cl_upspeed` and `cl_lightlevel`**: the up and down keys' speed (`CL_InitInput`'s `cl_upspeed`, 200: `+moveup`
+  and `+movedown` swimming, flying and in noclip) at the console, and `cl_lightlevel` showing the light at the
+  player's feet as `V_RenderView` set it from the lightmap under it.
+- **`scr_timegraph` and `scr_debuggraph`**: `SCR_DebugGraph`'s band under the view, the frame's time a bar as the
+  netgraph draws the net's, with `scr_graphheight`, `scr_graphscale` and `scr_graphshift` laying it out.
+- **`quit`, `killserver`, `vid_restart` and `snd_restart`**: `quit` ending the game as the quit menu's yes does
+  (`Com_Quit`), `killserver` stopping the game for the attract loop (`SV_KillServer_f`), `vid_restart` making the
+  painter again from the settings (`VID_Restart_f`) and `snd_restart` the mixer (`CL_Snd_Restart_f`), the sounds
+  loaded again.
 
 ## Playing the demo
 

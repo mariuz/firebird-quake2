@@ -121,7 +121,10 @@ export async function importLevel(db, lv) {
   const ids = lv.ents.rows.map((r) => r[lv.ents.cols.indexOf('ID')]);
   const oldPes = lv.playerIds ?? [lv.playerId];   // (a level left before coop: one player)
   const pes = await playerEnts(db);
-  const base = Math.max(...oldPes, ...ids, ...pes) + 1;   // (above every id in play: the moves cannot collide)
+  // above every id in play, the fresh load's whole table among them (a level entered by a spawn point puts the player amid
+  // its entities, so the fresh ids run past it): the moves cannot collide
+  const maxNow = (await db.query('SELECT MAX(id) m FROM ents')).rows[0]?.M ?? 0;
+  const base = Math.max(...oldPes, ...ids, ...pes, maxNow) + 1;
   const newPe = new Map(pes.map((pe, i) => [pe, base + i]));   // the fresh load's ids → above the level's
   const moved = new Map(oldPes.map((old, i) => [old, base + i]));   // the level's references → the same clients
   let sql = '';
