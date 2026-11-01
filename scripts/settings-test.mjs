@@ -70,6 +70,8 @@ check(DEFAULTS.swMipcap === 0 && DEFAULTS.swMipscale === 1 && DEFAULTS.swStipple
   && loadSettings(store(JSON.stringify({ swMipcap: 3, swMipscale: 2.5, swStipplealpha: true }))).swMipscale === 2.5 && loadSettings(store(JSON.stringify({ swStipplealpha: true }))).swStipplealpha === true
   && loadSettings(store(JSON.stringify({ swMipcap: 4, swMipscale: 11, swStipplealpha: 1 }))).swMipcap === 0 && loadSettings(store(JSON.stringify({ swMipscale: 11 }))).swMipscale === 1 && loadSettings(store(JSON.stringify({ swStipplealpha: 1 }))).swStipplealpha === false,
   'sw_mipcap 0 to 3, sw_mipscale 0 to 10 and sw_stipplealpha a boolean come back, anything else is the default');
+// s_show: a boolean, off by default
+check(DEFAULTS.sShow === false && loadSettings(store(JSON.stringify({ sShow: true }))).sShow === true && loadSettings(store(JSON.stringify({ sShow: 'yes' }))).sShow === false, 's_show comes back as a boolean, anything else off');
 // sv_noreload: a boolean, off by default
 check(DEFAULTS.svNoreload === false && loadSettings(store(JSON.stringify({ svNoreload: true }))).svNoreload === true && loadSettings(store(JSON.stringify({ svNoreload: 1 }))).svNoreload === false, 'sv_noreload comes back as a boolean, anything else off');
 // developer and logfile: booleans, off by default

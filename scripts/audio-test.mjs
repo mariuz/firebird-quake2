@@ -207,6 +207,38 @@ audio.setNocd(true);
 check(audio.music === null && audio.nocd, 'cd_nocd 1 stops the music');
 audio.setNocd(false); await settle();
 check(audio.music?.track === 11, 'cd_nocd 0 plays the track again');
+// the cd word's ways (CD_f): cd play once (nothing at the end), cd loop over and over, pause and resume from the offset, off and on
+await audio.playMusic(9, 0, 'once'); await settle();
+const once = sources().find((n) => n.to === audio.musicGain && n.started && !n.stopped);
+check(audio.music?.how === 'once' && !!once, 'cd play: the track once');
+ended(once); await settle();
+check(audio.music === null, '... and nothing at its end');
+await audio.playMusic(9, 0, 'loop'); await settle();
+const looped = sources().find((n) => n.to === audio.musicGain && n.started && !n.stopped);
+ended(looped); await settle();
+check(audio.music?.track === 9 && audio.music.how === 'loop' && audio.music.plays === 1, 'cd loop: the track again at its end, whatever cd_loopcount says');
+audio.ctx.currentTime = (audio.ctx.currentTime ?? 0) + 7;
+check(audio.pauseMusic() && audio.music === null && audio.pausedMusic?.track === 9 && audio.pausedMusic.how === 'loop' && Math.abs(audio.pausedMusic.offset - 7) < 1e-6, `cd pause stops the music and keeps where it was (${audio.pausedMusic?.offset} s in)`);
+check(!audio.pauseMusic(), 'pause again: nothing playing');
+check(audio.resumeMusic(), 'cd resume');
+await settle();
+const resumed = sources().find((n) => n.to === audio.musicGain && n.started && !n.stopped);
+check(audio.music?.track === 9 && audio.music.how === 'loop' && Math.abs(resumed?.offset - 7) < 1e-6 && !audio.resumeMusic(), `... plays the track from where it was (${resumed?.offset} s), looping still; resume again: nothing paused`);
+check(audio.musicInfo().playing && audio.musicInfo().looping && audio.musicInfo().track === 9 && audio.musicInfo().tracks === 1, 'cd info says what plays, looping, and the folder\'s tracks');
+audio.setEnabled(false);
+check(audio.music === null && !audio.enabled && !audio.musicInfo().enabled, 'cd off stops the music');
+await audio.playMusic(10); await settle();
+check(audio.music === null, '... and plays none');
+audio.setEnabled(true); await settle();
+check(audio.music?.track === 10, 'cd on plays the track again');
+// s_show: each sound started told with its volumes
+{
+  const shown = [];
+  audio.onStart = (name, l, r) => shown.push(`${l} ${r} ${name}`);
+  await audio.playEvents([[0, 0, 7, 1, 'weapons/blastf1a.wav', 1, 0, null, null, null]], audio.listener);
+  audio.onStart = null;
+  check(shown.length === 1 && /^255 255 weapons\/blastf1a\.wav$/.test(shown[0]), `s_show is told the sound with its volumes (${shown[0]})`);
+}
 audio.loopCount = 4;
 await audio.playMusic(9); await settle();
 const track2 = sources().find((n) => n.to === audio.musicGain && n.started && !n.stopped);

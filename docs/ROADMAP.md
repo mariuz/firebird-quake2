@@ -1114,9 +1114,17 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   messagemode2` works as a command line. `test:console` the two words through the page, refused without a game, Tab;
   the browser test brings the prompt up with T, types and says a line that reaches the message line by the player's
   name, and drops the team's prompt with Escape, on both builds.
-- **`cd` and `s_show`**: `CD_f`'s word over the music (`cd play <n>`, `cd loop <n>`, `cd stop`, `cd pause`, `cd resume`,
-  `cd info`, `cd on`, `cd off`), and `s_show 1` printing each sound started on the scrollback as `S_StartSound` printed
-  it (the entity, the channel, the name).
+- **`cd` and `s_show`**: done. `cd` is `CD_f`'s word over the music: `cd play <n>` plays a track once (nothing at its
+  end) and `cd loop <n>` over and over, whatever `cd_loopcount` says (`playMusic`'s `how`), `cd stop`, `cd pause` and
+  `cd resume` from where it was (`pauseMusic`, `resumeMusic`: the offset into the track), `cd off` and `cd on`
+  (`setEnabled`: no music until on again), `cd info` printing the tracks (a picked folder's, else the CD's eleven),
+  what plays or is paused and how, and the volume as it did, summed on the line; the Music control off is said.
+  `s_show 1` prints each sound started on the scrollback as "left right name" with the volumes 0 to 255, a line a
+  sound rather than `S_Update`'s every frame (`Q2Audio.onStart`); not archived, as Quake's was not. `test:audio` plays
+  once and at the end nothing, loops, pauses with the offset and resumes from it, turns the music off and on, and is
+  told a sound started; `test:console` s_show shown, set and refused, cd's words through the page, info laid out and
+  summed, an unknown word refused, Tab; `test:settings` the setting; the browser test prints a sound started and drives
+  the music with the words, on both builds.
 - **`cl_add_entities`, `cl_add_particles`, `cl_add_lights`, `cl_add_blend` and the `cl_test*` cvars**: `V_RenderView`'s
   switches leaving the entities, the particles, the dynamic lights or the screen blend out of a frame, and
   `cl_testentities`, `cl_testparticles`, `cl_testlights` and `cl_testblend` (`V_TestEntities`, `V_TestParticles`,
