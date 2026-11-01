@@ -763,7 +763,7 @@ BEGIN
     -- menu (fire only) and in coop or deathmatch puts the client back in at its spawn point (ClientBeginServerFrame;
     -- a deathmatch with DF_FORCE_RESPAWN needs no button)
     EXECUTE PROCEDURE toss_move(pe, dt);
-    IF (t > deadt + 1 AND (fire = 1 OR ((coop = 1 OR dm = 1) AND jump = 1) OR (dm = 1 AND BIN_AND(dmf, 1024) <> 0))) THEN
+    IF (t > deadt + 1 AND (fire = 1 OR ((coop = 1 OR dm = 1) AND jump >= 10) OR (dm = 1 AND BIN_AND(dmf, 1024) <> 0))) THEN
     BEGIN
       IF (coop = 1 OR dm = 1) THEN EXECUTE PROCEDURE respawn(pe);
       ELSE UPDATE game g SET g.exit_kind = 3 WHERE g.id = 1;
@@ -783,7 +783,7 @@ BEGIN
       chase = chase_next(pe, chase);
       IF (chase = 0) THEN EXECUTE PROCEDURE sprint(pe, 'No other players to chase.');
     END
-    IF (jump > 0) THEN chase = 0;
+    IF (jump >= 10) THEN chase = 0;
     IF (chase > 0 AND NOT EXISTS (SELECT 1 FROM player p WHERE p.id = :chase AND p.spectator = 0 AND p.ent_id IS NOT NULL)) THEN chase = 0;   -- (the target gone, or watching too)
     UPDATE player p SET p.chase = :chase, p.fire_held = :fire WHERE p.ent_id = :pe;
     IF (chase > 0) THEN
@@ -878,8 +878,9 @@ BEGIN
   -- PM_CheckJump
   -- PMF_JUMP_HELD: a jump held in the air or in water keeps the flag as it is (it used to be left NULL,
   -- which the column refused: a second tap on the touch screen's move half while still airborne crashed the tic)
+  -- (the command's jump is Quake's upmove, ±cl_upspeed, 200 by default: under 10 is not the jump key held, as PM_CheckJump had it)
   jr2 = jr;
-  IF (jump = 1) THEN
+  IF (jump >= 10) THEN
   BEGIN
     IF (wl >= 2) THEN
     BEGIN
@@ -925,8 +926,7 @@ BEGIN
     fx_ = fx_ * COS(pitch * 0.0174532925e0); fy = fy * COS(pitch * 0.0174532925e0);
     wx = fx_ * fwd * maxspd + rx * side * maxspd; wy = fy * fwd * maxspd + ry * side * maxspd; wz = fz * fwd * maxspd;
     IF (fwd = 0 AND side = 0 AND jump = 0) THEN wz = wz - 60;
-    ELSE IF (jump = 1) THEN wz = wz + 200;
-    ELSE IF (jump < 0) THEN wz = wz - 200;                               -- crouch swims down
+    ELSE wz = wz + jump;                                                 -- the upmove, ±cl_upspeed: up on the jump key, crouch swims down
     wspd = vlen(wx, wy, wz);
     IF (wspd > maxspd) THEN BEGIN wx = wx * maxspd / wspd; wy = wy * maxspd / wspd; wz = wz * maxspd / wspd; wspd = maxspd; END
     wspd = wspd * 0.5e0;
@@ -979,7 +979,7 @@ BEGIN
     -- noclip (PM_SPECTATOR): fly where the view points, jump to rise, through everything
     vx = (fwd * COS(yaw * 0.0174532925e0) * COS(pitch * 0.0174532925e0) + side * SIN(yaw * 0.0174532925e0)) * maxspd;
     vy = (fwd * SIN(yaw * 0.0174532925e0) * COS(pitch * 0.0174532925e0) - side * COS(yaw * 0.0174532925e0)) * maxspd;
-    vz = (-fwd * SIN(pitch * 0.0174532925e0) + jump) * maxspd;
+    vz = (-fwd * SIN(pitch * 0.0174532925e0) + jump / 200e0) * maxspd;   -- (the upmove as a share of cl_upspeed's 200: the full speed up at the default)
     UPDATE ents e SET e.x = e.x + :vx * :dt, e.y = e.y + :vy * :dt, e.z = e.z + :vz * :dt, e.vx = :vx, e.vy = :vy, e.vz = :vz,
            e.flags = BIN_AND(:flags, BIN_NOT(512)), e.yaw = :yaw WHERE e.id = :pe;
     EXECUTE PROCEDURE link_ent(pe);

@@ -201,7 +201,7 @@ await session.setUserinfo(2, { name: '', hand: 0 });
   guest.sendCommand([1, 0, 0, 0, 0, 0, 0, 1, 0]); await session.tic(idle, host.takeCommand());
   guest.sendCommand([1, 0, 0, 0, 0, 1, 0, 1, 0]); await session.tic(idle, host.takeCommand());
   check((await cam()).CHASE === 1, 'attack again with nobody else to chase keeps the first client');
-  guest.sendCommand([1, 0, 0, 0, 0, 0, 1, 1, 0]); await session.tic(idle, host.takeCommand());
+  guest.sendCommand([1, 0, 0, 0, 0, 0, 200, 1, 0]); await session.tic(idle, host.takeCommand());   // (the jump key: the upmove at cl_upspeed's 200)
   const c3 = await cam();
   check(c3.CHASE === 0 && Math.hypot(c3.X - c2.X, c3.Y - c2.Y) < 40, `jump lets go: floating free from where it was (chase ${c3.CHASE})`);
   const chaseCmd = async (arg, client = 2) => (await q(`SELECT msg FROM player_command('chase', '${arg}', ${client})`))[0].MSG;
@@ -239,10 +239,10 @@ check(moved > 100, `the guest's forward command walks its player at the host (${
 check(guest.frames === 21 && guest.take().row.PX === session.clients[1].PX, 'a frame a tic, each with the row of that tic');
 
 // the commands between two tics merge: the turns sum, a button held in any counts, the last impulse stands
-guest.sendCommand([1, 1, 0, 5, -2, 0, 1, 1, 0]);
+guest.sendCommand([1, 1, 0, 5, -2, 0, 200, 1, 0]);
 guest.sendCommand([1, 0, 1, 7, 1, 1, 0, 0, 3]);
 let merged = host.takeCommand();
-check(JSON.stringify(merged) === JSON.stringify([1, 0, 1, 12, -1, 1, 1, 0, 3]), `two commands in one tic merge (${JSON.stringify(merged)})`);
+check(JSON.stringify(merged) === JSON.stringify([1, 0, 1, 12, -1, 1, 200, 0, 3]), `two commands in one tic merge (${JSON.stringify(merged)})`);
 merged = host.takeCommand();
 check(JSON.stringify(merged) === JSON.stringify([1, 0, 0, 0, 0, 0, 0, 0, 0]), `none in the next: the guest stands, as a client whose packets did not come (${JSON.stringify(merged)})`);
 

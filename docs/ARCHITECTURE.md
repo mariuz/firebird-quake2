@@ -773,10 +773,12 @@ line and "Connection timed out" at its page, and a guest leaves a host silent pa
 out.", its page standing for a key as a kicked one does; 0 never, neither archived),
 `m_yaw` (the turn a mouse count, 0.022 as Quake had it, `Input.mouse`'s), `cl_gun` (0: no view weapon, as `CL_AddViewWeapon`
 had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
-`cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed` and `cl_sidespeed` (`CL_AdjustAngles` and `CL_BaseMove`'s
+`cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed`, `cl_sidespeed` and `cl_upspeed` (`CL_AdjustAngles` and `CL_BaseMove`'s
 speeds, Quake's defaults 140 and 150 degrees a second, 1.5 with `+speed` held, 200 units a second: `Input.read` turns and looks
 the keys and the right stick by them a tic and scales the walk and the sidestep in the full speed's 200, the command's fraction
-kept within 1; none archived, as Quake's were not),
+kept within 1, and makes the upmove ±`cl_upspeed` for `+moveup` and `+movedown`, which the move reads as the jump key from 10 up
+and the duck below 0 and adds to the wish in water and, as a share of 200, in noclip; none archived, as Quake's were not),
+`cl_lightlevel` (`R_SetLightLevel`'s: the light at the eye, 150 at full light, from the lightmap under it, `lightLevel`; shown, never set),
 `gun_x`, `gun_y` and `gun_z` (`SV_CalcGunOffset`'s development tools, 0: the view weapon drawn moved along the view's right,
 forward and down, `drawFrame`'s) and `scr_centertime` (`SCR_DrawCenterString`: a centre print drawn 2.5 seconds from when it came,
 `CenterPrint` in `src/notify.js`, a view each, whatever the row carries it for: the SQL keeps it three seconds, a demo's frames

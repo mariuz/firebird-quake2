@@ -123,7 +123,7 @@ await db.exec(`DELETE FROM ents WHERE id = ${mon}`);
 for (let i = 0; i < 5; i++) await session.tic(idle, cmd({ fire: 1 }));
 check((await players())[1].DEADFLAG === 1, 'fire within the first second after dying does nothing');
 for (let i = 0; i < 20; i++) await session.tic(idle, idle);
-await session.tic(idle, cmd({ jump: 1 }));
+await session.tic(idle, cmd({ jump: 200 }));
 ps = await players();
 check(ps[1].DEADFLAG === 0 && ps[1].HEALTH === 100 && ps[1].ENT_ID === p2.ENT_ID, 'a button a second later respawns it: alive, full health, the same entity');
 check([32, 96, 168].some((x) => Math.abs(ps[1].X - x) < 1) && Math.abs(ps[1].Y + 224) < 1, `back at its coop spot (${ps[1].X.toFixed(0)},${ps[1].Y.toFixed(0)})`);
@@ -196,7 +196,7 @@ check((await msgs()).join('|') === 'player 1: fast 5|player 1: fast 5', 'flood_m
 await db.exec(`UPDATE game SET flood_msgs = 4, time_ = ${t0}; UPDATE player SET flood_when = '', flood_locktill = 0, msg = NULL`);
 
 // ── the obituaries (ClientObituary, coop only): every client's message line says who died of what ──
-const respawn = async () => { for (let i = 0; i < 22; i++) await session.tic(idle, idle); await session.tic(idle, cmd({ jump: 1 })); };
+const respawn = async () => { for (let i = 0; i < 22; i++) await session.tic(idle, idle); await session.tic(idle, cmd({ jump: 200 })); };
 const dieOf = async (sql, want) => {
   await db.exec(sql);
   const m = await msgs();

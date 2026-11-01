@@ -75,6 +75,8 @@ check(DEFAULTS.clAddEntities === true && DEFAULTS.clAddParticles === true && DEF
   && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clAddLights === false && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clTestlights === true
   && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clAddBlend === true && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clTestblend === false,
   'the cl_add switches come back on by default and the cl_test cvars off, anything but a boolean the default');
+// cl_upspeed: units a second within 0..1000, 200 by default
+check(DEFAULTS.clUpspeed === 200 && loadSettings(store(JSON.stringify({ clUpspeed: 100 }))).clUpspeed === 100 && loadSettings(store(JSON.stringify({ clUpspeed: 2000 }))).clUpspeed === 200 && loadSettings(store(JSON.stringify({ clUpspeed: 'x' }))).clUpspeed === 200, 'cl_upspeed comes back within 0..1000, else 200');
 // s_show: a boolean, off by default
 check(DEFAULTS.sShow === false && loadSettings(store(JSON.stringify({ sShow: true }))).sShow === true && loadSettings(store(JSON.stringify({ sShow: 'yes' }))).sShow === false, 's_show comes back as a boolean, anything else off');
 // sv_noreload: a boolean, off by default

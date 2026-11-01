@@ -1135,9 +1135,18 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   `test:settings` the eight; `test:console` shown, set, refused and Tab; the browser test reads a frame with the tests
   on (32 lights and models, 4096 particles, the blend), the switches at 0 (none of them), and back, on both builds.
   `frameInfo` on the page's debug object says what the first view's last frame had.
-- **`cl_upspeed` and `cl_lightlevel`**: the up and down keys' speed (`CL_InitInput`'s `cl_upspeed`, 200: `+moveup`
-  and `+movedown` swimming, flying and in noclip) at the console, and `cl_lightlevel` showing the light at the
-  player's feet as `V_RenderView` set it from the lightmap under it.
+- **`cl_upspeed` and `cl_lightlevel`**: done. The usercmd's jump is Quake's upmove now, ±`cl_upspeed` (200) as
+  `CL_BaseMove` made it from `+moveup` and `+movedown` (it was ±1 as a flag): `player_think` and `src/pmove.js` take
+  10 or more as the jump key held, as `PM_CheckJump` had it, add the upmove to the wish in water (up on the jump key,
+  the crouch swimming down) and rise in noclip by its share of 200, so the numbers at the default are as they were
+  (`test:predict` holds the twin to the SQL's over the run); `cl_upspeed` at the console, units a second 0 to 1000,
+  not archived. `cl_lightlevel` shows the light at the eye as `R_SetLightLevel` saved it for the server each frame (150
+  at full light), read from the lightmap under the eye (`lightLevel`); a value given is refused. `test:input` reads
+  the upmove at 200 and at 100; `test:console` the cvar shown, set and refused, cvarlist with it, the light shown,
+  refused a value and without a map, Tab; `test:settings` the setting; the coop, deathmatch, prediction, smoke and net
+  tests jump at 200 (the crouches at -200); the browser test reads the setting and the upmove from the keys, and the
+  light at the eye, on both builds. On the way, the host's merge of a guest's pending commands turned any upmove into
+  1, a crouch into a jump: the upmove is carried as sent now, its sign kept.
 - **`scr_timegraph` and `scr_debuggraph`**: `SCR_DebugGraph`'s band under the view, the frame's time a bar as the
   netgraph draws the net's, with `scr_graphheight`, `scr_graphscale` and `scr_graphshift` laying it out.
 - **`quit`, `killserver`, `vid_restart` and `snd_restart`**: `quit` ending the game as the quit menu's yes does

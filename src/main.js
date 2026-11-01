@@ -488,6 +488,7 @@ const con = new Console({
   // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)
   setTimescale: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; timescale = n; lastTic = performance.now(); } return timescale; },
   // the fixedtime cvar: shown (null leaves it), set (a guest's clock is the host's); the ms owed start over with it
+  lightLevel: () => (map && last ? Math.round(150 * lightPoint(map.bsp, last.PX, last.PY, last.VIEW_Z) / 255) : null),   // (cl_lightlevel: R_SetLightLevel's 150 at full light)
   setFixedtime: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; fixedtime = n; fixedAcc = 0; lastTic = performance.now(); } return fixedtime; },
   execConfig: () => $('cfg-file').click(),              // (exec: the Config control's picker; its file runs through execText)
   execAutoexec: () => execAutoexec(),                    // (exec autoexec: the kept autoexec.cfg run again; null when none is kept)

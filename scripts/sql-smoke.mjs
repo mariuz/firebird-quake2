@@ -58,7 +58,7 @@ assert(moved > 50, `player walked forward (${moved.toFixed(1)} units)`);
 assert(Math.abs(s.PZ - start.z) < 64, `player stayed on the floor (dz ${(s.PZ - start.z).toFixed(1)})`);
 
 // a jump held through the air (PMF_JUMP_HELD): the flag keeps, the tic runs; it used to write NULL to jump_released
-for (let i = 0; i < 8; i++) s = await tic([1, 0, 0, 0, 0, 0, 1, 1, 0]);
+for (let i = 0; i < 8; i++) s = await tic([1, 0, 0, 0, 0, 0, 200, 1, 0]);   // (the jump key: the upmove at cl_upspeed's 200)
 const jr = (await db.query('SELECT jump_released j FROM player')).rows[0].J;
 assert(jr === 0, `jump held through the air: the flag stays down (${jr}) and the tics run`);
 for (let i = 0; i < 2; i++) s = await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
@@ -335,7 +335,7 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert(spots === 0 || atSpot === 1, `the player watches from an info_player_intermission (${spots} on this map), at its angles`);
   assert(r.VIEW_Z === r.PZ, 'with the eye at the spot itself (no view height)');
   const m0 = await mons();
-  for (let i = 0; i < 10; i++) r = await tic([1, 1, 0, 0, 0, 0, 1, 1, 0]);
+  for (let i = 0; i < 10; i++) r = await tic([1, 1, 0, 0, 0, 0, 200, 1, 0]);
   assert((await mons()) === m0, 'the world holds still');
   assert(r.EXIT_KIND === 0, 'a button before five seconds does not leave');
   await db.exec('UPDATE game SET time_ = intermission_time + 6');
@@ -472,11 +472,11 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   };
   for (let i = 0; i < 4; i++) await tic([1, 0, 0, 0, 0, 0, 0, 1, 0]);
   const run = await face();
-  let r = await tic([1, 0, 0, 0, 0, 0, -1, 1, 0]);
+  let r = await tic([1, 0, 0, 0, 0, 0, -200, 1, 0]);   // (a crouch: the upmove down)
   let m = await me();
   assert(m.DUCKED === 1 && m.MAXZ === 4 && m.VIEW_OFS === -2 && Math.abs(r.VIEW_Z - (r.PZ - 2)) < 0.01, `crouching ducks: the box 4 high, the eye at -2 (view ${(r.VIEW_Z - r.PZ).toFixed(1)})`);
   const a = await me();
-  for (let i = 0; i < 20; i++) r = await tic([1, 1, 0, 0, 0, 0, -1, 1, 0]);   // (a tic is 0.05 s)
+  for (let i = 0; i < 20; i++) r = await tic([1, 1, 0, 0, 0, 0, -200, 1, 0]);   // (a tic is 0.05 s)
   const b = await me();
   const ducked = Math.hypot(b.X - a.X, b.Y - a.Y);
   assert(b.DUCKED === 1 && ducked > (run.f > 0.5 ? 50 : 10) && ducked <= 101, `ducked, it moves at 100 units a second at most (${ducked.toFixed(0)} in a second)`);

@@ -130,7 +130,7 @@ check(ps[1].DEADFLAG === 1 && ps[0].SCORE === 1 && ps[1].SCORE === 0 && m[0] ===
 const tossed = await one(`SELECT id, spawnflags FROM ents WHERE classname = 'weapon_shotgun' AND BIN_AND(spawnflags, 65536) <> 0`);
 check(tossed && Math.hypot((await one(`SELECT x, y FROM ents WHERE id = ${tossed.ID}`)).X - ps[1].X, (await one(`SELECT x, y FROM ents WHERE id = ${tossed.ID}`)).Y - ps[1].Y) < 80, 'the shotgun in hand is tossed where the client died (TossClientWeapon)');
 await tics(22);
-await session.tic(idle, cmd({ jump: 1 }));
+await session.tic(idle, cmd({ jump: 200 }));
 ps = await players();
 check(ps[1].DEADFLAG === 0 && ps[1].HEALTH === 100 && ps[1].WEAPONS === 1 && ps[1].WEAPON === 1 && ps[1].SHELLS === 0 && atSpot(ps[1], dmSpots),
   `a button a second later respawns it afresh at a deathmatch spot (${ps[1].X.toFixed(0)},${ps[1].Y.toFixed(0)}; the blaster, no shells)`);
@@ -156,7 +156,7 @@ await db.exec(`EXECUTE PROCEDURE changelevel(${exit.ID}, ${p1.ENT_ID})`);
 ps = await players(); m = await msgs(); g = await game();
 check(ps[0].DEADFLAG === 1 && m[0] === 'player 1 found a way out.' && ps[0].SCORE === 0 && g.INTERMISSION_TIME === null && g.EXIT_KIND === 0,
   `an exit kills the client that touches it and the level goes on (${m[0]})`);
-await tics(22, cmd({ jump: 1 }));
+await tics(22, cmd({ jump: 200 }));
 check((await players())[0].DEADFLAG === 0, 'the first client respawns');
 await db.exec('UPDATE game SET dmflags = 4096 WHERE id = 1');
 await db.exec(`EXECUTE PROCEDURE changelevel(${exit.ID}, ${p1.ENT_ID})`);
@@ -238,7 +238,7 @@ check(qf.QUAD_FINISHED > session.last.TIME_ && qf.INV_QUAD === 0 && (await item(
 await db.exec('UPDATE game SET dmflags = 512 WHERE id = 1');
 await q("SELECT msg FROM player_command('kill', '', 2)");
 await tics(22);
-await session.tic(idle, cmd({ jump: 1 }));
+await session.tic(idle, cmd({ jump: 200 }));
 ps = await players();
 const far = dmSpots.map(([x, y, z]) => [Math.hypot(x - ps[0].X, y - ps[0].Y, z - ps[0].Z), x, y]).sort((a, b) => b[0] - a[0])[0];
 check(Math.abs(ps[1].X - far[1]) < 1 && Math.abs(ps[1].Y - far[2]) < 1, `with spawn farthest the respawn is at the spot farthest from the other client (${far[0].toFixed(0)} units)`);
@@ -259,14 +259,14 @@ check(dq && dq.THINK === 'remove' && Math.abs(dq.NEXTTHINK - (tq + 30)) < 1e-6 &
 const apart = dq && dw ? Math.abs(((Math.atan2(dq.VY, dq.VX) - Math.atan2(dw.VY, dw.VX)) * 180 / Math.PI + 540) % 360 - 180) : 0;
 check(Math.abs(apart - 45) < 0.5, `the two tossed 22.5 degrees to either side of the view (${apart.toFixed(1)} apart)`);
 await tics(22);
-await session.tic(idle, cmd({ jump: 1 }));
+await session.tic(idle, cmd({ jump: 200 }));
 await db.exec('UPDATE game SET dmflags = 0 WHERE id = 1');
 await db.exec("DELETE FROM ents WHERE classname IN ('weapon_shotgun', 'item_quad') AND BIN_AND(spawnflags, 65536) <> 0");
 await db.exec(`UPDATE player SET quad_finished = ${(await game()).TIME_ + 30} WHERE id = 2`);
 await db.exec(`EXECUTE PROCEDURE t_damage(${ps[1].ENT_ID}, 0, 0, 1000, 0, 8)`);
 check(!(await one("SELECT id FROM ents WHERE classname = 'item_quad' AND BIN_AND(spawnflags, 65536) <> 0")), 'without the flag the quad dies with its owner');
 await tics(22);
-await session.tic(idle, cmd({ jump: 1 }));
+await session.tic(idle, cmd({ jump: 200 }));
 ps = await players();
 
 // ── the mega health waits while its owner is above the maximum, then comes back ──
