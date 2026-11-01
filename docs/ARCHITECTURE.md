@@ -825,7 +825,10 @@ the loop held meanwhile, the seconds and the frames a second said; an argument p
 (`S_Play`: each word a pak sound played at the ear, `.wav` added to one without a dot, `playSound`), `stopsound` (`S_StopAllSounds`:
 every one-shot and loop cut, `Q2Audio.stopAll`; the next frame's rows start the loops again) and `soundinfo` (`S_SoundInfo_f`: the mix's
 rate, stereo, the sounds decoded, the ones playing and looping, a line each on the scrollback and the sum on the line, `Q2Audio.info`;
-"sound system not started" before the first click or key makes the context), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
+"sound system not started" before the first click or key makes the context), `messagemode` and `messagemode2` (`Con_MessageMode_f`, `Con_MessageMode2_f`: the chat prompt up over the view as `Key_Message`
+had it, "say:" or "say_team:" drawn under the notify lines with the line typed after it and a blinking cursor, `drawChat`; every
+key goes to it, Enter saying the line, Escape dropping it, Backspace taking a character off; T's action by default, so `bind y
+messagemode2` does; the page's `messageMode`, a game running), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the
 guest's client); the rest go to `player_command(cmd, arg)` (on a joined page to the host as a `con` message,
 `GuestLink.sendConsole` and `HostLink.onConsole`, which runs `player_command` for the guest's client, as

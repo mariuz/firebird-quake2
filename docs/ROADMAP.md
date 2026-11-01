@@ -1106,9 +1106,14 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
 The sixteenth list: what the chat, the music, the view, the keys, the graphs and the page's ends still lack of
 Quake 2's own words with the demo pak. In the order they are to be taken.
 
-- **`messagemode` and `messagemode2`**: the chat prompt as `Con_MessageMode_f` and `Key_Message` had it: "say:" at the
-  top of the view with the line typed after it, Enter saying it (`say`; `messagemode2` is `say_team`), Escape dropping
-  it, in place of the console opened with "say " typed; both words at the console, so `bind y messagemode2` does.
+- **`messagemode` and `messagemode2`**: done. The chat prompt is `Key_Message`'s now: T (the `messagemode` action) or
+  either word at the console brings "say:" ("say_team:" for `messagemode2`) up under the notify lines with the line
+  typed after it and a blinking cursor, as `Con_DrawNotify` drew it (the page's `drawChat`), every key going to it,
+  Enter saying the line (`say`; `say_team` is `say` here), Escape dropping it, Backspace taking a character off, in
+  place of the console opened with "say " typed; a game must be running, and the prompt goes with the level. `bind y
+  messagemode2` works as a command line. `test:console` the two words through the page, refused without a game, Tab;
+  the browser test brings the prompt up with T, types and says a line that reaches the message line by the player's
+  name, and drops the team's prompt with Escape, on both builds.
 - **`cd` and `s_show`**: `CD_f`'s word over the music (`cd play <n>`, `cd loop <n>`, `cd stop`, `cd pause`, `cd resume`,
   `cd info`, `cd on`, `cd off`), and `s_show 1` printing each sound started on the scrollback as `S_StartSound` printed
   it (the entity, the channel, the name).
