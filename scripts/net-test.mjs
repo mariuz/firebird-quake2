@@ -32,6 +32,8 @@ const host = new HostLink(new Link(a));
 const guest = new GuestLink(new Link(b));
 let maps = 0, pics = [];
 guest.onMap = () => { maps++; };
+const seen = [];   // cl_shownet: each message's kind and size as it comes
+guest.onNet = (kind, size) => seen.push([kind, size]);
 guest.onPic = (file) => pics.push(file);
 
 // the host's game, as the page starts one for a guest: a new coop game, the map sent from its setup
@@ -71,6 +73,7 @@ let said = null;
 host.onSay = (t) => { said = t; };
 guest.sendSay(' hello\nhost ');
 check(said === 'hello host', 'a guest\'s say reaches the host, its line break a space, trimmed');
+check(seen.length > 0 && seen[0][0] === 'map' && seen[0][1] > 20, `the guest is told each message's kind and size as it comes (${seen.slice(0, 2).map(([k, n]) => `${n}:${k}`).join(' ')}), cl_shownet's print`);
 guest.sendSay('x'.repeat(200));
 check(said?.length === 150, 'and is cut at 150 characters, as Quake cut a say');
 said = null; guest.sendSay('   ');

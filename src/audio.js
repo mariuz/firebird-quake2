@@ -33,6 +33,7 @@ export class Q2Audio {
     this.musicStore = null;      // src/demostore.js's FileStore: a picked folder's tracks kept as they play, played at the next start
     this.music = null;
     this.track = 0;
+    this.khz = 44;               // s_khz: the mixer's rate at the next start or restart (11, 22, 44: the browser's own)
     this.enabled = true;         // the cd word's on and off (CD_f): off, no music until on again
     this.pausedMusic = null;     // cd pause: { track, plays, how, offset } to resume from
     this.onStart = null;         // s_show: told each sound started as (name, left, right), the volumes 0 to 255 as S_Update printed the channels
@@ -44,7 +45,9 @@ export class Q2Audio {
 
   unlock() {
     if (!this.ctx) {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // s_khz: the context asked at 11025 or 22050 (11, 22); 44 leaves the browser's own rate, the default here
+      const rate = this.khz === 11 ? 11025 : this.khz === 22 ? 22050 : 0;
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)(rate ? { sampleRate: rate } : undefined);
       this.master = this.ctx.createGain();
       this.master.gain.value = this.volume;
       this.master.connect(this.ctx.destination);

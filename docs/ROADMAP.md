@@ -1189,9 +1189,16 @@ the userinfo still lack of Quake 2's own words with the demo pak. In the order t
   set, refused and in config.cfg, cl_paused shown both ways and refused a value, log_stats's cases, Tab; the browser
   test downloads stats.log with its header and lines, flips in_joystick through to the input and reads cl_paused
   around pause, on both builds.
-- **`s_khz`, `cl_shownet` and `cl_showclamp`**: the mixer's rate at the next `snd_restart` (`s_khz` 11, 22 or 44:
-  the context made at it), a joined page's messages' kinds and sizes printed as `CL_ParseServerMessage` printed them
-  under `cl_shownet`, and the clock's clamps under `cl_showclamp` ("high clamp", "low clamp") as `CL_ParseFrame` said.
+- **`s_khz`, `cl_shownet` and `cl_showclamp`**: done. `s_khz` is `S_Init`'s rate: 11 or 22 asks the next
+  `snd_restart`'s context for 11025 or 22050 (`Q2Audio.khz`), 44 leaves the browser's own rate, the default here;
+  archived as Quake's was. `cl_shownet` prints a joined page's messages on its scrollback as `CL_ParseServerMessage`
+  printed them: 1 each message's size, 2 its size and kind ("f" the host's frames; `GuestLink.onNet`, the size from
+  the link). `cl_showclamp` prints the clock's clamps as `CL_ParseFrame` said them: "high clamp" with the milliseconds
+  dropped when the wall is ahead of the game past the two tics a frame runs, "low clamp" at a joined page when a host
+  frame comes past its time. `test:audio` sees the context asked at 22050 and 11025 and the browser's own at 44;
+  `test:net` the guest told each message's kind and size; `test:settings` the three; `test:console` shown, set,
+  refused, config.cfg with s_khz, Tab; the browser test restarts the mixer at 22 kHz and back, and reads the host's
+  frames' sizes at a joined page, on both builds.
 - **`r_lockpvs` and `r_dspeeds`**: ref_soft's `r_lockpvs` (the view's PVS kept where it was locked, the leaves marked
   from there as the eye moves on, `R_MarkLeaves`'s `r_viewcluster` held) and `r_dspeeds` (the painter's times a frame
   in detail on the line, as `R_RenderFrame` printed "ms"s under it).

@@ -365,6 +365,17 @@ try {
     const lf0 = await page.evaluate(() => window.quake2.logfile).catch(() => ({}));
     assert(lf1.on === true && lf1.kept > 0 && logDl && logDl.suggestedFilename() === 'qconsole.log' && /^\]echo logged line\nlogged line$/m.test(logText) && logText.endsWith(']logfile 0\n') && lf0.on === false && lf0.kept === 0,
       `logfile 1 keeps the scrollback as qconsole.log (${lf1.kept} characters flushed), logfile 0 downloads it (${logText.split('\n').length - 1} lines) and drops it`);
+    // s_khz 22 makes the next snd_restart's context at 22050 (soundinfo says so), 44 the browser's own again; cl_showclamp reaches the settings
+    await typeCommand('s_khz 22'); await typeCommand('snd_restart'); await sleep(500);
+    const khz22 = await page.evaluate(() => ({ s: window.quake2.settings.sKhz, rate: window.quake2.audio.ctx?.sampleRate })).catch(() => ({}));
+    await typeCommand('soundinfo'); const si22 = await status();
+    await typeCommand('s_khz 44'); await typeCommand('snd_restart'); await sleep(500);
+    const khz44 = await page.evaluate(() => ({ s: window.quake2.settings.sKhz, rate: window.quake2.audio.ctx?.sampleRate })).catch(() => ({}));
+    await typeCommand('cl_showclamp 1');
+    const clampOn = await page.evaluate(() => window.quake2.settings.clShowclamp).catch(() => null);
+    await typeCommand('cl_showclamp 0');
+    assert(khz22.s === 22 && khz22.rate === 22050 && /22050 Hz/.test(si22) && khz44.s === 44 && khz44.rate !== 22050 && clampOn === true,
+      `s_khz 22 and snd_restart make the mixer at 22050 (${JSON.stringify(khz22)}, "${si22}"), 44 the browser's own again (${khz44.rate}); cl_showclamp reaches the settings (${clampOn})`);
     // log_stats 1 writes a line a painted frame to stats.log (the header first), 0 downloads it; in_joystick 0 leaves the pads unread;
     // cl_paused shows the pause's state
     await typeCommand('log_stats 1'); await sleep(1500);
@@ -381,7 +392,7 @@ try {
     await typeCommand('pause'); await typeCommand('cl_paused'); const cp2 = await status();
     assert(ls1.on === true && ls1.kept > 0 && statsDl && statsDl.suggestedFilename() === 'stats.log' && statsLines[0] === 'entities,dlights,parts,frame time' && statsLines.length > 5 && statsLines.slice(1).every((l) => /^\d+,\d+,\d+,\d+$/.test(l))
       && joyOff.s === false && joyOff.i === false && joyOn.s === true && joyOn.i === true && cp0 === '"cl_paused" is "0"' && cp1 === '"cl_paused" is "1"' && cp2 === '"cl_paused" is "0"',
-      `log_stats keeps a line a frame as stats.log (${statsLines.length} lines downloaded, the header first), in_joystick reaches the input (${JSON.stringify(joyOff)} → ${JSON.stringify(joyOn)}), cl_paused follows pause (${cp0}, ${cp1}, ${cp2})`);
+      `log_stats keeps a line a frame as stats.log (${statsLines.length} lines downloaded, the header first; ${JSON.stringify(ls1)}; the first line out of shape: ${JSON.stringify(statsLines.find((l, i) => i > 0 && !/^\d+,\d+,\d+,\d+$/.test(l)) ?? null)}), in_joystick reaches the input (${JSON.stringify(joyOff)} → ${JSON.stringify(joyOn)}), cl_paused follows pause (${cp0}, ${cp1}, ${cp2})`);
     await typeCommand('developer 1');
     await page.evaluate(() => console.warn('dev note', 7)); await sleep(200);
     const devOn = await page.evaluate(() => window.quake2.notify.log(4)).catch(() => []);
@@ -1193,6 +1204,11 @@ try {
       assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
         `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
       assert(/joined[^:]*: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
+      // cl_shownet 2 at the joined page prints each message's size and kind on its scrollback (the host's frames come as "f")
+      await typeOn(gp, 'cl_shownet 2'); await sleep(600);
+      const shown = await gp.evaluate(() => window.quake2.notify.log(12)).catch(() => []);
+      await typeOn(gp, 'cl_shownet 0');
+      assert(shown.some((l) => /^\s*\d+:f$/.test(l)), `cl_shownet 2 prints the host's messages' sizes and kinds at the joined page (${JSON.stringify(shown.filter((l) => /:\w+$/.test(l)).slice(-3))})`);
       const gbook = await gp.evaluate(() => window.quake2.settings.addressBook).catch(() => null);
       assert(gbook?.[0] === `http://localhost:${RELAY_PORT} ${offer}` && gbook.length === 1, `the join by code put the relay and the code first in the guest's address book (${JSON.stringify(gbook)})`);
       // the ping: the host measures the guest's round trip a second (a ping, its pong), the guest's score board row and

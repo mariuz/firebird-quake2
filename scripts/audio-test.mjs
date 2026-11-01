@@ -20,7 +20,7 @@ const made = [];
 class Param { constructor(v) { this.value = v; this.ramps = []; } linearRampToValueAtTime(v, t) { this.ramps.push(['lin', v, t]); } exponentialRampToValueAtTime(v, t) { this.ramps.push(['exp', v, t]); } setValueAtTime(v, t) { this.ramps.push(['set', v, t]); } cancelScheduledValues() {} }
 class Node { constructor(kind) { this.kind = kind; this.to = null; this.started = false; this.stopped = false; made.push(this); } connect(n) { this.to = n; return n; } disconnect() { this.to = null; } start(when, offset) { this.started = true; this.offset = offset; } stop() { if (this.stopped) throw new Error('stopped twice'); this.stopped = true; } }
 class FakeContext {
-  constructor() { this.state = 'running'; this.currentTime = 10; this.sampleRate = 22050; this.destination = new Node('destination'); this.decoded = 0; this.resumed = 0; this.suspended = 0; }
+  constructor(opts = {}) { this.state = 'running'; this.currentTime = 10; this.sampleRate = opts.sampleRate ?? 22050; this.asked = opts.sampleRate ?? null; this.destination = new Node('destination'); this.decoded = 0; this.resumed = 0; this.suspended = 0; }
   createGain() { const n = new Node('gain'); n.gain = new Param(1); return n; }
   createBufferSource() { const n = new Node('source'); n.buffer = null; n.loop = false; return n; }
   createStereoPanner() { const n = new Node('panner'); n.pan = new Param(0); return n; }
@@ -231,6 +231,15 @@ await audio.playMusic(10); await settle();
 check(audio.music === null, '... and plays none');
 audio.setEnabled(true); await settle();
 check(audio.music?.track === 10, 'cd on plays the track again');
+// s_khz: the context asked at 11025 or 22050 on a restart, 44 the browser's own
+{
+  audio.khz = 22; audio.restart(); await settle();
+  const at22 = audio.ctx?.asked;
+  audio.khz = 11; audio.restart(); await settle();
+  const at11 = audio.ctx?.asked;
+  audio.khz = 44; audio.restart(); await settle();
+  check(at22 === 22050 && at11 === 11025 && audio.ctx?.asked === null, `s_khz 22 and 11 ask the context for 22050 and 11025 (${at22}, ${at11}), 44 asks nothing: the browser's own`);
+}
 // snd_restart (restart): the context closed and made anew, the sounds forgotten, the music back
 {
   const before = audio.ctx;

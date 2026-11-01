@@ -702,7 +702,10 @@ of, latched as the cvar was: "skill will be changed for next game."), as are the
 or a sidestep with `+strafe` held or lookstrafe on under `+mlook`, `m_side` in `cl_sidespeed`'s 200 a tic; its
 vertical a look with `+mlook` held or free look on, else a walk, `m_forward` in `cl_forwardspeed`'s 200; free look
 is on by default here, as the mouse always looked, off in Quake; the options menu has the three boxes; `m_forward`
-and `m_side` not archived, as Quake's were not), and `netgraph`, cl_scrn.c's
+and `m_side` not archived, as Quake's were not), `cl_shownet` (`CL_ParseServerMessage`'s prints on a joined page: 1 each message's size, 2 its size and kind, "f" the host's
+frames, on the scrollback as each comes, `GuestLink.onNet`), `cl_showclamp` (`CL_ParseFrame`'s "high clamp" and "low clamp": the
+wall ahead of the game past the two tics a frame runs, the rest dropped, and a host's frame past its time at a joined page; neither
+archived), and `netgraph`, cl_scrn.c's
 debug graph along the bottom of a joined page's view, a column a frame from the host, `src/netgraph.js`, not
 archived, with `timegraph` (a frame's time as a column each painted frame, `cls.frametime` × 300 in colour 0, as `SCR_DebugGraph`
 took it), `debuggraph` (the band drawn whatever it holds) and `graphheight`, `graphscale` and `graphshift` (the band's height, each
@@ -775,7 +778,7 @@ until it has played `cd_loopcount` times, 4, then `cd_looptrack`, 11, over and o
 in for a track with no file as one endless track; `cd_nocd 1` plays no music, archived as Quake's was), `cd` (`CD_f`'s words over the
 music: `cd play <n>` a track once and `cd loop <n>` over and over, whatever `cd_loopcount` says, `cd stop`, `cd pause` and `cd resume`
 from where it was, `Q2Audio.pauseMusic` and `resumeMusic`, `cd off` and `cd on`, `setEnabled`, and `cd info` printing the tracks, what
-plays or is paused and how, and the volume as it did, `musicInfo`), `s_show` (`S_Update`'s print of the channels playing, here a line a
+plays or is paused and how, and the volume as it did, `musicInfo`), `s_khz` (`S_Init`'s rate: 11 or 22 asks the next `snd_restart`'s context for 11025 or 22050, 44 leaves the browser's own, the default here; archived), `s_show` (`S_Update`'s print of the channels playing, here a line a
 sound started on the scrollback, "left right name" with the volumes 0 to 255, `Q2Audio.onStart`; not archived), `m_filter`
 (`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived), `in_joystick` (`IN_Frame`'s: 0 leaves the pads unread, `Input.joystick`; archived as Quake's was, 1 here where Quake's was 0) and `host_speeds` (a frame's
 times on the console's line once a second as `Qcommon_Frame` printed "all, sv, gm, cl, rf": the whole, the server frame outside

@@ -75,6 +75,10 @@ check(DEFAULTS.clAddEntities === true && DEFAULTS.clAddParticles === true && DEF
   && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clAddLights === false && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clTestlights === true
   && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clAddBlend === true && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clTestblend === false,
   'the cl_add switches come back on by default and the cl_test cvars off, anything but a boolean the default');
+// s_khz 11, 22 or 44 (44), cl_shownet 0 to 2, cl_showclamp a boolean
+check(DEFAULTS.sKhz === 44 && DEFAULTS.clShownet === 0 && DEFAULTS.clShowclamp === false && loadSettings(store(JSON.stringify({ sKhz: 22, clShownet: 2, clShowclamp: true }))).sKhz === 22 && loadSettings(store(JSON.stringify({ sKhz: 22, clShownet: 2, clShowclamp: true }))).clShownet === 2
+  && loadSettings(store(JSON.stringify({ clShowclamp: true }))).clShowclamp === true && loadSettings(store(JSON.stringify({ sKhz: 33, clShownet: 3, clShowclamp: 1 }))).sKhz === 44 && loadSettings(store(JSON.stringify({ clShownet: 3 }))).clShownet === 0 && loadSettings(store(JSON.stringify({ clShowclamp: 1 }))).clShowclamp === false,
+  's_khz, cl_shownet and cl_showclamp come back within their ranges, else the defaults');
 // in_joystick on by default, log_stats off, booleans
 check(DEFAULTS.inJoystick === true && DEFAULTS.logStats === false && loadSettings(store(JSON.stringify({ inJoystick: false, logStats: true }))).inJoystick === false && loadSettings(store(JSON.stringify({ inJoystick: false, logStats: true }))).logStats === true
   && loadSettings(store(JSON.stringify({ inJoystick: 0, logStats: 'yes' }))).inJoystick === true && loadSettings(store(JSON.stringify({ logStats: 'yes' }))).logStats === false, 'in_joystick and log_stats come back as booleans, anything else the default');

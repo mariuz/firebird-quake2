@@ -56,7 +56,7 @@ export class Link {
     }
     let msg;
     try { msg = JSON.parse(text); } catch { return; }
-    this.onMessage?.(msg);
+    this.onMessage?.(msg, text.length);   // (the size with it: cl_shownet's print)
   }
   close() {
     if (!this.open) return;
@@ -208,9 +208,10 @@ export class GuestLink {
     link.onClose = () => this.onClose?.();
   }
   get open() { return this.link.open; }
-  receive(m) {
+  receive(m, size = 0) {
     if (!m || typeof m !== 'object') return;
     this.heardAt = this.now();
+    if (this.onNet) this.onNet(String(m.t ?? '?'), size || JSON.stringify(m).length);   // (cl_shownet: each message's kind and size, as CL_ParseServerMessage printed them; a link in one process gives no text, so its size is the JSON's)
     switch (m.t) {
       case 'map': this.map = m; this.frame = null; this.fresh = false; this.onMap?.(m); break;
       case 'f':
