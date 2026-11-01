@@ -554,6 +554,12 @@ try {
     const spdBack = await page.evaluate(() => ({ yaw: window.quake2.settings.clYawspeed, fwd: window.quake2.settings.clForwardspeed })).catch(() => ({}));
     assert(spd.yaw === 280 && spd.fwd === 100 && spdBack.yaw === 140 && spdBack.fwd === 200,
       `cl_yawspeed and cl_forwardspeed reach the settings and go back (${JSON.stringify(spd)} → ${JSON.stringify(spdBack)})`);
+    // cl_upspeed reaches the settings and the usercmd's upmove (the input's read); cl_lightlevel shows the light at the eye
+    await typeCommand('cl_upspeed 100');
+    const up = await page.evaluate(() => ({ setting: window.quake2.settings.clUpspeed, cmd: (window.quake2.input.hold('Space', true), (() => { const c = window.quake2.input.read(1, window.quake2.settings); window.quake2.input.hold('Space', false); return c[6]; })()) })).catch(() => ({}));
+    await typeCommand('cl_upspeed 200');
+    await typeCommand('cl_lightlevel'); const ll = await status();
+    assert(up.setting === 100 && up.cmd === 100 && /^"cl_lightlevel" is "\d+"$/.test(ll), `cl_upspeed 100 reaches the settings and the upmove read from the keys (${JSON.stringify(up)}), cl_lightlevel shows the light at the eye (${ll})`);
     // viewpos says the eye and the yaw; timerefresh spins the view a full turn in 128 frames and times it, the game going on after
     await typeCommand('viewpos'); const vpos = await status();
     await typeCommand('timerefresh'); await sleep(1500); const tref = await status();

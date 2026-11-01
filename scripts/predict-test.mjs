@@ -72,14 +72,14 @@ const RUN = [];
 for (let i = 0; i < 200; i++) {
   let c = { fwd: 1, side: 0, yawd: 0, pitchd: 0, jump: 0, run: 1 };
   if (i >= 20 && i < 60) c.yawd = 2;
-  if (i === 10) c.jump = 1;
-  if (i >= 70 && i < 80) c.jump = -1;                 // a crouch
+  if (i === 10) c.jump = 200;   // (the upmove at cl_upspeed's 200)
+  if (i >= 70 && i < 80) c.jump = -200;               // a crouch
   if (i >= 80 && i < 95) c = { ...c, fwd: 0, side: 1 };
   if (i >= 95 && i < 105) c = { ...c, fwd: 0 };       // a stop
   if (i >= 105 && i < 120) c = { ...c, run: 0, pitchd: i % 2 ? 3 : -3 };
   if (i >= 120 && i < 160) c = { ...c, yawd: -3 };
   if (i >= 160) c = { ...c, fwd: -1, yawd: i % 7 === 0 ? 20 : 0 };
-  if (i >= 150 && i % 25 === 0) c.jump = 1;
+  if (i >= 150 && i % 25 === 0) c.jump = 200;
   RUN.push(c);
 }
 const solidsNow = async () => (await q("SELECT m.name, e.x, e.y, e.z, e.pitch, e.yaw, e.roll FROM ents e JOIN models m ON m.id = e.model_id WHERE e.solid = 4 AND m.name STARTING WITH '*'"))
@@ -129,7 +129,7 @@ check(freeDrift < 1, `run free from the first row alone, the JS drifts from the 
 const st0 = stateFromRow(last);
 check(st0.x === last.PX && st0.vx === last.VX && st0.onground === !!last.ONGROUND && st0.ducked === !!last.DUCKED && st0.jumpReleased === !!last.JUMP_RELEASED && near(st0.pitch, last.PITCH - last.BOB_PITCH - last.PUNCH) && st0.stepz === last.STEPZ && st0.bobtime === last.BOBTIME,
   'stateFromRow takes the origin, velocity, flags, the raw pitch (the bob and the punch taken off), the step and the bob clock from the row');
-const noclip = pmove(cm, { ...st0, noclip: true, onground: true, pitch: 0 }, { fwd: 1, side: 0, yawd: 0, pitchd: 0, jump: 1, run: 1 }, 0.05);
+const noclip = pmove(cm, { ...st0, noclip: true, onground: true, pitch: 0 }, { fwd: 1, side: 0, yawd: 0, pitchd: 0, jump: 200, run: 1 }, 0.05);
 check(!noclip.onground && near(noclip.vz, 300) && near(noclip.z, st0.z + 15) && near(Math.hypot(noclip.vx, noclip.vy), 300), 'in noclip the move flies where the view points and rises on jump, through everything');
 
 // ── p_view.c's cvars on the game row (bob_up, bob_pitch, bob_roll, run_pitch, run_roll): the JS bobs by the ones it is given, and

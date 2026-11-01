@@ -11,7 +11,7 @@ export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, m
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false,
   crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false,
   mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '',
-  clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, timeout: 125, clTimeout: 120,
+  clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
   coop: false, deathmatch: false,
   dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, gender: 'male', msg: 1, rtcIce: '', rtcSignal: '', addressBook: Object.freeze([]), netgraph: false });
@@ -62,7 +62,7 @@ const CHECK = {
   mYaw: num(-10, 10), clGun: bool, conNotifytime: num(0, 60),
   // the keys' speeds (CL_AdjustAngles, CL_BaseMove): cl_yawspeed and cl_pitchspeed in degrees a second (140, 150), cl_anglespeedkey
   // the run key's factor on them (1.5), cl_forwardspeed and cl_sidespeed in units a second (200, the full speed: the command's 1)
-  clYawspeed: num(0, 3600), clPitchspeed: num(0, 3600), clAnglespeedkey: num(0, 100), clForwardspeed: num(0, 1000), clSidespeed: num(0, 1000),
+  clYawspeed: num(0, 3600), clPitchspeed: num(0, 3600), clAnglespeedkey: num(0, 100), clForwardspeed: num(0, 1000), clSidespeed: num(0, 1000), clUpspeed: num(0, 1000),
   // timeout (the host drops a guest silent that long, SV_CheckTimeouts, 125) and cl_timeout (a guest leaves a host silent that long, CL_CheckTimeout, 120); 0 never
   timeout: int(0, 3600), clTimeout: int(0, 3600),
   // gun_x, gun_y and gun_z (SV_CalcGunOffset's development tools: the view weapon moved right, forward and down, 0) and

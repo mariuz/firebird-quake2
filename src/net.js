@@ -152,7 +152,7 @@ export class HostLink {
     const c = [1, 0, 0, 0, 0, 0, 0, 1, 0];
     for (const p of this.pending) {
       c[1] = +p[1] || 0; c[2] = +p[2] || 0; c[3] += +p[3] || 0; c[4] += +p[4] || 0;
-      c[5] = c[5] || (p[5] ? 1 : 0); c[6] = c[6] || (p[6] ? 1 : 0); c[7] = p[7] ? 1 : 0;
+      c[5] = c[5] || (p[5] ? 1 : 0); c[6] = c[6] || (+p[6] || 0); c[7] = p[7] ? 1 : 0;   // (the upmove as sent: ±cl_upspeed, a crouch's negative kept)
       if (p[8]) c[8] = +p[8];
     }
     this.pending.length = 0;

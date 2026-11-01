@@ -360,7 +360,7 @@ export function stateFromRow(row) {
 
 /**
  * ClientThink's move for one tic of `dt` seconds (player_think's movement, PM_* in pmove.c): `st` is changed in
- * place and returned. `cmd` is the usercmd's { fwd, side, yawd, pitchd, jump (1 up, -1 crouch), run }; `world`
+ * place and returned. `cmd` is the usercmd's { fwd, side, yawd, pitchd, jump (Quake's upmove: cl_upspeed up, its negative a crouch), run }; `world`
  * the solids and boxes to clip against (see trace), `gravity` the map's, `view` the game row's bob and run cvars and sv_airaccelerate. The view the state gives is in
  * `view`: { x, y, z, viewZ, yaw, pitch, roll } with the bob and the step smoothing in (SV_CalcViewOffset).
  */
@@ -391,7 +391,7 @@ export function pmove(cm, st, cmd, dt, { solids = [], boxes = [], gravity = 800,
   if (ducked) maxspd = 100;
   // PM_CheckJump
   let jr2 = st.jumpReleased;
-  if (cmd.jump === 1) {
+  if (cmd.jump >= 10) {   // (the upmove, ±cl_upspeed: 10 or more is the jump key, as PM_CheckJump had it)
     if (wl >= 2) {
       if (st.vz > -300) st.vz = wt & 32 ? 100 : wt & 16 ? 80 : 50;
       onground = false;
@@ -420,8 +420,7 @@ export function pmove(cm, st, cmd, dt, { solids = [], boxes = [], gravity = 800,
     fx *= Math.cos(st.pitch * RAD); fy *= Math.cos(st.pitch * RAD);
     let wx = fx * fwd * maxspd + rx * side * maxspd, wy = fy * fwd * maxspd + ry * side * maxspd, wz = fz * fwd * maxspd;
     if (fwd === 0 && side === 0 && jump === 0) wz -= 60;
-    else if (jump === 1) wz += 200;
-    else if (jump < 0) wz -= 200;
+    else wz += jump;   // (the upmove: up on the jump key, crouch swims down)
     let wspd = vlen(wx, wy, wz);
     if (wspd > maxspd) { wx = wx * maxspd / wspd; wy = wy * maxspd / wspd; wz = wz * maxspd / wspd; wspd = maxspd; }
     wspd *= 0.5;
@@ -455,7 +454,7 @@ export function pmove(cm, st, cmd, dt, { solids = [], boxes = [], gravity = 800,
     // PM_SPECTATOR: fly where the view points, jump to rise, through everything
     st.vx = (fwd * Math.cos(st.yaw * RAD) * Math.cos(st.pitch * RAD) + side * Math.sin(st.yaw * RAD)) * maxspd;
     st.vy = (fwd * Math.sin(st.yaw * RAD) * Math.cos(st.pitch * RAD) - side * Math.cos(st.yaw * RAD)) * maxspd;
-    st.vz = (-fwd * Math.sin(st.pitch * RAD) + jump) * maxspd;
+    st.vz = (-fwd * Math.sin(st.pitch * RAD) + jump / 200) * maxspd;   // (the upmove as a share of cl_upspeed's 200)
     st.x += st.vx * dt; st.y += st.vy * dt; st.z += st.vz * dt;
     st.onground = false;
   } else {

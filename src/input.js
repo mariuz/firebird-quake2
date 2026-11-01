@@ -3,7 +3,7 @@
 //
 // An Input holds what happened since the last tic (keys down, mouse movement, taps, a weapon
 // impulse, the pad's last read) and read(tics, settings) turns it into one command,
-// [tics, fwd, side, yaw, pitch, fire, jump, run, imp], clearing what was one-shot. attach() wires
+// [tics, fwd, side, yaw, pitch, fire, jump, run, imp] (jump: Quake's upmove, ±cl_upspeed), clearing what was one-shot. attach() wires
 // the browser events whose meaning is the game's alone; the page keeps the keys that are its own
 // (menus, the console, the F keys) and hands the rest to key(). Nothing here touches the page's
 // state, so a test can drive it with plain calls.
@@ -143,10 +143,10 @@ const TOUCH_MOVE = 40;    // pixels of a move drag for full speed
 
 // CL_AdjustAngles and CL_BaseMove's speeds (the cl_ cvars, Quake's defaults: 140 and 150 degrees a second, the run key's
 // 1.5 on them, 200 units a second each move), as degrees a tic and fractions of the full speed (200 a tic, the command's 1)
-export const SPEEDS = Object.freeze({ clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200 });
+export const SPEEDS = Object.freeze({ clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200 });
 export function speeds(settings) {
   const v = (k) => (typeof settings?.[k] === 'number' && Number.isFinite(settings[k]) ? settings[k] : SPEEDS[k]);
-  return { turn: v('clYawspeed') / 20, look: v('clPitchspeed') / 20, key: v('clAnglespeedkey'), fwd: v('clForwardspeed') / 200, side: v('clSidespeed') / 200 };
+  return { turn: v('clYawspeed') / 20, look: v('clPitchspeed') / 20, key: v('clAnglespeedkey'), fwd: v('clForwardspeed') / 200, side: v('clSidespeed') / 200, up: v('clUpspeed') };   // (up: the usercmd's upmove, units a second, as CL_BaseMove made it from cl_upspeed)
 }
 const TAP = { px: 10, ms: 250 };
 
@@ -323,8 +323,8 @@ export class Input {
     this.mouseFwd = 0; this.mouseSide = 0;
     const fire = b('attack') || k('TouchFire') || this.fireClick || pad?.fire ? 1 : 0;
     if (this.fireClick === 'tap') this.fireClick = false;   // (a tap fires once)
-    // Quake's upmove: jump up, crouch (C) down, both nothing
-    const jump = (b('moveup') || k('TapJump') || pad?.jump ? 1 : 0) - (b('movedown') || pad?.crouch ? 1 : 0);
+    // Quake's upmove: cl_upspeed up for a jump, down for a crouch (C), both nothing (the move reads 10 or more as the jump key, under 0 as the duck)
+    const jump = ((b('moveup') || k('TapJump') || pad?.jump ? 1 : 0) - (b('movedown') || pad?.crouch ? 1 : 0)) * sp.up;
     this.keys.delete('TapJump');
     const imp = this.impulse;
     this.impulse = 0;
@@ -342,7 +342,7 @@ export class Input {
     const sp = speeds(settings);
     const yaw = pad.turn * sp.turn * tics * settings.sensitivity / 7;
     const pitch = pad.look * sp.look * tics * settings.sensitivity / 7 * (settings.invertMouse ? -1 : 1);
-    return [tics, pad.fwd, pad.side, yaw, pitch, pad.fire ? 1 : 0, (pad.jump ? 1 : 0) - (pad.crouch ? 1 : 0), settings.alwaysRun || pad.run ? 1 : 0, padImpulse(pad)];
+    return [tics, pad.fwd, pad.side, yaw, pitch, pad.fire ? 1 : 0, ((pad.jump ? 1 : 0) - (pad.crouch ? 1 : 0)) * sp.up, settings.alwaysRun || pad.run ? 1 : 0, padImpulse(pad)];
   }
   /** The pad at `index` among the connected ones (1 the second), read once: a press counts once; null without one. */
   pollPadAt(index) {
