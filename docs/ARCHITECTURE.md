@@ -700,7 +700,10 @@ vertical a look with `+mlook` held or free look on, else a walk, `m_forward` in 
 is on by default here, as the mouse always looked, off in Quake; the options menu has the three boxes; `m_forward`
 and `m_side` not archived, as Quake's were not), and `netgraph`, cl_scrn.c's
 debug graph along the bottom of a joined page's view, a column a frame from the host, `src/netgraph.js`, not
-archived: shown alone, set with a word through the page's `setSetting` so its controls, the menus and the
+archived, with `timegraph` (a frame's time as a column each painted frame, `cls.frametime` × 300 in colour 0, as `SCR_DebugGraph`
+took it), `debuggraph` (the band drawn whatever it holds) and `graphheight`, `graphscale` and `graphshift` (the band's height, each
+column's scale and lift, as `SCR_DrawDebugGraph` laid it out), the names as cl_scrn.c registered the cvars, without the `scr_`;
+none archived: shown alone, set with a word through the page's `setSetting` so its controls, the menus and the
 userinfo follow; `cvarlist`; `set <cvar> <value>` as config.cfg sets one), `writeconfig` (the binds and the cvars as `config.cfg`, downloaded, as
 `Key_WriteBindings` and `Cvar_WriteVariables` wrote them) and `exec` (the Config control's picker; the file
 runs line by line through `Console.execText`; `exec autoexec` the kept autoexec.cfg, `unautoexec` dropping

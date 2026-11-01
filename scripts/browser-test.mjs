@@ -533,6 +533,18 @@ try {
     assert(withTests?.dlights >= 32 && withTests.ents >= 32 && withTests.particles >= 4096 && withTests.tint?.join() === '255,128,64,0.5'
       && without?.dlights === 0 && without.ents === 0 && without.particles === 0 && without.tint === null && plain?.dlights < 32 && plain.ents < 32 && plain.particles < 4096,
       `the cl_test cvars add their rings and blend to a frame (${JSON.stringify(withTests)}), the cl_add switches at 0 leave everything out (${JSON.stringify(without)}), back as it was (${JSON.stringify(plain)})`);
+    // timegraph 1 adds a frame's time as a column each painted frame (colour 0, cls.frametime × 300); debuggraph, graphheight,
+    // graphscale and graphshift reach the settings, and back
+    await typeCommand('timegraph 1'); await sleep(300);
+    const tg1 = await page.evaluate(() => window.quake2.netgraph).catch(() => null);
+    await sleep(600);
+    const tg2 = await page.evaluate(() => window.quake2.netgraph).catch(() => null);
+    await typeCommand('debuggraph 1'); await typeCommand('graphheight 16'); await typeCommand('graphscale 2'); await typeCommand('graphshift 3');
+    const gs = await page.evaluate(() => { const s = window.quake2.settings; return [s.debuggraph, s.graphheight, s.graphscale, s.graphshift].join(); }).catch(() => '');
+    await typeCommand('timegraph 0'); await typeCommand('debuggraph 0'); await typeCommand('graphheight 32'); await typeCommand('graphscale 1'); await typeCommand('graphshift 0');
+    const gs0 = await page.evaluate(() => { const s = window.quake2.settings; return [s.timegraph, s.debuggraph, s.graphheight, s.graphscale, s.graphshift].join(); }).catch(() => '');
+    assert(tg1 && tg2 && tg2.added > tg1.added && tg2.last?.colour === 0 && tg2.last.value > 0 && tg2.last.value <= 300 && gs === 'true,16,2,3' && gs0 === 'false,false,32,1,0',
+      `timegraph adds a column a painted frame (${tg2?.added - tg1?.added} in 0.6 s, the last ${tg2?.last?.value?.toFixed(1)} high), debuggraph and the graph's layout reach the settings (${gs}) and go back (${gs0})`);
     // sw_mipcap, sw_mipscale and sw_stipplealpha reach the painter: under the cap the frame's surfaces are built at mip 3
     await typeCommand('sw_mipcap 3'); await typeCommand('sw_mipscale 2'); await typeCommand('sw_stipplealpha 1'); await sleep(600);
     const mp1 = await page.evaluate(() => { const r = window.quake2.renderer; return { cap: r.mipcap, scale: r.mipscale, stipple: r.stipplealpha, at3: [...r.surfCache.keys()].some((k) => k % 4 === 3), s: [window.quake2.settings.swMipcap, window.quake2.settings.swMipscale, window.quake2.settings.swStipplealpha] }; }).catch(() => ({}));

@@ -860,6 +860,7 @@ let lastPaint = 0;
 let paints = 0;          // frames painted (the tics are session.frameNo)
 let guestGotAt = 0, guestDt = 0.05, guestSentAt = 0;   // a guest: when the host's last frame came and how long it stands for
 const netgraph = new Netgraph();   // the netgraph cvar's graph (SCR_DebugGraph): a column a host frame on a joined page
+let lastGraphAt = 0;   // timegraph: when the last frame was painted, for its time as a column
 let guestLastTic = null;           // the tic of the host's last frame, for the frames that never came between two
 // a guest's prediction (src/pmove.js, CL_PredictMovement): the map's clip data, the commands sent and not yet taken by a
 // host tic (each numbered), the state run from the last frame's row through them, and the error the last frame corrected
@@ -1585,7 +1586,15 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   }
   else if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
   if (last.DEAD) hud.drawCenter(r, session.twoPlayers || net ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
-  if (which === 0 && settings.netgraph && netGuest()) netgraph.draw(r);   // SCR_DrawDebugGraph: the netgraph cvar's band along the bottom of a joined page's view
+  if (which === 0) {
+    // SCR_DebugGraph for timegraph (a frame's time as a column, cls.frametime × 300, colour 0); SCR_DrawDebugGraph's band along the bottom
+    // of the view with debuggraph, timegraph or a joined page's netgraph, laid out by graphheight, graphscale and graphshift
+    if (settings.timegraph) { const nowG = performance.now(); if (lastGraphAt) netgraph.add(Math.min(1000, nowG - lastGraphAt) / 1000 * 300, 0); lastGraphAt = nowG; } else lastGraphAt = 0;
+    if ((settings.netgraph && netGuest()) || settings.debuggraph || settings.timegraph) {
+      const scale = Number(settings.graphscale);
+      netgraph.draw(r, { height: Number(settings.graphheight) || 32, scale: Number.isFinite(scale) ? scale : 1, shift: Number(settings.graphshift) || 0 });
+    }
+  }
   // the palette blend: damage, bonus, powerups, water (a demo's row carries the server's ps.blend as it was)
   let tint = null;
   const since = time - last.DMG_TIME;
