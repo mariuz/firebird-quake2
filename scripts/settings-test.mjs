@@ -75,6 +75,12 @@ check(DEFAULTS.clAddEntities === true && DEFAULTS.clAddParticles === true && DEF
   && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clAddLights === false && loadSettings(store(JSON.stringify({ clAddLights: false, clTestlights: true }))).clTestlights === true
   && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clAddBlend === true && loadSettings(store(JSON.stringify({ clAddBlend: 0, clTestblend: 1 }))).clTestblend === false,
   'the cl_add switches come back on by default and the cl_test cvars off, anything but a boolean the default');
+// the debug graph's cvars: timegraph and debuggraph booleans off, graphheight 1..240 (32), graphscale -100..100 (1), graphshift -240..240 (0)
+check(DEFAULTS.timegraph === false && DEFAULTS.debuggraph === false && DEFAULTS.graphheight === 32 && DEFAULTS.graphscale === 1 && DEFAULTS.graphshift === 0
+  && loadSettings(store(JSON.stringify({ timegraph: true, debuggraph: true, graphheight: 16, graphscale: -2, graphshift: 3 }))).graphheight === 16 && loadSettings(store(JSON.stringify({ timegraph: true, graphscale: -2, graphshift: 3 }))).graphscale === -2
+  && loadSettings(store(JSON.stringify({ graphshift: 3 }))).graphshift === 3 && loadSettings(store(JSON.stringify({ timegraph: true }))).timegraph === true
+  && loadSettings(store(JSON.stringify({ graphheight: 0, graphscale: 101, graphshift: -241, debuggraph: 1 }))).graphheight === 32 && loadSettings(store(JSON.stringify({ graphscale: 101 }))).graphscale === 1 && loadSettings(store(JSON.stringify({ graphshift: -241 }))).graphshift === 0 && loadSettings(store(JSON.stringify({ debuggraph: 1 }))).debuggraph === false,
+  'the debug graph\'s cvars come back within their ranges, else the defaults');
 // cl_upspeed: units a second within 0..1000, 200 by default
 check(DEFAULTS.clUpspeed === 200 && loadSettings(store(JSON.stringify({ clUpspeed: 100 }))).clUpspeed === 100 && loadSettings(store(JSON.stringify({ clUpspeed: 2000 }))).clUpspeed === 200 && loadSettings(store(JSON.stringify({ clUpspeed: 'x' }))).clUpspeed === 200, 'cl_upspeed comes back within 0..1000, else 200');
 // s_show: a boolean, off by default

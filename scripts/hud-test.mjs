@@ -179,6 +179,8 @@ assert(inside(r) && textOverlaps(r) === 0 && !picAt(r, 'tag1') && textAt(r, 4) =
   assert(fills.length === 1 + 8 && fills[1].h === 9 && fills[8].h === 2, 'the ring keeps the last eight (its size), the newest at the right');
   fills.length = 0; g.draw(rr, { scale: 4 });
   assert(fills[1].h === (9 * 4) % GRAPH_HEIGHT, 'a value past the height wraps, as scr_graphscale could make one');
+  fills.length = 0; g.draw(rr, { height: 16, scale: 1, shift: 3 });
+  assert(fills[0].h === 16 && fills[0].y === 224 && fills[1].h === (9 + 3) % 16 && fills[1].y === 240 - fills[1].h, 'graphheight and graphshift lay the band out: 16 high, each column lifted three');
 }
 
 // the pause plaque (SCR_DrawPause: pics/pause.pcx centred a little under the middle, none with scr_showpause 0) and the turtle

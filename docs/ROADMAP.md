@@ -1147,8 +1147,14 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   tests jump at 200 (the crouches at -200); the browser test reads the setting and the upmove from the keys, and the
   light at the eye, on both builds. On the way, the host's merge of a guest's pending commands turned any upmove into
   1, a crouch into a jump: the upmove is carried as sent now, its sign kept.
-- **`scr_timegraph` and `scr_debuggraph`**: `SCR_DebugGraph`'s band under the view, the frame's time a bar as the
-  netgraph draws the net's, with `scr_graphheight`, `scr_graphscale` and `scr_graphshift` laying it out.
+- **`scr_timegraph` and `scr_debuggraph`**: done, under the names cl_scrn.c registered the cvars (the `scr_` is the C
+  variables' alone): `timegraph 1` adds a frame's time as a column each painted frame (`cls.frametime` × 300, colour 0,
+  as `SCR_DebugGraph` took it), `debuggraph 1` draws the band along the bottom of the view whatever it holds (a joined
+  page's netgraph columns among them), and `graphheight` (32), `graphscale` (1) and `graphshift` (0) lay it out as
+  `SCR_DrawDebugGraph` did (`Netgraph.draw`'s options from the settings); none archived. `test:hud` draws the band at a
+  height with a shift; `test:settings` the five within their ranges; `test:console` shown, set, refused and Tab; the
+  browser test sees a column added a painted frame under `timegraph 1` and the layout cvars in the settings and back,
+  on both builds.
 - **`quit`, `killserver`, `vid_restart` and `snd_restart`**: `quit` ending the game as the quit menu's yes does
   (`Com_Quit`), `killserver` stopping the game for the attract loop (`SV_KillServer_f`), `vid_restart` making the
   painter again from the settings (`VID_Restart_f`) and `snd_restart` the mixer (`CL_Snd_Restart_f`), the sounds
