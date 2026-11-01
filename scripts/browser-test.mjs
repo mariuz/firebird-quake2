@@ -396,15 +396,23 @@ try {
     assert(/^Current search path: pak0\.pak \(\d{3,} files, the demo's, \.\/pak\/pak0\.pak\)$/.test(pathLine) && dirRes.status === 'dir maps/*.bsp: 3 files' && /Directory of pak0\.pak\/maps\/\*\.bsp\|----\|demo1\.bsp\|demo2\.bsp\|demo3\.bsp/.test(dirRes.log ?? '')
       && /^\d{2,} models loaded, \d{6,} bytes$/.test(models) && /^\d{2,} images, \d{5,} texels$/.test(images) && /^\d+ sounds loaded, \d+ bytes$/.test(sounds),
       `path names the pak (${pathLine}), dir lists the maps (${dirRes.status}: ${dirRes.log}), modellist, imagelist and soundlist count what is loaded (${models}; ${images}; ${sounds})`);
-    // the chat: T (messagemode) opens the console with "say " on its line, and the words go to the message line by the
-    // player's name (Cmd_Say_f), drawn in the notify lines
+    // the chat: T (messagemode) brings the chat prompt up over the view (Key_Message: the console stays closed, the keys type
+    // the line), Enter says it and the words go to the message line by the player's name (Cmd_Say_f), drawn in the notify
+    // lines; messagemode2 at the console is the team's prompt, Escape drops it with nothing said
     await page.mouse.click(480, 360); await sleep(200);
     await page.keyboard.press('KeyT'); await sleep(200);
-    const chatLine = await page.evaluate(() => ({ hidden: document.getElementById('cmdline').hidden, value: document.getElementById('cmdline').value })).catch(() => ({}));
-    await page.keyboard.type('Hello, World!'); await page.keyboard.press('Enter'); await sleep(400);
-    const chat = await page.evaluate(() => { const q = window.quake2; return { lines: q.notify.lines(q.session.last.TIME_), msg: q.session.last.MSG }; }).catch(() => ({}));
-    assert(!chatLine.hidden && chatLine.value === 'say ' && chat.msg === 'player 1: Hello, World!' && chat.lines?.includes('player 1: Hello, World!'),
-      `T opens the console with "say ", and the words reach the message line by the player's name (${JSON.stringify({ chatLine, chat })})`);
+    const chatUp = await page.evaluate(() => ({ hidden: document.getElementById('cmdline').hidden, chat: window.quake2.chat })).catch(() => ({}));
+    await page.keyboard.type('Hello, World!'); await sleep(200);
+    const chatTyped = await page.evaluate(() => window.quake2.chat).catch(() => null);
+    await page.keyboard.press('Enter'); await sleep(400);
+    const chat = await page.evaluate(() => { const q = window.quake2; return { lines: q.notify.lines(q.session.last.TIME_), msg: q.session.last.MSG, chat: q.chat }; }).catch(() => ({}));
+    await typeCommand('messagemode2');
+    const team = await page.evaluate(() => ({ chat: window.quake2.chat, hidden: document.getElementById('cmdline').hidden })).catch(() => ({}));
+    await page.keyboard.type('secret'); await page.keyboard.press('Escape'); await sleep(300);
+    const dropped = await page.evaluate(() => ({ chat: window.quake2.chat, msg: window.quake2.session.last.MSG })).catch(() => ({}));
+    assert(chatUp.hidden && chatUp.chat?.team === false && chatUp.chat.text === '' && chatTyped?.text === 'Hello, World!' && chat.chat === null && chat.msg === 'player 1: Hello, World!' && chat.lines?.includes('player 1: Hello, World!')
+      && team.chat?.team === true && team.hidden && dropped.chat === null && dropped.msg !== 'player 1: secret',
+      `T brings the chat prompt up, the line typed reaches the message line by the player's name on Enter; messagemode2 is the team's prompt, Escape drops it (${JSON.stringify({ chatUp, chatTyped, chat, team, dropped })})`);
     // rtc_ice: the ICE server for the network game, kept in the settings and shown; cleared again before the network
     // section below (a relay that is not there would hold each offer three seconds)
     await typeCommand('rtc_ice turn:relay.example.org:3478 ace secret');

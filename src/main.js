@@ -44,6 +44,7 @@ const statusEl = $('status');
 const statsEl = $('stats');
 const TIC_MS = 50;
 let timescale = 1;   // the timescale cvar: the game's clock against the wall's (Qcommon_Frame scaled the frame's milliseconds); the host's rules a guest
+let chat = null;     // the chat prompt (messagemode, messagemode2: Key_Message's key_dest): { team, text } while it is up
 let fixedtime = 0, fixedAcc = 0;   // the fixedtime cvar: the game's clock stepped fixedtime ms an animation frame whatever the wall says (Qcommon_Frame's), 0 the wall's; the ms owed not yet run
 
 let db, pak, res, renderer, hud;
@@ -167,6 +168,7 @@ window.addEventListener('keydown', (e) => {
   if (demo) { if (!e.repeat) { e.preventDefault(); openMenu(() => menu.main()); } return; }
   // default.cfg: F2 the save menu, F3 the load menu, F10 quit; Escape puts the help computer or the
   // inventory away (cmd putaway), else brings up the main menu
+  if (chat) { e.preventDefault(); chatKey(e); return; }   // (the chat prompt takes every key, as Key_Message did)
   if (e.code === 'F3') { e.preventDefault(); openMenu(() => menu.loadMenu()); return; }
   if (!running) return;
   if (e.code === 'F2') { e.preventDefault(); openMenu(() => menu.saveMenu()); return; }
@@ -179,7 +181,7 @@ window.addEventListener('keydown', (e) => {
   // the bound actions (settings.binds, the keys menu): the help computer and the inventory screen are the page's,
   // the rest the movement keys, and the weapon, inventory and item keys as impulses
   const act = input.bound(e.code);
-  if (act === 'messagemode') { e.preventDefault(); openConsole('say '); return; }   // (default.cfg's t: the words to every player)
+  if (act === 'messagemode') { e.preventDefault(); messageMode(false); return; }   // (default.cfg's t: the chat prompt, the words to every player)
   if (act === 'help') { e.preventDefault(); toggleScreen(0, 'help'); }
   if (act === 'inven') { e.preventDefault(); toggleScreen(0, 'inventory'); }         // inven
   if (act || GAME_KEYS.has(e.code)) e.preventDefault();
@@ -440,6 +442,7 @@ const con = new Console({
   timedemo: (name) => playDemo(name, { timedemo: true }),
   screenshot: () => screenshot(),
   say: (text) => sayText(text),
+  messageMode: (team) => messageMode(team),              // (messagemode, messagemode2: the chat prompt up; false without a game)
   setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
   download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
   clearLog: () => { notify.clear(); conlog.textContent = ''; conlog.hidden = true; },   // (clear: the scrollback and the notify lines emptied, Con_Clear_f)
@@ -507,6 +510,33 @@ const con = new Console({
     return info ? { name: info.name, hand: info.hand, gender: info.gender, msg: info.msg, fov: info.fov, spectator: info.spectator } : { name: c.NETNAME ?? '', hand: c.HAND ?? 0 };
   },
 });
+/**
+ * Con_MessageMode_f and Con_MessageMode2_f: the chat prompt up over the view ("say:" or "say_team:" under the notify lines,
+ * the line typed after it), in a game running; the console, if open, goes. True once it is up.
+ */
+function messageMode(team) {
+  if (!running || !map || demo) return false;
+  if (!cmdline.hidden) closeConsole();
+  input.clear();
+  chat = { team: !!team, text: '' };
+  return true;
+}
+/** Key_Message: Enter says the line (say; say_team for messagemode2), Escape drops it, Backspace takes a character off, a printable key types one (MAXCMDLINE). */
+function chatKey(e) {
+  if (e.code === 'Escape') { chat = null; return; }
+  if (e.code === 'Enter' || e.code === 'NumpadEnter') { const text = chat.text.trim(); chat = null; if (text) sayText(text).catch((err) => console.warn('say:', err.message)); return; }
+  if (e.code === 'Backspace') { chat.text = chat.text.slice(0, -1); return; }
+  if (typeof e.key === 'string' && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && chat.text.length < 255) chat.text += e.key;
+}
+/** Con_DrawNotify's prompt: "say:" (or "say_team:") at the line under the notify lines, the text's tail that fits, a blinking cursor. */
+function drawChat(r, y) {
+  const label = chat.team ? 'say_team:' : 'say:', skip = label.length + 1;
+  r.drawString(hud.conchars, label, 8, y);
+  const cols = (r.w >> 3) - (skip + 1);
+  const text = chat.text.length > cols ? chat.text.slice(chat.text.length - cols) : chat.text;
+  r.drawString(hud.conchars, text, skip * 8, y);
+  r.drawChar(hud.conchars, 10 + ((performance.now() >> 8) & 1), (text.length + skip) * 8, y);
+}
 function openConsole(prefill = '') {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
   input.clear();
@@ -738,6 +768,7 @@ const localViews = () => (session?.twoPlayers && !netHost() ? session.nclients :
 function beginMap() {
   running = false;
   demo = null;
+  chat = null;   // (the chat prompt, if up, goes with the level)
   if (recorder) stopRecording();   // (a recording ends with its level, as the client's did at the disconnect)
   for (const L of lerps) { L.prev = null; L.cur = null; }   // (the frames of the map being left)
   lastPaint = 0;
@@ -1493,7 +1524,12 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   const cprint = centerPrints[which].text(time);
   if (cprint) hud.drawCenter(r, cprint, Math.floor(r.h * 0.3));
   // Con_DrawNotify for the first view: the last prints at the top, a line each, three seconds; another view its one line
-  if (which === 0) { noteMessage(last); notify.lines(last.TIME_).forEach((s, i) => r.drawString(hud.conchars, s, 8, 8 + i * 8)); }
+  if (which === 0) {
+    noteMessage(last);
+    const lines = notify.lines(last.TIME_);
+    lines.forEach((s, i) => r.drawString(hud.conchars, s, 8, 8 + i * 8));
+    if (chat) drawChat(r, 8 + lines.length * 8);   // (the chat prompt under them, as Con_DrawNotify drew it)
+  }
   else if (last.MSG) r.drawString(hud.conchars, last.MSG, 8, 8);
   if (last.DEAD) hud.drawCenter(r, session.twoPlayers || net ? 'You died\n\npress fire or jump' : 'You died\n\npress fire', Math.min(60, r.h >> 2));
   if (which === 0 && settings.netgraph && netGuest()) netgraph.draw(r);   // SCR_DrawDebugGraph: the netgraph cvar's band along the bottom of a joined page's view
@@ -1915,7 +1951,7 @@ async function boot() {
     window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
-      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; },
+      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; },
       get logfile() { return { on: !!settings.logfile, kept: logKept.length, pending: logNew.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),

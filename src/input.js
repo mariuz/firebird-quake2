@@ -39,7 +39,7 @@ export const ACTIONS = [
   { id: 'help', name: 'help computer', cmd: 'help' },
   // default.cfg's "use silencer" (s) and "use power shield" (p), whose keys the page has (back, pause): bound to l and h
   { id: 'silencer', name: 'silencer', impulse: 18, cmd: 'use silencer' }, { id: 'shield', name: 'power shield', impulse: 21, cmd: 'use power shield' },
-  // default.cfg's messagemode (t): the console with "say " on its line, the words to every player
+  // default.cfg's messagemode (t): the chat prompt over the view (Key_Message), the line typed said to every player
   { id: 'messagemode', name: 'chat', cmd: 'messagemode' },
   // bindnames' sidestep (+strafe: held, the turning keys step sideways) and keyboard look (+klook: held, the walking keys
   // look up and down), as CL_BaseMove and CL_AdjustAngles read them; default.cfg's ALT and INS

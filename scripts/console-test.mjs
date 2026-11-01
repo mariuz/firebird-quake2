@@ -617,6 +617,18 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   delete host.setCvar;
 }
 
+// messagemode and messagemode2: the chat prompt through the page (team for the second), refused without a game
+{
+  let prompts = [], up = true;
+  host.messageMode = (team) => { if (!up) return false; prompts.push(team); return true; };
+  await con.submit('messagemode'); await con.submit('messagemode2'); await con.submit('MessageMode');
+  check(prompts.join() === 'false,true,false' && status.at(-1)?.[1] !== true, 'messagemode brings the chat prompt up, messagemode2 the team\'s, case aside');
+  up = false;
+  await con.submit('messagemode');
+  check(prompts.length === 3 && status.at(-1)?.[0] === 'messagemode: a game must be running' && status.at(-1)?.[1] === true, 'without a game it says so');
+  check(con.complete('mess') === 'messagemode ' && con.complete('messagemode2') === 'messagemode2 ', 'Tab completes messagemode and messagemode2');
+  delete host.messageMode;
+}
 // fixedtime: the game's clock stepped a fixed number of milliseconds a frame, shown, set within 0..1000, refused for a fraction or a word, a guest told
 {
   let fixed = 0, guest = false;
