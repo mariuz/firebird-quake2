@@ -376,6 +376,16 @@ try {
     await typeCommand('cl_showclamp 0');
     assert(khz22.s === 22 && khz22.rate === 22050 && /22050 Hz/.test(si22) && khz44.s === 44 && khz44.rate !== 22050 && clampOn === true,
       `s_khz 22 and snd_restart make the mixer at 22050 (${JSON.stringify(khz22)}, "${si22}"), 44 the browser's own again (${khz44.rate}); cl_showclamp reaches the settings (${clampOn})`);
+    // s_mixahead reaches the mixer's lead; s_testsound 1 plays the sine with the mix muted, 0 brings the mix back at the volume
+    await typeCommand('s_mixahead 0.3');
+    const mixLead = await page.evaluate(() => ({ s: window.quake2.settings.sMixahead, a: window.quake2.audio.mixahead })).catch(() => ({}));
+    await typeCommand('s_mixahead 0.05');
+    await typeCommand('s_testsound 1');
+    const tone = await page.evaluate(() => ({ s: window.quake2.settings.sTestsound, on: !!window.quake2.audio.testTone, hz: window.quake2.audio.testTone?.osc.frequency.value, master: window.quake2.audio.master?.gain.value })).catch(() => ({}));
+    await typeCommand('s_testsound 0');
+    const toneOff = await page.evaluate(() => ({ on: !!window.quake2.audio.testTone, master: window.quake2.audio.master?.gain.value })).catch(() => ({}));
+    assert(mixLead.s === 0.3 && mixLead.a === 0.3 && tone.s === true && tone.on === true && tone.hz > 300 && tone.master === 0 && toneOff.on === false && toneOff.master > 0,
+      `s_mixahead reaches the mixer (${JSON.stringify(mixLead)}); s_testsound plays the sine (${tone.hz?.toFixed(0)} Hz) with the mix muted and 0 brings it back (${JSON.stringify(toneOff)})`);
     // log_stats 1 writes a line a painted frame to stats.log (the header first), 0 downloads it; in_joystick 0 leaves the pads unread;
     // cl_paused shows the pause's state
     await typeCommand('log_stats 1'); await sleep(1500);

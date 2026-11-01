@@ -138,6 +138,8 @@ const joyFromSettings = (s) => ({ forwardThreshold: s.joyForwardthreshold, sideT
   forwardSensitivity: s.joyForwardsensitivity, sideSensitivity: s.joySidesensitivity, pitchSensitivity: s.joyPitchsensitivity, yawSensitivity: s.joyYawsensitivity });
 input.joy = joyFromSettings(settings);
 audio.khz = Number(settings.sKhz) || 44;   // (s_khz from the settings)
+audio.mixahead = Number(settings.sMixahead) || 0;   // (s_mixahead: the raw stream's lead)
+audio.setTestsound(!!settings.sTestsound);   // (s_testsound: the sine in place of the mix, from the first start)
 let anyKey = null;      // a picture screen waiting for a key or a click
 // the help computer (F1, or the pad's Back) and the inventory screen (TAB, or the pad's Y), per view: the
 // keys are the first player's, the pad is its player's (the second in coop)
@@ -294,6 +296,8 @@ function setSetting(k, v) {
   if (k === 'inJoystick') input.joystick = v !== false;   // (in_joystick: the pads read, or not)
   if (k.startsWith('joy')) input.joy = joyFromSettings(settings);   // (the joy_ cvars: the sticks' dead zones and speeds)
   if (k === 'sKhz') audio.khz = Number(v) || 44;   // (s_khz: the rate at the next snd_restart)
+  if (k === 'sMixahead') audio.mixahead = Number(v) || 0;   // (s_mixahead: the raw stream's lead)
+  if (k === 'sTestsound') audio.setTestsound(!!v);   // (s_testsound: the sine in place of the mix)
   if (k === 'sShow') audio.onStart = v ? (name, l, r) => notify.add(`${String(l).padStart(3)} ${String(r).padStart(3)} ${name}`, gameClock(), { show: false }) : null;   // (s_show: each sound started on the scrollback as S_Update printed a channel)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));

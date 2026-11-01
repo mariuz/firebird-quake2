@@ -786,7 +786,11 @@ until it has played `cd_loopcount` times, 4, then `cd_looptrack`, 11, over and o
 in for a track with no file as one endless track; `cd_nocd 1` plays no music, archived as Quake's was), `cd` (`CD_f`'s words over the
 music: `cd play <n>` a track once and `cd loop <n>` over and over, whatever `cd_loopcount` says, `cd stop`, `cd pause` and `cd resume`
 from where it was, `Q2Audio.pauseMusic` and `resumeMusic`, `cd off` and `cd on`, `setEnabled`, and `cd info` printing the tracks, what
-plays or is paused and how, and the volume as it did, `musicInfo`), `s_khz` (`S_Init`'s rate: 11 or 22 asks the next `snd_restart`'s context for 11025 or 22050, 44 leaves the browser's own, the default here; archived), `s_show` (`S_Update`'s print of the channels playing, here a line a
+plays or is paused and how, and the volume as it did, `musicInfo`), `s_khz` (`S_Init`'s rate: 11 or 22 asks the next `snd_restart`'s context for 11025 or 22050, 44 leaves the browser's own, the default here; archived),
+`s_mixahead` (`S_Update`'s lead: how far past the clock the mixer painted, 0.2 for a DMA; here how far ahead of the clock the raw stream's samples,
+a cinematic's, are queued when they start or have fallen behind, `Q2Audio.mixahead`, 0.05: a frame's worth; archived as Quake's was), `s_testsound`
+(`S_TransferPaintBuffer`'s fixed sine in place of the mix: an oscillator at 0.1 radians a sample of the mixer's rate, 20000 of 32768, into the
+output with the sounds' gain muted while it plays and back at the volume after, `setTestsound`; not archived), `s_show` (`S_Update`'s print of the channels playing, here a line a
 sound started on the scrollback, "left right name" with the volumes 0 to 255, `Q2Audio.onStart`; not archived), `m_filter`
 (`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived), `in_joystick` (`IN_Frame`'s: 0 leaves the pads unread, `Input.joystick`; archived as Quake's was, 1 here where Quake's was 0), the `joy_*` cvars
 (`IN_JoyMove`'s: `joy_forwardthreshold`, `joy_sidethreshold`, `joy_pitchthreshold` and `joy_yawthreshold` each stick axis's dead zone, of its

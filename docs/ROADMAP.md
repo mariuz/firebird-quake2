@@ -1271,8 +1271,16 @@ with the demo pak. In the order they are to be taken.
   the Input's joy reaching both pads; `test:settings` the eight within their ranges; `test:console` shown, set,
   refused, cvarlist with them, left out of config.cfg, Tab; the browser test sets a threshold and a sensitivity and
   reads them on the settings and the input, and the defaults back, on both builds.
-- **`s_mixahead` and `s_testsound`**: the mix's lead (how far ahead of the clock the mixer paints, 0.2 s) and the test
-  tone (`S_TransferPaintBuffer`'s sine in place of the mix).
+- **`s_mixahead` and `s_testsound`**: done. `s_mixahead` is `S_Update`'s lead, how far past the clock the mixer painted
+  (0.2 for a DMA): here how far ahead of the clock the raw stream's samples, a cinematic's, are queued when they start
+  or have fallen behind (`Q2Audio.mixahead`; 0.05, a frame's worth, where the browser schedules the one-shots itself);
+  archived as Quake's was. `s_testsound 1` is `S_TransferPaintBuffer`'s fixed sine in place of the mix: an oscillator at
+  0.1 radians a sample of the mixer's rate (351 Hz at 22050), 20000 of 32768, into the output with the sounds' gain
+  muted while it plays and back at the volume after (`setTestsound`, remembered for the first start); not archived.
+  Both in the console's list for Tab. `test:audio` sees the raw stream queued 0.05 s ahead and 0.3 s at the cvar, the
+  tone made at the rate's frequency and gain with the mix muted, the volume set meanwhile kept, and the mix back when
+  off; `test:settings` the two; `test:console` shown, set, refused, cvarlist, config.cfg with s_mixahead and without
+  s_testsound, Tab; the browser test sets the lead and plays the tone, the mix muted and back, on both builds.
 - **`sw_aliasstats`, `sw_polymodelstats`, `sw_reportsurfout`, `sw_reportedgeout` and `z_stats`**: the painter's
   reports (the models drawn and their triangles a frame, the surfaces and edges past the limits) and the memory in use
   (the engine's heap, the page's).
