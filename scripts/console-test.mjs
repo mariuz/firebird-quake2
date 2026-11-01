@@ -13,8 +13,8 @@ const calls = [];
 const status = [];
 const host = {
   db: { query: async (sql, params = []) => { calls.push(['query', sql.slice(0, 40), ...params]); return { rows: [{ S: 12345, R: 999 }] }; } },
-  pak: { has: (p) => p === 'maps/demo2.bsp', list: () => ['maps/demo1.bsp', 'maps/demo2.bsp', 'pics/conchars.pcx', 'sound/weapons/blastf1a.wav', 'readme.txt'] },
-  settings: { fov: 90, skill: 1, binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
+  pak: { has: (p) => p === 'maps/demo2.bsp' || p === 'pics/victory.pcx', list: () => ['maps/demo1.bsp', 'maps/demo2.bsp', 'pics/conchars.pcx', 'sound/weapons/blastf1a.wav', 'readme.txt'] },
+  settings: { fov: 90, skill: 1, detail: 'high', renderer: 'fast', binds: defaultBinds(), lines: {}, name: '', hand: 0, gender: 'male', msg: 1, rate: 500000, skin: 'male/grunt', password: '', spectatorPassword: '', rconPassword: '', showpackets: false, showdrop: false, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rLockpvs: false, rSpeeds: false, rDspeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, swAliasstats: false, swReportsurfout: false, swMaxsurfs: 0, developer: false, logfile: false, logStats: false, svNoreload: false, sShow: false, inJoystick: true, inMouse: true, joyForwardthreshold: 0.15, joySidethreshold: 0.15, joyPitchthreshold: 0.15, joyYawthreshold: 0.15, joyForwardsensitivity: -1, joySidesensitivity: -1, joyPitchsensitivity: 1, joyYawsensitivity: -1, sKhz: 44, sMixahead: 0.05, sTestsound: false, clShownet: 0, clShowclamp: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 },
   setSetting: (k, v) => { host.settings[k] = v; calls.push(['set', k, String(v)]); },
   saveSettings: () => calls.push(['saveSettings']),
   setSkill: (n) => calls.push(['setSkill', n]),
@@ -35,6 +35,26 @@ await con.submit('map demo2');
 check(last() === 'startMap demo2', 'map <name> starts the map');
 await con.submit('map nowhere');
 check(status.at(-1)?.[0] === 'no map "nowhere" in this pak' && status.at(-1)?.[1] === true && last() === 'startMap demo2', 'a map not in the pak is refused with a message, nothing started');
+// map with a map string (a spawn point, a picture or a cinematic, "+" what follows), gamemap keeping the level, nextserver
+{
+  const strings = [];
+  host.mapString = (t) => { strings.push(`map ${t}`); return true; };
+  host.gameMap = (t) => { strings.push(`gamemap ${t}`); return true; };
+  let next = '';
+  host.nextServer = (t) => { if (t != null) next = t; return next; };
+  await con.submit('map demo2$start'); await con.submit('map victory.pcx+demo2'); await con.submit('map *demo2');
+  check(strings.join('|') === 'map demo2$start|map victory.pcx+demo2|map *demo2' && last() === 'startMap demo2', `a spawn point, a picture with what follows, or a unit's end go through the page as a string (${strings.join('|')})`);
+  await con.submit('map nosuch.pcx+demo2'); await con.submit('map ntro.cin+demo2'); await con.submit('map nowhere$start');
+  check(strings.length === 3 && status.at(-3)?.[0] === 'no picture "nosuch.pcx" in this pak' && status.at(-2)?.[0] === 'no cinematic "ntro.cin" in this pak' && status.at(-1)?.[0] === 'no map "nowhere" in this pak' && status.at(-1)?.[1] === true,
+    'a picture, a cinematic or a map the pak lacks is refused');
+  await con.submit('gamemap'); check(status.at(-1)?.[0] === 'usage: gamemap <map>' && status.at(-1)?.[1] === true, 'gamemap alone shows its usage');
+  await con.submit('gamemap demo2'); await con.submit('GameMap *demo2$start');
+  check(strings.slice(3).join('|') === 'gamemap demo2|gamemap *demo2$start', 'gamemap goes through the page with the string as typed, case aside');
+  await con.submit('nextserver'); check(status.at(-1)?.[0] === '"nextserver" is ""', 'nextserver shows nothing to follow');
+  await con.submit('nextserver demo2'); check(next === 'demo2' && status.at(-1)?.[0] === '"nextserver" is "demo2"', 'nextserver demo2 sets what follows');
+  check(con.complete('gam') === 'gamemap ' && con.complete('nex') === 'nextserver ', 'Tab completes gamemap and nextserver');
+  delete host.mapString; delete host.gameMap; delete host.nextServer;
+}
 await con.submit('fov');
 check(status.at(-1)?.[0] === '"fov" is "90"', 'fov alone shows the fov');
 await con.submit('fov 200');
@@ -178,6 +198,15 @@ check(status.at(-1)?.[0] === 'demos: q2demo1; recorded: mine', 'and the list say
   joined = false;
   await con.submit('god');
   check(forwarded.length === 1 && calls.length === n + 1 && last().startsWith('query SELECT msg FROM player_command'), 'alone, it runs here');
+  // cmd (Cmd_ForwardToServer_f): the words after it go to the host as typed on a joined page, run here on a page of its own
+  joined = true;
+  await con.submit('cmd give all');
+  check(forwarded.length === 2 && forwarded[1].join(' ') === 'give all' && calls.length === n + 1, 'joined, cmd give all sends give all to the host');
+  await con.submit('cmd');
+  check(status.at(-1)?.[0] === 'Usage: cmd <command>' && status.at(-1)?.[1] === true && forwarded.length === 2, 'cmd alone shows its usage');
+  joined = false;
+  await con.submit('cmd god');
+  check(forwarded.length === 2 && calls.length === n + 2 && last() === 'query SELECT msg FROM player_command(?, ?) god ' && con.complete('cmd') === 'cmd ', 'alone, cmd god runs god here; Tab completes cmd');
   delete host.forward;
 }
 host.db.query = async () => { throw new Error('boom'); };
@@ -211,10 +240,10 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   check(status.at(-1)?.[0] === 'players: the host lists them' && status.at(-1)?.[1] === true, 'on a joined page, the host lists them');
   await con.submit('kick 2');
   check(kicked.length === 0 && status.at(-1)?.[0] === 'kick: only the host of a game over the network can kick' && status.at(-1)?.[1] === true, 'kick on a page that does not host is refused');
-  rows = [{ num: 1, name: 'Ace', kind: 'page' }, { num: 2, name: 'Rimmer', kind: 'guest', sent: 120, dropped: 3, ping: 37, spectator: true }, { num: 3, name: 'player 3', kind: 'guest', sent: 40, dropped: 0, ping: null, spectator: false }, { num: 4, name: 'player 4', kind: 'standing' }];
+  rows = [{ num: 1, name: 'Ace', kind: 'page' }, { num: 2, name: 'Rimmer', kind: 'guest', sent: 120, dropped: 3, held: 2, ping: 37, spectator: true }, { num: 3, name: 'player 3', kind: 'guest', sent: 40, dropped: 0, ping: null, spectator: false }, { num: 4, name: 'player 4', kind: 'standing' }];
   await con.submit('players');
-  check(status.at(-1)?.[0] === '1 Ace (this page) · 2 Rimmer (guest: 120 frames sent, 3 dropped, ping 37 ms, watching) · 3 player 3 (guest: 40 frames sent) · 4 player 4 (standing)' && status.at(-1)?.[1] === false,
-    'players lists every client with its number, name and what drives it, a guest with its frames sent and dropped, its ping once measured, and whether it watches');
+  check(status.at(-1)?.[0] === '1 Ace (this page) · 2 Rimmer (guest: 120 frames sent, 3 dropped, 2 held, ping 37 ms, watching) · 3 player 3 (guest: 40 frames sent) · 4 player 4 (standing)' && status.at(-1)?.[1] === false,
+    'players lists every client with its number, name and what drives it, a guest with its frames sent, dropped and held to its rate, its ping once measured, and whether it watches');
   await con.submit('kick');
   check(status.at(-1)?.[0] === 'Usage: kick <userid>' && status.at(-1)?.[1] === true, 'kick alone shows its usage, as SV_Kick_f did');
   await con.submit('kick x');
@@ -226,7 +255,7 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   rows = [{ num: 1, name: 'player 1', kind: 'page' }, { num: 2, name: 'player 2', kind: 'pad' }];
   await con.submit('players');
   check(status.at(-1)?.[0] === '1 player 1 (this page) · 2 player 2 (a pad)', 'a coop game at one page lists the pad\'s player');
-  check(con.complete('pl') === 'play ' && con.complete('playe') === 'players ' && con.complete('ki') === 'kick ', 'Tab completes play, players and kick');
+  check(con.complete('pl') === 'play ' && con.complete('playe') === 'playerlist ' && con.complete('players') === 'players ' && con.complete('ki') === 'kick ', 'Tab completes play, playerlist (first for playe), players and kick');
   // dumpuser: SV_DumpUser_f's print of a client's userinfo as Info_Print laid it out, in the scrollback, the sum on the line
   let dumped = null;
   const printBefore = host.print;
@@ -240,10 +269,10 @@ check(spectating === 0 && status.at(-1)?.[0] === 'spectator: playing again', 'sp
   users = 'guest';
   await con.submit('dumpuser 1');
   check(status.at(-1)?.[0] === 'dumpuser: the host has the userinfos' && status.at(-1)?.[1] === true, 'a joined page is sent to the host');
-  users = { 1: { name: 'Ace', hand: 1, gender: 'female', msg: 1, fov: 90, spectator: 0 }, 2: { name: '', hand: 0 } };
+  users = { 1: { name: 'Ace', hand: 1, gender: 'female', msg: 1, fov: 90, spectator: 0, rate: 25000, skin: 'female/athena' }, 2: { name: '', hand: 0 } };
   await con.submit('dumpuser 1');
-  check(dumped === 'userinfo\n--------\nname                Ace\nhand                1\ngender              female\nmsg                 1\nfov                 90\nspectator           0'
-    && status.at(-1)?.[0] === 'client 1: name "Ace" · hand "1" · gender "female" · msg "1" · fov "90" · spectator "0"' && status.at(-1)?.[1] === false,
+  check(dumped === 'userinfo\n--------\nname                Ace\nhand                1\ngender              female\nmsg                 1\nfov                 90\nspectator           0\nrate                25000\nskin                female/athena'
+    && status.at(-1)?.[0] === 'client 1: name "Ace" · hand "1" · gender "female" · msg "1" · fov "90" · spectator "0" · rate "25000" · skin "female/athena"' && status.at(-1)?.[1] === false,
     'dumpuser 1 prints the client\'s userinfo, each key on twenty characters, and sums it on the line');
   await con.submit('dumpuser 2');
   check(dumped === 'userinfo\n--------\nname                \nhand                0', 'a pad\'s player has its row\'s name and hand');
@@ -358,6 +387,23 @@ await con.submit('password secret'); check(s.password === 'secret' && last() ===
 await con.submit('password two words'); check(s.password === 'secret' && status.at(-1)?.[0] === 'password takes at most 32 characters, no spaces' && status.at(-1)?.[1] === true, 'a password with a space is refused');
 await con.submit('spectator_password watch'); check(s.spectatorPassword === 'watch', 'spectator_password watch sets the watchers\' one');
 await con.submit('password ""'); await con.submit('spectator_password ""'); check(s.password === '' && s.spectatorPassword === '', '"" clears them');
+// rcon_password (the client's and the server's in one) and rcon (CL_Rcon_f): the line to the host with the password from a joined page
+await con.submit('rcon_password'); check(status.at(-1)?.[0] === '"rcon_password" is ""', 'rcon_password shows none by default');
+await con.submit('rcon status'); check(status.at(-1)?.[0] === "You must set 'rcon_password' before issuing an rcon command" && status.at(-1)?.[1] === true, 'rcon without a password says so, as CL_Rcon_f did');
+await con.submit('rcon_password secret'); check(s.rconPassword === 'secret' && last() === 'set rconPassword secret', 'rcon_password secret sets it through the page');
+await con.submit('rcon_password two words'); check(s.rconPassword === 'secret' && status.at(-1)?.[1] === true, 'one with a space is refused');
+{
+  const rcons = [];
+  let joinedRcon = false;
+  host.rcon = (line) => { if (!joinedRcon) return false; rcons.push(line); return true; };
+  await con.submit('rcon status'); check(rcons.length === 0 && status.at(-1)?.[0] === 'You must have joined a game to issue rcon commands' && status.at(-1)?.[1] === true, 'on a page of its own it says so (no rcon_address here)');
+  joinedRcon = true;
+  await con.submit('rcon kick 3'); check(rcons.length === 1 && rcons[0] === 'kick 3', 'joined, the line goes to the host as typed');
+  await con.submit('rcon'); check(rcons.length === 1 && status.at(-1)?.[0] === 'Usage: rcon <command>' && status.at(-1)?.[1] === true, 'rcon alone shows its usage');
+  check(con.complete('rco') === 'rcon ' && con.complete('rcon_') === 'rcon_password ', 'Tab completes rcon and rcon_password');
+  delete host.rcon;
+}
+await con.submit('rcon_password ""'); check(s.rconPassword === '', '"" clears it');
 // the gender userinfo: a word (f… female, m… male, else neutral), male by default, archived
 await con.submit('gender'); check(status.at(-1)?.[0] === '"gender" is "male"', 'gender shows male by default');
 await con.submit('gender Female'); check(s.gender === 'Female' && last() === 'set gender Female' && status.at(-1)?.[0] === '"gender" is "Female"', 'gender Female sets the word as typed through the page');
@@ -369,6 +415,19 @@ await con.submit('msg'); check(status.at(-1)?.[0] === '"msg" is "1"', 'msg shows
 await con.submit('msg 0'); check(s.msg === 0 && last() === 'set msg 0' && status.at(-1)?.[0] === '"msg" is "0"', 'msg 0 lets every print through, through the page');
 await con.submit('msg 4'); check(s.msg === 0 && status.at(-1)?.[0] === 'msg takes 0 to 3' && status.at(-1)?.[1] === true, 'msg 4 is refused');
 await con.submit('msg 1');
+// the rate userinfo: bytes a second, clamped to 1000..1000000 as SV_UserinfoChanged clamped it, 500000 by default (a frame here is the face
+// list), archived; the skin userinfo: model/skin, male/grunt by default, archived
+await con.submit('rate'); check(status.at(-1)?.[0] === '"rate" is "500000"', 'rate shows 500000 by default');
+await con.submit('rate 25000'); check(s.rate === 25000 && last() === 'set rate 25000' && status.at(-1)?.[0] === '"rate" is "25000"', 'rate 25000 asks for Quake\'s default, through the page');
+await con.submit('rate 100'); check(s.rate === 1000 && status.at(-1)?.[0] === '"rate" is "1000"', 'rate 100 is clamped up to 1000, as SV_UserinfoChanged clamped it');
+await con.submit('rate 2000000'); check(s.rate === 1000000, 'and 2000000 down to 1000000');
+await con.submit('rate fast'); check(s.rate === 1000000 && status.at(-1)?.[0] === 'rate takes bytes a second, 1000 to 1000000' && status.at(-1)?.[1] === true, 'a word is refused');
+await con.submit('rate 500000');
+await con.submit('skin'); check(status.at(-1)?.[0] === '"skin" is "male/grunt"', 'skin shows male/grunt by default');
+await con.submit('skin female/athena'); check(s.skin === 'female/athena' && last() === 'set skin female/athena' && status.at(-1)?.[0] === '"skin" is "female/athena"', 'skin female/athena sets it through the page');
+await con.submit('skin grunt'); check(s.skin === 'female/athena' && status.at(-1)?.[0] === 'skin takes model/skin, as male/grunt' && status.at(-1)?.[1] === true, 'a skin without its model is refused');
+await con.submit('skin male/grunt');
+check(con.complete('rat') === 'rate ' && con.complete('skin') === 'skin ' && con.complete('ski') === 'skill ', 'Tab completes rate and skin, skill first for ski');
 await con.submit('crosshair 3'); check(s.crosshair === 3, 'crosshair 3');
 await con.submit('crosshair 4'); check(s.crosshair === 3 && status.at(-1)?.[1] === true, 'crosshair 4 is refused');
 await con.submit('s_volume'); check(status.at(-1)?.[0] === '"s_volume" is "0.70"', 's_volume shows the effects volume as 0..1');
@@ -421,7 +480,7 @@ await con.submit('netgraph 1'); check(s.netgraph === true && last() === 'set net
 await con.submit('netgraph 2'); check(s.netgraph === true && status.at(-1)?.[0] === 'netgraph takes 0 or 1' && status.at(-1)?.[1] === true, 'netgraph 2 is refused');
 await con.submit('netgraph 0'); check(s.netgraph === false, 'netgraph 0 turns it off');
 await con.submit('cvarlist');
-check(/^name "" · hand "2" · gender "male" · msg "1" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · cd_volume "1.00" · cd_loopcount "4" · cd_looptrack "11" · cd_nocd "0" · s_show "0" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · m_filter "0" · netgraph "0" · timegraph "0" · debuggraph "0" · graphheight "32" · graphscale "1" · graphshift "0" · cl_predict "1" · cl_showmiss "0" · viewsize "100" · r_fullbright "0" · cl_add_entities "1" · cl_add_particles "1" · cl_add_lights "1" · cl_add_blend "1" · cl_testentities "0" · cl_testparticles "0" · cl_testlights "0" · cl_testblend "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_speeds "0" · host_speeds "0" · developer "0" · sv_noreload "0" · sw_drawflat "0" · sw_waterwarp "1" · sw_clearcolor "0" · sw_mipcap "0" · sw_mipscale "1" · sw_stipplealpha "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · cl_upspeed "200" · timeout "125" · cl_timeout "120" · gun_x "0" · gun_y "0" · gun_z "0" · scr_centertime "2.5" · cl_footsteps "1" · scr_showpause "1" · scr_showturtle "0" · cl_maxfps "90" · vid_gamma "1.4" · hostname "" · password "" · spectator_password "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
+check(/^name "" · hand "2" · gender "male" · msg "1" · rate "500000" · skin "male\/grunt" · sensitivity "20" · cl_run "1" · m_pitch "0.022" · crosshair "3" · s_volume "0.25" · s_khz "44" · s_mixahead "0.05" · s_testsound "0" · cd_volume "1.00" · cd_loopcount "4" · cd_looptrack "11" · cd_nocd "0" · s_show "0" · freelook "1" · lookspring "0" · lookstrafe "0" · m_forward "1" · m_side "1" · m_filter "0" · in_joystick "1" · in_mouse "1" · joy_forwardthreshold "0.15" · joy_sidethreshold "0.15" · joy_pitchthreshold "0.15" · joy_yawthreshold "0.15" · joy_forwardsensitivity "-1" · joy_sidesensitivity "-1" · joy_pitchsensitivity "1" · joy_yawsensitivity "-1" · netgraph "0" · timegraph "0" · debuggraph "0" · graphheight "32" · graphscale "1" · graphshift "0" · cl_predict "1" · cl_showmiss "0" · cl_shownet "0" · cl_showclamp "0" · showpackets "0" · showdrop "0" · viewsize "100" · r_fullbright "0" · cl_add_entities "1" · cl_add_particles "1" · cl_add_lights "1" · cl_add_blend "1" · cl_testentities "0" · cl_testparticles "0" · cl_testlights "0" · cl_testblend "0" · r_drawentities "1" · r_drawworld "1" · r_lerpmodels "1" · r_novis "0" · r_lockpvs "0" · r_speeds "0" · r_dspeeds "0" · host_speeds "0" · developer "0" · sv_noreload "0" · sw_drawflat "0" · sw_waterwarp "1" · sw_clearcolor "0" · sw_mipcap "0" · sw_mipscale "1" · sw_stipplealpha "0" · sw_aliasstats "0" · sw_reportsurfout "0" · sw_maxsurfs "0" · m_yaw "0.022" · cl_gun "1" · con_notifytime "3" · cl_yawspeed "140" · cl_pitchspeed "150" · cl_anglespeedkey "1.5" · cl_forwardspeed "200" · cl_sidespeed "200" · cl_upspeed "200" · timeout "125" · cl_timeout "120" · gun_x "0" · gun_y "0" · gun_z "0" · scr_centertime "2.5" · cl_footsteps "1" · scr_showpause "1" · scr_showturtle "0" · cl_maxfps "90" · vid_gamma "1.4" · hostname "" · password "" · spectator_password "" · rcon_password "" · fov "160" · skill "/.test(status.at(-1)?.[0] ?? ''), `cvarlist lists them with their values (${status.at(-1)?.[0]})`);
 // hostname (the host's name, at most 32 printable characters), help (Cmd_Help_f) and sv_gravity (the game's gravity)
 await con.submit('hostname'); check(status.at(-1)?.[0] === '"hostname" is ""', 'hostname shows the empty default');
 await con.submit('hostname Hal 9000'); check(s.hostname === 'Hal 9000' && last() === 'set hostname Hal 9000', 'hostname takes a name with spaces');
@@ -529,7 +588,25 @@ await con.submit('sw_mipscale 2.5'); check(s.swMipscale === 2.5 && last() === 's
 await con.submit('sw_mipscale x'); check(s.swMipscale === 2.5 && status.at(-1)?.[0] === 'sw_mipscale takes a number from 0 to 10, 1 as Quake had it' && status.at(-1)?.[1] === true, 'sw_mipscale x is refused');
 await con.submit('sw_stipplealpha 1'); check(s.swStipplealpha === true && last() === 'set swStipplealpha true', 'sw_stipplealpha 1 stipples the translucent surfaces');
 await con.submit('sw_mipcap 0'); await con.submit('sw_mipscale 1'); await con.submit('sw_stipplealpha 0');
-check(con.complete('sw_m') === 'sw_mipcap ' && con.complete('sw_mips') === 'sw_mipscale ' && con.complete('sw_s') === 'sw_stipplealpha ', 'Tab completes the three');
+check(con.complete('sw_mi') === 'sw_mipcap ' && con.complete('sw_mips') === 'sw_mipscale ' && con.complete('sw_s') === 'sw_stipplealpha ', 'Tab completes the three');
+// the painter's reports (sw_aliasstats, sw_reportsurfout) and the surface cache's size (sw_maxsurfs), none archived; z_stats (Z_Stats_f)
+await con.submit('sw_aliasstats 1'); check(s.swAliasstats === true && last() === 'set swAliasstats true' && status.at(-1)?.[0] === '"sw_aliasstats" is "1"', 'sw_aliasstats 1 prints the models drawn, through the page');
+await con.submit('sw_reportsurfout 1'); check(s.swReportsurfout === true && last() === 'set swReportsurfout true', 'sw_reportsurfout 1 prints the surfaces short');
+await con.submit('sw_maxsurfs'); check(status.at(-1)?.[0] === '"sw_maxsurfs" is "0"', 'sw_maxsurfs shows 0, the painter\'s own size');
+await con.submit('sw_maxsurfs 500'); check(s.swMaxsurfs === 500 && last() === 'set swMaxsurfs 500', 'sw_maxsurfs 500 sets the cache\'s size');
+await con.submit('sw_maxsurfs 100001'); check(s.swMaxsurfs === 500 && status.at(-1)?.[1] === true, 'past 100000 is refused');
+check(!writeConfig({ ...s }).split('\n').some((l) => l.startsWith('set sw_aliasstats') || l.startsWith('set sw_reportsurfout') || l.startsWith('set sw_maxsurfs')), 'config.cfg leaves the three out');
+await con.submit('sw_aliasstats 0'); await con.submit('sw_reportsurfout 0'); await con.submit('sw_maxsurfs 0');
+{
+  let printed = null;
+  host.print = (text) => { printed = text; };
+  host.memStats = () => [{ what: 'surfaces built', blocks: 120, bytes: 40960 }, { what: 'sounds decoded', blocks: 3, bytes: 1024 }];
+  await con.submit('z_stats');
+  check(printed === '     40960 bytes in   120 blocks  surfaces built\n      1024 bytes in     3 blocks  sounds decoded' && status.at(-1)?.[0] === '41984 bytes in 123 blocks' && status.at(-1)?.[1] === false,
+    'z_stats prints each holding\'s bytes and blocks as Z_Stats_f laid them out and sums them on the line');
+  delete host.memStats; delete host.print;
+}
+check(con.complete('sw_a') === 'sw_aliasstats ' && con.complete('sw_r') === 'sw_reportsurfout ' && con.complete('sw_ma') === 'sw_maxsurfs ' && con.complete('z') === 'z_stats ', 'Tab completes the three and z_stats');
 // m_yaw (the turn a count), cl_gun (the view weapon) and con_notifytime (the notify lines' seconds)
 await con.submit('m_yaw'); check(status.at(-1)?.[0] === '"m_yaw" is "0.022"', 'm_yaw shows 0.022 by default');
 await con.submit('m_yaw 0.044'); check(s.mYaw === 0.044 && last() === 'set mYaw 0.044', 'm_yaw 0.044 doubles the turn a count');
@@ -616,15 +693,28 @@ for (const [name, key, dflt] of [['r_fullbright', 'rFullbright', false], ['r_dra
   let printed = null;
   host.print = (text) => { printed = text; };
   host.serverInfo = async () => ({ mapname: 'demo1', deathmatch: 0, coop: 1, dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, skill: 2 });
-  host.userInfo = () => ({ name: 'Ace', hand: 1, gender: 'female', msg: 1, fov: 90, spectator: 0 });
-  host.status = () => ({ map: 'demo1', rows: [{ num: 1, score: 3, ping: 0, name: 'Ace' }, { num: 2, score: 1, ping: 12, name: 'player 2' }] });
+  host.userInfo = () => ({ name: 'Ace', hand: 1, gender: 'female', msg: 1, fov: 90, spectator: 0, rate: 500000, skin: 'male/grunt' });
+  host.status = () => ({ map: 'demo1', rows: [{ num: 1, score: 3, ping: 0, name: 'Ace', time: 125, spectator: 0, skin: 'male/grunt' }, { num: 2, score: 1, ping: 12, name: 'player 2', time: 7.9, spectator: 1, skin: 'female/athena' }] });
   await con.submit('serverinfo');
   check(status.at(-1)?.[0] === 'Server info settings: mapname "demo1" · deathmatch "0" · coop "1" · dmflags "0" · fraglimit "0" · timelimit "0" · cheats "0" · skill "2"', 'serverinfo lists the game\'s cvars as Info_Print listed them');
   await con.submit('userinfo');
-  check(status.at(-1)?.[0] === 'User info settings: name "Ace" · hand "1" · gender "female" · msg "1" · fov "90" · spectator "0"', 'userinfo lists this page\'s userinfo');
+  check(status.at(-1)?.[0] === 'User info settings: name "Ace" · hand "1" · gender "female" · msg "1" · fov "90" · spectator "0" · rate "500000" · skin "male/grunt"', 'userinfo lists this page\'s userinfo');
   await con.submit('status');
   check(status.at(-1)?.[0] === 'map: demo1 · 2 clients: 1 Ace 3 frags, 0 ms · 2 player 2 1 frags, 12 ms' && printed === 'num score ping name\n  1     3    0 Ace\n  2     1   12 player 2',
     'status says the map and the clients on the line, and prints them as SV_Status_f laid them out');
+  // playerlist (3.20's Cmd_PlayerList_f): each client's time in the game, ping, score and name, a watcher marked, a line each
+  await con.submit('playerlist');
+  check(printed === '02:05    0   3 Ace\n00:07   12   1 player 2 (spectator)' && status.at(-1)?.[0] === '02:05    0   3 Ace · 00:07   12   1 player 2 (spectator)' && status.at(-1)?.[1] === false,
+    'playerlist prints each client\'s minutes and seconds in the game, ping, score and name as Cmd_PlayerList_f laid them out, a watcher marked, and sums them on the line');
+  // skins (CL_Skins_f): each client's player skin configstring, "name\model/skin", a line each
+  await con.submit('skins');
+  check(printed === '1: Ace\\male/grunt\n2: player 2\\female/athena' && status.at(-1)?.[0] === '1: Ace\\male/grunt · 2: player 2\\female/athena' && status.at(-1)?.[1] === false,
+    'skins prints each client\'s name and skin as CL_Skins_f printed the configstrings, and sums them on the line');
+  host.status = () => null;
+  await con.submit('playerlist');
+  check(status.at(-1)?.[0] === 'playerlist: no game running' && status.at(-1)?.[1] === true && con.complete('playerl') === 'playerlist ', 'with no game it says so; Tab completes playerlist');
+  await con.submit('skins');
+  check(status.at(-1)?.[0] === 'skins: no game running' && status.at(-1)?.[1] === true && con.complete('skins') === 'skins ' && con.complete('skin') === 'skin ', 'skins with no game says so; Tab completes skins, and skin first for skin');
   host.serverInfo = async () => null; host.status = () => null;
   await con.submit('serverinfo');
   check(status.at(-1)?.[0] === 'serverinfo: a joined page runs no server of its own' && status.at(-1)?.[1] === true, 'serverinfo on a joined page says so');
@@ -653,7 +743,7 @@ await con.submit('lookstrafe 2'); check(s.lookstrafe === true && status.at(-1)?.
 await con.submit('m_forward 2'); check(s.mForward === 2 && last() === 'set mForward 2', 'm_forward 2');
 await con.submit('m_side -1'); check(s.mSide === -1 && last() === 'set mSide -1' && status.at(-1)?.[0] === '"m_side" is "-1"', 'm_side -1');
 await con.submit('m_side x'); check(s.mSide === -1 && status.at(-1)?.[1] === true, 'm_side x is refused');
-Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
+Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, rate: 500000, skin: 'male/grunt', password: '', spectatorPassword: '', rconPassword: '', showpackets: false, showdrop: false, sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false, crosshair: 1, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0, clPredict: true, clShowmiss: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rLockpvs: false, rSpeeds: false, rDspeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, swAliasstats: false, swReportsurfout: false, swMaxsurfs: 0, developer: false, logfile: false, logStats: false, svNoreload: false, sShow: false, inJoystick: true, inMouse: true, joyForwardthreshold: 0.15, joySidethreshold: 0.15, joyPitchthreshold: 0.15, joyYawthreshold: 0.15, joyForwardsensitivity: -1, joySidesensitivity: -1, joyPitchsensitivity: 1, joyYawsensitivity: -1, sKhz: 44, sMixahead: 0.05, sTestsound: false, clShownet: 0, clShowclamp: false, mYaw: 0.022, clGun: true, conNotifytime: 3, clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120, gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90, brightness: 1.4, hostname: '', coop: false, deathmatch: false, players: 2 });
 
 // the deathmatch cvars and cheats: shown alone, set for the game running and the next ones through the host's setCvar, clamped
 {
@@ -675,6 +765,39 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   delete host.setCvar;
 }
 
+// vid_mode and vid_ref: the video menu's cvars, through the page's controls, the painter restarted on a change; archived
+{
+  let restarts = 0;
+  host.vidRestart = () => { restarts++; return true; };
+  await con.submit('vid_mode'); check(status.at(-1)?.[0] === '"vid_mode" is "1"', 'vid_mode shows 1 for 320×240');
+  await con.submit('vid_mode 2'); check(s.detail === 'ultra' && last() === 'set detail ultra' && restarts === 1 && status.at(-1)?.[0] === '"vid_mode" is "2"', 'vid_mode 2 is 640×480 through the page, the painter restarted');
+  await con.submit('vid_mode 2'); check(restarts === 1, 'the same mode again restarts nothing');
+  await con.submit('vid_mode 5'); check(s.detail === 'ultra' && status.at(-1)?.[0] === 'vid_mode takes 0 (160×120), 1 (320×240) or 2 (640×480)' && status.at(-1)?.[1] === true, 'vid_mode 5 is refused');
+  await con.submit('vid_ref'); check(status.at(-1)?.[0] === '"vid_ref" is "soft"', 'vid_ref shows soft for the face picker');
+  await con.submit('vid_ref SQL'); check(s.renderer === 'sql' && last() === 'set renderer sql' && restarts === 2 && status.at(-1)?.[0] === '"vid_ref" is "sql"', 'vid_ref sql is the projector, case aside, the painter restarted');
+  await con.submit('vid_ref gl'); check(s.renderer === 'sql' && status.at(-1)?.[0] === 'vid_ref takes soft (SQL picks the faces, JS projects) or sql (SQL projects every vertex)' && status.at(-1)?.[1] === true, 'vid_ref gl is refused');
+  await con.submit('vid_mode 1'); await con.submit('vid_ref soft');
+  const cfgLines = writeConfig(s).split('\n');
+  check(cfgLines.includes('set vid_mode "1"') && cfgLines.includes('set vid_ref "soft"'), 'config.cfg carries vid_mode and vid_ref, archived as Quake\'s were');
+  check(con.complete('vid_m') === 'vid_mode ' && con.complete('vid_ref') === 'vid_ref ', 'Tab completes vid_mode and vid_ref');
+  delete host.vidRestart;
+}
+// quit, killserver, vid_restart and snd_restart through the page, each refused before it can be done
+{
+  const done = [];
+  let ready = false;
+  host.quit = () => ready && (done.push('quit'), true); host.killServer = () => ready && (done.push('kill'), true);
+  host.vidRestart = () => ready && (done.push('vid'), true); host.sndRestart = () => ready && (done.push('snd'), true);
+  await con.submit('quit'); check(done.length === 0 && status.at(-1)?.[0] === 'quit: no pak is loaded yet' && status.at(-1)?.[1] === true, 'quit before the pak says so');
+  await con.submit('vid_restart'); check(status.at(-1)?.[0] === 'vid_restart: no painter yet (a pak must be loaded)' && status.at(-1)?.[1] === true, 'vid_restart without a painter says so');
+  await con.submit('snd_restart'); check(status.at(-1)?.[0] === 'snd_restart: sound system not started (a click or a key makes it)' && status.at(-1)?.[1] === true, 'snd_restart before the mixer says so');
+  ready = true;
+  await con.submit('quit'); await con.submit('killserver'); await con.submit('vid_restart'); await con.submit('snd_restart');
+  check(done.join() === 'quit,kill,vid,snd' && status.at(-4)?.[0] === 'the game ends: the attract loop' && status.at(-3)?.[0] === 'Server was killed' && status.at(-2)?.[0] === 'vid_restart: the painter made again' && status.at(-1)?.[0] === 'snd_restart: sound system restarted',
+    'quit ends the game, killserver kills the server, vid_restart and snd_restart remake the painter and the mixer, each saying so');
+  check(con.complete('qu') === 'quit ' && con.complete('kills') === 'killserver ' && con.complete('vid_res') === 'vid_restart ' && con.complete('snd') === 'snd_restart ', 'Tab completes the four');
+  delete host.quit; delete host.killServer; delete host.vidRestart; delete host.sndRestart;
+}
 // messagemode and messagemode2: the chat prompt through the page (team for the second), refused without a game
 {
   let prompts = [], up = true;
@@ -686,6 +809,16 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   check(prompts.length === 3 && status.at(-1)?.[0] === 'messagemode: a game must be running' && status.at(-1)?.[1] === true, 'without a game it says so');
   check(con.complete('mess') === 'messagemode ' && con.complete('messagemode2') === 'messagemode2 ', 'Tab completes messagemode and messagemode2');
   delete host.messageMode;
+}
+// toggleconsole and togglechat (Con_ToggleConsole_f, Con_ToggleChat_f): the console up or down through the page, togglechat with the notify
+// lines cleared first
+{
+  const toggles = [], said = status.length;
+  host.toggleConsole = (clearNotify) => { toggles.push(clearNotify); return toggles.length % 2 === 1; };
+  await con.submit('toggleconsole'); await con.submit('togglechat'); await con.submit('ToggleConsole');
+  check(toggles.join() === 'false,true,false' && status.length === said, 'toggleconsole toggles the console, togglechat with the notify lines cleared, case aside, nothing said');
+  check(con.complete('togglec') === 'togglechat ' && con.complete('toggleco') === 'toggleconsole ', 'Tab completes togglechat and toggleconsole');
+  delete host.toggleConsole;
 }
 // fixedtime: the game's clock stepped a fixed number of milliseconds a frame, shown, set within 0..1000, refused for a fraction or a word, a guest told
 {
@@ -741,7 +874,7 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   check(lines.includes('set sw_stipplealpha "0"') && !lines.some((l) => l.startsWith('set sw_mipcap') || l.startsWith('set sw_mipscale') || l.startsWith('set sw_drawflat')), 'sw_stipplealpha is archived as Quake\'s was, sw_mipcap and sw_mipscale not');
   check(lines[0].startsWith('//') && lines[1] === 'unbindall' && lines[2] === 'bind k "+attack"' && lines[3] === 'bind MOUSE2 "+attack"' && lines.includes('bind MWHEELDOWN "weapnext"') && !lines.some((l) => l.includes('"+moveup"'))
     && godAt > 3 && godAt < setAt && lines[godAt + 1] === 'bind MOUSE3 "say hello"'
-    && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && lines.includes('set freelook "1"') && lines.includes('set lookspring "0"') && lines.includes('set viewsize "100"') && lines.includes('set vid_gamma "1.4"') && lines.includes('set gender "male"') && lines.includes('set m_filter "0"') && lines.includes('set msg "1"') && lines.includes('set hostname ""') && !lines.some((l) => l.startsWith('set netgraph') || l.startsWith('set m_forward') || l.startsWith('set m_side') || l.startsWith('set cl_predict') || l.startsWith('set cl_showmiss') || l.startsWith('set r_') || l.startsWith('set m_yaw') || l.startsWith('set cl_gun') || l.startsWith('set con_notifytime')) && cfg.endsWith('\n'),
+    && lines.includes('set name "Ace Rimmer"') && lines.includes('set sensitivity "5"') && lines.includes('set m_pitch "-0.022"') && lines.includes('set s_volume "0.70"') && lines.includes('set fov "160"') && lines.includes('set skill "2"') && lines.includes('set freelook "1"') && lines.includes('set lookspring "0"') && lines.includes('set viewsize "100"') && lines.includes('set vid_gamma "1.4"') && lines.includes('set gender "male"') && lines.includes('set m_filter "0"') && lines.includes('set msg "1"') && lines.includes('set rate "500000"') && lines.includes('set skin "male/grunt"') && lines.includes('set hostname ""') && !lines.some((l) => l.startsWith('set netgraph') || l.startsWith('set m_forward') || l.startsWith('set m_side') || l.startsWith('set cl_predict') || l.startsWith('set cl_showmiss') || l.startsWith('set r_') || l.startsWith('set m_yaw') || l.startsWith('set cl_gun') || l.startsWith('set con_notifytime')) && cfg.endsWith('\n'),
     'writeConfig writes unbindall, a bind line a key in the actions\' order, the keys bound to lines after them, and a set line a cvar, as config.cfg had them (netgraph, m_forward, m_side, m_yaw, cl_gun, con_notifytime, the cl_ speeds, gun_x, gun_y, gun_z, scr_centertime, cl_predict, cl_showmiss and the r_ switches, not archived, left out)');
   let downloaded = null;
   host.download = (name, text) => { downloaded = { name, text }; };
@@ -770,6 +903,92 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   await con.submit('developer 1'); check(s.developer === true && last() === 'set developer true' && status.at(-1)?.[0] === '"developer" is "1"', 'developer 1 sets it through the page');
   await con.submit('developer 2'); check(s.developer === true && status.at(-1)?.[0] === 'developer takes 0 or 1' && status.at(-1)?.[1] === true, 'developer 2 is refused');
   await con.submit('developer 0');
+  // r_lockpvs and r_dspeeds: ref_soft's switches as cvars, through the page
+await con.submit('r_lockpvs 1'); check(s.rLockpvs === true && last() === 'set rLockpvs true' && status.at(-1)?.[0] === '"r_lockpvs" is "1"', 'r_lockpvs 1 holds the view\'s cluster, through the page');
+await con.submit('r_lockpvs 2'); check(s.rLockpvs === true && status.at(-1)?.[0] === 'r_lockpvs takes 0 or 1' && status.at(-1)?.[1] === true, 'r_lockpvs 2 is refused');
+await con.submit('r_dspeeds 1'); check(s.rDspeeds === true && last() === 'set rDspeeds true', 'r_dspeeds 1 prints the painter\'s times in detail');
+await con.submit('r_lockpvs 0'); await con.submit('r_dspeeds 0');
+check(con.complete('r_lo') === 'r_lockpvs ' && con.complete('r_ds') === 'r_dspeeds ', 'Tab completes r_lockpvs and r_dspeeds');
+// s_khz, cl_shownet and cl_showclamp as cvars: the rate (archived), the net prints, the clamp prints
+await con.submit('s_khz 22'); check(s.sKhz === 22 && last() === 'set sKhz 22' && status.at(-1)?.[0] === '"s_khz" is "22"', 's_khz 22 sets the rate for the next snd_restart, through the page');
+await con.submit('s_khz 33'); check(s.sKhz === 22 && status.at(-1)?.[0] === 's_khz takes 11, 22 or 44' && status.at(-1)?.[1] === true, 's_khz 33 is refused');
+check(writeConfig({ ...s, sKhz: 22 }).split('\n').includes('set s_khz "22"'), 'config.cfg carries s_khz, archived as Quake\'s was');
+await con.submit('s_khz 44');
+// s_mixahead (archived) and s_testsound (not): the raw stream's lead, the test tone in place of the mix
+await con.submit('s_mixahead'); check(status.at(-1)?.[0] === '"s_mixahead" is "0.05"', 's_mixahead shows 0.05 by default');
+await con.submit('s_mixahead 0.3'); check(s.sMixahead === 0.3 && last() === 'set sMixahead 0.3' && status.at(-1)?.[0] === '"s_mixahead" is "0.3"', 's_mixahead 0.3 sets the lead through the page');
+await con.submit('s_mixahead 2'); check(s.sMixahead === 0.3 && status.at(-1)?.[0] === 's_mixahead takes 0 to 1 seconds' && status.at(-1)?.[1] === true, 'past a second is refused');
+check(writeConfig({ ...s }).split('\n').includes('set s_mixahead "0.3"'), 'config.cfg carries s_mixahead, archived as Quake\'s was');
+await con.submit('s_mixahead 0.05');
+await con.submit('s_testsound 1'); check(s.sTestsound === true && last() === 'set sTestsound true' && status.at(-1)?.[0] === '"s_testsound" is "1"', 's_testsound 1 plays the tone, through the page');
+await con.submit('s_testsound 2'); check(s.sTestsound === true && status.at(-1)?.[1] === true, 's_testsound 2 is refused');
+check(!writeConfig({ ...s }).split('\n').some((l) => l.startsWith('set s_testsound')), 'config.cfg leaves s_testsound out, as Quake\'s did');
+await con.submit('s_testsound 0');
+check(con.complete('s_m') === 's_mixahead ' && con.complete('s_t') === 's_testsound ', 'Tab completes the two');
+await con.submit('cl_shownet 2'); check(s.clShownet === 2 && last() === 'set clShownet 2', 'cl_shownet 2 prints each message\'s size and kind');
+await con.submit('cl_shownet 3'); check(s.clShownet === 2 && status.at(-1)?.[0] === 'cl_shownet takes 0, 1 or 2' && status.at(-1)?.[1] === true, 'cl_shownet 3 is refused');
+await con.submit('cl_showclamp 1'); check(s.clShowclamp === true && last() === 'set clShowclamp true', 'cl_showclamp 1 prints the clock\'s clamps');
+await con.submit('cl_shownet 0'); await con.submit('cl_showclamp 0');
+check(con.complete('s_k') === 's_khz ' && con.complete('cl_shown') === 'cl_shownet ' && con.complete('cl_showc') === 'cl_showclamp ', 'Tab completes the three');
+// showpackets and showdrop (Netchan_Transmit's and Netchan_Process's prints) as cvars, neither archived
+await con.submit('showpackets'); check(status.at(-1)?.[0] === '"showpackets" is "0"', 'showpackets shows 0 by default');
+await con.submit('showpackets 1'); check(s.showpackets === true && last() === 'set showpackets true' && status.at(-1)?.[0] === '"showpackets" is "1"', 'showpackets 1 prints each message, through the page');
+await con.submit('showpackets 2'); check(s.showpackets === true && status.at(-1)?.[0] === 'showpackets takes 0 or 1' && status.at(-1)?.[1] === true, 'showpackets 2 is refused');
+await con.submit('showdrop 1'); check(s.showdrop === true && last() === 'set showdrop true', 'showdrop 1 prints the frames dropped, held or missed');
+check(!writeConfig({ ...s, showpackets: true, showdrop: true }).split('\n').some((l) => l.startsWith('set showpackets') || l.startsWith('set showdrop')), 'config.cfg leaves both out, as Quake\'s did');
+await con.submit('showpackets 0'); await con.submit('showdrop 0');
+check(con.complete('showp') === 'showpackets ' && con.complete('showd') === 'showdrop ', 'Tab completes showpackets and showdrop');
+// in_joystick: a setting as its cvar, archived; cl_paused: the pause's state shown, never set; log_stats: stats.log through the page
+  await con.submit('in_joystick 0'); check(s.inJoystick === false && last() === 'set inJoystick false' && status.at(-1)?.[0] === '"in_joystick" is "0"', 'in_joystick 0 leaves the pads unread, through the page');
+  await con.submit('in_joystick 2'); check(s.inJoystick === false && status.at(-1)?.[0] === 'in_joystick takes 0 or 1' && status.at(-1)?.[1] === true, 'in_joystick 2 is refused');
+  check(writeConfig({ ...s, inJoystick: false }).split('\n').includes('set in_joystick "0"'), 'config.cfg carries in_joystick, archived as Quake\'s was');
+  await con.submit('in_joystick 1');
+  // IN_JoyMove's cvars: the thresholds (0 to 0.9) and the sensitivities (-10 to 10), none archived
+  await con.submit('joy_yawthreshold'); check(status.at(-1)?.[0] === '"joy_yawthreshold" is "0.15"', 'joy_yawthreshold shows 0.15 by default');
+  await con.submit('joy_yawthreshold 0.5'); check(s.joyYawthreshold === 0.5 && last() === 'set joyYawthreshold 0.5' && status.at(-1)?.[0] === '"joy_yawthreshold" is "0.5"', 'joy_yawthreshold 0.5 sets the stick\'s dead zone through the page');
+  await con.submit('joy_yawthreshold 1'); check(s.joyYawthreshold === 0.5 && status.at(-1)?.[0] === 'joy_yawthreshold takes 0 to 0.9' && status.at(-1)?.[1] === true, 'a threshold past 0.9 is refused');
+  await con.submit('joy_pitchsensitivity'); await con.submit('joy_yawsensitivity');
+  check(status.at(-2)?.[0] === '"joy_pitchsensitivity" is "1"' && status.at(-1)?.[0] === '"joy_yawsensitivity" is "-1"', 'joy_pitchsensitivity shows 1 and joy_yawsensitivity -1 (Quake\'s signs)');
+  await con.submit('joy_pitchsensitivity -1'); check(s.joyPitchsensitivity === -1 && last() === 'set joyPitchsensitivity -1', 'joy_pitchsensitivity -1 turns the look the other way');
+  await con.submit('joy_forwardsensitivity 11'); check(s.joyForwardsensitivity === -1 && status.at(-1)?.[0] === 'joy_forwardsensitivity takes -10 to 10' && status.at(-1)?.[1] === true, 'a sensitivity past 10 is refused');
+  await con.submit('joy_sidesensitivity x'); check(s.joySidesensitivity === -1 && status.at(-1)?.[1] === true, 'a word is refused');
+  check(!writeConfig({ ...s }).split('\n').some((l) => l.startsWith('set joy_')), 'config.cfg leaves the joy_ cvars out, as Quake\'s did');
+  await con.submit('joy_yawthreshold 0.15'); await con.submit('joy_pitchsensitivity 1');
+  check(con.complete('joy_f') === 'joy_forwardsensitivity ' && con.complete('joy_yawt') === 'joy_yawthreshold ', 'Tab completes the joy_ cvars');
+  // impulse (IN_Impulse: the next command's), in_mouse (the mouse read, archived) and in_restart (IN_Restart_f) through the page
+  {
+    let imp = null, restarts = 0;
+    host.setImpulse = (n) => { imp = n; };
+    host.inRestart = () => { restarts++; return true; };
+    await con.submit('impulse 12'); check(imp === 12, 'impulse 12 sets the next command\'s impulse');
+    await con.submit('impulse'); check(imp === 12 && status.at(-1)?.[0] === 'impulse takes a number, 0 to 255' && status.at(-1)?.[1] === true, 'impulse alone is refused');
+    await con.submit('impulse 300'); await con.submit('impulse x'); check(imp === 12 && status.at(-1)?.[1] === true, 'past 255, or a word, is refused');
+    await con.submit('in_mouse'); check(status.at(-1)?.[0] === '"in_mouse" is "1"', 'in_mouse shows 1 by default');
+    await con.submit('in_mouse 0'); check(s.inMouse === false && last() === 'set inMouse false' && status.at(-1)?.[0] === '"in_mouse" is "0"', 'in_mouse 0 leaves the mouse unread, through the page');
+    await con.submit('in_mouse 2'); check(s.inMouse === false && status.at(-1)?.[0] === 'in_mouse takes 0 or 1' && status.at(-1)?.[1] === true, 'in_mouse 2 is refused');
+    check(writeConfig({ ...s, inMouse: false }).split('\n').includes('set in_mouse "0"'), 'config.cfg carries in_mouse, archived as Quake\'s was');
+    await con.submit('in_mouse 1');
+    await con.submit('in_restart'); check(restarts === 1, 'in_restart takes the input again through the page');
+    check(con.complete('imp') === 'impulse ' && con.complete('in_m') === 'in_mouse ' && con.complete('in_r') === 'in_restart ', 'Tab completes impulse, in_mouse and in_restart');
+    delete host.setImpulse; delete host.inRestart;
+  }
+  let pausedState = false;
+  host.isPaused = () => pausedState;
+  await con.submit('cl_paused'); check(status.at(-1)?.[0] === '"cl_paused" is "0"', 'cl_paused shows 0 with the game going');
+  pausedState = true;
+  await con.submit('cl_paused'); check(status.at(-1)?.[0] === '"cl_paused" is "1"', '... and 1 paused');
+  await con.submit('cl_paused 0'); check(status.at(-1)?.[0] === 'cl_paused is the pause\'s own: pause sets it' && status.at(-1)?.[1] === true, 'a value is refused: pause sets it');
+  delete host.isPaused;
+  let statsOn = false, statsLines = null;
+  host.setLogStats = async (on) => { if (on) { if (statsOn) return 'already'; statsOn = true; return 'on'; } if (!statsOn) return null; statsOn = false; return statsLines; };
+  await con.submit('log_stats'); check(status.at(-1)?.[0] === '"log_stats" is "0"', 'log_stats alone shows 0');
+  await con.submit('log_stats 0'); check(status.at(-1)?.[0] === 'log_stats: nothing was logged' && status.at(-1)?.[1] === true, 'log_stats 0 with nothing logged says so');
+  await con.submit('log_stats 1'); check(statsOn && status.at(-1)?.[0] === 'log_stats: a line a frame goes to stats.log', 'log_stats 1 starts the log');
+  await con.submit('log_stats 1'); check(status.at(-1)?.[0] === 'log_stats: already on', 'log_stats 1 again says it is on');
+  statsLines = 40;
+  await con.submit('log_stats 0'); check(!statsOn && status.at(-1)?.[0] === 'log_stats: stats.log downloaded, 40 lines', 'log_stats 0 downloads the file and says how many lines');
+  check(con.complete('in_') === 'in_joystick ' && con.complete('cl_pa') === 'cl_paused ' && con.complete('log_') === 'log_stats ', 'Tab completes the three');
+  delete host.setLogStats;
   let logOn = false, logLines = null;
   host.setLogfile = async (on) => { if (on) { if (logOn) return 'already'; logOn = true; return 'on'; } if (!logOn) return null; logOn = false; return logLines; };
   await con.submit('logfile'); check(status.at(-1)?.[0] === '"logfile" is "0"', 'logfile alone shows 0');
@@ -866,7 +1085,7 @@ Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spec
   await con.submit('set bogus 1');
   check(status.at(-1)?.[0] === '"bogus" is not a cvar this page keeps' && status.at(-1)?.[1] === true, 'set on a cvar the page has not is refused');
   host.settings.fov = 160; host.settings.binds = defaultBinds(); host.settings.lines = {};
-  Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, password: '', spectatorPassword: '', sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false });
+  Object.assign(s, { name: '', hand: 0, gender: 'male', msg: 1, rate: 500000, skin: 'male/grunt', password: '', spectatorPassword: '', rconPassword: '', showpackets: false, showdrop: false, sensitivity: 7, alwaysRun: true, invertMouse: false, crosshair: 1, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, sfx: 70, music: 50, cdLoopcount: 4, cdLooptrack: 11, cdNocd: false });
 }
 
 // bind and its kin: Key_Bind_f, Key_Unbind_f, Key_Unbindall_f and Key_Bindlist_f over the keys menu's binds

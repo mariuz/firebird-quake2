@@ -365,6 +365,70 @@ try {
     const lf0 = await page.evaluate(() => window.quake2.logfile).catch(() => ({}));
     assert(lf1.on === true && lf1.kept > 0 && logDl && logDl.suggestedFilename() === 'qconsole.log' && /^\]echo logged line\nlogged line$/m.test(logText) && logText.endsWith(']logfile 0\n') && lf0.on === false && lf0.kept === 0,
       `logfile 1 keeps the scrollback as qconsole.log (${lf1.kept} characters flushed), logfile 0 downloads it (${logText.split('\n').length - 1} lines) and drops it`);
+    // s_khz 22 makes the next snd_restart's context at 22050 (soundinfo says so), 44 the browser's own again; cl_showclamp reaches the settings
+    await typeCommand('s_khz 22'); await typeCommand('snd_restart'); await sleep(500);
+    const khz22 = await page.evaluate(() => ({ s: window.quake2.settings.sKhz, rate: window.quake2.audio.ctx?.sampleRate })).catch(() => ({}));
+    await typeCommand('soundinfo'); const si22 = await status();
+    await typeCommand('s_khz 44'); await typeCommand('snd_restart'); await sleep(500);
+    const khz44 = await page.evaluate(() => ({ s: window.quake2.settings.sKhz, rate: window.quake2.audio.ctx?.sampleRate })).catch(() => ({}));
+    await typeCommand('cl_showclamp 1');
+    const clampOn = await page.evaluate(() => window.quake2.settings.clShowclamp).catch(() => null);
+    await typeCommand('cl_showclamp 0');
+    assert(khz22.s === 22 && khz22.rate === 22050 && /22050 Hz/.test(si22) && khz44.s === 44 && khz44.rate !== 22050 && clampOn === true,
+      `s_khz 22 and snd_restart make the mixer at 22050 (${JSON.stringify(khz22)}, "${si22}"), 44 the browser's own again (${khz44.rate}); cl_showclamp reaches the settings (${clampOn})`);
+    // s_mixahead reaches the mixer's lead; s_testsound 1 plays the sine with the mix muted, 0 brings the mix back at the volume
+    await typeCommand('s_mixahead 0.3');
+    const mixLead = await page.evaluate(() => ({ s: window.quake2.settings.sMixahead, a: window.quake2.audio.mixahead })).catch(() => ({}));
+    await typeCommand('s_mixahead 0.05');
+    await typeCommand('s_testsound 1');
+    const tone = await page.evaluate(() => ({ s: window.quake2.settings.sTestsound, on: !!window.quake2.audio.testTone, hz: window.quake2.audio.testTone?.osc.frequency.value, master: window.quake2.audio.master?.gain.value })).catch(() => ({}));
+    await typeCommand('s_testsound 0');
+    const toneOff = await page.evaluate(() => ({ on: !!window.quake2.audio.testTone, master: window.quake2.audio.master?.gain.value })).catch(() => ({}));
+    assert(mixLead.s === 0.3 && mixLead.a === 0.3 && tone.s === true && tone.on === true && tone.hz > 300 && tone.master === 0 && toneOff.on === false && toneOff.master > 0,
+      `s_mixahead reaches the mixer (${JSON.stringify(mixLead)}); s_testsound plays the sine (${tone.hz?.toFixed(0)} Hz) with the mix muted and 0 brings it back (${JSON.stringify(toneOff)})`);
+    // log_stats 1 writes a line a painted frame to stats.log (the header first), 0 downloads it; in_joystick 0 leaves the pads unread;
+    // cl_paused shows the pause's state
+    await typeCommand('log_stats 1'); await sleep(1500);
+    const ls1 = await page.evaluate(() => window.quake2.logStats).catch(() => ({}));
+    const [statsDl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('log_stats 0')]);
+    const statsText = statsDl ? fs.readFileSync(await statsDl.path(), 'utf8') : '';
+    const statsLines = statsText.split('\n').filter((l) => l);
+    await typeCommand('in_joystick 0');
+    const joyOff = await page.evaluate(() => ({ s: window.quake2.settings.inJoystick, i: window.quake2.input.joystick })).catch(() => ({}));
+    await typeCommand('in_joystick 1');
+    const joyOn = await page.evaluate(() => ({ s: window.quake2.settings.inJoystick, i: window.quake2.input.joystick })).catch(() => ({}));
+    await typeCommand('cl_paused'); const cp0 = await status();
+    await typeCommand('pause'); await typeCommand('cl_paused'); const cp1 = await status();
+    await typeCommand('pause'); await typeCommand('cl_paused'); const cp2 = await status();
+    assert(ls1.on === true && ls1.kept > 0 && statsDl && statsDl.suggestedFilename() === 'stats.log' && statsLines[0] === 'entities,dlights,parts,frame time' && statsLines.length > 5 && statsLines.slice(1).every((l) => /^\d+,\d+,\d+,\d+$/.test(l))
+      && joyOff.s === false && joyOff.i === false && joyOn.s === true && joyOn.i === true && cp0 === '"cl_paused" is "0"' && cp1 === '"cl_paused" is "1"' && cp2 === '"cl_paused" is "0"',
+      `log_stats keeps a line a frame as stats.log (${statsLines.length} lines downloaded, the header first; ${JSON.stringify(ls1)}; the first line out of shape: ${JSON.stringify(statsLines.find((l, i) => i > 0 && !/^\d+,\d+,\d+,\d+$/.test(l)) ?? null)}), in_joystick reaches the input (${JSON.stringify(joyOff)} → ${JSON.stringify(joyOn)}), cl_paused follows pause (${cp0}, ${cp1}, ${cp2})`);
+    // the joy_ cvars reach the settings and the input's pad reading (Input.joy), and the defaults come back
+    await typeCommand('joy_yawthreshold 0.5'); await typeCommand('joy_pitchsensitivity -1');
+    const joyc = await page.evaluate(() => ({ t: window.quake2.settings.joyYawthreshold, s: window.quake2.settings.joyPitchsensitivity, it: window.quake2.input.joy?.yawThreshold, is: window.quake2.input.joy?.pitchSensitivity })).catch(() => ({}));
+    await typeCommand('joy_yawthreshold 0.15'); await typeCommand('joy_pitchsensitivity 1');
+    const joycBack = await page.evaluate(() => ({ t: window.quake2.settings.joyYawthreshold, it: window.quake2.input.joy?.yawThreshold, is: window.quake2.input.joy?.pitchSensitivity })).catch(() => ({}));
+    assert(joyc.t === 0.5 && joyc.s === -1 && joyc.it === 0.5 && joyc.is === -1 && joycBack.t === 0.15 && joycBack.it === 0.15 && joycBack.is === 1,
+      `joy_yawthreshold and joy_pitchsensitivity reach the settings and the pad reading (${JSON.stringify(joyc)}) and the defaults come back (${JSON.stringify(joycBack)})`);
+    // impulse 12 at the console is the next command's: the weapon changes (weapnext's), 22 changes it back; in_mouse 0 leaves the mouse unread
+    // (the input's mouseOn), 1 reads it again; in_restart forgets the pads' presses
+    const weaponNow = () => page.evaluate(() => window.quake2.session.last?.WEAPON ?? null).catch(() => null);
+    const w0 = await weaponNow();
+    await typeCommand('impulse 12');
+    let w1 = w0;
+    for (let i = 0; i < 20 && w1 === w0; i++) { await sleep(150); w1 = await weaponNow(); }
+    await typeCommand('impulse 22');
+    let w2 = w1;
+    for (let i = 0; i < 20 && w2 !== w0; i++) { await sleep(150); w2 = await weaponNow(); }
+    await typeCommand('in_mouse 0');
+    const imOff = await page.evaluate(() => ({ s: window.quake2.settings.inMouse, m: window.quake2.input.mouseOn })).catch(() => ({}));
+    await typeCommand('in_mouse 1');
+    const imOn = await page.evaluate(() => ({ s: window.quake2.settings.inMouse, m: window.quake2.input.mouseOn })).catch(() => ({}));
+    await page.evaluate(() => { window.quake2.input.pads[0] = { held: new Set([1]), last: null }; }).catch(() => undefined);
+    await typeCommand('in_restart');
+    const irs = await page.evaluate(() => window.quake2.input.pads.length).catch(() => -1);
+    assert(w0 !== null && w1 !== w0 && w2 === w0 && imOff.s === false && imOff.m === false && imOn.s === true && imOn.m === true && irs === 0,
+      `impulse 12 changes the weapon (${w0} → ${w1}) and impulse 22 changes it back (${w2}); in_mouse reaches the settings and the input (${JSON.stringify(imOff)} → ${JSON.stringify(imOn)}); in_restart forgets the pads (${irs})`);
     await typeCommand('developer 1');
     await page.evaluate(() => console.warn('dev note', 7)); await sleep(200);
     const devOn = await page.evaluate(() => window.quake2.notify.log(4)).catch(() => []);
@@ -477,6 +541,16 @@ try {
     assert(novis.novis === 1 && novis.setting === true && allFaces > withPvs && withPvs > 0 && fb1.flag === true && fb1.setting === true && typeof speeds === 'string'
       && rDefaults.fullbright === false && rDefaults.novis === false && rDefaults.speeds === false && rDefaults.ents === true && rDefaults.world === true,
       `r_novis 1 marks every leaf (the set holds ${allFaces} faces against the PVS's ${withPvs}), r_fullbright 1 sets the painter's flag, r_speeds 1 prints the frame's figures ("${speeds}"), and the switches come back (${JSON.stringify(rDefaults)})`);
+    // r_lockpvs reaches the view's row and the settings; r_dspeeds prints the painter's times in detail
+    await typeCommand('r_lockpvs 1'); await sleep(300);
+    const lock = await page.evaluate(() => window.quake2.sql('SELECT lockpvs l FROM viewcfg').then((r) => ({ row: r[0].L, setting: window.quake2.settings.rLockpvs }))).catch(() => ({}));
+    await typeCommand('r_lockpvs 0'); await sleep(300);
+    const unlock = await page.evaluate(() => window.quake2.sql('SELECT lockpvs l FROM viewcfg').then((r) => r[0].L)).catch(() => null);
+    await typeCommand('r_dspeeds 1');
+    let dspeeds = null;
+    for (let i = 0; i < 20 && !dspeeds; i++) { await sleep(200); dspeeds = await page.evaluate(() => window.quake2.notify.log(64).find((l) => /^[\d.]+ ms world, [\d.]+ ms ents, [\d.]+ ms fx, [\d.]+ ms rest$/.test(l)) ?? null).catch(() => null); }
+    await typeCommand('r_dspeeds 0');
+    assert(lock.row === 1 && lock.setting === true && unlock === 0 && typeof dspeeds === 'string', `r_lockpvs 1 holds the view's cluster on the row (${JSON.stringify(lock)}) and 0 lets it go (${unlock}); r_dspeeds prints the painter's times ("${dspeeds}")`);
     // serverinfo, userinfo and status: the game's cvars, this page's userinfo and the clients, on the line (status's lines in the scrollback too)
     await typeCommand('serverinfo');
     const svInfo = await status();
@@ -485,19 +559,41 @@ try {
     await typeCommand('status');
     const stLine = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(8) })).catch(() => ({}));
     assert(/^Server info settings: mapname "demo1" · deathmatch "0" · coop "0" · dmflags "\d+" · fraglimit "\d+" · timelimit "\d+" · cheats "\d" · skill "\d" · hostname "noname" · needpass "0"$/.test(svInfo)
-      && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
+      && /^User info settings: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0" · rate "500000" · skin "male\/grunt"$/.test(usInfo) && /^map: demo1 · 1 client: 1 .+ 0 frags, 0 ms$/.test(stLine.line ?? '')
       && stLine.log?.includes('num score ping name'),
       `serverinfo lists the game's cvars ("${svInfo}"), userinfo this page's ("${usInfo}"), status the map and the client ("${stLine.line}", the lines in the scrollback)`);
+    // playerlist (3.20's) lists the client's time in the game, ping, score and name; cmd god runs god here (Cmd_ForwardToServer_f at a page of its own)
+    await typeCommand('playerlist');
+    const plLine = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(3) })).catch(() => ({}));
+    const godAt = async () => page.evaluate(async () => ((await window.quake2.sql('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 1'))[0]?.FLAGS ?? 0) & 16).catch(() => -1);
+    const cg0 = await godAt();
+    await typeCommand('cmd god'); await sleep(300); const cg1 = await godAt();
+    await typeCommand('cmd god'); await sleep(300); const cg2 = await godAt();
+    assert(/^\d\d:\d\d {4}0 {3}0 .+$/.test(plLine.line ?? '') && plLine.log?.some((l) => /^\d\d:\d\d {4}0 {3}0 /.test(l)) && cg0 === 0 && cg1 === 16 && cg2 === 0,
+      `playerlist lists the client's time in the game, ping, score and name ("${plLine.line}", the line in the scrollback), cmd god runs god here and again puts it off (${cg0} → ${cg1} → ${cg2})`);
+    // skins lists the client's name and skin; toggleconsole typed at the console (which Enter closed) brings it back up and Escape closes it;
+    // togglechat does the same with the notify lines cleared off the view
+    await typeCommand('skins');
+    const skLine = await status();
+    await typeCommand('toggleconsole'); await sleep(200);
+    const tcUp = await page.evaluate(() => !document.getElementById('cmdline').hidden).catch(() => null);
+    await page.keyboard.press('Escape'); await sleep(200);
+    const tcDown = await page.evaluate(() => !document.getElementById('cmdline').hidden).catch(() => null);
+    await typeCommand('echo a line to clear'); await typeCommand('togglechat'); await sleep(200);
+    const tch = await page.evaluate(() => ({ up: !document.getElementById('cmdline').hidden, lines: window.quake2.notify.lines(window.quake2.session.last.TIME_).length })).catch(() => ({}));
+    await page.keyboard.press('Escape'); await sleep(200);
+    assert(/^1: .+\\male\/grunt$/.test(skLine) && tcUp === true && tcDown === false && tch.up === true && tch.lines === 0,
+      `skins lists the client's name and skin ("${skLine}"); toggleconsole brings the console up (${tcUp}) and Escape closes it (${tcDown}); togglechat brings it up with the notify lines cleared (${JSON.stringify(tch)})`);
     // dumpuser 1 prints this page's client's userinfo in the scrollback as Info_Print laid it out; a client not in the game is not
     // active; the flood cvars are on the game row (flood_waitdelay 20 reaches it)
     await typeCommand('dumpuser 1');
-    const du = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(10) })).catch(() => ({}));
+    const du = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(12) })).catch(() => ({}));   // (the layout's ten lines and the line summing them)
     await typeCommand('dumpuser 3');
     const du3 = await status();
     await typeCommand('flood_waitdelay 20');
     const fl = await page.evaluate(async () => (await window.quake2.sql('SELECT flood_msgs m, flood_waitdelay w FROM game'))[0]).catch(() => ({}));
     await typeCommand('flood_waitdelay 10');
-    assert(/^client 1: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0"$/.test(du.line ?? '') && du.log?.includes('userinfo') && du.log?.includes('--------') && du.log?.some((l) => /^hand {16}0$/.test(l))
+    assert(/^client 1: name "[^"]*" · hand "0" · gender "male" · msg "1" · fov "90" · spectator "0" · rate "500000" · skin "male\/grunt"$/.test(du.line ?? '') && du.log?.includes('userinfo') && du.log?.includes('--------') && du.log?.some((l) => /^hand {16}0$/.test(l))
       && du3 === 'Client 3 is not active' && fl?.M === 4 && fl?.W === 20,
       `dumpuser 1 prints this page's userinfo in the scrollback and sums it on the line ("${du.line}"), client 3 is not active ("${du3}"), flood_waitdelay 20 reaches the game row (${JSON.stringify(fl)})`);
     // host_speeds 1 prints a frame's times on the line once a second as Qcommon_Frame did; m_filter reaches the settings
@@ -533,6 +629,27 @@ try {
     assert(withTests?.dlights >= 32 && withTests.ents >= 32 && withTests.particles >= 4096 && withTests.tint?.join() === '255,128,64,0.5'
       && without?.dlights === 0 && without.ents === 0 && without.particles === 0 && without.tint === null && plain?.dlights < 32 && plain.ents < 32 && plain.particles < 4096,
       `the cl_test cvars add their rings and blend to a frame (${JSON.stringify(withTests)}), the cl_add switches at 0 leave everything out (${JSON.stringify(without)}), back as it was (${JSON.stringify(plain)})`);
+    // vid_mode and vid_ref reach the Detail and renderer controls (the painter remade): 0 is 160×120, sql the projector, and back
+    await typeCommand('vid_mode 0'); await sleep(700);
+    const vm0 = await page.evaluate(() => ({ detail: window.quake2.settings.detail, select: document.getElementById('detail')?.value, w: window.quake2.renderer.screenW, line: document.getElementById('status')?.textContent })).catch(() => ({}));
+    await typeCommand('vid_ref sql'); await sleep(300);
+    const vr = await page.evaluate(() => ({ renderer: window.quake2.settings.renderer, select: document.getElementById('renderer')?.value })).catch(() => ({}));
+    await typeCommand('vid_mode 1'); await typeCommand('vid_ref soft'); await sleep(700);
+    const vm1 = await page.evaluate(() => ({ detail: window.quake2.settings.detail, renderer: window.quake2.settings.renderer, w: window.quake2.renderer.screenW })).catch(() => ({}));
+    assert(vm0.detail === 'low' && vm0.select === 'low' && vm0.w === 160 && /"vid_mode" is "0"/.test(vm0.line ?? '') && vr.renderer === 'sql' && vr.select === 'sql' && vm1.detail === 'high' && vm1.renderer === 'fast' && vm1.w === 320,
+      `vid_mode 0 is 160×120 through the Detail control (${JSON.stringify(vm0)}), vid_ref sql the projector (${JSON.stringify(vr)}), and back (${JSON.stringify(vm1)})`);
+    // vid_restart makes the painter anew (another object, the sky and the view kept, the game painting on); snd_restart the mixer
+    // (another context, the decoded sounds forgotten, the music back)
+    const painterBefore = await page.evaluate(() => ({ r: window.quake2.renderer, sky: window.quake2.renderer.skyName, w: window.quake2.renderer.screenW, paints: window.quake2.paints })).then((x) => x).catch(() => ({}));
+    const sameRenderer = await page.evaluate(() => { window.__r0 = window.quake2.renderer; return true; }).catch(() => false);
+    await typeCommand('vid_restart'); await sleep(700);
+    const painterAfter = await page.evaluate(() => ({ same: window.quake2.renderer === window.__r0, sky: window.quake2.renderer.skyName, w: window.quake2.renderer.screenW, paints: window.quake2.paints, line: document.getElementById('status')?.textContent })).catch(() => ({}));
+    await page.evaluate(() => { window.__c0 = window.quake2.audio.ctx; }).catch(() => undefined);
+    await typeCommand('snd_restart'); await sleep(500);
+    const mixer = await page.evaluate(() => ({ same: window.quake2.audio.ctx === window.__c0, up: !!window.quake2.audio.ctx, music: !!window.quake2.audio.music, line: document.getElementById('status')?.textContent })).catch(() => ({}));
+    assert(sameRenderer && painterAfter.same === false && painterAfter.sky === painterBefore.sky && painterAfter.w === painterBefore.w && painterAfter.paints > painterBefore.paints && /painter made again/.test(painterAfter.line ?? '')
+      && mixer.same === false && mixer.up && /sound system restarted/.test(mixer.line ?? ''),
+      `vid_restart remakes the painter with the sky and the size kept and the game painting on (${JSON.stringify(painterAfter)}), snd_restart remakes the mixer (${JSON.stringify(mixer)})`);
     // timegraph 1 adds a frame's time as a column each painted frame (colour 0, cls.frametime × 300); debuggraph, graphheight,
     // graphscale and graphshift reach the settings, and back
     await typeCommand('timegraph 1'); await sleep(300);
@@ -552,6 +669,18 @@ try {
     const mp0 = await page.evaluate(() => { const r = window.quake2.renderer; return { cap: r.mipcap, scale: r.mipscale, stipple: r.stipplealpha }; }).catch(() => ({}));
     assert(mp1.cap === 3 && mp1.scale === 2 && mp1.stipple === true && mp1.at3 === true && mp1.s?.join() === '3,2,true' && mp0.cap === 0 && mp0.scale === 1 && mp0.stipple === false,
       `sw_mipcap 3, sw_mipscale 2 and sw_stipplealpha 1 reach the painter and the settings, surfaces are built at mip 3 under the cap, and go back (${JSON.stringify(mp1)} → ${JSON.stringify(mp0)})`);
+    // sw_aliasstats prints the models drawn a frame once a second; sw_maxsurfs 10 makes the cache overflow each frame and sw_reportsurfout says the
+    // surfaces short; z_stats prints what the page holds and sums it on the line
+    await typeCommand('sw_aliasstats 1'); await typeCommand('sw_maxsurfs 10'); await typeCommand('sw_reportsurfout 1');
+    let prLog = [];
+    for (let i = 0; i < 20 && !(prLog.some((l) => /^ *\d+ polygon models drawn, \d+ triangles$/.test(l)) && prLog.some((l) => /^Short \d+ surfaces$/.test(l))); i++) { await sleep(250); prLog = await page.evaluate(() => window.quake2.notify.log(30)).catch(() => []); }
+    const prMax = await page.evaluate(() => ({ max: window.quake2.renderer.maxSurfs, size: window.quake2.renderer.surfCache.size, s: window.quake2.settings.swMaxsurfs })).catch(() => ({}));
+    await typeCommand('sw_aliasstats 0'); await typeCommand('sw_reportsurfout 0'); await typeCommand('sw_maxsurfs 0');
+    await typeCommand('z_stats');
+    const zs = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(6) })).catch(() => ({}));
+    assert(prLog.some((l) => /^ *\d+ polygon models drawn, \d+ triangles$/.test(l)) && prLog.some((l) => /^Short \d+ surfaces$/.test(l)) && prMax.max === 10 && prMax.size <= 11 && prMax.s === 10
+      && /^\d+ bytes in \d+ blocks$/.test(zs.line ?? '') && zs.log?.some((l) => /bytes in +\d+ blocks  surfaces built/.test(l)),
+      `sw_aliasstats prints the models drawn (${JSON.stringify(prLog.filter((l) => /polygon/.test(l)).slice(-1))}), sw_maxsurfs 10 and sw_reportsurfout the surfaces short (${JSON.stringify(prLog.filter((l) => /^Short/.test(l)).slice(-1))}, ${JSON.stringify(prMax)}), z_stats what the page holds ("${zs.line}")`);
     // m_yaw, cl_gun and con_notifytime reach the settings, con_notifytime the notify's seconds; back to the defaults after
     await typeCommand('m_yaw 0.044'); await typeCommand('cl_gun 0'); await typeCommand('con_notifytime 1');
     const three = await page.evaluate(() => ({ yaw: window.quake2.settings.mYaw, gun: window.quake2.settings.clGun, notify: window.quake2.settings.conNotifytime, seconds: window.quake2.notify.seconds })).catch(() => ({}));
@@ -559,6 +688,33 @@ try {
     const threeBack = await page.evaluate(() => ({ yaw: window.quake2.settings.mYaw, gun: window.quake2.settings.clGun, seconds: window.quake2.notify.seconds })).catch(() => ({}));
     assert(three.yaw === 0.044 && three.gun === false && three.notify === 1 && three.seconds === 1 && threeBack.yaw === 0.022 && threeBack.gun === true && threeBack.seconds === 3,
       `m_yaw, cl_gun and con_notifytime reach the settings, the last the notify's seconds (${JSON.stringify(three)} → ${JSON.stringify(threeBack)})`);
+    // killserver ends the game for the attract loop (SV_KillServer_f), as quit does; a map brings a game back
+    // (a key during the attract loop brings the menu up, not the console: the Map select starts the game again)
+    await typeCommand('killserver');
+    let killed = {};
+    for (let i = 0; i < 80 && !killed.demo; i++) { await sleep(250); killed = await page.evaluate(() => ({ demo: !!window.quake2.demo, map: window.quake2.session?.map?.name ?? null })).catch(() => ({})); }
+    await page.selectOption('#map', 'demo1');
+    for (let i = 0; i < 240 && !(await page.evaluate(() => window.quake2.running && !window.quake2.demo).catch(() => false)); i++) await sleep(250);
+    for (let i = 0; i < 240 && !/q2_tic \d+ ms/.test(await stats()); i++) await sleep(250);
+    const backAgain = await page.evaluate(() => ({ running: window.quake2.running, demo: !!window.quake2.demo })).catch(() => ({}));
+    // gamemap keeps the level running aside and loads the next (SV_GameMap_f); map with a picture and "+" shows the picture, nextserver
+    // holding what follows, a key then starting a new game on it, the unit's levels forgotten (SV_Map_f)
+    const mapState = () => page.evaluate(() => ({ map: window.quake2.session?.map?.name ?? null, kept: [...(window.quake2.session?.unitLevels?.keys() ?? [])].sort().join(), running: window.quake2.running, next: window.quake2.nextServer })).catch(() => ({}));
+    await typeCommand('gamemap demo2');
+    let gm = {};
+    for (let i = 0; i < 240 && !(gm.map === 'demo2' && gm.running); i++) { await sleep(250); gm = await mapState(); }
+    for (let i = 0; i < 240 && !/q2_tic \d+ ms/.test(await stats()); i++) await sleep(250);
+    await typeCommand('map victory.pcx+demo1'); await sleep(1500);
+    const pic = await mapState();
+    await page.keyboard.press('Space');
+    let gmBack = {};
+    for (let i = 0; i < 240 && !(gmBack.map === 'demo1' && gmBack.running); i++) { await sleep(250); gmBack = await mapState(); }
+    for (let i = 0; i < 240 && !/q2_tic \d+ ms/.test(await stats()); i++) await sleep(250);
+    assert(gm.map === 'demo2' && gm.kept === 'demo1' && pic.running === false && pic.next === 'demo1' && gmBack.map === 'demo1' && gmBack.kept === '',
+      `gamemap demo2 keeps demo1 aside (${JSON.stringify(gm)}); map victory.pcx+demo1 shows the picture with nextserver holding demo1 (${JSON.stringify(pic)}), a key starts a new game on it, the unit forgotten (${JSON.stringify(gmBack)})`);
+    await typeCommand('give all');   // (the new game's inventory as the checks below expect it)
+    assert(killed.demo === true && backAgain.running === true && backAgain.demo === false,
+      `killserver ends the game for the attract loop (${JSON.stringify(killed)}), the Map select brings a game back (${JSON.stringify(backAgain)})`);
     // the keys' speeds (cl_yawspeed, cl_forwardspeed) reach the settings and the defaults come back
     await typeCommand('cl_yawspeed 280'); await typeCommand('cl_forwardspeed 100');
     const spd = await page.evaluate(() => ({ yaw: window.quake2.settings.clYawspeed, fwd: window.quake2.settings.clForwardspeed })).catch(() => ({}));
@@ -664,6 +820,13 @@ try {
     await typeCommand('msg 1');
     const mlvBack = await page.evaluate(async () => (await window.quake2.sql('SELECT msglevel FROM player WHERE id = 1'))[0]?.MSGLEVEL).catch(() => null);
     assert(mlv.m === 0 && /· msg "0" ·/.test(mlv.line ?? '') && mlv.row === 0 && mlvBack === 1, `msg reaches the settings, the userinfo and the row (${JSON.stringify(mlv)} → ${mlvBack})`);
+    // the rate and skin userinfos: the figures reach the settings, the userinfo line and the session's userinfo, and the defaults come back
+    await typeCommand('rate 25000'); await typeCommand('skin female/athena'); await typeCommand('userinfo');
+    const rs = await page.evaluate(() => ({ rate: window.quake2.settings.rate, skin: window.quake2.settings.skin, line: document.getElementById('status').textContent, kept: window.quake2.session.userinfo[1] })).catch(() => ({}));
+    await typeCommand('rate 500000'); await typeCommand('skin male/grunt');
+    const rsBack = await page.evaluate(() => ({ rate: window.quake2.settings.rate, skin: window.quake2.settings.skin })).catch(() => ({}));
+    assert(rs.rate === 25000 && rs.skin === 'female/athena' && /· rate "25000" · skin "female\/athena"$/.test(rs.line ?? '') && rs.kept?.rate === 25000 && rs.kept?.skin === 'female/athena' && rsBack.rate === 500000 && rsBack.skin === 'male/grunt',
+      `rate and skin reach the settings, the userinfo line and the session's userinfo (${JSON.stringify({ ...rs, kept: undefined })}) and the defaults come back (${JSON.stringify(rsBack)})`);
     // gun_z and scr_centertime reach the settings (the gun drawn lower, a centre print's seconds) and the defaults come back
     await typeCommand('gun_z 10'); await typeCommand('scr_centertime 1');
     const gun = await page.evaluate(() => ({ z: window.quake2.settings.gunZ, ct: window.quake2.settings.scrCentertime })).catch(() => ({}));
@@ -1128,6 +1291,11 @@ try {
       assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
         `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
       assert(/joined[^:]*: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
+      // cl_shownet 2 at the joined page prints each message's size and kind on its scrollback (the host's frames come as "f")
+      await typeOn(gp, 'cl_shownet 2'); await sleep(600);
+      const shown = await gp.evaluate(() => window.quake2.notify.log(12)).catch(() => []);
+      await typeOn(gp, 'cl_shownet 0');
+      assert(shown.some((l) => /^\s*\d+:f$/.test(l)), `cl_shownet 2 prints the host's messages' sizes and kinds at the joined page (${JSON.stringify(shown.filter((l) => /:\w+$/.test(l)).slice(-3))})`);
       const gbook = await gp.evaluate(() => window.quake2.settings.addressBook).catch(() => null);
       assert(gbook?.[0] === `http://localhost:${RELAY_PORT} ${offer}` && gbook.length === 1, `the join by code put the relay and the code first in the guest's address book (${JSON.stringify(gbook)})`);
       // the ping: the host measures the guest's round trip a second (a ping, its pong), the guest's score board row and
@@ -1163,6 +1331,18 @@ try {
       const ngAfter = await gp.evaluate(() => window.quake2.netgraph.added).catch(() => -1);
       assert(ng.on === true && ng.added > 10 && ng.last?.colour === 0xd0 && ngOff.on === false && ngAfter === ngOff.added,
         `netgraph 1 on the joined page adds a column a frame (${ng.added}, the last a ping column) and netgraph 0 stops it (${ngOff.added} → ${ngAfter})`);
+      // the guest's rate: rate 25000 at its console goes with its userinfo to the host, which holds its frames to it (SV_RateDrop: the
+      // frames of the last second under the bytes a second, the rest held and counted); rate 500000 lets them all go again
+      await typeOn(gp, 'rate 25000');
+      let rt1 = {};
+      for (let i = 0; i < 40 && !(rt1.rate === 25000 && rt1.held > 5); i++) { await sleep(250); rt1 = await page.evaluate(() => ({ rate: window.quake2.net?.guests?.[0]?.host.info?.rate, held: window.quake2.net?.guests?.[0]?.host.heldFrames })).catch(() => ({})); }
+      await typeOn(gp, 'rate 500000');
+      let rt2 = {};
+      for (let i = 0; i < 40 && rt2.rate !== 500000; i++) { await sleep(250); rt2 = await page.evaluate(() => ({ rate: window.quake2.net?.guests?.[0]?.host.info?.rate, held: window.quake2.net?.guests?.[0]?.host.heldFrames })).catch(() => ({})); }
+      await sleep(1500);
+      const rt3 = await page.evaluate(() => ({ held: window.quake2.net?.guests?.[0]?.host.heldFrames, stats: document.getElementById('stats')?.textContent })).catch(() => ({}));
+      assert(rt1.rate === 25000 && rt1.held > 5 && rt2.rate === 500000 && rt3.held === rt2.held && /\d+ held/.test(rt3.stats ?? ''),
+        `rate 25000 at the guest's console reaches the host, which holds its frames to it (${rt1.held} held); rate 500000 lets them go (${rt2.held} → ${rt3.held}), the host's stats line counts them`);
       // the host's save and load with the guest connected: F6 saves the shared game, F9 loads it; the guest's client is
       // kept and the map sent again, so its frames keep coming (as at a level change)
       await page.evaluate(() => document.activeElement?.blur?.()).catch(() => undefined);
@@ -1234,6 +1414,56 @@ try {
       await typeOn(gp, 'serverinfo');
       const gSv = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
       assert(/^map: demo1 · 2 clients: 1 .+ · 2 .+ ms$/.test(gStatus) && /runs no server of its own/.test(gSv), `status on the joined page lists both clients ("${gStatus}"), serverinfo says it runs no server ("${gSv}")`);
+      // playerlist on the joined page lists both clients from its score board rows (their times in the game, pings and scores); cmd god
+      // at its console goes to the host as typed, which runs god for the guest's client
+      await typeOn(gp, 'playerlist');
+      const gpl = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      const guestGod = async () => page.evaluate(async () => ((await window.quake2.sql('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0]?.FLAGS ?? 0) & 16).catch(() => -1);
+      const gg0 = await guestGod();
+      await typeOn(gp, 'cmd god');
+      let gg1 = gg0;
+      for (let i = 0; i < 20 && gg1 !== 16; i++) { await sleep(250); gg1 = await guestGod(); }
+      await typeOn(gp, 'cmd god');
+      let gg2 = gg1;
+      for (let i = 0; i < 20 && gg2 !== 0; i++) { await sleep(250); gg2 = await guestGod(); }
+      assert(/^\d\d:\d\d +\d+ +\d+ .+ · \d\d:\d\d +\d+ +\d+ .+$/.test(gpl) && gg0 === 0 && gg1 === 16 && gg2 === 0,
+        `playerlist on the joined page lists both clients ("${gpl}"); cmd god at its console runs god for its client at the host and again puts it off (${gg0} → ${gg1} → ${gg2})`);
+      // skins at the joined page lists both clients' skins from its score board rows (the host's userinfos)
+      await typeOn(gp, 'skins');
+      const gsk = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      assert(/^1: .+\\male\/grunt · 2: .+\\male\/grunt$/.test(gsk), `skins at the joined page lists both clients' skins ("${gsk}")`);
+      // rcon at the joined page: nothing without rcon_password; with the host's, the line runs at the host's console and its prints come back
+      // (status's lines on the guest's scrollback, its sum on the line, "Rcon from client 2" on the host's scrollback); with another, "Bad
+      // rcon_password." on the guest's line and "Bad rcon from client 2" at the host
+      await typeOn(gp, 'rcon status');
+      const rcNo = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      await typeOn(gp, 'rcon_password secret'); await typeOn(page, 'rcon_password secret');
+      await typeOn(gp, 'rcon status');
+      let rcOk = {};
+      for (let i = 0; i < 40 && !/^map: demo1/.test(rcOk.line ?? ''); i++) { await sleep(250); rcOk = await gp.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(6) })).catch(() => ({})); }
+      const rcHost = await page.evaluate(() => window.quake2.notify.log(8)).catch(() => []);
+      await typeOn(page, 'rcon_password other');
+      await typeOn(gp, 'rcon status');
+      let rcBad = '';
+      for (let i = 0; i < 40 && rcBad !== 'Bad rcon_password.'; i++) { await sleep(250); rcBad = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => ''); }
+      const rcHostBad = await page.evaluate(() => window.quake2.notify.log(8)).catch(() => []);
+      await typeOn(gp, 'rcon_password ""'); await typeOn(page, 'rcon_password ""');
+      // showpackets at the joined page prints each message sent and received ("recv  6504 : f", "send    60 : cmd"); showdrop at the host says each frame
+      // held to the guest's rate at 25000 ("client 2: Held frame at N"), at the guest the frames missed before one ("Dropped N frames at T")
+      await typeOn(gp, 'showpackets 1'); await sleep(600);
+      const spk = await gp.evaluate(() => window.quake2.notify.log(24)).catch(() => []);
+      await typeOn(gp, 'showpackets 0');
+      await typeOn(page, 'showdrop 1'); await typeOn(gp, 'showdrop 1'); await typeOn(gp, 'rate 25000');
+      let sdh = [], sdg = [];
+      for (let i = 0; i < 40 && !(sdh.some((l) => /^client 2: Held frame at \d+$/.test(l)) && sdg.some((l) => /^Dropped \d+ frames at \d+$/.test(l))); i++) {
+        await sleep(250); sdh = await page.evaluate(() => window.quake2.notify.log(24)).catch(() => []); sdg = await gp.evaluate(() => window.quake2.notify.log(24)).catch(() => []);
+      }
+      await typeOn(gp, 'rate 500000'); await typeOn(page, 'showdrop 0'); await typeOn(gp, 'showdrop 0');
+      assert(spk.some((l) => /^recv +\d+ : f$/.test(l)) && spk.some((l) => /^send +\d+ : cmd$/.test(l)) && sdh.some((l) => /^client 2: Held frame at \d+$/.test(l)) && sdg.some((l) => /^Dropped \d+ frames at \d+$/.test(l)),
+        `showpackets at the joined page prints the frames received and the commands sent (${JSON.stringify(spk.filter((l) => /^(send|recv) /.test(l)).slice(-3))}); showdrop says the frames held at the host (${JSON.stringify(sdh.filter((l) => /Held/.test(l)).slice(-1))}) and missed at the guest (${JSON.stringify(sdg.filter((l) => /Dropped/.test(l)).slice(-1))})`);
+      assert(rcNo === "You must set 'rcon_password' before issuing an rcon command" && /^map: demo1 · 2 clients/.test(rcOk.line ?? '') && rcOk.log?.includes('num score ping name') && rcHost.includes('Rcon from client 2: status')
+        && rcBad === 'Bad rcon_password.' && rcHostBad.includes('Bad rcon from client 2: status'),
+        `rcon at the joined page asks for rcon_password first ("${rcNo}"), runs status at the host with it ("${rcOk.line}", the lines on its scrollback, the host's saying ${JSON.stringify(rcHost.filter((l) => /rcon/i.test(l)))}) and is refused with another ("${rcBad}", ${JSON.stringify(rcHostBad.filter((l) => /rcon/i.test(l)))})`);
       const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
       await typeOn(page, 'rtc_signal none');
@@ -1359,7 +1589,7 @@ try {
         // players at the host's console lists the three clients and what drives each (SV_Status_f)
         await typeOn(page, 'players');
         const plist = await page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
-        assert(/^1 player 1 \(this page\) · 2 player 2 \(guest: \d+ frames sent(, \d+ dropped)?(, ping \d+ ms)?\) · 3 player 3 \(guest: \d+ frames sent(, \d+ dropped)?(, ping \d+ ms)?\)$/.test(plist), `players lists the host's page and the two guests with their frames and pings (${plist})`);
+        assert(/^1 player 1 \(this page\) · 2 player 2 \(guest: \d+ frames sent(, \d+ dropped)?(, \d+ held)?(, ping \d+ ms)?\) · 3 player 3 \(guest: \d+ frames sent(, \d+ dropped)?(, \d+ held)?(, ping \d+ ms)?\)$/.test(plist), `players lists the host's page and the two guests with their frames, the frames held to the first's rate earlier, and pings (${plist})`);
         // kick 3 at the host's console drops the third page (SV_Kick_f): its client stands, the first guest plays on, the
         // third page says why and offers a game of its own, every message line says who was kicked
         await typeOn(page, 'kick 3');

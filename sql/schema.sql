@@ -95,7 +95,8 @@ CREATE TABLE viewcfg (
   lv_leaf INTEGER,                     -- the eye's leaf at lv_ex/ey/ez (no tree walk while the eye stands)
   view_stamp INTEGER DEFAULT 0 NOT NULL, -- counts the frames on which the view changed
   world_lst BLOB SUB_TYPE TEXT CHARACTER SET ASCII,
-  novis  SMALLINT DEFAULT 0 NOT NULL     -- r_novis: 1 marks every leaf, the PVS and the areas ignored (R_MarkLeaves); the sets are dropped when it changes
+  novis  SMALLINT DEFAULT 0 NOT NULL,    -- r_novis: 1 marks every leaf, the PVS and the areas ignored (R_MarkLeaves); the sets are dropped when it changes
+  lockpvs SMALLINT DEFAULT 0 NOT NULL    -- r_lockpvs: 1 keeps the view's cluster where it was locked, the leaves marked from there as the eye moves on (R_MarkLeaves with r_lockpvs)
 );
 
 -- ── resources ───────────────────────────────────────────────────────────
@@ -520,7 +521,8 @@ CREATE TABLE player (
   fov             DOUBLE PRECISION,                       -- the fov userinfo (ClientUserinfoChanged, 1..160): the client's own frustum; NULL, the view's
   lastweapon      INTEGER DEFAULT 0 NOT NULL,             -- pers.lastweapon (ChangeWeapon): the weapon bit held before the one in hand, weaplast's; 0 none yet
   flood_locktill  DOUBLE PRECISION DEFAULT 0 NOT NULL,    -- flood_locktill (Cmd_Say_f): the level time the client may talk again from
-  flood_when      VARCHAR(100) DEFAULT '' NOT NULL        -- flood_when: the last ten says' times, each in hundredths of a second on ten characters, the newest last
+  flood_when      VARCHAR(100) DEFAULT '' NOT NULL,       -- flood_when: the last ten says' times, each in hundredths of a second on ten characters, the newest last
+  enter_time      DOUBLE PRECISION DEFAULT 0 NOT NULL     -- resp.enterframe (InitClientResp): the level time the client came in; the score board's and playerlist's time in the game
 );
 
 -- client_respawn_t's coop_respawn: each client's persistent data as it was when the level began

@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pak, pic } from '../src/pak.js';
-import { Menu, saveComment, PLAYERS, HANDS } from '../src/menu.js';
+import { Menu, saveComment, PLAYERS, HANDS, RATE_NAMES } from '../src/menu.js';
 import { defaultBinds, bindKey } from '../src/input.js';
 import { CREDITS } from '../src/credits.js';
 
@@ -314,6 +314,19 @@ keys('ArrowRight', 'ArrowRight');
 assert(settings.hand === 2, '... then center, and no further');
 keys('ArrowLeft', 'ArrowLeft', 'ArrowLeft');
 assert(settings.hand === 0, 'left back to right-handed, and no further');
+// the connection speed spin: the rate userinfo from rate_tbl (the figures twenty times Quake's), User defined for a rate off it
+settings.rate = 500000;
+keys('ArrowDown');
+assert(menu.current.cursor === 4 && menu.current.items[4].type === 'spin' && menu.current.items[4].items === RATE_NAMES && menu.current.items[4].get() === 4, 'down from the handedness is the connection speed spin, T1/LAN at the rate of 500000');
+keys('ArrowLeft');
+assert(settings.rate === 200000, 'left picks Dual ISDN/Cable: rate 200000');
+keys('ArrowRight', 'ArrowRight');
+assert(settings.rate === 500000, 'right is T1/LAN again, and User defined past it sets nothing');
+settings.rate = 25000;
+assert(menu.current.items[4].get() === 5 && menu.current.items[1].name() === 'model: male' && menu.current.items[2].name() === 'skin: grunt', 'a rate off the table shows as User defined; the model and skin boxes show the skin userinfo');
+settings.skin = 'female/athena';
+assert(menu.current.items[2].name() === 'skin: athena' && menu.current.items[1].name() === 'model: female', 'skin female/athena shows in them');
+settings.rate = 500000; settings.skin = 'male/grunt';
 keys('KeyX', 'Tab');
 assert(settings.hand === 0 && menu.current.cursor === 0, 'a letter on the spin types nothing; Tab wraps to the field');
 menu.key('Tab', '\t'); menu.key('Escape', 'Escape');

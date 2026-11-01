@@ -16,8 +16,8 @@ const pad = (axes = [0, 0, 0, 0], held = [], triggers = {}) => ({
 });
 
 // the sticks
-check(axis(0.1) === 0 && axis(-0.19) === 0, `inside the dead zone (${DEAD}) a stick is still`);
-check(axis(1) === 1 && axis(-1) === -1 && Math.abs(axis(0.6) - 0.5) < 1e-9, 'past it the throw rescales to 0..1');
+check(DEAD === 0.15 && axis(0.1) === 0 && axis(-0.14) === 0, `inside the dead zone (${DEAD}, joy_*threshold's default) a stick is still`);
+check(axis(1) === 1 && axis(-1) === -1 && Math.abs(axis(0.6) - 0.45 / 0.85) < 1e-9 && axis(0.4, 0.5) === 0 && axis(1, 0.5) === 1, 'past it the throw rescales to 0..1; a threshold given is the dead zone instead');
 const still = readPad(pad());
 check(still.fwd === 0 && still.side === 0 && still.turn === 0 && still.look === 0 && !still.fire && !still.jump && !still.run, 'an idle pad asks for nothing');
 const walk = readPad(pad([0, -0.5, 0, 0]));
@@ -26,12 +26,49 @@ const run = readPad(pad([0.7, -0.7, 0, 0]));
 check(run.fwd > 0 && run.side > 0 && run.run, 'the left stick near its edge runs, strafing');
 const look = readPad(pad([0, 0, 1, -1]));
 check(look.turn === -1 && look.look === -1, 'the right stick turns right and looks up (Quake pitch: negative is up)');
+// IN_JoyMove's cvars: a threshold is a stick axis's dead zone, a sensitivity its speed with Quake's signs (-1 forward, side and yaw, 1 pitch
+// as the standard mapping points them), clamped to full throw; a value missing or no number is the default
+const joyd = readPad(pad([0.4, -0.4, 0.4, 0.4]), new Set(), { forwardThreshold: 0.5, sideThreshold: 0.5, yawThreshold: 0.5, pitchThreshold: 0.1 });
+check(joyd.fwd === 0 && joyd.side === 0 && joyd.turn === 0 && joyd.look > 0.3, 'a stick inside joy_*threshold is still, the pitch past its own looks');
+const joys = readPad(pad([0.5, -0.5, 0.5, 0.5]), new Set(), { forwardSensitivity: -3, sideSensitivity: 1, yawSensitivity: 1, pitchSensitivity: -1, forwardThreshold: 'x' });
+const half = axis(0.5);
+check(joys.fwd === 1 && Math.abs(joys.side + half) < 1e-9 && Math.abs(joys.turn - half) < 1e-9 && Math.abs(joys.look + half) < 1e-9, 'a sensitivity scales a stick, clamped to full throw, and its sign turns it: side, yaw and pitch the other way');
+{
+  const inp = new Input({ getPads: () => [pad([0, -0.4, 0, 0])] });
+  inp.joy = { forwardThreshold: 0.5 };
+  check(inp.pollPad().fwd === 0 && inp.pollPadAt(0).fwd === 0, 'Input.joy gives the pads their thresholds (joy_forwardthreshold 0.5: a stick at 0.4 is still)');
+  inp.joy = {};
+  check(inp.pollPad().fwd > 0, 'and none the defaults');
+}
 
 // the buttons
 const fire = readPad(pad([0, 0, 0, 0], [], { [BUTTON.RT]: 0.8 }));
 check(fire.fire && !fire.jump, 'RT past half its travel fires');
 const jump = readPad(pad([0, 0, 0, 0], [BUTTON.A, BUTTON.B]));
 check(jump.jump && jump.crouch, 'A jumps, B crouches');
+// in_joystick 0 (Input.joystick false): the pads are left unread
+{
+  const off = new Input({ getPads: () => [pad([0, 1, 0, 0], [BUTTON.A])] });
+  off.joystick = false;
+  const c = off.read(1, {});
+  check(off.pollPad() === null && off.pollPadAt(0) === null && c[1] === 0 && c[6] === 0, 'with in_joystick 0 the pad is not read: no move, no jump');
+  off.joystick = true;
+  check(off.pollPad() !== null, 'in_joystick 1 reads it again');
+}
+// in_mouse 0 (Input.mouseOn false): the mouse's samples are dropped; in_restart (restart): the keys, the samples and the pads read anew
+{
+  const im = new Input({ getPads: () => [pad([0, 0, 0, 0], [BUTTON.A])] });
+  im.mouseOn = false; im.mouse(40, 0, { sensitivity: 7 });
+  check(im.read(1, { sensitivity: 7 })[3] === 0, 'with in_mouse 0 a mouse sample turns nothing');
+  im.mouseOn = true; im.mouse(40, 0, { sensitivity: 7 });
+  check(im.read(1, { sensitivity: 7 })[3] !== 0, 'in_mouse 1 reads it again');
+  im.key('KeyW'); im.pollPad(); im.pollPadAt(0); im.mouse(10, 0, { sensitivity: 7, mFilter: true });
+  check(im.keys.has('KeyW') && im.pad.held.size === 1 && im.pads.length === 1, 'a key held, the pad\'s button held, a second pad read');
+  im.restart();
+  const again = im.pollPad();
+  check(im.keys.size === 0 && im.pads.length === 0 && im.lastDx === 0 && again?.pressed.has(BUTTON.A) === true, 'in_restart lets the key go, forgets the pads\' presses (the button counts as pressed again) and the mouse\'s samples');
+  check(im.read(1, { sensitivity: 7 })[3] === 0, 'and the turn the samples owed is gone');
+}
 
 // a press is reported once, so a weapon changes once per click of the bumper
 let prev = new Set();

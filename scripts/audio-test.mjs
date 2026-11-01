@@ -18,9 +18,9 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 // ── a Web Audio that records: every node made, started and stopped, and what it is connected to ──
 const made = [];
 class Param { constructor(v) { this.value = v; this.ramps = []; } linearRampToValueAtTime(v, t) { this.ramps.push(['lin', v, t]); } exponentialRampToValueAtTime(v, t) { this.ramps.push(['exp', v, t]); } setValueAtTime(v, t) { this.ramps.push(['set', v, t]); } cancelScheduledValues() {} }
-class Node { constructor(kind) { this.kind = kind; this.to = null; this.started = false; this.stopped = false; made.push(this); } connect(n) { this.to = n; return n; } disconnect() { this.to = null; } start(when, offset) { this.started = true; this.offset = offset; } stop() { if (this.stopped) throw new Error('stopped twice'); this.stopped = true; } }
+class Node { constructor(kind) { this.kind = kind; this.to = null; this.started = false; this.stopped = false; made.push(this); } connect(n) { this.to = n; return n; } disconnect() { this.to = null; } start(when, offset) { this.started = true; this.when = when; this.offset = offset; } stop() { if (this.stopped) throw new Error('stopped twice'); this.stopped = true; } }
 class FakeContext {
-  constructor() { this.state = 'running'; this.currentTime = 10; this.sampleRate = 22050; this.destination = new Node('destination'); this.decoded = 0; this.resumed = 0; this.suspended = 0; }
+  constructor(opts = {}) { this.state = 'running'; this.currentTime = 10; this.sampleRate = opts.sampleRate ?? 22050; this.asked = opts.sampleRate ?? null; this.destination = new Node('destination'); this.decoded = 0; this.resumed = 0; this.suspended = 0; }
   createGain() { const n = new Node('gain'); n.gain = new Param(1); return n; }
   createBufferSource() { const n = new Node('source'); n.buffer = null; n.loop = false; return n; }
   createStereoPanner() { const n = new Node('panner'); n.pan = new Param(0); return n; }
@@ -231,6 +231,49 @@ await audio.playMusic(10); await settle();
 check(audio.music === null, '... and plays none');
 audio.setEnabled(true); await settle();
 check(audio.music?.track === 10, 'cd on plays the track again');
+// s_mixahead: the raw stream's samples (a cinematic's) queued that far ahead of the clock when they start or have fallen behind; s_testsound:
+// a fixed sine in place of the mix (0.1 radians a sample at the rate, 20000 of 32768), the sounds muted meanwhile and back at the volume after
+{
+  audio.stopRaw();
+  const n0 = made.length;
+  audio.playRaw(new Uint8Array(2205), 22050);
+  const raw1 = made.slice(n0).find((n) => n.kind === 'source');
+  check(raw1 && near(raw1.when, audio.ctx.currentTime + 0.05) && near(audio.rawTime, audio.ctx.currentTime + 0.05 + 0.1), `the raw stream starts 0.05 s ahead of the clock by default (at ${raw1?.when})`);
+  audio.stopRaw(); audio.mixahead = 0.3;
+  const n1 = made.length;
+  audio.playRaw(new Uint8Array(2205), 22050);
+  const raw2 = made.slice(n1).find((n) => n.kind === 'source');
+  check(raw2 && near(raw2.when, audio.ctx.currentTime + 0.3), `s_mixahead 0.3 queues it 0.3 s ahead (at ${raw2?.when})`);
+  audio.stopRaw(); audio.mixahead = 0.05;
+  const n2 = made.length;
+  audio.setTestsound(true);
+  const osc = made.slice(n2).find((n) => n.kind === 'osc');
+  check(osc && osc.started && near(osc.frequency.value, 0.1 * audio.ctx.sampleRate / (2 * Math.PI)) && near(osc.to?.gain?.value, 20000 / 32768) && osc.to?.to === audio.ctx.destination && audio.master.gain.value === 0,
+    `s_testsound 1 plays a sine of ${osc?.frequency.value.toFixed(1)} Hz at ${(20000 / 32768).toFixed(2)} into the output and mutes the mix`);
+  audio.setVolume(0.5);
+  check(audio.master.gain.value === 0 && audio.volume === 0.5, 'the volume set meanwhile is kept for after');
+  audio.setTestsound(false);
+  check(osc.stopped && audio.testTone === null && audio.master.gain.value === 0.5, 's_testsound 0 stops it and the mix is back at the volume');
+  audio.setVolume(0.7);
+}
+// s_khz: the context asked at 11025 or 22050 on a restart, 44 the browser's own
+{
+  audio.khz = 22; audio.restart(); await settle();
+  const at22 = audio.ctx?.asked;
+  audio.khz = 11; audio.restart(); await settle();
+  const at11 = audio.ctx?.asked;
+  audio.khz = 44; audio.restart(); await settle();
+  check(at22 === 22050 && at11 === 11025 && audio.ctx?.asked === null, `s_khz 22 and 11 ask the context for 22050 and 11025 (${at22}, ${at11}), 44 asks nothing: the browser's own`);
+}
+// snd_restart (restart): the context closed and made anew, the sounds forgotten, the music back
+{
+  const before = audio.ctx;
+  await audio.playEvents([[0, 0, 7, 1, 'weapons/blastf1a.wav', 1, 0, null, null, null]], audio.listener);
+  const hadBuffers = audio.buffers.size > 0;
+  const restarted = audio.restart();
+  await settle();
+  check(restarted && audio.ctx && audio.ctx !== before && hadBuffers && audio.buffers.size === 0 && audio.music?.track === 10, `restart makes a new context (${audio.ctx !== before}), forgets the ${hadBuffers ? 'decoded' : 'no'} sounds and plays the track again (${audio.music?.track})`);
+}
 // s_show: each sound started told with its volumes
 {
   const shown = [];

@@ -121,6 +121,27 @@ r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
 const levels = [0, 0, 0, 0];
 for (const k of r.surfCache.keys()) levels[k % 4]++;
 assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws near surfaces at mip 0 and far ones smaller (by level: ${levels.join(' ')})`);
+// sw_reportsurfout and sw_maxsurfs: the surfaces built after the cache overflowed in a frame are short (r_outofsurfaces); the cache's size
+// is the cvar's, the painter's own at 0; sw_aliasstats: the models drawn and their triangles, counted from the frame's start
+{
+  const built = r.surfCache.size;
+  assert(r.surfShort === 0 && r.maxSurfs === 0 && built <= 2000, `the frame's ${built} surfaces fit the cache: none short`);
+  r.maxSurfs = 10; r.surfCache.clear();
+  r.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: 0, fov: 90 });
+  r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
+  assert(r.surfShort > 0 && r.surfShort < built && r.surfCache.size <= 11, `sw_maxsurfs 10: the cache clears past ten and the ${r.surfShort} surfaces built after are short (${r.surfCache.size} kept)`);
+  r.maxSurfs = 0; r.surfCache.clear();
+  const amdl = [...res.models.values()].find((m) => m.mdl && m.mdl.numVerts > 20)?.mdl;
+  r.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: 0, fov: 90 });
+  assert(r.aliasDrawn === 0 && r.aliasTris === 0 && r.surfShort === 0, 'a frame starts with no model drawn and nothing short');
+  r.drawAlias(amdl, 0, 0, [last.PX + 60, last.PY, last.VIEW_Z], [0, 0, 0], 255);
+  r.drawAlias(amdl, 0, 0, [last.PX + 60, last.PY + 20, last.VIEW_Z], [0, 0, 0], 255);
+  assert(r.aliasDrawn === 2 && r.aliasTris === 2 * amdl.numTris, `two models drawn count two and their ${2 * amdl.numTris} triangles (sw_aliasstats)`);
+  // (the frame as it was before the models, for the checks below)
+  r.surfCache.clear();
+  r.beginFrame({ x: last.PX, y: last.PY, z: last.VIEW_Z, yaw: last.YAW, pitch: last.PITCH, roll: 0, fov: 90 });
+  r.drawFaceList(rows, styles, last.TIME_, new Map(), new Map());
+}
 // sw_mipcap 3: the same frame has every surface at mip 3; sw_stipplealpha: its translucent surfaces drawn stippled, the frame
 // differing where they are (and nowhere, with none in view)
 {

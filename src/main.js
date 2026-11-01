@@ -22,6 +22,7 @@ import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './render
 import { Effects } from './effects.js';
 import { Hud, viewFrameLerp } from './hud.js';
 import { Menu, saveComment, ADDRESS_BOOK } from './menu.js';
+import { parseChangeMap } from './levels.js';
 import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
 import { SAVE_VERSION } from './savegame.js';
 import { Q2Audio } from './audio.js';
@@ -67,7 +68,7 @@ function paintDue(now) {
   lastDue = now;
   return true;
 }
-let rSpeedsAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
+let rSpeedsAt = 0, rDspeedsAt = 0, aliasStatsAt = 0, surfOutAt = 0;   // when r_speeds last printed the frame's figures (once a second here; R_RenderFrame printed every frame)
 let hostSpeedsAt = 0;   // when host_speeds last printed a frame's times (once a second here; Qcommon_Frame printed every frame)
 let lastTic = 0;
 // src/net.js: a game shared over a data channel. The host runs the game here and sends the guest its frames
@@ -120,7 +121,9 @@ document.addEventListener('visibilitychange', () => audio.suspend(document.hidde
 const perf = { tic: 0, faces: 0, draw: 0, rows: 0 };
 let frameInfo = null;   // the first view's last frame: { ents, dlights, particles, tint } (the cl_add and cl_test cvars read back)
 
+let rconOut = null;   // Com_BeginRedirect: while an rcon line runs at the host's console, its prints and its line are kept for the guest (RD_PACKET)
 function setStatus(msg, isError = false) {
+  if (rconOut && msg) rconOut.push(msg);
   statusEl.textContent = msg;
   statusEl.classList.toggle('error', isError);
   statusEl.hidden = !msg;
@@ -129,6 +132,15 @@ function setStatus(msg, isError = false) {
 // ── input ────────────────────────────────────────────────────────────────
 // src/input.js holds the keys, the mouse, the touches and the pad between tics and reads them as the usercmd
 const input = new Input({ binds: settings.binds });   // (the keys menu edits settings.binds in place: the Input reads the same object)
+input.joystick = settings.inJoystick !== false;   // (in_joystick from the settings: the pads read, or not)
+input.mouseOn = settings.inMouse !== false;   // (in_mouse from the settings: the mouse read, or not)
+/** The joy_ cvars as the pad reads them (IN_JoyMove's thresholds and sensitivities; Input.joy, gamepad.js's JOY keys). */
+const joyFromSettings = (s) => ({ forwardThreshold: s.joyForwardthreshold, sideThreshold: s.joySidethreshold, pitchThreshold: s.joyPitchthreshold, yawThreshold: s.joyYawthreshold,
+  forwardSensitivity: s.joyForwardsensitivity, sideSensitivity: s.joySidesensitivity, pitchSensitivity: s.joyPitchsensitivity, yawSensitivity: s.joyYawsensitivity });
+input.joy = joyFromSettings(settings);
+audio.khz = Number(settings.sKhz) || 44;   // (s_khz from the settings)
+audio.mixahead = Number(settings.sMixahead) || 0;   // (s_mixahead: the raw stream's lead)
+audio.setTestsound(!!settings.sTestsound);   // (s_testsound: the sine in place of the mix, from the first start)
 let anyKey = null;      // a picture screen waiting for a key or a click
 // the help computer (F1, or the pad's Back) and the inventory screen (TAB, or the pad's Y), per view: the
 // keys are the first player's, the pad is its player's (the second in coop)
@@ -154,10 +166,13 @@ function toggleScreen(p, which) {
   else if (which === 'help') { showHelp[p] = !showHelp[p]; showInv[p] = false; showScores[p] = false; if (row) helpSeen[p] = row.HELP_CHANGED ?? 0; }
   else { showInv[p] = !showInv[p]; showHelp[p] = false; showScores[p] = false; }
 }
-/** The score board's rows: every client's frags and, over the network, its ping (a guest's come with its row). */
+/**
+ * The score board's rows: every client's frags, over the network its ping (a guest's come with its row), the level time it came in
+ * (`enter_time`, resp.enterframe: the board's and playerlist's time in the game) and whether it watches (3.20's spectator, from its userinfo).
+ */
 function scoreRows() {
-  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, name: last?.NETNAME, score: last?.SCORE ?? 0, ping: 0 }];
-  return session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0, ping: net?.guests?.find((g) => g.client === c.CLIENT)?.host.ping ?? 0 }));
+  if (netGuest()) return last?.SCORES ?? [{ id: last?.CLIENT ?? 1, name: last?.NETNAME, score: last?.SCORE ?? 0, ping: 0, time: last?.ENTER_TIME ?? 0, spectator: 0, skin: 'male/grunt' }];
+  return session.clients.map((c) => ({ id: c.CLIENT, name: c.NETNAME, score: c.SCORE ?? 0, ping: net?.guests?.find((g) => g.client === c.CLIENT)?.host.ping ?? 0, time: c.ENTER_TIME ?? 0, spectator: session.userinfo[c.CLIENT]?.spectator ? 1 : 0, skin: session.userinfo[c.CLIENT]?.skin ?? 'male/grunt' }));   // (skin: the skin userinfo, skins' and a recording's)
 }
 /** A joined page's own round trip, as the host measured it and sent it with the score board's rows; null before one came. */
 const ownPing = () => (netGuest() ? last?.SCORES?.find((s) => s.id === last.CLIENT)?.ping ?? null : null);
@@ -268,7 +283,7 @@ function setSetting(k, v) {
     if (v && !document.fullscreenElement) canvas.requestFullscreen?.().catch(() => {});
     else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   } else { settings[k] = v; saveSettings(); }
-  if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg' || k === 'password') applyUserinfo();
+  if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg' || k === 'rate' || k === 'skin' || k === 'password') applyUserinfo();
   if (k === 'viewsize') applyView().catch((err) => console.warn('viewsize:', err.message));   // (the 3D view's rectangle, the SQL's frustum with it)
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
   if (k === 'swDrawflat' && renderer) { renderer.drawflat = !!v; renderer.surfCache.clear(); }   // (sw_drawflat: the surfaces built again flat, or textured)
@@ -276,12 +291,20 @@ function setSetting(k, v) {
   if (k === 'swMipcap' && renderer) renderer.mipcap = Number(v) || 0;   // (sw_mipcap, sw_mipscale: the next frame's mip levels; sw_stipplealpha: its translucent surfaces)
   if (k === 'swMipscale' && renderer) renderer.mipscale = Number(v);
   if (k === 'swStipplealpha' && renderer) renderer.stipplealpha = !!v;
+  if (k === 'swMaxsurfs' && renderer) { renderer.maxSurfs = Number(v) || 0; renderer.surfCache.clear(); }   // (sw_maxsurfs: the surface cache's size, 0 the painter's own; the cache starts over at it, a full one standing over a still view otherwise)
   if (k === 'cdLoopcount') audio.loopCount = Number(v) || 4;   // (cd_loopcount, cd_looptrack: the music's loop; cd_nocd: none)
   if (k === 'cdLooptrack') audio.loopTrack = Number(v) || 0;
   if (k === 'cdNocd') audio.setNocd(!!v);
+  if (k === 'inJoystick') input.joystick = v !== false;   // (in_joystick: the pads read, or not)
+  if (k === 'inMouse') input.mouseOn = v !== false;   // (in_mouse: the mouse read, or not)
+  if (k.startsWith('joy')) input.joy = joyFromSettings(settings);   // (the joy_ cvars: the sticks' dead zones and speeds)
+  if (k === 'sKhz') audio.khz = Number(v) || 44;   // (s_khz: the rate at the next snd_restart)
+  if (k === 'sMixahead') audio.mixahead = Number(v) || 0;   // (s_mixahead: the raw stream's lead)
+  if (k === 'sTestsound') audio.setTestsound(!!v);   // (s_testsound: the sine in place of the mix)
   if (k === 'sShow') audio.onStart = v ? (name, l, r) => notify.add(`${String(l).padStart(3)} ${String(r).padStart(3)} ${name}`, gameClock(), { show: false }) : null;   // (s_show: each sound started on the scrollback as S_Update printed a channel)
   // r_novis: the SQL's marking takes every leaf (the kept sets dropped so the next frame marks anew); a guest paints the host's frames as they are
   if (k === 'rNovis' && db && !netGuest()) db.exec(`UPDATE viewcfg SET novis = ${v ? 1 : 0}, vis_cluster = NULL WHERE id = 1`).catch((err) => console.warn('r_novis:', err.message));
+  if (k === 'rLockpvs' && db && !netGuest()) db.exec(`UPDATE viewcfg SET lockpvs = ${v ? 1 : 0} WHERE id = 1`).catch((err) => console.warn('r_lockpvs:', err.message));   // (r_lockpvs: the view's cluster held, or marked anew as the eye moves)
   if (k === 'conNotifytime') notify.seconds = Number(v) || 0;   // (con_notifytime: the notify lines' seconds)
   if (k === 'scrCentertime') for (const c of centerPrints) c.seconds = Number(v) || 0;   // (scr_centertime: a centre print's seconds)
   if (k === 'clFootsteps') audio.footsteps = v !== false;   // (cl_footsteps 0: the footsteps dropped)
@@ -296,7 +319,7 @@ function setSetting(k, v) {
  */
 function applyUserinfo() {
   // (only a joined page watches: the host's and a local game's clients play)
-  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, fov: settings.fov, gender: settings.gender, msg: settings.msg, password: settings.password };
+  const info = { name: settings.name, hand: settings.hand, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, fov: settings.fov, gender: settings.gender, msg: settings.msg, rate: settings.rate, skin: settings.skin, password: settings.password };
   if (netGuest()) { if (net.guest?.open) net.guest.sendInfo(info); return; }
   session?.setUserinfo(1, info).catch((err) => console.warn('userinfo:', err.message));
 }
@@ -328,34 +351,62 @@ const warn = console.warn.bind(console);
 console.warn = (...args) => { warn(...args); if (settings.developer) notify.add(args.map((a) => (a instanceof Error ? a.message : String(a))).join(' '), gameClock()); };
 // logfile 1 (Com_Printf's write to qconsole.log): the scrollback's lines as they come, kept in the file store (so a reload's run
 // follows the last), flushed a second after a line and at the page's end; logfile 0 downloads the file and drops it
-const LOG_KEY = 'qconsole.log';
-let logKept = '', logNew = '', logFlush = 0;   // (the file's text so far, the lines since the last flush)
-notify.onAdd = (line) => { if (!settings.logfile) return; logNew += `${line}\n`; if (!logFlush) logFlush = setTimeout(flushLog, 1000); };
-async function flushLog() {
-  logFlush = 0;
-  if (!logNew) return;
-  logKept += logNew; logNew = '';
-  await fileStore.put(LOG_KEY, { name: LOG_KEY, bytes: new TextEncoder().encode(logKept) }).catch((err) => warn('qconsole.log:', err.message));
+/**
+ * A text kept in the file store as it grows (Com_Printf's qconsole.log, CL_Frame's stats.log): lines added while it is on,
+ * flushed a second after a line and at the page's end; on from the last run, its file goes on; stopped, downloaded and dropped.
+ */
+function keptLog(key) {
+  const log = { kept: '', pending: '', timer: 0, on: false };
+  const read = async () => { const f = await fileStore.get(key).catch(() => null); return f ? new TextDecoder().decode(f.bytes) : ''; };
+  log.flush = async () => {
+    log.timer = 0;
+    if (!log.pending) return;
+    log.kept += log.pending; log.pending = '';
+    await fileStore.put(key, { name: key, bytes: new TextEncoder().encode(log.kept) }).catch((err) => warn(`${key}:`, err.message));
+  };
+  log.add = (line) => { if (!log.on) return; log.pending += `${line}\n`; if (!log.timer) log.timer = setTimeout(log.flush, 1000); };
+  log.resume = () => { log.on = true; read().then((text) => { log.kept = text + log.kept; }); };
+  log.start = async () => { log.kept = await read(); log.on = true; };   // (on once the file is read: a line added meanwhile would come before its first)
+  log.stop = async () => {
+    log.on = false;
+    if (log.timer) { clearTimeout(log.timer); log.timer = 0; }
+    const text = log.kept + log.pending;
+    log.kept = ''; log.pending = '';
+    await fileStore.remove(key).catch(() => undefined);
+    if (!text) return 0;
+    downloadText(key, text);
+    return text.split('\n').length - 1;
+  };
+  window.addEventListener('pagehide', () => { if (log.timer) { clearTimeout(log.timer); log.flush(); } });
+  return log;
 }
-async function readLog() { const f = await fileStore.get(LOG_KEY).catch(() => null); return f ? new TextDecoder().decode(f.bytes) : ''; }
-if (settings.logfile) readLog().then((text) => { logKept = text + logKept; });   // (on from the last run: its file goes on)
-window.addEventListener('pagehide', () => { if (logFlush) { clearTimeout(logFlush); flushLog(); } });
+const conLog = keptLog('qconsole.log');   // logfile: the scrollback's lines
+const statsLog = keptLog('stats.log');    // log_stats: a line a painted frame, "entities,dlights,parts,frame time" as CL_Frame wrote it
+notify.onAdd = (line) => conLog.add(line);
+if (settings.logfile) conLog.resume();
+if (settings.logStats) statsLog.resume();
 async function setLogfile(on) {
   if (on) {
     if (settings.logfile) return 'already';
     settings.logfile = true; saveSettings();
-    logKept = await readLog();
+    await conLog.start();
     return 'on';
   }
   if (!settings.logfile) return null;
   settings.logfile = false; saveSettings();
-  if (logFlush) { clearTimeout(logFlush); logFlush = 0; }
-  const text = logKept + logNew;
-  logKept = ''; logNew = '';
-  await fileStore.remove(LOG_KEY).catch(() => undefined);
-  if (!text) return 0;
-  downloadText(LOG_KEY, text);
-  return text.split('\n').length - 1;
+  return conLog.stop();
+}
+async function setLogStats(on) {
+  if (on) {
+    if (settings.logStats) return 'already';
+    settings.logStats = true; saveSettings();
+    await statsLog.start();
+    if (!statsLog.kept) statsLog.add('entities,dlights,parts,frame time');   // (the file's first line, as CL_Frame wrote it)
+    return 'on';
+  }
+  if (!settings.logStats) return null;
+  settings.logStats = false; saveSettings();
+  return statsLog.stop();
 }
 function noteMessage(row) {
   if (!row?.MSG || row.MSG_TIME === lastMsgTime) return;
@@ -369,6 +420,11 @@ const con = new Console({
   get db() { return db; }, get pak() { return pak; }, settings, saveSettings,
   setStatus: (msg, isError) => { setStatus(msg, isError); if (msg) notify.add(msg, gameClock(), { show: false }); },
   startMap: (name) => startMap(name, true),
+  // map <string> with a spawn point, a picture or a cinematic and what follows (SV_Map_f: a new game, the unit forgotten), gamemap <string>
+  // (SV_GameMap_f: the level running kept aside), nextserver (what follows the picture or cinematic playing; null shows it)
+  mapString: (target) => { if (!res) return false; changeLevel(target, false).catch((err) => setStatus(err.message, true)); return true; },
+  gameMap: (target) => { if (!res) return false; changeLevel(target, true).catch((err) => setStatus(err.message, true)); return true; },
+  nextServer: (text) => { if (text != null) nextServer = String(text); return nextServer; },
   setView: (fov) => applyView(fov),
   saveGame: () => saveGame(), loadGame: () => loadGame(),
   toggleInventory: () => toggleScreen(0, 'inventory'),
@@ -381,7 +437,7 @@ const con = new Console({
     return g ? { mapname: g.MAP_NAME, deathmatch: g.DEATHMATCH, coop: g.COOP, dmflags: g.DMFLAGS, fraglimit: g.FRAGLIMIT, timelimit: g.TIMELIMIT, cheats: g.CHEATS, skill: g.SKILL, hostname: settings.hostname || 'noname',
       needpass: (settings.password ? 1 : 0) + (settings.spectatorPassword && settings.spectatorPassword !== 'none' ? 2 : 0) } : null;   // (needpass: 1 a password, 2 a spectator password, as SV_StatusString set it)
   },
-  userInfo: () => ({ name: settings.name, hand: settings.hand, gender: settings.gender, msg: settings.msg, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0 }),
+  userInfo: () => ({ name: settings.name, hand: settings.hand, gender: settings.gender, msg: settings.msg, fov: settings.fov, spectator: netGuest() && $('net-spectate').checked ? 1 : 0, rate: settings.rate, skin: settings.skin }),
   isFullscreen: () => !!document.fullscreenElement,   // (vid_fullscreen: the page's live state; setSetting('fullscreen', …) asks for it)
   // play, stopsound and soundinfo (S_Play, S_StopAllSounds, S_SoundInfo_f): a pak sound at the ear, every sound cut, the mix's figures
   playSound: (name) => { if (!pak?.has(`sound/${name}`)) return false; audio.playLocal(name); return true; },
@@ -447,7 +503,8 @@ const con = new Console({
   },
   // deathmatch, coop and maxclients: the next game's mode and clients, latched (the settings and the Players select, no game started)
   setGameMode: ({ coop, deathmatch, players }) => { settings.coop = !!coop; settings.deathmatch = !!deathmatch; settings.players = Math.max(2, Math.min(4, Number(players) || 2)); saveSettings(); $('players').value = playersValue(); },
-  status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}` })) } : null),
+  // (the rows' time: the whole seconds in the game, playerlist's, from the level clock and the enter time; spectator: a watcher)
+  status: () => (running && map ? { map: (netGuest() ? net.guest.map?.name : session?.map?.name) ?? map.name ?? '?', rows: scoreRows().map((s) => ({ num: s.id, score: s.score ?? 0, ping: s.ping ?? 0, name: s.name || `player ${s.id}`, time: Math.max(0, Math.floor(gameClock() - (s.time ?? 0))), spectator: s.spectator ? 1 : 0, skin: s.skin ?? 'male/grunt' })) } : null),
   isRunning: () => running,
   // the deathmatch cvars: the game running takes the new value at once, the next maps through the session
   setCvar: async (name, value) => { session.cvars[name] = value; if (map && !netGuest()) await db.exec(`UPDATE game SET ${name} = ${value} WHERE id = 1`); },
@@ -458,12 +515,25 @@ const con = new Console({
   screenshot: () => screenshot(),
   say: (text) => sayText(text),
   messageMode: (team) => messageMode(team),              // (messagemode, messagemode2: the chat prompt up; false without a game)
+  // toggleconsole and togglechat (Con_ToggleConsole_f, Con_ToggleChat_f): the console up or down (typed at its line, which Enter closed, it comes
+  // back up); togglechat clears the notify lines off the view first, as the function did whatever its name
+  toggleConsole: (clearNotify = false) => { if (clearNotify) notify.clearNotify(); if (cmdline.hidden) openConsole(); else closeConsole(); return !cmdline.hidden; },
+  setImpulse: (n) => { input.impulse = n; },   // (impulse: the next command's, as IN_Impulse set in_impulse; a joined page's goes with its command)
+  // in_restart (IN_Restart_f): the keys, the mouse's samples and the pads read anew; the mouse let go and taken again when a game is up
+  inRestart: () => {
+    input.restart();
+    if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
+    if (running && !menu.active && !demo && cmdline.hidden) canvas.requestPointerLock?.()?.catch?.(() => {});
+    return true;
+  },
   setSetting: (k, v) => setSetting(k, v),   // (the cvars: name, hand, sensitivity, cl_run, m_pitch, crosshair, s_volume, cd_volume)
   download: (name, text) => downloadText(name, text),   // (writeconfig: config.cfg)
   clearLog: () => { notify.clear(); conlog.textContent = ''; conlog.hidden = true; },   // (clear: the scrollback and the notify lines emptied, Con_Clear_f)
   setLogfile: (on) => setLogfile(on),                     // (logfile: the scrollback to qconsole.log in the file store, downloaded with 0)
+  setLogStats: (on) => setLogStats(on),                   // (log_stats: a line a frame to stats.log in the file store, downloaded with 0)
+  isPaused: () => paused,                                 // (cl_paused: the pause's state)
   dumpLog: (name) => { const lines = notify.log(notify.keep); downloadText(`${name}.txt`, lines.join('\n') + '\n'); return lines.length; },   // (condump: the scrollback as <name>.txt, Con_Dump_f)
-  print: (text) => notify.add(text, gameClock(), { show: false }),   // (cmdlist: lines into the scrollback alone)
+  print: (text) => { if (rconOut) rconOut.push(text); notify.add(text, gameClock(), { show: false }); },   // (cmdlist: lines into the scrollback alone; an rcon line's for the guest too)
   // version: the page's version and build (scripts/build.mjs stamps them), the engine package's version, and the engine line (Firebird's version, threads or not)
   version: () => `Firebird Quake 2 ${typeof __VERSION__ === 'string' ? __VERSION__ : 'dev'} build ${typeof __BUILD__ === 'string' ? __BUILD__ : 'dev'}, firebird-wasm ${typeof __FBWASM__ === 'string' ? __FBWASM__ : 'dev'}, ${$('engine').textContent}`,   // eslint-disable-line no-undef
   togglePause: () => { if (netHost() || netGuest() || !running) return null; paused = !paused; return paused; },   // (pause: a single-player game running, as CL_Pause_f allowed)
@@ -471,6 +541,17 @@ const con = new Console({
   pakInfo: () => (pak ? { name: pickedPak ?? 'pak0.pak', files: pak.files.size, from: pickedPak ? 'picked, kept in the browser' : "the demo's, ./pak/pak0.pak" } : null),
   // modellist: the models loaded (the MD2s and sprites by name, the full game's monsters on a row without a mesh at size 0) with their size in the pak
   modelList: () => (res ? [...res.models.values()].map((m) => ({ name: m.name, size: pak?.files.get(m.name)?.size ?? 0 })) : []),
+  // z_stats: the surfaces the painter holds (each its pixels), the sounds decoded (their samples), the pak (one block), the page's heap where
+  // the browser tells it (Chromium's performance.memory); the engine's heap lives in its Worker, out of reach
+  memStats: () => {
+    const rows = [];
+    if (renderer) { let b = 0; for (const s of renderer.surfCache.values()) b += s.data?.length ?? 0; rows.push({ what: 'surfaces built (the painter\'s cache)', blocks: renderer.surfCache.size, bytes: b }); }
+    rows.push({ what: 'sounds decoded', blocks: audio.buffers.size, bytes: audio.decodedBytes ?? 0 });
+    if (pak) rows.push({ what: `the pak (${pak.files.size} files)`, blocks: 1, bytes: pak.bytes?.byteLength ?? pak.buffer?.byteLength ?? 0 });
+    const mem = typeof performance !== 'undefined' ? performance.memory : null;
+    if (mem?.usedJSHeapSize) rows.push({ what: 'the page\'s heap in use (the engine\'s is its Worker\'s)', blocks: 1, bytes: mem.usedJSHeapSize });
+    return rows;
+  },
   // imagelist: the pictures in use (P: the hud's, the menus' through its cache), the wall textures the painter has built (W) and the models' skins (M), with their sizes
   imageList: () => {
     const out = [];
@@ -485,6 +566,7 @@ const con = new Console({
   soundList: () => [...audio.buffers.keys()].map((name) => ({ name, size: pak?.files.get(`sound/${name}`)?.size ?? 0, loop: audio.loops.has(name) })),
   // a joined page's game commands (god, give, kill…) go to the host, which runs them for this page's client (Cmd_ForwardToServer)
   forward: (cmd, arg) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendConsole(cmd, arg); return true; },
+  rcon: (line) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendRcon(settings.rconPassword, line); return true; },   // (CL_Rcon_f: the line to the host with rcon_password)
   // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)
   setTimescale: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; timescale = n; lastTic = performance.now(); } return timescale; },
   // the fixedtime cvar: shown (null leaves it), set (a guest's clock is the host's); the ms owed start over with it
@@ -503,6 +585,10 @@ const con = new Console({
   listPlayers: () => listPlayers(),                      // (players: the game's clients and what drives each; 'guest' on a joined page, null without a game)
   connect: (text) => connectTo(text),                    // (connect <code or offer>: Join with it, as the box and Answer would)
   disconnect: () => disconnect(),                        // (disconnect: Leave; true when this page was in a shared game)
+  quit: () => { if (!res) return false; quitGame(); return true; },                 // (quit: Com_Quit's, the quit menu's yes: the game ends for the attract loop)
+  killServer: () => { if (!res) return false; disconnect(); quitGame(); return true; },   // (killserver: SV_KillServer_f: a hosted game's guests dropped, the game ended)
+  vidRestart: () => vidRestart(),                        // (vid_restart: the painter made anew from the settings)
+  sndRestart: () => audio.restart(),                     // (snd_restart: the mixer made anew, the sounds decoded again as they play)
   reconnect: () => (lastConnect ? connectTo(lastConnect) : false),   // (reconnect: Join again with what this page last joined with)
   lastConnect: () => lastConnect,
   // M_Init's menu_* commands: the menu opens over the view as the key or the menu's item would open it
@@ -523,7 +609,7 @@ const con = new Console({
     const c = session.clients.find((x) => x.CLIENT === n);
     if (!c) return 'inactive';
     const info = session.userinfo[n];
-    return info ? { name: info.name, hand: info.hand, gender: info.gender, msg: info.msg, fov: info.fov, spectator: info.spectator } : { name: c.NETNAME ?? '', hand: c.HAND ?? 0 };
+    return info ? { name: info.name, hand: info.hand, gender: info.gender, msg: info.msg, fov: info.fov, spectator: info.spectator, rate: info.rate, skin: info.skin } : { name: c.NETNAME ?? '', hand: c.HAND ?? 0 };
   },
 });
 /**
@@ -913,7 +999,10 @@ async function frame() {
       lastTic = now - fixedAcc / timescale;
     } else {
       owed = Math.floor((now - lastTic) * timescale / TIC_MS);
-      if (owed > 2) { owed = 2; lastTic = now - 2 * TIC_MS / timescale; }
+      if (owed > 2) {
+        if (settings.clShowclamp) notify.add(`high clamp ${Math.round((owed - 2) * TIC_MS / timescale)}`, gameClock(), { show: false });   // (cl_showclamp: the wall ahead of the game, the tics past two dropped, as CL_ParseFrame said of its clock)
+        owed = 2; lastTic = now - 2 * TIC_MS / timescale;
+      }
     }
 
     if (netGuest()) { guestFrame(now); nextFrame(); return; }
@@ -1059,7 +1148,9 @@ function guestFrame(now) {
     if (settings.netgraph) {
       const tics = Math.round(guestDt / 0.05) || 1;
       const dropped = guestLastTic != null && Number.isFinite(last.TIC) ? Math.max(0, last.TIC - guestLastTic - tics) : 0;
-      netgraph.frame({ dropped, late: guestGotAt > 0 && now - guestGotAt > 2 * guestDt * 1000 + 50, ping: ownPing() ?? 0 });
+      const late = guestGotAt > 0 && now - guestGotAt > 2 * guestDt * 1000 + 50;
+      if (late && settings.clShowclamp) notify.add(`low clamp ${Math.round(now - guestGotAt - guestDt * 1000)}`, gameClock(), { show: false });   // (cl_showclamp: a host frame past its time, the guest's clock held back)
+      netgraph.frame({ dropped, late, ping: ownPing() ?? 0 });
     }
     guestLastTic = Number.isFinite(last.TIC) ? last.TIC : null;
     guestGotAt = now; guestDt = got.dt || 0.05;
@@ -1148,7 +1239,7 @@ async function startRecording(name) {
   const brushNames = guest ? new Map() : new Map((await db.query("SELECT e.id, m.name FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B' AND m.name STARTING WITH '*'", [], { rowMode: 'array' })).rows);
   const setup = guest ? net.guest.map : mapSetup ?? {};
   const rec = new DemoRecorder({ map: map.name, res, bsp: map.bsp, mapBytes: pak.get(`maps/${map.name}.bsp`), setup, playerEnt, brushNames,
-    levelname: guest ? setup.levelname ?? '' : await session.levelName(), fov: viewFov(), netname: settings.name || 'player' });
+    levelname: guest ? setup.levelname ?? '' : await session.levelName(), fov: viewFov(), netname: settings.name || 'player', skin: settings.skin });
   recorder = { name, rec };
   setStatus(`Recording to ${name}.dm2`);
   setTimeout(() => { if (statusEl.textContent.startsWith('Recording to')) setStatus(''); }, 2500);
@@ -1362,20 +1453,30 @@ function demoRow(st) {
 
 // ── leaving a level: what the server did with the map string (SV_Map; src/levels.js) ─────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function changeLevel(target) {
-  // the unit's levels and its cross-level flags (session.leave); then a picture, the next map, or the end
-  const c = await session.leave(target);
+let nextServer = '';   // the nextserver cvar: what follows the picture or the cinematic playing (a map string's "+" part), read and set at the console
+/**
+ * SV_Map's work with a map string (src/levels.js): a picture or a cinematic, then what follows it (the nextserver cvar
+ * holds it meanwhile, as SV_Map set it), the next map, or the end. `keep` is SV_GameMap_f's way (an exit's, the gamemap
+ * word's): the level running kept aside with the unit's flags (session.leave, the players carried); without it (the map
+ * word's, SV_Map_f) the string starts a new game, the unit's levels forgotten.
+ */
+async function changeLevel(target, keep = true) {
+  const kept = keep && running && map;
+  const c = kept ? await session.leave(target) : parseChangeMap(target);
+  const after = () => { const next = nextServer || c.then; nextServer = ''; return next ? changeLevel(next, keep) : endGame(); };
   if (c.kind === 'pic' && pak.has(`pics/${c.map}`)) {
     if (netHost()) for (const g of net.guests) g.host.sendPic(`pics/${c.map}`);
+    nextServer = c.then ?? '';
     await showPicture(`pics/${c.map}`);
-    return c.then ? changeLevel(c.then) : endGame();
+    return after();
   }
   if (c.kind === 'cinematic' && pak.has(`video/${c.map}`)) {
     if (netHost()) for (const g of net.guests) g.host.sendCin(`video/${c.map}`);
+    nextServer = c.then ?? '';
     await playCinematic(`video/${c.map}`);
-    return c.then ? changeLevel(c.then) : endGame();
+    return after();
   }
-  if (c.kind !== 'map') return c.then ? changeLevel(c.then) : endGame();   // a cinematic the pak lacks, a demo: not played
+  if (c.kind !== 'map') return after();   // a cinematic the pak lacks, a demo: not played
   if (!pak.has(`maps/${c.map}.bsp`)) {
     setStatus(`${c.map} is not in this pak`);
     await sleep(2500);
@@ -1383,8 +1484,8 @@ async function changeLevel(target) {
   }
   // SCR_DrawLoading: the plaque over the last frame while the next level loads
   const plaque = hud.pic('loading');
-  if (plaque) { renderer.drawPic(plaque, (renderer.w - plaque.w) >> 1, (renderer.h - plaque.h) >> 1); renderer.present(); }
-  await startMap(c.map, false, c.spawn);
+  if (plaque && renderer) { renderer.drawPic(plaque, (renderer.w - plaque.w) >> 1, (renderer.h - plaque.h) >> 1); renderer.present(); }
+  await startMap(c.map, !kept, c.spawn);
 }
 
 /** A full-screen picture with its own palette (the ss_pic server state), until a key after a second. */
@@ -1490,6 +1591,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION && settings.swWaterwarp !== false;   // (sw_waterwarp 0: the view under water drawn as above it)
   if (underwater) r.beginUnderwater();
   r.beginFrame(view);
+  const tWorld = performance.now();
   if (faces && (settings.rDrawworld || drawEnts)) {
     const frames = new Map();
     for (const [id, [f, eff]] of brushFrames) frames.set(id, entityFrame(f, eff, time));
@@ -1499,6 +1601,8 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
     if (settings.renderer === 'sql') r.drawFaces(rows, styles, time, frames);
     else r.drawFaceList(rows, styles, time, frames, brushAngles);
   }
+  perf.world = performance.now() - tWorld;   // (r_dspeeds: the world's faces)
+  const tEnts = performance.now();
   const bsp = map.bsp;
   perf.ents = ents.length;
   for (const e of drawEnts ? ents : []) {   // (r_drawentities 0: R_DrawEntitiesOnList skipped; cl_add_entities 0: none to list)
@@ -1521,9 +1625,12 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   }
   // the temporary entities: beams, the parasite's tongue, the explosions (src/effects.js); the particles were
   // run once for the frame
+  perf.epoly = performance.now() - tEnts;   // (r_dspeeds: the models and the sprites)
+  const tFx = performance.now();
   tempEnts.draw(r, bsp, time);
   const particles = settings.clAddParticles === false ? [] : settings.clTestparticles ? r.particles.concat(testParticles(view, axes)) : r.particles;   // (cl_add_particles 0: none; cl_testparticles: the ring too)
   if (particles !== r.particles) { const own = r.particles; r.particles = particles; r.drawParticles(); r.particles = own; } else r.drawParticles();
+  perf.fx = performance.now() - tFx;   // (r_dspeeds: the temporary entities and the particles)
   // the weapon in hand (depth hack: drawn over everything near); none at the intermission
   // (a demo's row names the gun model, its frame and its angles as the server sent them: ps.gunindex, gunframe, gunangles)
   // (the hand: a left-hander's gun is drawn mirrored, a centre-hander's not at all, as ref_soft and ref_gl had hand 1 and 2)
@@ -1610,6 +1717,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   if (settings.clTestblend) tint = [255, 128, 64, 0.5];   // (V_TestBlend: 1, 0.5, 0.25 at half)
   if (settings.clAddBlend === false) tint = null;          // (cl_add_blend 0: no blend)
   if (which === 0) frameInfo = { ents: drawEnts ? ents.length : 0, dlights: r.dlights.length, particles: particles.length, tint };
+  if (which === 0 && settings.logStats) statsLog.add(`${frameInfo.ents},${frameInfo.dlights},${frameInfo.particles},${Math.round(perf.draw)}`);   // (log_stats: CL_Frame's line a frame, the painter's last time)
   // SCR_DrawNet's turtle at the view's corner once three frames in a row took a tenth of a second or more (scr_showturtle), the first view's
   if (which === 0) turtleDrawn = hud.drawTurtle(r, dt, !!settings.scrShowturtle, r.vr.x, r.vr.y);
   r.present(tint, null, which);
@@ -1623,7 +1731,7 @@ function updateStats() {
   if (now - fpsT > 500) { fps = (fpsN * 1000) / (now - fpsT); fpsT = now; fpsN = 0; }
   const sum = (k) => net.guests.reduce((n, g) => n + g.host[k], 0);
   const link = netGuest() ? ` · joined${net.guest.map?.hostname ? ` ${net.guest.map.hostname}` : ''}: ${net.guest.frames} frames from the host${ownPing() != null ? `, ping ${ownPing()} ms` : ''}`
-    : netHost() ? ` · hosting: ${sum('sentFrames')} frames sent${net.guests.length > 1 ? ` to ${net.guests.length} guests` : ''}${sum('droppedFrames') ? `, ${sum('droppedFrames')} dropped` : ''}`
+    : netHost() ? ` · hosting: ${sum('sentFrames')} frames sent${net.guests.length > 1 ? ` to ${net.guests.length} guests` : ''}${sum('droppedFrames') ? `, ${sum('droppedFrames')} dropped` : ''}${sum('heldFrames') ? `, ${sum('heldFrames')} held` : ''}`
     : demo ? ` · demo ${demo.name}: frame ${demo.player.played + 1} of ${demo.frames}` : '';
   const rec = recorder ? ` · recording ${recorder.name}: ${recorder.rec.frames} frames (${(recorder.rec.size / 1024).toFixed(0)} KB)` : '';
   statsEl.textContent = `${fps.toFixed(1)} fps · q2_tic ${perf.tic.toFixed(0)} ms · frame queries ${perf.faces.toFixed(0)} ms (${perf.rows} rows) · raster ${perf.draw.toFixed(0)} ms · ${renderer.particles.length} particles${link}${rec}`;
@@ -1631,6 +1739,23 @@ function updateStats() {
   if (settings.rSpeeds && performance.now() - rSpeedsAt > 1000) {
     rSpeedsAt = performance.now();
     notify.add(`${(perf.faces + perf.draw).toFixed(0)} ms, ${perf.rows} wpoly ${perf.ents ?? 0} epoly (q2_tic ${perf.tic.toFixed(0)} ms)`, gameClock());
+  }
+  // r_dspeeds: the painter's times in detail (once a second here), as R_RenderFrame printed its "ms"s under it: the world's faces, the
+  // models and the sprites, the temporary entities and the particles, the rest (the view weapon, the status bar, the present)
+  if (settings.rDspeeds && performance.now() - rDspeedsAt > 1000) {
+    rDspeedsAt = performance.now();
+    const w = perf.world ?? 0, e = perf.epoly ?? 0, f = perf.fx ?? 0;
+    notify.add(`${w.toFixed(1)} ms world, ${e.toFixed(1)} ms ents, ${f.toFixed(1)} ms fx, ${Math.max(0, perf.draw - w - e - f).toFixed(1)} ms rest`, gameClock());
+  }
+  // sw_aliasstats (R_PrintAliasStats, once a second here): the polygon models drawn, and their triangles; sw_reportsurfout ("Short %d surfaces"):
+  // the surfaces built after the painter's cache overflowed in the frame, when any did
+  if (settings.swAliasstats && performance.now() - aliasStatsAt > 1000) {
+    aliasStatsAt = performance.now();
+    notify.add(`${String(renderer.aliasDrawn).padStart(3)} polygon models drawn, ${renderer.aliasTris} triangles`, gameClock());
+  }
+  if (settings.swReportsurfout && renderer.surfShort > 0 && performance.now() - surfOutAt > 1000) {
+    surfOutAt = performance.now();
+    notify.add(`Short ${renderer.surfShort} surfaces`, gameClock());
   }
   // host_speeds: a frame's times as Qcommon_Frame printed "all, sv, gm, cl, rf" (once a second here): the whole, the server frame outside
   // the game (none: the SQL tic is the game), the game (the tic), the client outside the painter (the frame query), the painter
@@ -1739,6 +1864,22 @@ async function hostAccept(peer, text) {
   g.host.onSay = (text) => { if (net?.guests.includes(g) && map && !demo) session.say(g.client, text).catch((err) => console.warn('say:', err.message)); };
   // the guest's game commands run here for its client (the answer goes to its message line, as player_command prints it)
   g.host.onConsole = (cmd, arg) => { if (net?.guests.includes(g) && map && !demo && running) db.query('SELECT msg FROM player_command(?, ?, ?)', [cmd, arg, g.client]).catch((err) => console.warn('a guest\'s command:', err.message)); };
+  // SV_RemoteCommand_f: the guest's rcon line runs at this console when its password is rcon_password's (Rcon_Validate: none set, none
+  // taken), the prints and the line kept for it meanwhile (Com_BeginRedirect) and sent back; a bad one is told so, and this console says
+  // "Bad rcon from" as the server's did
+  g.host.onRcon = async (pw, line) => {
+    if (!net?.guests.includes(g)) return;
+    const ok = !!settings.rconPassword && pw === settings.rconPassword;
+    notify.add(`${ok ? 'Rcon' : 'Bad rcon'} from client ${g.client}: ${line}`, gameClock(), { show: false });
+    if (!ok) { if (g.host.open) g.host.sendPrint('Bad rcon_password.'); return; }
+    const out = []; rconOut = out;
+    try { await con.run(line); } catch (err) { out.push(`${line}: ${err.message}`); } finally { if (rconOut === out) rconOut = null; }
+    if (g.host.open) g.host.sendPrint(out.join('\n'));
+  };
+  // showpackets and showdrop at the host: each message to or from the guest ("send  1234 : f client 2", as Netchan_Transmit printed "send %4i : …"),
+  // and each frame dropped (the channel behind) or held (the guest's rate) with its tic, on the scrollback
+  g.host.onPacket = (dir, kind, size) => { if (settings.showpackets) notify.add(`${dir} ${String(size).padStart(5)} : ${kind} client ${g.client}`, gameClock(), { show: false }); };
+  g.host.onDrop = (what, tic) => { if (settings.showdrop) notify.add(`client ${g.client}: ${what === 'held' ? 'Held' : 'Dropped'} frame at ${tic}`, gameClock(), { show: false }); };
   netEl.panel.hidden = true;
   canvas.scrollIntoView?.({ block: 'start' });   // (the page scrolled to the texts; the game is up here)
   netState(`hosting: ${guestsState()}`);
@@ -1755,7 +1896,7 @@ const guestsState = () => `${net.guests.length} guest${net.guests.length === 1 ?
 const freeClient = () => { for (let c = 2; c <= MAX_PLAYERS; c++) if (!net.guests.some((g) => g.client === c)) return c; return null; };
 /**
  * SV_Status_f's list: the game's clients, each with its number, its name and what drives it (this page, a guest with the
- * frames sent and dropped and whether it watches, a pad, or nothing: standing); 'guest' on a joined page, null with no game.
+ * frames sent, dropped and held and whether it watches, a pad, or nothing: standing); 'guest' on a joined page, null with no game.
  */
 function listPlayers() {
   if (netGuest()) return 'guest';
@@ -1764,7 +1905,7 @@ function listPlayers() {
   return session.clients.map((c) => {
     const g = net?.guests?.find((x) => x.client === c.CLIENT);
     const kind = c.CLIENT === 1 ? 'page' : g ? 'guest' : c.CLIENT <= local ? 'pad' : 'standing';
-    return { num: c.CLIENT, name: c.NETNAME || `player ${c.CLIENT}`, kind, sent: g?.host.sentFrames ?? 0, dropped: g?.host.droppedFrames ?? 0, spectator: !!g?.host.info?.spectator, ping: g?.host.ping ?? null };
+    return { num: c.CLIENT, name: c.NETNAME || `player ${c.CLIENT}`, kind, sent: g?.host.sentFrames ?? 0, dropped: g?.host.droppedFrames ?? 0, held: g?.host.heldFrames ?? 0, spectator: !!g?.host.info?.spectator, ping: g?.host.ping ?? null };
   });
 }
 /**
@@ -1839,10 +1980,17 @@ async function netGo() {
       running = false;   // this page's own game stands; the host's frames are what is painted
       audio.stopLoops();
       net.guest = new GuestLink(link);
+      // cl_shownet (CL_ParseServerMessage's prints): 1 the message's size alone, 2 "size:kind", on the scrollback as each comes
+      net.guest.onNet = (kind, size) => { const n = Number(settings.clShownet) || 0; if (n) notify.add(n >= 2 ? `${String(size).padStart(5)}:${kind}` : String(size), gameClock(), { show: false }); };
       applyUserinfo();   // (the userinfo goes with the connect, as the client's did)
       net.guest.onMap = (m) => guestMap(m).catch((err) => { console.error(err); setStatus(err.message, true); });
       net.guest.onPic = (file) => { if (pak.has(file)) { running = false; const p = loadPcx(pak.get(file)); renderer.drawPicFull(p); renderer.present(null, p.palette); } };
       net.guest.onCin = (file) => { if (pak.has(file) && !cinematic) playCinematic(file).catch((err) => console.error(err)); };
+      // a print from the host's console (an rcon line's answer): its lines on the scrollback, the last on the line, as Com_Printf put them on the console
+      // showpackets and showdrop at a joined page: each message to or from the host, and the frames missed before one ("Dropped %i packets at %i")
+      net.guest.onPacket = (dir, kind, size) => { if (settings.showpackets) notify.add(`${dir} ${String(size).padStart(5)} : ${kind}`, gameClock(), { show: false }); };
+      net.guest.onDrop = (n, tic) => { if (settings.showdrop) notify.add(`Dropped ${n} frames at ${tic}`, gameClock(), { show: false }); };
+      net.guest.onPrint = (text) => { const lines = text.split('\n').filter((l) => l); for (const l of lines) notify.add(l, gameClock(), { show: false }); setStatus(lines.at(-1) ?? '', /^Bad rcon_password/.test(text)); };
       net.guest.onClose = () => {
         if (!netGuest()) return;
         const why = net.guest.kicked ? `${net.guest.kicked}.` : 'The host left.';   // (SV_Kick_f told this page before the channel closed)
@@ -1970,6 +2118,30 @@ async function openDatabase() {
   return instance;
 }
 
+/** The painter made from the pak and the settings (R_Init); vid_restart makes it again, the map's sky and the view's rectangle put back. */
+function makeRenderer() {
+  const cm = loadColormap(pak);
+  renderer = new Renderer(canvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
+  renderer.fullbright = !!settings.rFullbright;   // (r_fullbright as the settings have it)
+  renderer.drawflat = !!settings.swDrawflat; renderer.clearColor = Number(settings.swClearcolor) || 0;   // (sw_drawflat, sw_clearcolor)
+  renderer.mipcap = Number(settings.swMipcap) || 0; renderer.mipscale = Number(settings.swMipscale); renderer.stipplealpha = !!settings.swStipplealpha; renderer.maxSurfs = Number(settings.swMaxsurfs) || 0;   // (sw_mipcap, sw_mipscale, sw_stipplealpha)
+  renderer.setSize(viewWidth(), viewHeight());
+  renderer.lightScale = settings.brightness;
+}
+/** VID_Restart_f: the painter made anew from the settings, the sky, its spin, the backtile and the view's rectangle as they were. True once remade. */
+function vidRestart() {
+  if (!renderer || !pak) return false;
+  const old = renderer;
+  makeRenderer();
+  if (res) renderer.setResources(res);   // (the map's geometry, as mapLoaded gives it)
+  if (old.skyName) renderer.setSky(old.skyName);
+  renderer.skyRotate = old.skyRotate; renderer.skyAxis = old.skyAxis;
+  renderer.backtile = hud?.backtile ?? null;
+  renderer.setSize(old.screenW ?? viewWidth(), old.screenH ?? viewHeight(), old.views ?? 1);
+  renderer.setViewSize(settings.viewsize);
+  for (const L of lerps) { L.prev = null; L.cur = null; }   // (the frames held were the old painter's)
+  return true;
+}
 async function usePak(buffer, label) {
   running = false;
   pak = new Pak(buffer);
@@ -1978,13 +2150,7 @@ async function usePak(buffer, label) {
   setStatus(`Copying ${label} models into Firebird…`);
   res = await loadResources(db, pak, { width: viewWidth(), height: viewHeight(), fov: settings.fov });
   session.use(pak, res);
-  const cm = loadColormap(pak);
-  renderer = new Renderer(canvas, { palette: cm.palette, colormap: cm.colormap, alphamap: cm.alphamap, pak });
-  renderer.fullbright = !!settings.rFullbright;   // (r_fullbright as the settings have it)
-  renderer.drawflat = !!settings.swDrawflat; renderer.clearColor = Number(settings.swClearcolor) || 0;   // (sw_drawflat, sw_clearcolor)
-  renderer.mipcap = Number(settings.swMipcap) || 0; renderer.mipscale = Number(settings.swMipscale); renderer.stipplealpha = !!settings.swStipplealpha;   // (sw_mipcap, sw_mipscale, sw_stipplealpha)
-  renderer.setSize(viewWidth(), viewHeight());
-  renderer.lightScale = settings.brightness;
+  makeRenderer();
   hud = new Hud(pak);
   audio.setPak(pak);
   $('map').innerHTML = maps.map((m) => `<option>${m}</option>`).join('');
@@ -2016,8 +2182,8 @@ async function boot() {
     window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
-      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; },
-      get logfile() { return { on: !!settings.logfile, kept: logKept.length, pending: logNew.length }; },
+      get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
+      get logfile() { return { on: !!settings.logfile, kept: conLog.kept.length, pending: conLog.pending.length }; }, get logStats() { return { on: !!settings.logStats, kept: statsLog.kept.length, pending: statsLog.pending.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
       demoStore, fileStore, get pickedPak() { return pickedPak; }, get autoexec() { return autoexec ? { ...autoexec } : null; },

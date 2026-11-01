@@ -9,6 +9,7 @@ import { loadMap, ensureFaceVerts } from './loader.js';
 import { exportSave, importSave, exportLevel, importLevel, savedLevels, saveNote } from './savegame.js';
 import { packSave, unpackSave, saveHeader } from './savestore.js';
 import { parseChangeMap } from './levels.js';
+import { clampRate, skinOf } from './net.js';
 
 const ARR = { rowMode: 'array' };
 
@@ -131,14 +132,16 @@ export class Session {
    * ignore) and fov (the fov userinfo, 1..160, clamped as ClientUserinfoChanged clamped it: the client's own frustum, a
    * guest's frame at the fov it paints with; null leaves the view's) and gender (the gender userinfo, a word: one starting with f
    * is female, with m male, any other neutral, as IsFemale and IsNeutral read it; the obituaries' pronouns and the sexed sounds) and
-   * msg (the message level, 0 to 3: a print below it is dropped, as SV_ClientPrintf did; 1 as Quake's cvar, so PRINT_LOW's stay off). Kept, and written to the client's row after every
+   * msg (the message level, 0 to 3: a print below it is dropped, as SV_ClientPrintf did; 1 as Quake's cvar, so PRINT_LOW's stay off), rate (the bytes a second the
+   * host's frames to the client keep under, 1000..1000000 as SV_UserinfoChanged clamped Quake's 100..25000; the link holds to it, no row) and skin
+   * (model/skin, male/grunt by default; kept with the info and in a recording's CS_PLAYERSKINS, the model waiting on a pak that has it). Kept, and written to the client's row after every
    * map load and loaded game, as the userinfo came with the client and not with the level; written at once to a game running.
    */
-  async setUserinfo(client, { name = '', hand = 0, spectator = 0, fov = null, gender = 'male', msg = 1, password = '' } = {}) {
+  async setUserinfo(client, { name = '', hand = 0, spectator = 0, fov = null, gender = 'male', msg = 1, rate = 500000, skin = 'male/grunt', password = '' } = {}) {
     const f = Number(fov);
     const info = { name: String(name ?? '').replace(/[^\x20-\x7e]/g, '').slice(0, 15), hand: [0, 1, 2].includes(hand) ? hand : 0, spectator: spectator ? 1 : 0,
       fov: fov == null || !Number.isFinite(f) ? null : Math.max(1, Math.min(160, Math.round(f))), gender: String(gender ?? 'male').replace(/[^\x20-\x7e]/g, '').slice(0, 15) || 'male',
-      msg: [0, 1, 2, 3].includes(Number(msg)) ? Number(msg) : 1, password: String(password ?? '').slice(0, 32) };   // (the password: kept with the info, on no row)
+      msg: [0, 1, 2, 3].includes(Number(msg)) ? Number(msg) : 1, rate: clampRate(rate), skin: skinOf(skin), password: String(password ?? '').slice(0, 32) };   // (the password: kept with the info, on no row)
     this.userinfo[client] = info;
     if (this.map) await this.writeUserinfo(client, info);
     return info;
@@ -167,7 +170,7 @@ export class Session {
     if (!this.map || !this.twoPlayers || client < 2 || client > 4) return false;
     this.players = Math.max(this.players, client);
     if ((await this.db.query('SELECT 1 FROM player WHERE id = ?', [client])).rows.length) return false;
-    await this.db.query('INSERT INTO player (id) VALUES (?)', [client]);
+    await this.db.query('INSERT INTO player (id, enter_time) VALUES (?, (SELECT g.time_ FROM game g WHERE g.id = 1))', [client]);   // (InitClientResp's enterframe: it enters now)
     await this.db.query('EXECUTE PROCEDURE init_client_persistant(?)', [client]);
     const sp = (await this.db.query('SELECT spawnpoint FROM game')).rows[0]?.SPAWNPOINT ?? null;
     await this.db.query('EXECUTE PROCEDURE client_begin(?, ?)', [client, sp]);

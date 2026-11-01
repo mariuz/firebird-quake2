@@ -9,12 +9,13 @@ export const KEY = 'firebird-quake2:settings';
 
 export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, music: 50, musicMode: 'tracks', cdLoopcount: 4, cdLooptrack: 11, cdNocd: false, skill: 1, fov: 90,
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false,
-  crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rSpeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, developer: false, logfile: false, svNoreload: false, sShow: false,
-  mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '',
+  crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rLockpvs: false, rSpeeds: false, rDspeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, swAliasstats: false, swReportsurfout: false, swMaxsurfs: 0, developer: false, logfile: false, logStats: false, svNoreload: false, sShow: false, inJoystick: true, inMouse: true, sKhz: 44, sMixahead: 0.05, sTestsound: false, clShownet: 0, clShowclamp: false, showpackets: false, showdrop: false,
+  joyForwardthreshold: 0.15, joySidethreshold: 0.15, joyPitchthreshold: 0.15, joyYawthreshold: 0.15, joyForwardsensitivity: -1, joySidesensitivity: -1, joyPitchsensitivity: 1, joyYawsensitivity: -1,
+  mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '', rconPassword: '',
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
   coop: false, deathmatch: false,
-  dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, gender: 'male', msg: 1, rtcIce: '', rtcSignal: '', addressBook: Object.freeze([]), netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0 });
+  dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, gender: 'male', msg: 1, rate: 500000, skin: 'male/grunt', rtcIce: '', rtcSignal: '', addressBook: Object.freeze([]), netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0 });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, crosshair: 1 });
@@ -55,9 +56,19 @@ const CHECK = {
   hostSpeeds: bool,      // host_speeds: a frame's times printed once a second (Qcommon_Frame's all, sv, gm, cl, rf)
   // ref_soft's sw_ switches: every face flat in a colour of its own, the underwater warp, the palette index the view is cleared to
   swDrawflat: bool, swWaterwarp: bool, swClearcolor: int(0, 255), swMipcap: int(0, 3), swMipscale: num(0, 10), swStipplealpha: bool,   // (the mip cap and scale, the stipple)
+  swAliasstats: bool, swReportsurfout: bool, swMaxsurfs: int(0, 100000),   // the painter's reports (the models drawn, the surfaces short) and the surface cache's size (0 the painter's own)
   developer: bool, logfile: bool,   // the page's warnings on the console (developer), the scrollback kept as qconsole.log (logfile)
   svNoreload: bool,   // sv_noreload: a level of the unit come back to spawns fresh, what was left in it unread
   sShow: bool,        // s_show: each sound started printed on the scrollback
+  logStats: bool, inJoystick: bool,   // log_stats: a line a frame kept as stats.log; in_joystick: the pads read (1 here, where Quake's was 0)
+  inMouse: bool,   // in_mouse: the mouse read (IN_StartupMouse's)
+  sKhz: oneOf(11, 22, 44), clShownet: int(0, 2), clShowclamp: bool,
+  sMixahead: num(0, 1), sTestsound: bool,   // s_mixahead: the raw stream's lead in seconds (0.05); s_testsound: the sine in place of the mix
+  showpackets: bool, showdrop: bool,   // Netchan_Transmit's and Netchan_Process's prints: each message's direction, size and kind; the frames dropped, held or missed
+  // IN_JoyMove's cvars: the thresholds the sticks' dead zones (of the throw, 0.15), the sensitivities their speeds with Quake's signs (-1 forward, side and yaw, 1 pitch)
+  joyForwardthreshold: num(0, 0.9), joySidethreshold: num(0, 0.9), joyPitchthreshold: num(0, 0.9), joyYawthreshold: num(0, 0.9),
+  joyForwardsensitivity: num(-10, 10), joySidesensitivity: num(-10, 10), joyPitchsensitivity: num(-10, 10), joyYawsensitivity: num(-10, 10),
+  rLockpvs: bool, rDspeeds: bool,   // r_lockpvs: the view's cluster held where it was locked; r_dspeeds: the painter's times in detail   // s_khz: the mixer's rate; cl_shownet: a joined page's messages printed; cl_showclamp: the clock's clamps printed
   // m_yaw (the turn a mouse count, 0.022), cl_gun (the view weapon drawn), con_notifytime (the notify lines' seconds, 3)
   mYaw: num(-10, 10), clGun: bool, conNotifytime: num(0, 60),
   // the keys' speeds (CL_AdjustAngles, CL_BaseMove): cl_yawspeed and cl_pitchspeed in degrees a second (140, 150), cl_anglespeedkey
@@ -76,6 +87,8 @@ const CHECK = {
   // password (the network game's: a guest's userinfo, the host's requirement) and spectator_password (a watcher's): at most 32 characters, no spaces
   password: (v) => (typeof v === 'string' && /^[\x21-\x7e]{0,32}$/.test(v) ? v : undefined),
   spectatorPassword: (v) => (typeof v === 'string' && /^[\x21-\x7e]{0,32}$/.test(v) ? v : undefined),
+  // rcon_password (CL_Rcon_f's and Rcon_Validate's in one: what a joined page sends with rcon, what the host asks for): at most 32 characters, no spaces
+  rconPassword: (v) => (typeof v === 'string' && /^[\x21-\x7e]{0,32}$/.test(v) ? v : undefined),
   coop: bool,            // a new game with two players: the view split, the gamepad the second's
   deathmatch: bool,      // ... against each other (deathmatch wins over coop)
   dmflags: int(0, 65535), fraglimit: int(0, 999), timelimit: int(0, 999),   // the deathmatch cvars
@@ -90,6 +103,11 @@ const CHECK = {
   // the gender userinfo (a word of at most 15 printable characters, male by default: f… is female, m… male, else neutral)
   gender: (v) => (typeof v === 'string' && /^[\x21-\x7e]{1,15}$/.test(v) ? v : undefined),
   msg: int(0, 3),        // the msg userinfo: the message level a print must reach (0 low, 1 medium, 2 high, 3 chat), 1 as Quake's cvar
+  // the rate userinfo: the bytes a second this client asks the host's frames to keep under (SV_RateDrop holds a frame past it); Quake
+  // clamped it to 100..25000 for frames of a few hundred bytes, here a frame is the face list, kilobytes, twenty a second: 1000 to 1000000, 500000
+  rate: int(1000, 1000000),
+  // the skin userinfo: model/skin (male/grunt by default); the model and skin wait on a pak that has them
+  skin: (v) => (typeof v === 'string' && /^[\w-]{1,15}\/[\w-]{1,15}$/.test(v) ? v : undefined),
   // the ICE server the network game adds to the STUN (rtc_ice at the console): a url, or a url, a user and a password
   rtcIce: (v) => (typeof v === 'string' && v.length <= 300 && (v === '' || /^(stuns?|turns?):[^\s@]+( \S+ \S+)?$/i.test(v)) ? v : undefined),
   // the signalling relay (scripts/signal.mjs) the network game's texts go through under a room code (rtc_signal): its http(s) url

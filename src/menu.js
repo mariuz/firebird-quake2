@@ -24,6 +24,10 @@ const field = (name, y, length, visible, get, set, extra = {}) => ({ type: 'fiel
 const separator = () => ({ type: 'separator', x: 0, y: 0 });
 /** The handedness spin's choices (M_Menu_PlayerConfig_f's handedness_box), in the hand cvar's order. */
 export const HANDS = ['right', 'left', 'center'];
+// the player setup's connection speeds (PlayerConfig_MenuInit's rate_names and rate_tbl, the figures twenty times Quake's 2500 … 25000)
+export const RATE_NAMES = ['28.8 Modem', '33.6 Modem', 'Single ISDN', 'Dual ISDN/Cable', 'T1/LAN', 'User defined'];
+export const RATE_TBL = [50000, 64000, 100000, 200000, 500000];
+const skinOf = (skin) => (/^[\w-]{1,15}\/[\w-]{1,15}$/.test(String(skin ?? '')) ? String(skin) : 'male/grunt');
 /** The start server menu's rules (StartServer_MenuInit's dm_coop_names, with the page's single player first). */
 export const RULES = ['single player', 'cooperative', 'deathmatch'];
 /** The address book's entries (NUM_ADDRESSBOOK_ENTRIES). */
@@ -505,17 +509,20 @@ export class Menu {
   /**
    * M_Menu_PlayerConfig_f: the name (the netname cvar: the obituaries and the score board; at most 15 characters)
    * and the handedness (the hand cvar: right, left, center: where the shots come from and how the gun is drawn).
-   * The model and skin boxes wait on a pak with the player model (the demo's has none), the rate on a network
-   * with a rate; the player's preview went with the model.
+   * The model and skin boxes show the skin userinfo (model/skin) and wait on a pak with the player model (the demo's
+   * has none); the connection speed spin is the rate userinfo (rate_tbl's figures twenty times Quake's, a frame here
+   * being the face list: 28.8 Modem 50000 … T1/LAN 500000, "User defined" for any other); the player's preview went
+   * with the model.
    */
   playerConfig() {
     const h = this.host;
     const m = this.framework({
       id: 'player', banner: 'm_banner_multiplayer', items: [
         field('name', 0, 15, 15, () => h.get('name') ?? '', (v) => h.set('name', v)),
-        action('model: male', 20, null, { grayed: true, statusbar: 'the player model and its skins wait on a pak that has them' }),
-        action('skin: grunt', 30, null, { grayed: true, statusbar: 'the player model and its skins wait on a pak that has them' }),
+        action(() => `model: ${skinOf(h.get('skin')).split('/')[0]}`, 20, null, { grayed: true, statusbar: 'the player model and its skins wait on a pak that has them (the skin cvar sets them)' }),
+        action(() => `skin: ${skinOf(h.get('skin')).split('/')[1]}`, 30, null, { grayed: true, statusbar: 'the player model and its skins wait on a pak that has them (the skin cvar sets them)' }),
         spin('handedness', 50, HANDS, () => HANDS[h.get('hand')] ? h.get('hand') : 0, (v) => h.set('hand', v)),
+        spin('connection speed', 70, RATE_NAMES, () => { const i = RATE_TBL.indexOf(Number(h.get('rate'))); return i < 0 ? RATE_TBL.length : i; }, (v) => { if (v < RATE_TBL.length) h.set('rate', RATE_TBL[v]); }),
       ],
     });
     m.layout = (r) => { m.x = (r.w >> 1) - 40; m.y = (r.h >> 1) - 70; };

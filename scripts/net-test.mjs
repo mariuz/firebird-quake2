@@ -1,7 +1,7 @@
 // net-test.mjs – a game shared over a link, headless (src/net.js): the host's Session runs the game with the
 // guest's commands merged into the second client's usercmd, the guest gets the map and its frames and paints
 // from the map's geometry alone (loadMapModels, no database), the texts of the signalling round trip, the
-// chunking of a big message, a slow link's dropped frames, a level change, the ends closing. The two ends
+// chunking of a big message, a slow link's dropped frames, the frames held to the guest's rate, a level change, the ends closing. The two ends
 // are a Loopback in one process: Node has no WebRTC, and HostLink and GuestLink do not know it either.
 //   node scripts/net-test.mjs
 import fs from 'node:fs';
@@ -32,6 +32,8 @@ const host = new HostLink(new Link(a));
 const guest = new GuestLink(new Link(b));
 let maps = 0, pics = [];
 guest.onMap = () => { maps++; };
+const seen = [];   // cl_shownet: each message's kind and size as it comes
+guest.onNet = (kind, size) => seen.push([kind, size]);
 guest.onPic = (file) => pics.push(file);
 
 // the host's game, as the page starts one for a guest: a new coop game, the map sent from its setup
@@ -71,6 +73,7 @@ let said = null;
 host.onSay = (t) => { said = t; };
 guest.sendSay(' hello\nhost ');
 check(said === 'hello host', 'a guest\'s say reaches the host, its line break a space, trimmed');
+check(seen.length > 0 && seen[0][0] === 'map' && seen[0][1] > 20, `the guest is told each message's kind and size as it comes (${seen.slice(0, 2).map(([k, n]) => `${n}:${k}`).join(' ')}), cl_shownet's print`);
 guest.sendSay('x'.repeat(200));
 check(said?.length === 150, 'and is cut at 150 characters, as Quake cut a say');
 said = null; guest.sendSay('   ');
@@ -89,6 +92,19 @@ check(forwarded[1][0].length === 32 && forwarded[1][1].length === 64, 'a command
 guest.sendConsole('god', '');
 await new Promise((r) => setTimeout(r, 50));
 check(((await q('SELECT e.flags FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0].FLAGS & 16) === 0, 'and god again puts it off');
+// rcon (CL_Rcon_f): the password and the line reach the host cut to their sizes, for its SV_RemoteCommand_f; its answer comes back as a print
+{
+  const rcons = [], prints = [];
+  host.onRcon = (pw, line) => rcons.push([pw, line]);
+  guest.onPrint = (t) => prints.push(t);
+  guest.sendRcon('secret', ' status ');
+  guest.sendRcon('x'.repeat(40), 'y'.repeat(300));
+  guest.sendRcon('secret', '   ');
+  host.sendPrint('map: demo1\n1 client');
+  check(rcons.length === 2 && rcons[0][0] === 'secret' && rcons[0][1] === 'status' && rcons[1][0].length === 32 && rcons[1][1].length === 256 && prints.length === 1 && prints[0] === 'map: demo1\n1 client',
+    'a guest\'s rcon reaches the host with its password and line (trimmed, cut to 32 and 256), an empty line not at all, and the host\'s print reaches the guest');
+  host.onRcon = null; guest.onPrint = null;
+}
 // the ping: the host's clock goes to the guest and comes back at once, the round trip read against the host's clock
 {
   let clock = 1000;
@@ -360,6 +376,53 @@ r = await hostTic();
 check(!r.sent && host.droppedFrames === 1 && host.sentFrames > 0, 'a frame is dropped when the channel is behind, not queued');
 a.bufferedAmount = 0;
 
+// the rate userinfo: the frames of the last second kept under the guest's bytes a second (SV_RateDrop: a frame past their sum is held,
+// counted as surpressCount counted it, not dropped), clamped as SV_UserinfoChanged clamped it; the skin kept with the info
+guest.sendInfo({ name: 'x', hand: 0, rate: 25000, skin: 'female/athena' });
+check(host.info.rate === 25000 && host.info.skin === 'female/athena', 'the rate and the skin reach the host with the info');
+await session.setUserinfo(2, host.info);
+check(session.userinfo[2].rate === 25000 && session.userinfo[2].skin === 'female/athena', 'and the session keeps them with the client\'s userinfo');
+{
+  await new Promise((r) => setTimeout(r, 1050));   // (the frames sent so far, at 500000, out of the last second's window)
+  const was = { sent: host.sentFrames, held: host.heldFrames, dropped: host.droppedFrames };
+  let sentN = 0;
+  for (let i = 0; i < 8; i++) { if ((await hostTic()).sent) sentN++; }
+  const held = host.heldFrames - was.held, size = host.sizes.at(-1)?.[1] ?? 0;
+  check(sentN >= 1 && held >= 1 && sentN + held === 8 && host.sentFrames - was.sent === sentN && host.droppedFrames === was.dropped && size > 1000,
+    `at a rate of 25000 bytes a second, frames of ${size} characters: ${sentN} of 8 in a row sent, ${held} held, none dropped`);
+}
+guest.sendInfo({ name: 'x', hand: 0, rate: 10, skin: 'grunt' });
+check(host.info.rate === 1000 && host.info.skin === 'male/grunt', 'a rate under 1000 is clamped up to it, a skin without its model is male/grunt');
+guest.sendInfo({ name: 'x', hand: 0, rate: 'x' });
+check(host.info.rate === 500000 && host.info.skin === 'male/grunt', 'none given is 500000 and male/grunt');
+{
+  const was = host.heldFrames;
+  let sentN = 0;
+  for (let i = 0; i < 4; i++) { if ((await hostTic()).sent) sentN++; }
+  check(sentN === 4 && host.heldFrames === was, 'at 500000 four frames in a row go, none held');
+}
+// showpackets and showdrop: either end is told each message sent and received with its kind and size (Netchan_Transmit's and
+// Netchan_Process's prints); the host is told a frame dropped (the channel behind) or held (the rate) with its tic, the guest the
+// frames it missed at the next one that comes, by the tics between ("Dropped %i packets at %i")
+{
+  const hp = [], gpk = [], hd = [], gd = [];
+  host.onPacket = (d, k, n) => hp.push([d, k, n]); guest.onPacket = (d, k, n) => gpk.push([d, k, n]);
+  host.onDrop = (what, tic) => hd.push([what, tic]); guest.onDrop = (n, tic) => gd.push([n, tic]);
+  guest.sendSay('hi'); host.sendPing();
+  check(gpk.some(([d, k, n]) => d === 'send' && k === 'say' && n > 10) && hp.some(([d, k, n]) => d === 'recv' && k === 'say' && n > 10) && hp.some(([d, k]) => d === 'send' && k === 'ping')
+    && gpk.some(([d, k]) => d === 'recv' && k === 'ping') && gpk.some(([d, k]) => d === 'send' && k === 'pong') && hp.some(([d, k]) => d === 'recv' && k === 'pong'),
+    'showpackets: either end is told each message sent and received, its kind and size');
+  a.bufferedAmount = BACKLOG + 1; const dr = await hostTic(); a.bufferedAmount = 0; const nx = await hostTic();
+  check(!dr.sent && nx.sent && hd.length === 1 && hd[0][0] === 'dropped' && hd[0][1] === dr.last.TIC && gd.length === 1 && gd[0][0] === 1 && gd[0][1] === nx.last.TIC,
+    `showdrop: the host is told the frame dropped at its tic (${hd[0]?.[1]}), the guest the one frame it missed at the next (${JSON.stringify(gd[0])})`);
+  guest.sendInfo({ name: 'x', hand: 0, rate: 1000 });
+  const hl = await hostTic();
+  check(!hl.sent && hd.length === 2 && hd[1][0] === 'held' && hd[1][1] === hl.last.TIC, `at a rate of 1000 the next frame is held, the host told so at its tic (${hd[1]?.[1]})`);
+  guest.sendInfo({ name: 'x', hand: 0 });
+  host.onPacket = null; guest.onPacket = null; host.onDrop = null; guest.onDrop = null;
+}
+await session.setUserinfo(2, { name: '', hand: 0 });
+
 // a level change: the next map's message, then frames from it
 await session.leave('demo2$base1');
 sendMap('demo2', await session.startMap('demo2', { spawnpoint: 'base1' }));
@@ -462,6 +525,14 @@ check(r3 && r3.HEALTH === 100 && r3.WEAPONS === 1 && r3.WEAPON === 1, `the new c
 const spot3 = await p3(), spot2 = await p2();
 check(Math.hypot(spot3.X - spot2.X, spot3.Y - spot2.Y) > 1, `at a spot of its own (${spot3.X.toFixed(0)},${spot3.Y.toFixed(0)}; the second client at ${spot2.X.toFixed(0)},${spot2.Y.toFixed(0)})`);
 check(await session.addClient(3) === false && await pents() === 3, 'adding a client the game has changes nothing (no second entity)');
+{
+  // InitClientResp's enterframe: the new client came in at the level time, the first two at the level's start; the tic row carries it
+  const et = await q('SELECT p.id, p.enter_time FROM player p ORDER BY p.id');
+  const nowT = (await q('SELECT g.time_ FROM game g'))[0].TIME_;
+  await hostTic();
+  check(et.length === 3 && et[0].ENTER_TIME === 0 && et[1].ENTER_TIME === 0 && et[2].ENTER_TIME > 0 && Math.abs(et[2].ENTER_TIME - nowT) < 0.06 && session.clients[2].ENTER_TIME === et[2].ENTER_TIME,
+    `the third client entered at the level time (${et[2].ENTER_TIME.toFixed(2)} s, the level at ${nowT.toFixed(2)}), the first two at 0; the tic row carries it`);
+}
 check(await session.addClient(5) === false && await session.addClient(1) === false, 'a client past four, or the first, is refused');
 host3.sendMap({ name: session.map.name, view, nmodels: res.byName.size });
 check(maps3 === 1 && guest3.map?.name === 'demo2', 'the map as it is goes to the new guest');

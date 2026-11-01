@@ -24,6 +24,11 @@ export class Renderer {
     this.sinTable = new Float32Array(256);
     for (let i = 0; i < 256; i++) this.sinTable[i] = Math.sin((i / 256) * Math.PI * 2) * 8;
     this.surfCache = new Map();
+    this.maxSurfs = 0;           // sw_maxsurfs: the surface cache's size, 0 the painter's own (SURF_CACHE_MAX, as Quake's 0 was its 768)
+    this.aliasDrawn = 0;         // sw_aliasstats (R_PrintAliasStats's r_amodels_drawn): the polygon models drawn this frame, and their triangles
+    this.aliasTris = 0;
+    this.surfShort = 0;          // sw_reportsurfout (r_outofsurfaces): the surfaces built this frame after the cache overflowed and was cleared
+    this.surfOverflow = false;
     this.faceInfo = new Map();   // face id → { bsp, f, ti }
     this.textures = new Map();   // name → Wal | null
     this.models = null;
@@ -228,7 +233,8 @@ export class Renderer {
     const key = ((faceId * 4096 + tex.id) * 16384 + light) * 4 + mip;
     let s = this.surfCache.get(key);
     if (s !== undefined) return s;
-    if (this.surfCache.size > SURF_CACHE_MAX) this.surfCache.clear();
+    if (this.surfCache.size > (this.maxSurfs || SURF_CACHE_MAX)) { this.surfCache.clear(); this.surfOverflow = true; }   // (past sw_maxsurfs: the frame's surfaces from here are short, as r_outofsurfaces counted them)
+    if (this.surfOverflow) this.surfShort++;
     s = this.buildSurface(bsp, f, tex, styles, null, mip, faceId);
     this.surfCache.set(key, s);
     return s;
@@ -340,6 +346,7 @@ export class Renderer {
   // ── a frame ─────────────────────────────────────────────────────────────
   beginFrame(view) {
     this.view = view;
+    this.aliasDrawn = 0; this.aliasTris = 0; this.surfShort = 0; this.surfOverflow = false;   // (the frame's reports start over)
     const { w, h } = this.vr;   // (the 3D view's rectangle: the whole view at viewsize 100)
     this.stippleParity ^= 1;
     this.zb.fill(0);
@@ -666,6 +673,7 @@ export class Renderer {
     const R0 = -sr * sp * cy + cr * sy, R1 = -sr * sp * sy - cr * cy, R2 = -sr * cp;
     const U0 = cr * sp * cy + sr * sy, U1 = cr * sp * sy - sr * cy, U2 = cr * cp;
     const frame = mdl.frames[Math.min(Math.max(frameIndex | 0, 0), mdl.frames.length - 1)];
+    this.aliasDrawn++; this.aliasTris += mdl.numTris;   // (sw_aliasstats)
     const verts = frame.verts;
     const scx = frame.scale[0], scy = frame.scale[1], scz = frame.scale[2];
     const trx = frame.translate[0], try_ = frame.translate[1], trz = frame.translate[2];

@@ -542,7 +542,7 @@ guest's screen is up, and the score board's rows with each client's ping), dropp
 more than 256 KB queued; once a second a `ping` carrying the host's clock goes too, which the guest's link
 answers with a `pong` at once, the round trip read back against the clock (`HostLink.ping`: the score
 board's "Ping:", `players`' listing, the joined page's stats line). The guest's page
-(`GuestLink`) sends its userinfo (the player setup's name and hand, its gender and message level, whether it only watches, and its fov, an `info` message) at the connect, then
+(`GuestLink`) sends its userinfo (the player setup's name and hand, its gender and message level, whether it only watches, its fov, its rate and its skin, an `info` message) at the connect, then
 `Input.read`'s command each of its own tics, and paints the newest frame it holds
 exactly as the page paints its own (`drawFrame`), the sounds at its own ear, the effects and particles run
 there; it loads the pak as every page does and, at each map message (sent from `mapLoaded`: the name, the
@@ -690,7 +690,11 @@ loading plaque. `F1` toggles the help computer (`HelpComputer`): skill, level na
 The console: the backquote opens a command line over the view. A line's commands part at `;` outside
 quotes (`splitLine`, as `Cbuf_ExecuteText` parted them), `alias <name> <line>` names a line that runs by its
 name (`Cmd_Alias_f`, sixteen deep at most, the aliases lasting the session as Quake's did), and `wait` holds
-the rest of a line to the next frame (`Console.tick` from the page's frame). `map <name>`, `save`, `load`, `fov`,
+the rest of a line to the next frame (`Console.tick` from the page's frame). `map <string>` (`SV_Map_f`: a new game on the map, the
+unit's levels forgotten; the string as `target_changelevel` writes one, `src/levels.js`: a `$` spawn point, a `.pcx` picture or a
+`.cin` cinematic with `+` what follows, the page's `changeLevel` without the keep), `gamemap <string>` (`SV_GameMap_f`: the level
+running kept aside with the unit's flags as an exit keeps it, `*` wiping the unit, then the string's way), `nextserver` (what follows
+the picture or the cinematic playing, held as `SV_Map` set the cvar; shown and set at the console), `save`, `load`, `fov`,
 `seed` and `skill` are the page's (`skill 0`–`3`: the next map's skill, 3 the nightmare the menus stop short
 of, latched as the cvar was: "skill will be changed for next game."), as are the settings as cvars (`name`,
 `hand`, `sensitivity`, `cl_run`, `m_pitch`, `crosshair`, `s_volume`, `cd_volume`, the mouse look's `freelook`,
@@ -698,7 +702,14 @@ of, latched as the cvar was: "skill will be changed for next game."), as are the
 or a sidestep with `+strafe` held or lookstrafe on under `+mlook`, `m_side` in `cl_sidespeed`'s 200 a tic; its
 vertical a look with `+mlook` held or free look on, else a walk, `m_forward` in `cl_forwardspeed`'s 200; free look
 is on by default here, as the mouse always looked, off in Quake; the options menu has the three boxes; `m_forward`
-and `m_side` not archived, as Quake's were not), and `netgraph`, cl_scrn.c's
+and `m_side` not archived, as Quake's were not), `cl_shownet` (`CL_ParseServerMessage`'s prints on a joined page: 1 each message's size, 2 its size and kind, "f" the host's
+frames, on the scrollback as each comes, `GuestLink.onNet`), `showpackets` (`Netchan_Transmit`'s and `Netchan_Process`'s prints at either
+end of a shared game: each message sent or received with its size and kind, "send  1234 : f", `onPacket` on `HostLink` and `GuestLink`, the
+host's lines naming the client), `showdrop` (`Netchan_Process`'s "Dropped %i packets at %i": at the host each frame dropped, the channel
+behind, or held to the guest's rate, with its tic, `HostLink.onDrop`; at a joined page the frames missed before one, counted by the tics
+between its tic and the last's past the tics it ran, `GuestLink.onDrop`; neither archived), `cl_showclamp` (`CL_ParseFrame`'s "high clamp" and "low clamp": the
+wall ahead of the game past the two tics a frame runs, the rest dropped, and a host's frame past its time at a joined page; neither
+archived), and `netgraph`, cl_scrn.c's
 debug graph along the bottom of a joined page's view, a column a frame from the host, `src/netgraph.js`, not
 archived, with `timegraph` (a frame's time as a column each painted frame, `cls.frametime` × 300 in colour 0, as `SCR_DebugGraph`
 took it), `debuggraph` (the band drawn whatever it holds) and `graphheight`, `graphscale` and `graphshift` (the band's height, each
@@ -721,15 +732,21 @@ it, `dumpLog`; the name as typed with a path's characters and a `.txt` taken off
 page's warnings, `console.warn`'s, go to the console's lines and scrollback as well; not archived, as Quake's was not) and `logfile`
 (`Com_Printf`'s write to `qconsole.log`: with `logfile 1` the scrollback's lines go to the file as they come, `Notify.onAdd`, kept in the
 page's file store a second after a line and at the page's end, so a reload's run follows the last; `logfile 0` downloads the file and
-drops it, `setLogfile`; Quake left it in the game directory), `echo` (`Cmd_Echo_f`: its words
+drops it, `setLogfile`; Quake left it in the game directory), `log_stats` (`CL_Frame`'s: with `log_stats 1` a line a painted frame,
+"entities,dlights,parts,frame time" after that header, goes to `stats.log` the same way, `keptLog` serving both; `log_stats 0`
+downloads it), `echo` (`Cmd_Echo_f`: its words
 printed as typed), `cmdlist` (`Cmd_List_f`: every command on a line of the scrollback, the page's `print`, and how
 many), `version` (the page's version and build, which `scripts/build.mjs` stamps into the bundle, the engine
-package's version and the engine line: Firebird's version, threads or not), `path` (`FS_Path_f`: the pak in use, its files
+package's version and the engine line: Firebird's version, threads or not), `quit` (`Com_Quit`: the game ends for the attract loop,
+as the quit menu's yes does; the page stays), `killserver` (`SV_KillServer_f`: a hosted game's guests dropped, then the same,
+"Server was killed"), `vid_restart` (`VID_Restart_f`: the painter made anew from the settings, `makeRenderer`, the map's geometry given
+again, its sky, its spin, the backtile and the view's rectangle put back) and `snd_restart` (`CL_Snd_Restart_f`: the mixer's context closed and made
+anew, `Q2Audio.restart`, the decoded sounds forgotten and decoded again as they play, the music played again), `path` (`FS_Path_f`: the pak in use, its files
 counted and where it came from, `pakInfo`), `dir <wildcard>` (`FS_Dir_f`: the pak's files the wildcard names, `*.*` without one,
 `*` and `?` within a directory as the file system's glob had them, `dirList`; on the scrollback by their names under "Directory
 of"), `modellist`, `imagelist` and `soundlist` (`Mod_Modellist_f`, `R_ImageList_f`, `S_SoundList_f`: the models with their size in
 the pak, the pictures, wall textures and skins with their kind and size, the sounds decoded with L on the ones looping, a line
-each on the scrollback as those laid them out and the totals; the page's `modelList`, `imageList`, `soundList`), `pause` (`CL_Pause_f`: a single-player
+each on the scrollback as those laid them out and the totals; the page's `modelList`, `imageList`, `soundList`), `cl_paused` (the pause's state as `CL_Frame` set the cvar: shown, never set), `pause` (`CL_Pause_f`: a single-player
 game running pauses or goes on, `togglePause`; a shared game or none, "Pause command is only valid in single
 player"), `score` (`Cmd_Score_f`: the score board toggled in a game of more than one client, coop, deathmatch or
 shared, the inventory and the help put away; nothing in single player, `toggleScores`) and `putaway`
@@ -752,7 +769,11 @@ an 8 by 8 spread, and a blend of 1, 0.5, 0.25 at half, about the eye each frame;
 `testParticles`; none of the eight archived), `r_lerpmodels` (0: no pose blended, `backlerp` 0),
 `r_novis` (`viewcfg.novis`: `build_vis_set` marks every leaf, the PVS and the area portals ignored as `R_MarkLeaves` did
 with it, the kept sets dropped with the switch; a guest paints the host's frames as they are) and `r_speeds` (the
-frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame),
+frame's figures on the console's line once a second, "ms, wpoly, epoly" as `R_RenderFrame` printed them every frame), `r_lockpvs`
+(ref_soft's: `viewcfg.lockpvs`, `mark_faces` keeps the cluster marked wherever the eye has gone, so the leaves stay as they were
+locked while the view moves on; off, marked anew) and `r_dspeeds` (ref_soft's: the painter's times in detail on the line once a
+second, the world's faces, the models and the sprites, the temporary entities and the particles, and the rest, as `R_RenderFrame`
+printed its "ms"s under it),
 `sw_drawflat` (`D_DrawflatSurfaces`: every face built in a flat colour of its own, no texture and no light, `Renderer.drawflat`, the
 surface cache cleared with the switch), `sw_waterwarp` (0: the view under water drawn as above it, `D_WarpScreen` skipped) and
 `sw_clearcolor` (the palette index the view is cleared to before a frame, `Renderer.clearColor`: 0 here, where Quake's was 2; none of
@@ -760,14 +781,34 @@ the three archived), `sw_mipcap` and `sw_mipscale` (`D_MipLevelForScale`'s `d_mi
 and the thresholds 1, 0.4 and 0.2 scaled, `mipLevel(scale, mipscale, mipcap)`; neither archived) and `sw_stipplealpha` (translucent
 surfaces drawn stippled in place of the blend through the alpha map, `stippleKeep`: three pixels in four at 66% and one in four at
 33%, as `R_DrawSpanlet66Stipple` and `R_DrawSpanlet33Stipple` kept them, the parity turned each frame; the models' blend stays, as
-ref_soft's did; archived as Quake's was), `cd_loopcount`, `cd_looptrack` and `cd_nocd` (`CDAudio_Update`'s loop: a map's track plays over again at its end
+ref_soft's did; archived as Quake's was), `sw_aliasstats` (`R_PrintAliasStats`, once a second here: the polygon models drawn in the
+frame and their triangles, `Renderer.aliasDrawn` and `aliasTris`, counted from `beginFrame`), `sw_reportsurfout` ("Short %d surfaces": the
+surfaces built after the painter's cache overflowed and was cleared in the frame, `surfShort`, as `r_outofsurfaces` counted the ones past
+`r_surfaces`; printed once a second when any) and `sw_maxsurfs` (the surface cache's size, `Renderer.maxSurfs`, 0 the painter's own 2000 as
+Quake's 0 was its 768; none of the three archived; there is no edge table here, so `sw_reportedgeout` and `sw_maxedges` have no meaning),
+`z_stats` (`Z_Stats_f`'s "%i bytes in %i blocks": what the page holds, a line each in the scrollback and the sum on the line, `memStats`: the
+surfaces built with their pixels, the sounds decoded with their samples, the pak, and the page's heap in use where the browser tells it;
+the engine's heap lives in its Worker, out of the page's reach), `cd_loopcount`, `cd_looptrack` and `cd_nocd` (`CDAudio_Update`'s loop: a map's track plays over again at its end
 until it has played `cd_loopcount` times, 4, then `cd_looptrack`, 11, over and over, `Q2Audio.playMusic`'s `onended`; the drone stands
 in for a track with no file as one endless track; `cd_nocd 1` plays no music, archived as Quake's was), `cd` (`CD_f`'s words over the
 music: `cd play <n>` a track once and `cd loop <n>` over and over, whatever `cd_loopcount` says, `cd stop`, `cd pause` and `cd resume`
 from where it was, `Q2Audio.pauseMusic` and `resumeMusic`, `cd off` and `cd on`, `setEnabled`, and `cd info` printing the tracks, what
-plays or is paused and how, and the volume as it did, `musicInfo`), `s_show` (`S_Update`'s print of the channels playing, here a line a
+plays or is paused and how, and the volume as it did, `musicInfo`), `s_khz` (`S_Init`'s rate: 11 or 22 asks the next `snd_restart`'s context for 11025 or 22050, 44 leaves the browser's own, the default here; archived),
+`s_mixahead` (`S_Update`'s lead: how far past the clock the mixer painted, 0.2 for a DMA; here how far ahead of the clock the raw stream's samples,
+a cinematic's, are queued when they start or have fallen behind, `Q2Audio.mixahead`, 0.05: a frame's worth; archived as Quake's was), `s_testsound`
+(`S_TransferPaintBuffer`'s fixed sine in place of the mix: an oscillator at 0.1 radians a sample of the mixer's rate, 20000 of 32768, into the
+output with the sounds' gain muted while it plays and back at the volume after, `setTestsound`; not archived), `s_show` (`S_Update`'s print of the channels playing, here a line a
 sound started on the scrollback, "left right name" with the volumes 0 to 255, `Q2Audio.onStart`; not archived), `m_filter`
-(`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived) and `host_speeds` (a frame's
+(`CL_MouseMove`'s: each mouse sample averaged with the one before, `Input.mouse`, archived), `in_joystick` (`IN_Frame`'s: 0 leaves the pads unread, `Input.joystick`; archived as Quake's was, 1 here where Quake's was 0), `in_mouse` (`IN_StartupMouse`'s: 0 leaves the mouse unread, its samples dropped, `Input.mouseOn`; archived),
+`in_restart` (`IN_Restart_f`: the keys, the mouse's samples and the pads read anew, a press counting again, `Input.restart`; the mouse let
+go and taken again when a game is up, `inRestart`), `impulse` (`IN_Impulse`: the number is the next command's impulse, the weapons 1 to 11
+by number, the inventory's 12 to 15 and the items' 16 to 23 as the keys and the pad send them, `setImpulse`; a joined page's goes with its
+command), the `joy_*` cvars
+(`IN_JoyMove`'s: `joy_forwardthreshold`, `joy_sidethreshold`, `joy_pitchthreshold` and `joy_yawthreshold` each stick axis's dead zone, of its
+throw, 0.15; `joy_forwardsensitivity`, `joy_sidesensitivity`, `joy_pitchsensitivity` and `joy_yawsensitivity` each axis's speed, with Quake's
+signs, -1 forward, side and yaw and 1 pitch giving the move and the turn as the standard mapping points them, clamped to full throw;
+`gamepad.js`'s `JOY` and `readPad`'s third argument, `Input.joy` from the settings; none archived, as Quake's were not; no up axis, A and B
+being the jump and the crouch, so `joy_upthreshold` and `joy_upsensitivity` have no meaning here and are left out) and `host_speeds` (a frame's
 times on the console's line once a second as `Qcommon_Frame` printed "all, sv, gm, cl, rf": the whole, the server frame outside
 the game, none here where the SQL tic is the game, the game, the client outside the painter, the frame query, and the painter),
 `timeout` and `cl_timeout` (`SV_CheckTimeouts` and `CL_CheckTimeout`: each link notes when it last heard the other, `heardAt`,
@@ -796,7 +837,10 @@ have passed since the last painted, `paintDue`, 90 as Quake had it, 0 every anim
 them either way, and the SQL-projecting mode paints a tic's frame as it is); none archived, as Quake's were not,
 `vid_gamma` (the video menu's brightness as a cvar, the control's tenths from 1 to 1.8, a number between snapped and
 clamped to them, archived: the painter's light scale and the control follow through `setSetting`) and `vid_fullscreen` (the page's live fullscreen state shown, `isFullscreen`; 0 or 1 asks the page
-for it or leaves it, as the video menu's box does), `help` (`Cmd_Help_f`: the help computer, or the score board in deathmatch, as
+for it or leaves it, as the video menu's box does), `vid_mode` and `vid_ref` (`VID_MenuInit`'s cvars: the mode as the Detail select has
+it, 0 160×120, 1 320×240, 2 640×480, and the refresh as the renderer mode, `soft` the painter with SQL picking the faces and `sql` the
+projector; a change goes through the page's control and restarts the painter as `VID_CheckChanges` did; both archived, in config.cfg
+as Quake's were), `help` (`Cmd_Help_f`: the help computer, or the score board in deathmatch, as
 F1 brings it, `toggleHelp`), `sv_gravity` (the game row's gravity for the game running, `gravity` and `setGravity`; a new map
 takes its worldspawn's again, and a joined page runs no server), `bob_up`, `bob_pitch`, `bob_roll`, `run_pitch`, `run_roll`, `sv_rollangle` and
 `sv_rollspeed` (p_view.c's cvars on the game row the same way, `gameCvar` and `setGameCvar`, Quake's defaults: `player_think` bobs
@@ -824,15 +868,24 @@ page's alone; one the pak lacks is refused and the one up stays) and `hostname` 
 `password` and `spectator_password` (the network game's: a guest's info carries its `password`, and the host judges it as
 `SV_DirectConnect` and `ClientConnect` did, `connectRefusal` in `src/net.js`: a player's against the host's `password`, a
 watcher's against its `spectator_password`, empty or "none" asking nothing; a guest refused is kicked with the reason before it
-is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived),
+is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived), `rcon` and `rcon_password`
+(`CL_Rcon_f` and `SV_RemoteCommand_f`: a joined page's `rcon <line>` goes to the host with its `rcon_password`, `GuestLink.sendRcon`; the
+host's `Rcon_Validate` is its own `rcon_password`, none set taking none, and the line runs at its console with the prints and the status
+line kept meanwhile, `Com_BeginRedirect` as `rconOut`, and sent back as a `print` message onto the guest's scrollback and line; a wrong
+password answers "Bad rcon_password." and the host's scrollback says "Bad rcon from client N", a right one "Rcon from client N"; no
+password set, or no game joined (there is no `rcon_address`), the page says so; the cvar not archived, as neither of Quake's was),
 `deathmatch`, `coop` and `maxclients` (the Players select's words, latched as Quake latched them: the next game's mode and
 clients go to the settings and the select through `setGameMode`, "will be changed for next game." said, the game running
 going on; the page's coop is more than one client at it, deathmatch them against each other, `maxclients 1` single player),
 `serverinfo` (`SV_Serverinfo_f`: the game's cvars, `mapname`, `deathmatch`, `coop`, `dmflags`, `fraglimit`, `timelimit`,
 `cheats` and `skill`, as `Info_Print` listed them, the host's `serverInfo`; a joined page runs no server of its own),
-`userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `gender`, `msg`, `fov` and `spectator`, `userInfo`) and `status` (`SV_Status_f`:
+`userinfo` (`CL_Userinfo_f`: this page's `name`, `hand`, `gender`, `msg`, `fov`, `spectator`, `rate` and `skin`, `userInfo`) and `status` (`SV_Status_f`:
 the map and the clients with their frags, pings and names, a line each in the scrollback and the sum on the line,
-`status` over the score board's rows, a joined page's from its row), `timedemo` (above) and
+`status` over the score board's rows, a joined page's from its row), `playerlist` (3.20's `Cmd_PlayerList_f`: each client's minutes and
+seconds in the game, ping, score and name, "(spectator)" for a watcher, a line each in the scrollback and the sum on the line; the time
+from the level clock and the client's `enter_time`, `resp.enterframe`, set at the level's start and by `client_begin` for a client into the
+game running, in the tic row as `ENTER_TIME` and in the score board's rows, so the board's "Time" is each client's own), `cmd`
+(`Cmd_ForwardToServer_f`: the words after it go to the host as typed on a joined page, `forward`, and run here on a page of its own), `timedemo` (above) and
 `screenshot` (the view downloaded as `quakeNN.png`, as
 `SCR_ScreenShot_f` wrote `quakeNN.pcx`), `viewpos` (`V_Viewpos_f`: the eye's position and the yaw as whole numbers, `viewPos`), `timerefresh`
 (`SCR_TimeRefresh_f`: the view spun a full turn in 128 frames, the player's yaw set on its row for each frame's query and put back,
@@ -843,7 +896,11 @@ rate, stereo, the sounds decoded, the ones playing and looping, a line each on t
 "sound system not started" before the first click or key makes the context), `messagemode` and `messagemode2` (`Con_MessageMode_f`, `Con_MessageMode2_f`: the chat prompt up over the view as `Key_Message`
 had it, "say:" or "say_team:" drawn under the notify lines with the line typed after it and a blinking cursor, `drawChat`; every
 key goes to it, Enter saying the line, Escape dropping it, Backspace taking a character off; T's action by default, so `bind y
-messagemode2` does; the page's `messageMode`, a game running), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
+messagemode2` does; the page's `messageMode`, a game running), `toggleconsole` and `togglechat` (`Con_ToggleConsole_f` and
+`Con_ToggleChat_f`: the console up or down, `toggleConsole`; typed at its line, which Enter closed, it comes back up; `togglechat` clears
+the notify lines off the view first, `Notify.clearNotify`, as the function did whatever its name), `skins` (`CL_Skins_f`: each client's
+number, name and skin as its userinfo has them, "name\model/skin" as the player skin configstrings were, a line each in the scrollback
+and the sum on the line; the score board's rows carry the skin, so a joined page lists them too), `say` and `say_team` (`Cmd_Say_f`: the words on every client's message
 line as "name: text", `client_say`; a guest's go to the host as a `say` message, which says them for the
 guest's client); the rest go to `player_command(cmd, arg)` (on a joined page to the host as a `con` message,
 `GuestLink.sendConsole` and `HostLink.onConsole`, which runs `player_command` for the guest's client, as
@@ -919,7 +976,12 @@ pak with the player model. Both are settings (`name`, `hand`) and this client's 
 (`Session.setUserinfo`, `ClientUserinfoChanged`): the session keeps it and writes `player.netname` and
 `player.hand` after every map load and loaded game (the player table is made anew by `init_map` and by a save),
 and at once to a game running (`spectator`, 3.20's, through `client_spectator`: the client back in at its spot as a watcher with no body, noclipping, unhurt and unhunted, or as a player again; a watcher's attack key chases the next client playing and jump lets go, 3.20's `g_chase.c` as `chase_next` and `update_chase_cam` in game.sql, the eye thirty units behind the chased client's along its view, the angles its, no move of its own; `chase <n>` at the console does it by hand; `player.chase` says whom, in the tic row as `CHASE`); a guest sends its own to the host (`GuestLink.sendInfo`, an `info` message, at
-the connect and on every change), which gives it to the second client. The name is the obituaries'
+the connect and on every change), which gives it to the second client. The `rate` userinfo (`settings.rate`, the bytes a second, 1000 to 1000000 as
+`SV_UserinfoChanged` clamped Quake's 100 to 25000: a frame here is the face list, kilobytes, twenty a second, so 500000 by default) is the guest's
+link's: `HostLink.sendFrame` holds a frame when the frames of the last second sum past it (`SV_RateDrop`, `heldFrames` as its `surpressCount`;
+`players` and the stats line count them), and the player setup's connection speed spin picks it from `rate_tbl`'s figures twenty times Quake's
+(`RATE_TBL`, "User defined" for any other); the `skin` userinfo (`settings.skin`, model/skin, male/grunt) is kept with the info and written to a
+recording's `CS_PLAYERSKINS` after the name, the model waiting on a pak that has it (the setup's model and skin boxes show it, greyed). The name is the obituaries'
 (`client_obituary`) and the score board's (`Q2_TIC`'s `netname`, "player N" without one); the hand turns the
 muzzle (`muzzle`, `P_ProjectSource`: the right distance negated for a left-hander, zero for a centre-hander)
 and the gun drawn (`drawAlias`'s `mirror` for hand 1, as ref_soft negated `aliasxscale` for `RF_WEAPONMODEL`;
@@ -995,7 +1057,7 @@ the frame query and the raster. The SQL console runs any statement against the l
 | `lerp-test.mjs` | the frames between tics (`src/lerp.js`): the eye and the entities halfway between two tics' frames, angles the short way round, a newcomer, a teleport and another model snapping, the brush models' face rows and angles moved, the input's turn added to the current angles, the fraction clamped, the SQL-projecting mode exact, a frame step blending from the old frame over a tenth of a second (1 → 0.5 → 0, not for a newcomer, another model or the exact mode); then two tics of walking on demo1 and the frame halfway between them, and a turn showing at once |
 | `predict-test.mjs` | the player's move in JS (`src/pmove.js`) against the SQL's, tic by tic over two hundred tics on demo1 (walking, turning, a jump, a crouch, strafing, a stop, stairs, a wall): each tic from the SQL's row, the origin, the eye with the step and the bob, the angles, the velocity, the ground flag, the duck and the water level the same to the number; the traces against `trace_move` (a box down, a point, a box in the floor, a long one to a wall with its side's flags, a monster's box in the way), `ClipVelocity`, a point in the pool against `point_contents` and its water level; run free from the first row alone, no drift; the row's state read back; noclip |
 | `cinematic-test.mjs` | a cinematic (`src/cinematic.js`) made and read back: the Huffman trees as `Huff1TableInit` built them (the two smallest counts joined, the lowest index on a tie, a row with one count or none the leaf 255), the decoder on a hand-packed bit stream, the encoder against the decoder for every byte after every byte and for noise, a flat picture compressing small, a whole .cin read frame by frame (the header, the palettes, the pictures and the sound exactly, the end marker), a file that is none refused, the player's clock at fourteen a second |
-| `net-test.mjs` | a game shared over a link (`src/net.js`), the two ends a loopback in one process: the host's `Session` with two clients, the map message and the guest's geometry from the pak alone, the guest's userinfo (its name cut at fifteen, its hand checked) reaching the second client, a frame a tic with the guest's own row and every face the map's, the guest's forward command walking its player at the host, two commands in a tic merged (turns summed, buttons held, the last impulse) and none standing, a turn turning it, the shots' sounds arriving, the inventory rows on request, a 48 KB message in four chunks, a frame dropped on a slow link, a level change's map and frames, a picture, the signalling texts packed and unpacked, rubbish refused, one end's close closing the other; the commands numbered and the frame's ack, forty tics of the guest's move predicted from each frame's row exactly; a second guest into the game running (`Session.addClient`: its row and entity with fresh pers at a spot of its own, no second entity when added again, the map as it is, a tic with both guests, each its own row and frame, the third client walked by its guest while the other stands, a level change keeping three, the second guest leaving and the game going on with its client standing) |
+| `net-test.mjs` | a game shared over a link (`src/net.js`), the two ends a loopback in one process: the host's `Session` with two clients, the map message and the guest's geometry from the pak alone, the guest's userinfo (its name cut at fifteen, its hand checked) reaching the second client, a frame a tic with the guest's own row and every face the map's, the guest's forward command walking its player at the host, two commands in a tic merged (turns summed, buttons held, the last impulse) and none standing, a turn turning it, the shots' sounds arriving, the inventory rows on request, a 48 KB message in four chunks, a frame dropped on a slow link, frames held to the guest's rate userinfo, a level change's map and frames, a picture, the signalling texts packed and unpacked, rubbish refused, one end's close closing the other; the commands numbered and the frame's ack, forty tics of the guest's move predicted from each frame's row exactly; a second guest into the game running (`Session.addClient`: its row and entity with fresh pers at a spot of its own, no second entity when added again, the map as it is, a tic with both guests, each its own row and frame, the third client walked by its guest while the other stands, a level change keeping three, the second guest leaving and the game going on with its client standing) |
 | `audio-test.mjs` | the sound mix (`src/audio.js`) against a Web Audio that records: `S_Spatialize`'s fall-off (full within 80 units, ATTN_NORM silent from 1080, ATTN_IDLE twice as fast, ATTN_NONE everywhere) and pan (0.8 to the side, the listener's yaw), a one-shot per event cut by the next on its entity's channel but not on CHAN_AUTO, out of range or missing from the pak skipped, each sound decoded once, the loops summed per name at ATTN_STATIC with each side clamped, silent when unlisted and the channel kept, the speakers on and off with the frame, the page hidden and back, and the music: off, the drone, a track file from a picked folder, the volume |
 | `effects-test.mjs` | the temporary entities (`src/effects.js`): each effect row's particles and what it keeps, the explosions' frames, skins, translucency and fading light, the blaster hit turned to its direction, a gunshot's smoke and flash (four frames lit, one tic fullbright, no light), the sparks' packed count and colour, the BFG's strike (particles) and blast (the sprite), a muzzle flash lighting its frame only, the `EF_` lights, beams lasting 0.1 and 0.12 s, a parasite's tongue (one per parasite, a segment every 30 units, 0.2 s), an explosion painting a real frame; then the game's side on demo1: a rocket and a grenade into the water (the water's sound, the pictures as they were), a grenade in the air (a rocket's explosion) and on the ground (a grenade's), sixty-four bullets into a wall and their ricochets, a BFG shot's lasers ending in sparks, its strike, the ball as the `s_bfg3` sprite stepping its five frames |
 | `settings-test.mjs` | the page's settings (`src/settings.js`): the defaults, the round trip through storage, and each stored value checked against what it can be (a bad one back to its default, a full storage harmless; the name fifteen printable characters at most, the hand 0 to 2) |

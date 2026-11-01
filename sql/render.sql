@@ -251,10 +251,12 @@ END^
 CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER, vleaf INTEGER)
 RETURNS (slot SMALLINT)
 AS
-DECLARE cur INTEGER; DECLARE curarea INTEGER; DECLARE varea INTEGER; DECLARE k INTEGER; DECLARE used INTEGER;
+DECLARE cur INTEGER; DECLARE curarea INTEGER; DECLARE varea INTEGER; DECLARE k INTEGER; DECLARE used INTEGER; DECLARE lk SMALLINT;
 BEGIN
   SELECT l.area FROM leaves l WHERE l.id = :vleaf INTO varea;
-  SELECT c.vis_cluster, c.vis_area, c.vis_slot FROM viewcfg c WHERE c.id = 1 INTO cur, curarea, slot;
+  SELECT c.vis_cluster, c.vis_area, c.vis_slot, c.lockpvs FROM viewcfg c WHERE c.id = 1 INTO cur, curarea, slot, lk;
+  -- r_lockpvs (R_MarkLeaves with r_lockpvs): the cluster marked stays as it is, wherever the eye has gone
+  IF (lk = 1 AND cur IS NOT NULL AND slot IS NOT NULL) THEN EXIT;
   IF (cur IS NOT DISTINCT FROM vcluster AND curarea IS NOT DISTINCT FROM varea AND slot IS NOT NULL) THEN EXIT;
   IF (cur IS NULL) THEN DELETE FROM vis_sets;
   SELECT COALESCE(MAX(s.used), 0) + 1 FROM vis_sets s INTO used;

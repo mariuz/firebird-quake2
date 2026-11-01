@@ -6,16 +6,20 @@
 // Nothing here touches the DOM: the page wires the input element to historyStep(), complete() and
 // submit(), and gives a host with what the commands act on, so the tests can drive it with a fake one.
 
+import { parseChangeMap } from './levels.js';
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showmiss', 'cl_sidespeed', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'kick', 'kill', 'load', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'players', 'putaway', 'r_drawentities', 'r_drawworld', 'r_fullbright', 'r_lerpmodels', 'r_novis', 'r_speeds', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_show', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'sizedown', 'sizeup', 'skill', 'sky', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sw_clearcolor', 'sw_drawflat', 'sw_mipcap', 'sw_mipscale', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_paused', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showclamp', 'cl_showmiss', 'cl_shownet', 'cl_sidespeed', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmd', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gamemap', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'impulse', 'in_joystick', 'in_mouse', 'in_restart', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'joy_forwardsensitivity', 'joy_forwardthreshold', 'joy_pitchsensitivity', 'joy_pitchthreshold', 'joy_sidesensitivity', 'joy_sidethreshold', 'joy_yawsensitivity', 'joy_yawthreshold', 'kick', 'kill', 'killserver', 'load', 'log_stats', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'nextserver', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'playerlist', 'players', 'putaway', 'quit', 'r_drawentities', 'r_drawworld', 'r_dspeeds', 'r_fullbright', 'r_lerpmodels', 'r_lockpvs', 'r_novis', 'r_speeds', 'rate', 'rcon', 'rcon_password', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_khz', 's_mixahead', 's_show', 's_testsound', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'showdrop', 'showpackets', 'sizedown', 'sizeup', 'skill', 'skin', 'skins', 'sky', 'snd_restart', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sw_aliasstats', 'sw_clearcolor', 'sw_drawflat', 'sw_maxsurfs', 'sw_mipcap', 'sw_mipscale', 'sw_reportsurfout', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'togglechat', 'toggleconsole', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'vid_mode', 'vid_ref', 'vid_restart', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig', 'z_stats'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
  * setting each stands for, its value as the cvar showed it and the setting's value from a word typed (null for one
  * the cvar refuses). m_pitch is 0.022 or -0.022 (the invert mouse option), s_volume and cd_volume 0..1, cl_run 0 or 1.
  */
+// IN_JoyMove's cvars: a threshold 0 to 0.9 of a stick's throw, a sensitivity -10 to 10 (a number as typed, no padding)
+const readThreshold = (w) => { const n = Number(w); return /^-?\d*\.?\d+$/.test(w) && n >= 0 && n <= 0.9 ? n : null; };
+const readSens = (w) => { const n = Number(w); return /^-?\d*\.?\d+$/.test(w) && n >= -10 && n <= 10 ? n : null; };
 export const CVARS = {
   name: { key: 'name', show: (v) => String(v ?? ''), read: (w) => (/^[\x20-\x7e]{0,15}$/.test(w) ? w : null), help: 'at most 15 printable characters' },
   hand: { key: 'hand', show: (v) => String(v), read: (w) => ([0, 1, 2].includes(Number(w)) ? Number(w) : null), help: '0 right, 1 left, 2 center' },
@@ -25,11 +29,25 @@ export const CVARS = {
   // the msg userinfo (archived, as Quake's was): the level a print must reach this client, 0 low (every print), 1 medium (Quake's default:
   // the "No shells for shotgun" prints off), 2 high, 3 chat alone, as SV_ClientPrintf filtered them
   msg: { key: 'msg', show: (v) => String(v), read: (w) => (/^[0-3]$/.test(w) ? Number(w) : null), help: '0 to 3' },
+  // the rate userinfo (archived, as Quake's was): the bytes a second this client asks the host's frames to keep under (SV_RateDrop holds a
+  // frame past the sum of the last second's); clamped as SV_UserinfoChanged clamped it, to 1000..1000000 here (Quake's 100..25000 was a
+  // modem's figure for frames of a few hundred bytes: a frame here is the face list, kilobytes, twenty a second)
+  rate: { key: 'rate', show: (v) => String(v), read: (w) => (/^\d{1,7}$/.test(w) ? Math.max(1000, Math.min(1000000, Number(w))) : null), help: 'bytes a second, 1000 to 1000000' },
+  // the skin userinfo (archived, as Quake's was): model/skin, male/grunt by default, kept and sent with the userinfo as ClientUserinfoChanged
+  // took it; the model and skin wait on a pak that has them
+  skin: { key: 'skin', show: (v) => String(v ?? 'male/grunt'), read: (w) => (/^[\w-]{1,15}\/[\w-]{1,15}$/.test(w) ? w : null), help: 'model/skin, as male/grunt' },
   sensitivity: { key: 'sensitivity', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.max(1, Math.min(20, n)) : null; }, help: '1 to 20' },
   cl_run: { key: 'alwaysRun', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1' },
   m_pitch: { key: 'invertMouse', show: (v) => (v ? '-0.022' : '0.022'), read: (w) => { const n = Number(w); return Number.isFinite(n) && n !== 0 ? n < 0 : null; }, help: '0.022, or -0.022 to invert' },
   crosshair: { key: 'crosshair', show: (v) => String(v), read: (w) => (/^[0-3]$/.test(w) ? Number(w) : null), help: '0 to 3' },
   s_volume: { key: 'sfx', show: (v) => (v / 100).toFixed(2), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.round(Math.max(0, Math.min(1, n)) * 100) : null; }, help: '0 to 1' },
+  // s_khz (S_Init's rate: 11, 22 or 44 kHz, the mixer's context made at it on the next snd_restart; 44 the browser's own rate, the default here), archived
+  s_khz: { key: 'sKhz', show: (v) => String(v), read: (w) => (/^(11|22|44)$/.test(w) ? Number(w) : null), help: '11, 22 or 44' },
+  // s_mixahead (S_Update's lead: how far past the clock the mixer painted, 0.2 for a DMA; here how far ahead of the clock the raw stream's
+  // samples, a cinematic's, are queued when they start or have fallen behind, 0.05: a frame's worth), archived as Quake's was; s_testsound
+  // (S_TransferPaintBuffer's fixed sine in place of the mix, the sounds muted while it plays), not archived
+  s_mixahead: { key: 'sMixahead', show: (v) => String(v), read: (w) => { const n = Number(w); return /^\d*\.?\d+$/.test(w) && n >= 0 && n <= 1 ? n : null; }, help: '0 to 1 seconds' },
+  s_testsound: { key: 'sTestsound', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   cd_volume: { key: 'music', show: (v) => (v / 100).toFixed(2), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.round(Math.max(0, Math.min(1, n)) * 100) : null; }, help: '0 to 1' },
   // the music's loop as CDAudio_Update had it: cd_loopcount times the map's track, then cd_looptrack over and over; cd_nocd 1 no music (archived, as Quake's was)
   cd_loopcount: { key: 'cdLoopcount', show: (v) => String(v), read: (w) => (/^\d{1,2}$/.test(w) && Number(w) >= 1 ? Number(w) : null), help: '1 to 99', archive: false },
@@ -48,6 +66,20 @@ export const CVARS = {
   m_side: { key: 'mSide', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && Math.abs(n) <= 100 ? n : null; }, help: 'a number, 1 as Quake had it', archive: false },
   // m_filter (CL_MouseMove: each sample averaged with the one before), archived as Quake's was
   m_filter: { key: 'mFilter', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1' },
+  // in_joystick (IN_Frame's: the pads read; 0 leaves them unread), archived as Quake's was, 1 here where Quake's was 0
+  in_joystick: { key: 'inJoystick', show: (v) => (v === false ? '0' : '1'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1' },
+  // in_mouse (IN_StartupMouse's: 0 leaves the mouse unread, Input.mouseOn; archived as Quake's was)
+  in_mouse: { key: 'inMouse', show: (v) => (v === false ? '0' : '1'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1' },
+  // IN_JoyMove's cvars (none archived, as Quake's were not): the thresholds the sticks' dead zones (of the throw, 0.15), the sensitivities their
+  // speeds with Quake's signs (-1 forward, side and yaw, 1 pitch: the standard mapping's directions; 2 doubles a stick, the other sign turns it)
+  joy_forwardthreshold: { key: 'joyForwardthreshold', show: (v) => String(v), read: readThreshold, help: '0 to 0.9', archive: false },
+  joy_sidethreshold: { key: 'joySidethreshold', show: (v) => String(v), read: readThreshold, help: '0 to 0.9', archive: false },
+  joy_pitchthreshold: { key: 'joyPitchthreshold', show: (v) => String(v), read: readThreshold, help: '0 to 0.9', archive: false },
+  joy_yawthreshold: { key: 'joyYawthreshold', show: (v) => String(v), read: readThreshold, help: '0 to 0.9', archive: false },
+  joy_forwardsensitivity: { key: 'joyForwardsensitivity', show: (v) => String(v), read: readSens, help: '-10 to 10', archive: false },
+  joy_sidesensitivity: { key: 'joySidesensitivity', show: (v) => String(v), read: readSens, help: '-10 to 10', archive: false },
+  joy_pitchsensitivity: { key: 'joyPitchsensitivity', show: (v) => String(v), read: readSens, help: '-10 to 10', archive: false },
+  joy_yawsensitivity: { key: 'joyYawsensitivity', show: (v) => String(v), read: readSens, help: '-10 to 10', archive: false },
   // the network graph along the bottom of a joined page's view (SCR_DrawDebugGraph: a column a frame); not archived, as Quake's was not
   netgraph: { key: 'netgraph', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   // cl_scrn.c's debug graph as it registered the cvars (no scr_ on the names): timegraph 1 adds a frame's time as a column (cls.frametime × 300),
@@ -61,6 +93,14 @@ export const CVARS = {
   // prediction miss as CL_CheckPredictionError printed it; neither archived, as Quake's were not
   cl_predict: { key: 'clPredict', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   cl_showmiss: { key: 'clShowmiss', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  // cl_shownet (CL_ParseServerMessage's prints on a joined page: 1 each message's size, 2 its size and kind) and cl_showclamp (CL_ParseFrame's
+  // "high clamp" and "low clamp": the wall ahead of the game past two tics, a host frame past its time), neither archived
+  cl_shownet: { key: 'clShownet', show: (v) => String(v), read: (w) => (/^[0-2]$/.test(w) ? Number(w) : null), help: '0, 1 or 2', archive: false },
+  cl_showclamp: { key: 'clShowclamp', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  // showpackets (Netchan_Transmit's and Netchan_Process's prints at either end of a shared game: each message's direction, size and kind) and
+  // showdrop (Netchan_Process's "Dropped %i packets at %i": at the host each frame dropped or held, at a joined page the frames missed before one), neither archived
+  showpackets: { key: 'showpackets', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  showdrop: { key: 'showdrop', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   // SCR_CalcVrect's viewsize: the 3D view's share of the screen, 40 to 100 percent, the backtile around a smaller one (sizeup and sizedown step it by ten)
   viewsize: { key: 'viewsize', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) ? Math.max(40, Math.min(100, Math.round(n))) : null; }, help: '40 to 100' },
   // ref_soft's switches (none archived, as Quake's were not): r_fullbright 1 lights nothing, r_drawentities 0 and r_drawworld 0 leave
@@ -80,7 +120,9 @@ export const CVARS = {
   r_drawworld: { key: 'rDrawworld', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   r_lerpmodels: { key: 'rLerpmodels', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   r_novis: { key: 'rNovis', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  r_lockpvs: { key: 'rLockpvs', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },   // (ref_soft's: the view's cluster held where it was locked, the leaves marked from there as the eye moves on)
   r_speeds: { key: 'rSpeeds', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  r_dspeeds: { key: 'rDspeeds', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },   // (ref_soft's: the painter's times in detail on the line once a second, as R_RenderFrame printed its "ms"s)
   // host_speeds (Qcommon_Frame's "all, sv, gm, cl, rf" line, once a second here), not archived
   host_speeds: { key: 'hostSpeeds', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   // developer (Com_DPrintf's switch: the page's warnings, console.warn's, on the console too), not archived as Quake's was not
@@ -97,6 +139,12 @@ export const CVARS = {
   sw_mipcap: { key: 'swMipcap', show: (v) => String(v), read: (w) => (/^[0-3]$/.test(w) ? Number(w) : null), help: '0 to 3', archive: false },
   sw_mipscale: { key: 'swMipscale', show: (v) => String(v), read: (w) => (/^\d+(\.\d+)?$/.test(w) && Number(w) <= 10 ? Number(w) : null), help: 'a number from 0 to 10, 1 as Quake had it', archive: false },
   sw_stipplealpha: { key: 'swStipplealpha', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1' },
+  // the painter's reports, once a second on the console's line (none archived, as ref_soft's were not): sw_aliasstats (R_PrintAliasStats: the
+  // polygon models drawn, and their triangles), sw_reportsurfout ("Short %d surfaces": the surfaces built after the cache overflowed in a
+  // frame, as r_outofsurfaces counted the ones past r_surfaces); sw_maxsurfs the surface cache's size (0 the painter's own 2000, as Quake's 0 was its 768)
+  sw_aliasstats: { key: 'swAliasstats', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  sw_reportsurfout: { key: 'swReportsurfout', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  sw_maxsurfs: { key: 'swMaxsurfs', show: (v) => String(v), read: (w) => (/^\d{1,6}$/.test(w) && Number(w) <= 100000 ? Number(w) : null), help: "0 for the painter's own 2000, or a size up to 100000", archive: false },
   // m_yaw (the turn a mouse count, 0.022 as Quake had it), cl_gun (0: no view weapon, CL_AddViewWeapon's) and con_notifytime (the notify
   // lines' seconds, 3): none archived, as Quake's were not
   m_yaw: { key: 'mYaw', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && Math.abs(n) <= 10 ? n : null; }, help: 'a number, 0.022 as Quake had it', archive: false },
@@ -138,6 +186,9 @@ export const CVARS = {
   // spectator_password (ClientConnect: a watcher's); neither archived, as Quake's were not; "" clears one, "none" lets watchers in
   password: { key: 'password', show: (v) => String(v ?? ''), read: (w) => (/^[\x21-\x7e]{0,32}$/.test(w) ? w : null), help: 'at most 32 characters, no spaces', archive: false },
   spectator_password: { key: 'spectatorPassword', show: (v) => String(v ?? ''), read: (w) => (/^[\x21-\x7e]{0,32}$/.test(w) ? w : null), help: 'at most 32 characters, no spaces', archive: false },
+  // rcon_password (the client's rcon_password and the server's in one, as both were named: what rcon sends from a joined page, what the
+  // host's Rcon_Validate asks for; empty, the host takes no rcon); not archived, as Quake's were not
+  rcon_password: { key: 'rconPassword', show: (v) => String(v ?? ''), read: (w) => (/^[\x21-\x7e]{0,32}$/.test(w) ? w : null), help: 'at most 32 characters, no spaces', archive: false },
 };
 /**
  * FS_Dir_f's wildcard over the pak's names: the directory before the last slash as written, the rest a glob (* any run, ? one
@@ -159,19 +210,23 @@ export const GAME_CVARS = Object.freeze({ bob_up: [0.005, 0, 1], bob_pitch: [0.0
 const HISTORY = 32;
 
 /**
- * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), setView(fov),
+ * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), mapString(string) → true once begun (map with a spawn, a picture or a cinematic), gameMap(string) → true once begun (gamemap), nextServer(text | null) → what follows (nextserver), setView(fov),
  *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
  *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), messageMode(team) → true once the chat prompt is up (messagemode, messagemode2), setSetting(key, value) (the cvars: through the page's controls and the userinfo),
  *         download(name, text) (writeconfig), clearLog() (clear: the scrollback emptied), dumpLog(name) (condump: the scrollback downloaded as <name>.txt),
  *         setLogfile(on) → 'on' | 'already' for on, the lines downloaded or null for nothing for off (logfile),
+ *         setLogStats(on) → the same for stats.log (log_stats), isPaused() → whether the game is paused (cl_paused),
  *         print(text) (lines into the scrollback alone: cmdlist, dir and the listings), pakInfo() → { name, files, from } (path, dir: the pak's name, how many files, where it came from),
+ *         memStats() → [{ what, blocks, bytes }] (z_stats: the surfaces built, the sounds decoded, the pak, the page's heap where the browser tells it),
  *         modelList() → [{ name, size }] (modellist), imageList() → [{ kind, w, h, name }] (imagelist: P a picture, W a wall texture, M a skin), soundList() → [{ name, size, loop }] (soundlist), version() → the page's version string (version), togglePause() → paused now, null for a shared game or none (pause),
  *         toggleScores() (score: the score board, in a game of more than one client), putAway() (putaway: every screen off),
  *         serverInfo() → the game's cvars as { mapname, deathmatch, coop, dmflags, fraglimit, timelimit, cheats, skill }, null on a joined page or without a map (serverinfo),
- *         userInfo() → this page's { name, hand, gender, msg, fov, spectator } (userinfo),
+ *         userInfo() → this page's { name, hand, gender, msg, fov, spectator, rate, skin } (userinfo),
  *         playSound(name) → whether the pak has sound/<name>, played at the ear (play), stopSounds() (stopsound), soundInfo() → { started, rate, stereo, decoded, playing, loops } (soundinfo),
- *         viewPos() → the first view's { x, y, z, yaw } (viewpos), timeRefresh(flip) → { seconds, fps } after a full turn in 128 frames, null without a game of this page's own (timerefresh), status() → { map, rows: [{ num, score, ping, name }] }, null without a game (status),
+ *         viewPos() → the first view's { x, y, z, yaw } (viewpos), timeRefresh(flip) → { seconds, fps } after a full turn in 128 frames, null without a game of this page's own (timerefresh), status() → { map, rows: [{ num, score, ping, name, time, spectator, skin }] }, null without a game (status, playerlist, skins: `time` the whole seconds in the game, `spectator` a watcher, `skin` the skin userinfo),
+ *         toggleConsole(clearNotify) → true once the console is up, false once down (toggleconsole; togglechat with the notify lines cleared first),
+ *         setImpulse(n) (impulse: the next command's impulse), inRestart() (in_restart: the keys, the mouse and the pads read anew),
  *         isFullscreen() → whether the page is fullscreen now (vid_fullscreen; set through setSetting('fullscreen', bool)),
  *         toggleHelp() (help: the help computer, F1's), gravity() → the game's gravity, null on a joined page or without a map, setGravity(n) (sv_gravity),
  *         setGameString(col, text) (sv_maplist), setSky(name, rotate, axis) → true, false for a sky the pak lacks, null without a map (sky),
@@ -183,16 +238,22 @@ const HISTORY = 32;
  *         setTimescale(n | null) → the timescale now (null: a guest, whose clock is the host's),
  *         setFixedtime(n | null) → the fixedtime now (null: a guest),
  *         lightLevel() → 150 × the lightmap under the eye over 255, rounded, null without a map (cl_lightlevel),
- *         listPlayers() → the clients as [{ num, name, kind: 'page' | 'guest' | 'pad' | 'standing', sent, dropped, spectator }], 'guest' on a joined page, null without a game (players),
+ *         listPlayers() → the clients as [{ num, name, kind: 'page' | 'guest' | 'pad' | 'standing', sent, dropped, held, spectator }], 'guest' on a joined page, null without a game (players),
  *         kick(n) → the name kicked, or 'none' | 'not-hosting' (kick),
- *         dumpUser(n) → a client's userinfo as { name, hand, gender, msg, fov, spectator }, or 'guest' (a joined page) | 'none' (no game) | 'slot' | 'inactive' (dumpuser),
+ *         dumpUser(n) → a client's userinfo as { name, hand, gender, msg, fov, spectator, rate, skin }, or 'guest' (a joined page) | 'none' (no game) | 'slot' | 'inactive' (dumpuser),
  *         connect(text) → true once joining began (false: no pak yet), disconnect() → true when this page was in a shared game,
  *         reconnect(), lastConnect() → what this page last joined with ('' for nothing),
+ *         quit() → true once the game ended for the attract loop (quit), killServer() → the same with a hosted game's guests dropped (killserver),
+ *         vidRestart() → true once the painter is remade (vid_restart), sndRestart() → true once the mixer is remade (snd_restart),
  *         openMenu(name) → true once the menu is up (main, game, loadgame, savegame, options, keys, video, multiplayer, playerconfig, credits, quit; the menu_* commands),
- *         forward(cmd, arg) → true when the command went to the host (a joined page), false to run it here }
+ *         forward(cmd, arg) → true when the command went to the host (a joined page), false to run it here,
+ *         rcon(line) → true once the line went to the host with rcon_password (a joined page), false on a page of its own (rcon) }
  */
 /** The cvars config.cfg carries (CVARS, and fov and skill with them), each with its setting and how it shows. */
-const CONFIG_CVARS = () => ({ ...CVARS, fov: { key: 'fov', show: (v) => String(v) }, skill: { key: 'skill', show: (v) => String(v) } });
+const CONFIG_CVARS = () => ({ ...CVARS, fov: { key: 'fov', show: (v) => String(v) }, skill: { key: 'skill', show: (v) => String(v) },
+  // the video menu's cvars (VID_MenuInit's, archived as Quake's were): vid_mode the Detail select's mode (0 160×120, 1 320×240, 2 640×480), vid_ref the renderer mode (soft, sql)
+  vid_mode: { key: 'detail', show: (v) => String(Math.max(0, VID_MODES.indexOf(v))) }, vid_ref: { key: 'renderer', show: (v) => (v === 'sql' ? 'sql' : 'soft') } });
+const VID_MODES = ['low', 'high', 'ultra'];
 
 /**
  * Key_WriteBindings and Cvar_WriteVariables: the binds and the cvars as config.cfg's lines (`unbindall`, then
@@ -311,10 +372,26 @@ export class Console {
     // used to clear whatever was showing)
     const say = (msg, isError = false, ms = 2500) => { h.setStatus(msg, isError); const id = ++this.said; setTimeout(() => { if (this.said === id) h.setStatus(''); }, ms); };
     switch (cmd.toLowerCase()) {
-      case 'map': {
-        const name = arg.toLowerCase();
-        if (!h.pak.has(`maps/${name}.bsp`)) { say(`no map "${name}" in this pak`, true); return; }
-        await h.startMap(name);
+      case 'map': case 'gamemap': {
+        // SV_Map_f (map: a new game on the map, the unit's levels forgotten) and SV_GameMap_f (gamemap: the level running kept aside
+        // as an exit keeps it, "*" wiping the unit); the string as target_changelevel writes one (src/levels.js): a map, with a "$"
+        // spawn point, a .pcx picture or a .cin cinematic, "+" what follows it
+        const word = cmd.toLowerCase();
+        if (!arg) { say(`usage: ${word} <map>`, true); return; }
+        const c = parseChangeMap(arg);
+        if (c.kind === 'map' && !h.pak.has(`maps/${c.map}.bsp`)) { say(`no map "${c.map}" in this pak`, true); return; }
+        if (c.kind === 'pic' && !h.pak.has(`pics/${c.map}`)) { say(`no picture "${c.map}" in this pak`, true); return; }
+        if (c.kind === 'cinematic' && !h.pak.has(`video/${c.map}`)) { say(`no cinematic "${c.map}" in this pak`, true); return; }
+        if (word === 'map' && c.kind === 'map' && !c.spawn && !c.then && !c.unitEnd) { await h.startMap(c.map); return; }
+        if (!(word === 'map' ? h.mapString?.(arg) : h.gameMap?.(arg))) say(`${word}: no pak is loaded yet`, true);
+        return;
+      }
+      case 'nextserver': {
+        // the nextserver cvar: what follows the picture or the cinematic playing (a map string's "+" part, as SV_Map set it), shown
+        // or set
+        if (!arg) { say(`"nextserver" is "${h.nextServer?.(null) ?? ''}"`); return; }
+        h.nextServer?.(arg);
+        say(`"nextserver" is "${arg}"`);
         return;
       }
       case 'demomap': {
@@ -364,11 +441,11 @@ export class Console {
         // the kept autoexec.cfg dropped
         say((await h.dropAutoexec?.()) ? 'autoexec.cfg dropped' : 'no autoexec.cfg kept');
         return;
-      case 'name': case 'hand': case 'gender': case 'msg': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 'cd_volume': case 'cd_loopcount': case 'cd_looptrack': case 'cd_nocd': case 's_show':
-      case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'm_filter': case 'netgraph': case 'timegraph': case 'debuggraph': case 'graphheight': case 'graphscale': case 'graphshift': case 'cl_predict': case 'cl_showmiss': case 'viewsize':
+      case 'name': case 'hand': case 'gender': case 'msg': case 'rate': case 'skin': case 'sensitivity': case 'cl_run': case 'm_pitch': case 'crosshair': case 's_volume': case 's_khz': case 's_mixahead': case 's_testsound': case 'cd_volume': case 'cd_loopcount': case 'cd_looptrack': case 'cd_nocd': case 's_show':
+      case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'm_filter': case 'in_joystick': case 'in_mouse': case 'joy_forwardthreshold': case 'joy_sidethreshold': case 'joy_pitchthreshold': case 'joy_yawthreshold': case 'joy_forwardsensitivity': case 'joy_sidesensitivity': case 'joy_pitchsensitivity': case 'joy_yawsensitivity': case 'netgraph': case 'timegraph': case 'debuggraph': case 'graphheight': case 'graphscale': case 'graphshift': case 'cl_predict': case 'cl_showmiss': case 'cl_shownet': case 'cl_showclamp': case 'showpackets': case 'showdrop': case 'viewsize':
       case 'cl_add_entities': case 'cl_add_particles': case 'cl_add_lights': case 'cl_add_blend': case 'cl_testentities': case 'cl_testparticles': case 'cl_testlights': case 'cl_testblend':
-      case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': case 'host_speeds': case 'developer': case 'sv_noreload': case 'sw_drawflat': case 'sw_waterwarp': case 'sw_clearcolor': case 'sw_mipcap': case 'sw_mipscale': case 'sw_stipplealpha':
-      case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname': case 'password': case 'spectator_password':
+      case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lockpvs': case 'r_dspeeds': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': case 'host_speeds': case 'developer': case 'sv_noreload': case 'sw_drawflat': case 'sw_waterwarp': case 'sw_clearcolor': case 'sw_mipcap': case 'sw_mipscale': case 'sw_stipplealpha': case 'sw_aliasstats': case 'sw_reportsurfout': case 'sw_maxsurfs':
+      case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname': case 'password': case 'spectator_password': case 'rcon_password':
       case 'cl_yawspeed': case 'cl_pitchspeed': case 'cl_anglespeedkey': case 'cl_forwardspeed': case 'cl_sidespeed': case 'cl_upspeed': case 'timeout': case 'cl_timeout':
       case 'gun_x': case 'gun_y': case 'gun_z': case 'scr_centertime': case 'cl_footsteps': case 'scr_showpause': case 'scr_showturtle': case 'cl_maxfps': {
         // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
@@ -498,6 +575,23 @@ export class Console {
         // Con_Clear_f: the scrollback emptied, the notify lines with it (the line typed goes too, as the console's own echo of it did)
         h.clearLog?.();
         return;
+      case 'cl_paused': {
+        // the pause as CL_Frame set the cvar: shown; a value given is refused, pause being the word that sets it
+        if (arg) { say('cl_paused is the pause\'s own: pause sets it', true); return; }
+        say(`"cl_paused" is "${h.isPaused?.() ? '1' : '0'}"`);
+        return;
+      }
+      case 'log_stats': {
+        // the log_stats cvar (CL_Frame's): 1 writes a line a painted frame, "entities,dlights,parts,frame time", to stats.log as it
+        // did (the page's file store keeps it, through a reload too), 0 downloads what was written and drops it
+        if (!arg) { say(`"log_stats" is "${h.settings.logStats ? '1' : '0'}"`); return; }
+        if (!/^(0|1)$/.test(arg)) { say('log_stats takes 0 or 1', true); return; }
+        const r = await h.setLogStats?.(arg === '1');
+        if (arg === '1') say(r === 'already' ? 'log_stats: already on' : 'log_stats: a line a frame goes to stats.log');
+        else if (r == null) say('log_stats: nothing was logged', true);
+        else say(`log_stats: stats.log downloaded, ${r} line${r === 1 ? '' : 's'}`);
+        return;
+      }
       case 'logfile': {
         // the logfile cvar: 1 writes the scrollback to qconsole.log as it grows (Com_Printf's logfile write; the page's file store keeps
         // it, through a reload too), 0 downloads what was written and drops it (Quake left the file in the game directory)
@@ -603,7 +697,7 @@ export class Console {
         return;
       }
       case 'userinfo': {
-        // CL_Userinfo_f: this page's userinfo (ClientUserinfoChanged's name, hand, gender, msg, fov and spectator)
+        // CL_Userinfo_f: this page's userinfo (ClientUserinfoChanged's name, hand, gender, msg, fov, spectator, rate and skin)
         const info = h.userInfo?.() ?? {};
         say(`User info settings: ${Object.entries(info).map(([k, v]) => `${k} "${v}"`).join(' · ')}`, false, 8000);
         return;
@@ -614,6 +708,70 @@ export class Console {
         if (!st) { say('status: no game running', true); return; }
         h.print?.(['num score ping name', ...st.rows.map((c) => `${String(c.num).padStart(3)} ${String(c.score).padStart(5)} ${String(c.ping).padStart(4)} ${c.name}`)].join('\n'));
         say(`map: ${st.map} · ${st.rows.length} client${st.rows.length === 1 ? '' : 's'}: ${st.rows.map((c) => `${c.num} ${c.name} ${c.score} frags, ${c.ping} ms`).join(' · ')}`, false, 8000);
+        return;
+      }
+      case 'z_stats': {
+        // Z_Stats_f ("%i bytes in %i blocks"): what the page holds, a line each in the scrollback (the surfaces built, the sounds decoded, the
+        // pak, the page's heap where the browser tells it; the engine's heap is its Worker's and out of reach), the sum on the line
+        const rows = h.memStats?.() ?? [];
+        const bytes = rows.reduce((n, r) => n + (r.bytes || 0), 0), blocks = rows.reduce((n, r) => n + (r.blocks || 0), 0);
+        h.print?.(rows.map((r) => `${String(r.bytes || 0).padStart(10)} bytes in ${String(r.blocks || 0).padStart(5)} blocks  ${r.what}`).join('\n'));
+        say(`${bytes} bytes in ${blocks} blocks`, false, 8000);
+        return;
+      }
+      case 'impulse': {
+        // IN_Impulse: the number is the next command's impulse (the weapons 1 to 11 by number, the inventory's 12 to 15 and the items' 16 to 23,
+        // as the keys and the pad send them); nothing said, as Quake said nothing
+        const n = Number(arg);
+        if (!arg || !Number.isInteger(n) || n < 0 || n > 255) { say('impulse takes a number, 0 to 255', true); return; }
+        h.setImpulse?.(n);
+        return;
+      }
+      case 'in_restart': {
+        // IN_Restart_f (IN_Shutdown, IN_Init): the keys, the mouse's samples and the pads read anew, the mouse let go and taken again
+        h.inRestart?.();
+        return;
+      }
+      case 'skins': {
+        // CL_Skins_f: each client's number and its player skin configstring ("name\model/skin") a line each in the scrollback, as it printed
+        // "%i: %s" after loading them, the sum on the line; a joined page's from its score board rows
+        const st = h.status?.();
+        if (!st) { say('skins: no game running', true); return; }
+        const line = (c) => `${c.num}: ${c.name}\\${c.skin ?? 'male/grunt'}`;
+        h.print?.(st.rows.map(line).join('\n'));
+        say(st.rows.map(line).join(' · '), false, 8000);
+        return;
+      }
+      case 'toggleconsole': case 'togglechat': {
+        // Con_ToggleConsole_f and Con_ToggleChat_f: the console up or down (typed at its line, which Enter closed, it comes back up);
+        // togglechat clears the notify lines off the view first, as the function did whatever its name
+        h.toggleConsole?.(cmd.toLowerCase() === 'togglechat');
+        return;
+      }
+      case 'playerlist': {
+        // Cmd_PlayerList_f (3.20): each client's time in the game, ping, score and name, "(spectator)" for a watcher, a line each in the
+        // scrollback as it printed them ("%02d:%02d %4d %3d %s%s"), the sum on the line
+        const st = h.status?.();
+        if (!st) { say('playerlist: no game running', true); return; }
+        const line = (c) => { const t = Math.max(0, Math.floor(c.time ?? 0)); return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')} ${String(c.ping).padStart(4)} ${String(c.score).padStart(3)} ${c.name}${c.spectator ? ' (spectator)' : ''}`; };
+        h.print?.(st.rows.map(line).join('\n'));
+        say(st.rows.map(line).join(' · '), false, 8000);
+        return;
+      }
+      case 'rcon': {
+        // CL_Rcon_f: the line goes to the host with rcon_password, whose SV_RemoteCommand_f runs it at its console when the password is
+        // its own and sends the prints back (Com_BeginRedirect); no password set, or no game joined (no rcon_address here), it says so
+        if (!h.settings.rconPassword) { say("You must set 'rcon_password' before issuing an rcon command", true); return; }
+        if (!arg) { say('Usage: rcon <command>', true); return; }
+        if (!h.rcon?.(arg)) { say('You must have joined a game to issue rcon commands', true); return; }
+        return;
+      }
+      case 'cmd': {
+        // Cmd_ForwardToServer_f: the words after it go to the host as typed (a joined page), or run here as the game's own command
+        if (!arg) { say('Usage: cmd <command>', true); return; }
+        const [word, ...more] = arg.split(/\s+/);
+        if (h.forward?.(word, more.join(' '))) return;
+        await this.run(arg);
         return;
       }
       case 'vid_fullscreen': {
@@ -775,6 +933,46 @@ export class Console {
         say(`connecting to ${arg.length > 24 ? `${arg.slice(0, 24)}…` : arg}`);
         return;
       }
+      case 'quit': case 'killserver': {
+        // Com_Quit (quit: the quit menu's yes, the game ended for the attract loop; the page stays) and SV_KillServer_f
+        // (killserver: a hosted game's guests dropped first, "Server was killed")
+        const word = cmd.toLowerCase();
+        const done = word === 'quit' ? h.quit?.() : h.killServer?.();
+        if (!done) { say(`${word}: no pak is loaded yet`, true); return; }
+        say(word === 'quit' ? 'the game ends: the attract loop' : 'Server was killed');
+        return;
+      }
+      case 'vid_mode': {
+        // the video menu's mode as a cvar (vid_mode: 0 160×120, 1 320×240, 2 640×480, the Detail select's; archived): a change goes
+        // through the page's control and restarts the painter, as VID_CheckChanges did on a mode change
+        const now = Math.max(0, VID_MODES.indexOf(h.settings.detail));
+        if (!arg) { say(`"vid_mode" is "${now}"`); return; }
+        if (!/^[0-2]$/.test(arg)) { say('vid_mode takes 0 (160×120), 1 (320×240) or 2 (640×480)', true); return; }
+        if (Number(arg) !== now) { h.setSetting('detail', VID_MODES[Number(arg)]); h.vidRestart?.(); }
+        say(`"vid_mode" is "${arg}"`);
+        return;
+      }
+      case 'vid_ref': {
+        // the refresh as a cvar (vid_ref: soft for the painter with SQL picking the faces and JS projecting, sql for SQL projecting every
+        // vertex, the renderer mode; archived): a change goes through the page's control and restarts the painter, as VID_CheckChanges did
+        const now = h.settings.renderer === 'sql' ? 'sql' : 'soft';
+        if (!arg) { say(`"vid_ref" is "${now}"`); return; }
+        const w = arg.toLowerCase();
+        if (w !== 'soft' && w !== 'sql') { say('vid_ref takes soft (SQL picks the faces, JS projects) or sql (SQL projects every vertex)', true); return; }
+        if (w !== now) { h.setSetting('renderer', w === 'sql' ? 'sql' : 'fast'); h.vidRestart?.(); }
+        say(`"vid_ref" is "${w}"`);
+        return;
+      }
+      case 'vid_restart':
+        // VID_Restart_f: the painter made anew from the settings (the sky and the view's rectangle as they were)
+        if (!h.vidRestart?.()) { say('vid_restart: no painter yet (a pak must be loaded)', true); return; }
+        say('vid_restart: the painter made again');
+        return;
+      case 'snd_restart':
+        // CL_Snd_Restart_f: the mixer closed and made anew, the sounds decoded again as they play, the music played again
+        if (!h.sndRestart?.()) { say('snd_restart: sound system not started (a click or a key makes it)', true); return; }
+        say('snd_restart: sound system restarted');
+        return;
       case 'disconnect':
         // CL_Disconnect_f: the connection dropped (the Leave button); a joined page starts a game of its own
         { const was = !!h.disconnect?.(); say(was ? 'disconnected' : 'not connected', !was); }
@@ -815,7 +1013,7 @@ export class Console {
         const rows = h.listPlayers?.();
         if (rows === 'guest') { say('players: the host lists them', true); return; }
         if (!rows) { say('players: no game is running', true); return; }
-        const what = (r) => (r.kind === 'page' ? 'this page' : r.kind === 'guest' ? `guest: ${r.sent} frames sent${r.dropped ? `, ${r.dropped} dropped` : ''}${r.ping != null ? `, ping ${r.ping} ms` : ''}${r.spectator ? ', watching' : ''}` : r.kind === 'pad' ? 'a pad' : 'standing');
+        const what = (r) => (r.kind === 'page' ? 'this page' : r.kind === 'guest' ? `guest: ${r.sent} frames sent${r.dropped ? `, ${r.dropped} dropped` : ''}${r.held ? `, ${r.held} held` : ''}${r.ping != null ? `, ping ${r.ping} ms` : ''}${r.spectator ? ', watching' : ''}` : r.kind === 'pad' ? 'a pad' : 'standing');
         say(rows.map((r) => `${r.num} ${r.name} (${what(r)})`).join(' · '), false, 8000);
         return;
       }

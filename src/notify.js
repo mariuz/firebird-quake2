@@ -32,6 +32,8 @@ export class Notify {
   log(n = 16) { return this.entries.slice(-n).map((e) => e.text); }
 
   clear() { this.entries.length = 0; }
+  /** Con_ClearNotify: the notify lines off the view, the entries kept for the scrollback. */
+  clearNotify() { for (const e of this.entries) e.show = false; }
 }
 
 /**

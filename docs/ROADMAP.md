@@ -141,7 +141,8 @@ the order they are to be taken.
   userinfo (`Session.setUserinfo`): the session writes them to the client's row after every map load and
   loaded game, a guest sends its own to the host at the connect (an `info` message) and on every change, and
   each `Q2_TIC` row carries its client's `hand` and `netname` for the page. Tested in the menu, settings, coop,
-  net and painter tests. Left: the model and skin (the registered pak), the rate box, the model's preview.
+  net and painter tests. The rate box and the skin's words came with the seventeenth list (`rate` and `skin`); left: the
+  model and skin themselves (a pak with the player model) and the model's preview.
 - **Save files**: done. The page's Saves controls: Download writes the game as it stands to a file
   (`<map>-<time>.q2sav`, the slot text of `src/savestore.js`: the header line, the JSON gzipped and
   base64'd; `Session.packGame`), and Load takes such a file (`Session.unpackText`, the plain JSON of a save
@@ -1155,10 +1156,181 @@ Quake 2's own words with the demo pak. In the order they are to be taken.
   height with a shift; `test:settings` the five within their ranges; `test:console` shown, set, refused and Tab; the
   browser test sees a column added a painted frame under `timegraph 1` and the layout cvars in the settings and back,
   on both builds.
-- **`quit`, `killserver`, `vid_restart` and `snd_restart`**: `quit` ending the game as the quit menu's yes does
-  (`Com_Quit`), `killserver` stopping the game for the attract loop (`SV_KillServer_f`), `vid_restart` making the
-  painter again from the settings (`VID_Restart_f`) and `snd_restart` the mixer (`CL_Snd_Restart_f`), the sounds
-  loaded again.
+- **`quit`, `killserver`, `vid_restart` and `snd_restart`**: done. `quit` ends the game for the attract loop as the quit
+  menu's yes does (`Com_Quit`; the page stays), `killserver` drops a hosted game's guests first and does the same
+  (`SV_KillServer_f`, "Server was killed"), `vid_restart` makes the painter anew from the settings (`VID_Restart_f`:
+  `makeRenderer`, shared with the pak's load; the map's geometry given again, its sky, its spin, the backtile and the
+  view's rectangle put back, the held frames dropped) and `snd_restart` the mixer (`CL_Snd_Restart_f`: `Q2Audio.restart` closes the context and
+  makes it anew, the decoded sounds forgotten and decoded again as they play, the music played again). `test:audio`
+  restarts the mixer and sees a new context, no sounds decoded and the track back; `test:console` the four through the
+  page, each refused before it can be done, Tab; the browser test remakes the painter (another object, the sky and the
+  size kept, the game painting on) and the mixer (another context), and kills the server for the attract loop and
+  brings a game back with `map`, on both builds.
+
+The seventeenth list: what the video menu's cvars, the level words, the mixer, the pad, the painter's switches and
+the userinfo still lack of Quake 2's own words with the demo pak. In the order they are to be taken.
+
+- **`vid_mode` and `vid_ref`**: done. `vid_mode` is the mode as the Detail select has it (0 160×120, 1 320×240, 2
+  640×480, the video menu's spin) and `vid_ref` the refresh as the renderer mode (`soft` the painter with SQL picking
+  the faces and JS projecting, `sql` the projector); a change goes through the page's control (`setSetting`, so the
+  menus and the selects agree) and restarts the painter as `VID_CheckChanges` did, the same value again doing nothing;
+  both archived in config.cfg as Quake's were (`CONFIG_CVARS` maps them onto the detail and renderer settings).
+  `test:console` shows, sets (case aside), refuses, counts the restarts, reads config.cfg and Tab; the browser test
+  sets the mode to 160×120 and the refresh to the projector and sees the controls and the painter follow, and back,
+  on both builds.
+- **`gamemap` and `nextserver`**: `SV_GameMap_f` as the level change with the one running kept aside (an ordinary
+  exit's way, `*` wiping the unit), and the `+` chain of `SV_Map` (`map intro.cin+demo1`: the cinematic, then the
+  map, `nextserver` holding what follows and read back with `nextserver` at the console).
+- **`in_joystick`, `cl_paused` and `log_stats`**: done. `in_joystick 0` leaves the pads unread (`IN_Frame`'s;
+  `Input.joystick`, `pollPad` and `pollPadAt` returning none), archived as Quake's was, 1 here where Quake's was 0;
+  `cl_paused` shows the pause's state as `CL_Frame` set the cvar, a value refused (`pause` sets it); `log_stats 1`
+  writes a line a painted frame, "entities,dlights,parts,frame time" after that header, to `stats.log` in the file
+  store as `logfile` writes the console (`keptLog` serves both now), `log_stats 0` downloading it. `test:input` reads
+  no pad with it off and the pad again with it on; `test:settings` the two settings; `test:console` in_joystick shown,
+  set, refused and in config.cfg, cl_paused shown both ways and refused a value, log_stats's cases, Tab; the browser
+  test downloads stats.log with its header and lines, flips in_joystick through to the input and reads cl_paused
+  around pause, on both builds.
+- **`s_khz`, `cl_shownet` and `cl_showclamp`**: done. `s_khz` is `S_Init`'s rate: 11 or 22 asks the next
+  `snd_restart`'s context for 11025 or 22050 (`Q2Audio.khz`), 44 leaves the browser's own rate, the default here;
+  archived as Quake's was. `cl_shownet` prints a joined page's messages on its scrollback as `CL_ParseServerMessage`
+  printed them: 1 each message's size, 2 its size and kind ("f" the host's frames; `GuestLink.onNet`, the size from
+  the link). `cl_showclamp` prints the clock's clamps as `CL_ParseFrame` said them: "high clamp" with the milliseconds
+  dropped when the wall is ahead of the game past the two tics a frame runs, "low clamp" at a joined page when a host
+  frame comes past its time. `test:audio` sees the context asked at 22050 and 11025 and the browser's own at 44;
+  `test:net` the guest told each message's kind and size; `test:settings` the three; `test:console` shown, set,
+  refused, config.cfg with s_khz, Tab; the browser test restarts the mixer at 22 kHz and back, and reads the host's
+  frames' sizes at a joined page, on both builds.
+- **`r_lockpvs` and `r_dspeeds`**: done. `r_lockpvs 1` keeps the view's cluster where it was locked (`viewcfg.lockpvs`:
+  `mark_faces` exits with the cluster and the slot as they are, so the leaves stay marked from there while the eye
+  moves on, as `R_MarkLeaves` held `r_viewcluster`); off, the eye's cluster is marked anew. `r_dspeeds 1` prints the
+  painter's times in detail on the line once a second (the world's faces, the models and the sprites, the temporary
+  entities and the particles, and the rest), as `R_RenderFrame` printed its "ms"s under it. Neither archived. The
+  smoke test locks the view on another cluster, draws a frame and sees it held, then let go; `test:settings` the two;
+  `test:console` shown, set, refused and Tab; the browser test sets the lock on the row and reads the times line, on
+  both builds.
+- **`rate` and `skin` userinfos**: done. `rate` is the bytes a second a joined page asks for: the host holds a frame when
+  the frames of the last second sum past it (`HostLink.sendFrame`, as `SV_RateDrop` held a packet past the last ten's
+  sum; `heldFrames` as its `surpressCount`, on `players`' line and the stats line), clamped as `SV_UserinfoChanged`
+  clamped it, to 1000..1000000 here: Quake's 100..25000 was a modem's figure for frames of a few hundred bytes, and a
+  frame here is the face list, kilobytes, twenty a second, so 500000 by default; the player setup's connection speed
+  spin is `rate_tbl` at twenty times Quake's figures. `skin` is kept and sent with the userinfo as
+  `ClientUserinfoChanged` took it (model/skin, male/grunt), shown by `userinfo` and `dumpuser`, in the setup's model and
+  skin boxes (greyed still) and in a recording's `CS_PLAYERSKINS`; the model and skin themselves wait on a pak that has
+  them. Both archived, as Quake's were. `test:net` sees the rate and the skin reach the host and the session, frames
+  held at 25000 and none at 500000, the clamps; `test:settings` the two; `test:console` shown, set, clamped, refused,
+  cvarlist, config.cfg, `userinfo`, `dumpuser`, `players` with the held count and Tab; `test:menu` the spin and the
+  boxes; `test:record` the skin in the configstring; the browser test sets both and reads the userinfo line and the
+  session's, and at a joined page sees the host hold its frames at 25000 and let them go at 500000, on both builds.
+
+The eighteenth list: what the console, the link, the pad, the mixer and the painter still lack of Quake 2's own words
+with the demo pak. In the order they are to be taken.
+
+- **`playerlist` and `cmd`**: done. `playerlist` is 3.20's `Cmd_PlayerList_f`: each client's minutes and seconds in the
+  game, ping, score and name as it laid them out ("%02d:%02d %4d %3d %s%s"), "(spectator)" for a watcher, a line each
+  in the scrollback and the sum on the line; a joined page's from its score board rows. The time in the game is the
+  level clock less the client's `enter_time` (`resp.enterframe`, `InitClientResp`: 0 at the level's start, the level
+  time for a client `client_begin` puts into the game running), a player column in the save (older saves load it at
+  0), in the tic row as `ENTER_TIME` and in the score board's rows, whose "Time" is each client's own now (it was the
+  level's for every client). `cmd <words>` is `Cmd_ForwardToServer_f`: the words go to the host as typed on a joined
+  page (`forward`), and run here on a page of its own. Both in the console's list for Tab. `test:net` sees a third
+  client's enter time at the level time and the first two's at 0, the tic row carrying it; `test:console` playerlist's
+  lines and sum, no game, cmd forwarded, its usage, run here, Tab; the browser test reads playerlist's line and runs cmd
+  god here and, at a joined page, lists both clients and runs cmd god for its client at the host, on both builds.
+- **`rcon` and `rcon_password`**: done. `rcon <line>` at a joined page is `CL_Rcon_f`: the line goes to the host with
+  the page's `rcon_password` (the client's cvar and the server's were one name; one setting here, not archived), and
+  the host's `SV_RemoteCommand_f` runs it at its own console when the password is its `rcon_password` (`Rcon_Validate`:
+  none set, none taken), keeping the prints and the status line meanwhile (`Com_BeginRedirect`) and sending them back
+  as a `print` message, onto the guest's scrollback with the last on its line; a wrong password answers "Bad
+  rcon_password." and the host's scrollback says "Bad rcon from client N", a right one "Rcon from client N". No
+  password set, the page says so as Quake did; no game joined (there is no `rcon_address` here), it says so too. Both
+  words in the console's list for Tab. `test:net` sees the password and the line reach the host cut to their sizes
+  and a print reach the guest; `test:settings` the setting; `test:console` the cvar shown, set and refused, rcon
+  without a password, on a page of its own, joined (the line as typed), its usage and Tab; the browser test runs
+  status at the host from the joined page and reads its lines there, then is refused with another password, both
+  scrollbacks saying so, on both builds.
+- **`showpackets` and `showdrop`**: done. `showpackets 1` prints each message sent or received at either end of a shared
+  game on the scrollback with its size and kind, as `Netchan_Transmit` and `Netchan_Process` printed "send %4i" and
+  "recv %4i" (`HostLink.send` and `GuestLink.send` tell `onPacket`, the receives too; the host's lines name the client).
+  `showdrop 1` is `Netchan_Process`'s "Dropped %i packets at %i": at the host each frame dropped (the channel behind)
+  or held (the guest's rate) with its tic (`HostLink.onDrop`), at a joined page the frames missed before one, counted by
+  the tics between its tic and the last frame's past the tics it ran (`GuestLink.onDrop`, `lastTic`). Neither archived,
+  as Quake's were not; both in the console's list for Tab. `test:net` sees either end told each message with its kind
+  and size, the host told a frame dropped and one held at their tics, the guest the frame it missed at the next;
+  `test:settings` the two; `test:console` shown, set, refused, cvarlist, left out of config.cfg, Tab; the browser test
+  reads the frames received and the commands sent at the joined page, the frames held at the host at a rate of 25000
+  and the frames missed at the guest, on both builds.
+- **The pad's `joy_*` cvars**: done. `joy_forwardthreshold`, `joy_sidethreshold`, `joy_pitchthreshold` and
+  `joy_yawthreshold` are each stick axis's dead zone, of its throw (0.15, as `IN_JoyMove` had them; the one dead zone
+  was 0.2), and `joy_forwardsensitivity`, `joy_sidesensitivity`, `joy_pitchsensitivity` and `joy_yawsensitivity`
+  each axis's speed, with Quake's signs (-1 forward, side and yaw, 1 pitch: the move and the turn as the standard
+  mapping points them, the side axis taken negated as the Windows joystick's x was; 2 doubles a stick, the other
+  sign turns it, the result clamped to full throw). `gamepad.js`'s `JOY` and `readPad`'s third argument, `Input.joy`
+  from the settings on every change; none archived, as Quake's were not; all in the console's list for Tab. There is
+  no up axis (A jumps, B crouches), so `joy_upthreshold` and `joy_upsensitivity` are left out. `test:input` holds a
+  stick inside its threshold still and the pitch past its own looking, a sensitivity scaling and turning each axis,
+  the Input's joy reaching both pads; `test:settings` the eight within their ranges; `test:console` shown, set,
+  refused, cvarlist with them, left out of config.cfg, Tab; the browser test sets a threshold and a sensitivity and
+  reads them on the settings and the input, and the defaults back, on both builds.
+- **`s_mixahead` and `s_testsound`**: done. `s_mixahead` is `S_Update`'s lead, how far past the clock the mixer painted
+  (0.2 for a DMA): here how far ahead of the clock the raw stream's samples, a cinematic's, are queued when they start
+  or have fallen behind (`Q2Audio.mixahead`; 0.05, a frame's worth, where the browser schedules the one-shots itself);
+  archived as Quake's was. `s_testsound 1` is `S_TransferPaintBuffer`'s fixed sine in place of the mix: an oscillator at
+  0.1 radians a sample of the mixer's rate (351 Hz at 22050), 20000 of 32768, into the output with the sounds' gain
+  muted while it plays and back at the volume after (`setTestsound`, remembered for the first start); not archived.
+  Both in the console's list for Tab. `test:audio` sees the raw stream queued 0.05 s ahead and 0.3 s at the cvar, the
+  tone made at the rate's frequency and gain with the mix muted, the volume set meanwhile kept, and the mix back when
+  off; `test:settings` the two; `test:console` shown, set, refused, cvarlist, config.cfg with s_mixahead and without
+  s_testsound, Tab; the browser test sets the lead and plays the tone, the mix muted and back, on both builds.
+- **`sw_aliasstats`, `sw_polymodelstats`, `sw_reportsurfout`, `sw_reportedgeout` and `z_stats`**: done, for what the painter has.
+  `sw_aliasstats 1` prints the polygon models drawn in the frame and their triangles once a second, as `R_PrintAliasStats`
+  printed `r_amodels_drawn` (`Renderer.aliasDrawn` and `aliasTris`, counted from `beginFrame`); `sw_reportsurfout 1` prints
+  "Short %d surfaces" when a frame built surfaces after the painter's cache overflowed and was cleared (`surfShort`, as
+  `r_outofsurfaces` counted the ones past `r_surfaces`), and `sw_maxsurfs` sets the cache's size (0 the painter's own 2000,
+  as Quake's 0 was its 768); none archived. `z_stats` is `Z_Stats_f`: what the page holds, "%i bytes in %i blocks" a line
+  each in the scrollback and the sum on the line (`memStats`: the surfaces built with their pixels, the sounds decoded with
+  their samples, the pak, the page's heap in use where the browser tells it; the engine's heap lives in its Worker, out of
+  reach). Left out: `sw_reportedgeout` and `sw_maxedges` (there is no edge table here), and `sw_polymodelstats`, which was
+  Quake 1's `r_polymodelstats` and not ref_soft's. `test:painter` sees a frame with nothing short, the cache at ten
+  clearing and the surfaces after it short, and two models drawn counted with their triangles; `test:settings` the three;
+  `test:console` shown, set, refused, cvarlist, left out of config.cfg, z_stats laid out and summed, Tab; the browser test
+  reads the models drawn line, the surfaces short at a cache of ten, and z_stats's line and lines, on both builds.
+
+The nineteenth list: what the console, the keys, the mouse and the cvars still lack of Quake 2's own words with the
+demo pak. In the order they are to be taken.
+
+- **`skins`, `toggleconsole` and `togglechat`**: done. `skins` is `CL_Skins_f`: each client's number, name and skin as
+  its userinfo has them, "name\model/skin" as the player skin configstrings it printed were, a line each in the
+  scrollback and the sum on the line; the score board's rows carry the skin now, so a joined page lists them too.
+  `toggleconsole` is `Con_ToggleConsole_f`: the console up or down (`toggleConsole`; typed at its line, which Enter
+  closed, it comes back up; a key bound to it opens and closes it as the ` key does). `togglechat` is
+  `Con_ToggleChat_f`, which toggled the console too whatever its name, the notify lines cleared off the view first
+  (`Notify.clearNotify`, `Con_ClearNotify`'s: the lines stay in the scrollback). All three in the console's list for
+  Tab. `test:console` skins' lines and sum from the status rows and without a game, the two toggles through the page
+  with togglechat's clearing, Tab; the browser test reads skins' line, brings the console back with toggleconsole and
+  closes it, brings it back with togglechat and sees the notify lines gone, and lists both clients' skins at a joined
+  page, on both builds.
+- **`impulse`, `in_mouse` and `in_restart`**: done. `impulse <n>` is `IN_Impulse`: the number is the next command's
+  impulse (the weapons 1 to 11 by number, the inventory's 12 to 15 and the items' 16 to 23, as the keys and the pad
+  send them; `setImpulse`, a joined page's going with its command), 0 to 255, nothing said as Quake said nothing.
+  `in_mouse 0` leaves the mouse unread, its samples dropped (`Input.mouseOn`, `IN_StartupMouse`'s; archived as
+  Quake's was), the lock kept. `in_restart` is `IN_Restart_f`: the keys, the mouse's samples and the pads read anew,
+  a press counting again (`Input.restart`), the mouse let go and taken again when a game is up. All three in the
+  console's list for Tab. `test:input` drops a mouse sample with in_mouse 0 and reads it again, and sees a restart let
+  a key go, forget the pads' presses and the samples, the button counting again; `test:settings` the setting;
+  `test:console` impulse set and refused, in_mouse shown, set, refused and in config.cfg, in_restart through the page,
+  Tab; the browser test changes the weapon with impulse 12 and back with 22, flips in_mouse through to the input and
+  sees in_restart forget the pads, on both builds.
+- **`cl_timedemo` and `sv_showclamp`**: `cl_timedemo` as `CL_Timedemo_f` set it, 1 while a timedemo runs and shown
+  (a value refused, `timedemo` setting it), and `sv_showclamp` (`SV_Frame`'s "sv lowclamp" and "sv highclamp" at a
+  page running the game: the tics it fell behind by, the ones it held), as `cl_showclamp` says a joined page's.
+- **`set`'s flags and `cvarlist`'s**: `set <cvar> <value> [u | s | a]` as `Cvar_Set_f` took them (u the userinfo, s
+  the serverinfo, a archived: a cvar the page keeps marked for `userinfo`, `serverinfo` and config.cfg), and
+  `cvarlist`'s flag column before each cvar as `Cvar_List_f` printed it ("S", "U", "A", "L" for the serverinfo, the
+  userinfo, archived and latched).
+- **`scr_conspeed` and `scr_drawall`**: the console dropping over the view at `scr_conspeed`'s pixels a second as
+  `SCR_RunConsole` moved it (the page's console drawn in the view, `Con_DrawConsole`'s lines and the input line over
+  the frame when up, the page's input line standing in), and `scr_drawall` (`SCR_UpdateScreen`: the whole screen
+  painted each frame, the status bar's dirty rectangles aside).
 
 ## Playing the demo
 

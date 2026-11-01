@@ -8,7 +8,7 @@
 // (menus, the console, the F keys) and hands the rest to key(). Nothing here touches the page's
 // state, so a test can drive it with plain calls.
 
-import { readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON } from './gamepad.js';
+import { JOY, readPad, padImpulse, padScreens, firstPad, connectedPads, BUTTON } from './gamepad.js';
 
 // default.cfg's keys the browser must not act on itself (scrolling, the menu bar, tabbing away)
 export const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyI', 'KeyB',
@@ -164,6 +164,9 @@ export class Input {
     this.impulse = 0;
     this.touch = { move: null, look: null };
     this.pad = { held: new Set(), stick: { x: 0, y: 0 }, last: null };
+    this.joystick = true;   // in_joystick: the pads read (IN_Frame's; 0 leaves them unread)
+    this.mouseOn = true;    // in_mouse: the mouse read (IN_StartupMouse's; 0 leaves it unread, the lock kept)
+    this.joy = JOY;         // the joy_ cvars (IN_JoyMove's thresholds and sensitivities), the pads read with them
     this.pads = [];              // the other pads' last reads, by index after the first (the third and fourth players')
     this.menuPressed = false;    // the pad's Start went down at the last read
     this.padScreens = { inventory: false, help: false };   // ... and its Y or Back
@@ -171,6 +174,14 @@ export class Input {
     this.now = now;
   }
 
+  /** IN_Restart_f (IN_Shutdown, IN_Init): the keys, the mouse's samples and the pads read anew, a press counting again. */
+  restart() {
+    this.clear();
+    this.lastDx = 0; this.lastDy = 0;
+    this.mouseYaw = 0; this.mousePitch = 0; this.mouseFwd = 0; this.mouseSide = 0;   // (the samples not yet read)
+    this.pad = { held: new Set(), stick: { x: 0, y: 0 }, last: null };
+    this.pads = [];
+  }
   /** A game key went down (the page has routed its own keys first): held for the command, a one-shot one its impulse. */
   key(code) {
     code = normalizeKey(code);
@@ -200,6 +211,7 @@ export class Input {
    * the sensitivity; under m_filter each sample is averaged with the one before.
    */
   mouse(dx, dy, settings) {
+    if (!this.mouseOn) return;   // (in_mouse 0: the mouse unread)
     // m_filter: each sample averaged with the one before (CL_MouseMove's old_mouse_x/y), smoother and half a sample late
     if (settings.mFilter) { const fx = (dx + this.lastDx) / 2, fy = (dy + this.lastDy) / 2; this.lastDx = dx; this.lastDy = dy; dx = fx; dy = fy; } else { this.lastDx = dx; this.lastDy = dy; }
     const held = (a) => (this.binds[a] ?? []).some((c) => this.keys.has(c));
@@ -239,7 +251,8 @@ export class Input {
 
   /** The gamepad, read once a frame: a press counts once. */
   pollPad() {
-    const pad = readPad(firstPad(this.getPads()), this.pad.held);
+    if (!this.joystick) { this.pad.last = null; return null; }   // (in_joystick 0: no pad read)
+    const pad = readPad(firstPad(this.getPads()), this.pad.held, this.joy);
     if (pad) this.pad.held = pad.held;
     this.pad.last = pad;
     return pad;
@@ -346,9 +359,10 @@ export class Input {
   }
   /** The pad at `index` among the connected ones (1 the second), read once: a press counts once; null without one. */
   pollPadAt(index) {
+    if (!this.joystick) return null;
     const p = connectedPads(this.getPads())[index];
     const rec = this.pads[index] ?? (this.pads[index] = { held: new Set(), last: null });
-    const pad = readPad(p ?? null, rec.held);
+    const pad = readPad(p ?? null, rec.held, this.joy);
     if (pad) rec.held = pad.held;
     rec.last = pad;
     return pad;

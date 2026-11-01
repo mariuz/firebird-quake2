@@ -16,6 +16,7 @@ export class Q2Audio {
     this.ctx = null;
     this.pak = null;
     this.buffers = new Map();
+    this.decodedBytes = 0;       // z_stats: the decoded sounds' samples as bytes (frames × channels × 4)
     this.volume = 0.7;
     this.musicVolume = 0.5;
     this.channels = new Map();   // `${ent}:${chan}` → source, to cut
@@ -33,27 +34,50 @@ export class Q2Audio {
     this.musicStore = null;      // src/demostore.js's FileStore: a picked folder's tracks kept as they play, played at the next start
     this.music = null;
     this.track = 0;
+    this.khz = 44;               // s_khz: the mixer's rate at the next start or restart (11, 22, 44: the browser's own)
+    this.mixahead = 0.05;        // s_mixahead: how far ahead of the clock the raw stream's samples (a cinematic's) are queued when they start or have fallen behind (S_Update's lead; Quake's 0.2 covered a DMA, a frame's worth here)
+    this.testsound = false;      // s_testsound: S_TransferPaintBuffer's fixed sine in place of the mix (the sounds muted while it plays)
+    this.testTone = null;        // ... the oscillator and its gain while it plays
     this.enabled = true;         // the cd word's on and off (CD_f): off, no music until on again
     this.pausedMusic = null;     // cd pause: { track, plays, how, offset } to resume from
     this.onStart = null;         // s_show: told each sound started as (name, left, right), the volumes 0 to 255 as S_Update printed the channels
   }
 
-  setPak(pak) { this.stopLoops(); this.pak = pak; this.buffers.clear(); }
-  setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = v; }
+  setPak(pak) { this.stopLoops(); this.pak = pak; this.buffers.clear(); this.decodedBytes = 0; }
+  setVolume(v) { this.volume = v; if (this.master && !this.testTone) this.master.gain.value = v; }   // (the tone playing, the mix stays muted: the volume is for after)
   setMusicVolume(v) { this.musicVolume = v; if (this.musicGain) this.musicGain.gain.value = v; }
 
   unlock() {
     if (!this.ctx) {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // s_khz: the context asked at 11025 or 22050 (11, 22); 44 leaves the browser's own rate, the default here
+      const rate = this.khz === 11 ? 11025 : this.khz === 22 ? 22050 : 0;
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)(rate ? { sampleRate: rate } : undefined);
       this.master = this.ctx.createGain();
       this.master.gain.value = this.volume;
       this.master.connect(this.ctx.destination);
       this.musicGain = this.ctx.createGain();
       this.musicGain.gain.value = this.musicVolume;
       this.musicGain.connect(this.ctx.destination);
+      if (this.testsound) this.startTestTone();
       if (this.track) this.playMusic(this.track);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+
+  /**
+   * CL_Snd_Restart_f (S_Shutdown, S_Init, the sounds registered again): the context closed and made anew, the decoded sounds
+   * forgotten (decoded again as they play), the music played again. True once a context is up again (none before the first
+   * click or key: the restart waits for it like the first start).
+   */
+  restart() {
+    this.stopAll();
+    const old = this.ctx;
+    this.ctx = null; this.master = null; this.musicGain = null; this.testTone = null;
+    this.buffers.clear(); this.decodedBytes = 0;
+    this.music = null; this.pausedMusic = null;
+    try { old?.close?.()?.catch?.(() => {}); } catch { /* closed already */ }
+    this.unlock();
+    return !!this.ctx;
   }
 
   suspend(hidden) {
@@ -71,7 +95,9 @@ export class Q2Audio {
       if (!this.pak.has(file) && name.startsWith('player/female/')) file = 'sound/player/male/' + name.slice('player/female/'.length);
       if (!this.pak.has(file)) return null;
       try {
-        return await this.ctx.decodeAudioData(this.pak.buffer(file));
+        const b = await this.ctx.decodeAudioData(this.pak.buffer(file));
+        if (b) this.decodedBytes += (b.length ?? 0) * (b.numberOfChannels ?? 1) * 4;
+        return b;
       } catch { return null; }
     })();
     this.buffers.set(name, p);
@@ -116,7 +142,7 @@ export class Q2Audio {
     src.buffer = buf;
     src.connect(this.master);
     const now = this.ctx.currentTime;
-    if (!this.rawTime || this.rawTime < now) this.rawTime = now + 0.05;
+    if (!this.rawTime || this.rawTime < now) this.rawTime = now + this.mixahead;   // (s_mixahead: the stream starts, or catches up, that far ahead of the clock)
     src.start(this.rawTime);
     this.rawTime += buf.duration;
     (this.rawSources ??= []).push(src);
@@ -127,6 +153,33 @@ export class Q2Audio {
     for (const s of this.rawSources ?? []) { try { s.stop(); } catch { /* ended */ } }
     this.rawSources = [];
     this.rawTime = 0;
+  }
+  /**
+   * s_testsound: S_TransferPaintBuffer's fixed sine in place of the mix (sin(paintedtime × 0.1) × 20000: 0.1 radians a sample at the
+   * mixer's rate, 20000 of 32768). On, the tone plays into the output and the sounds are muted; off, the mix is back at the volume.
+   * Before the context exists it is remembered for the first start.
+   */
+  setTestsound(on) {
+    this.testsound = !!on;
+    if (!this.ctx) return;
+    if (this.testsound) this.startTestTone(); else this.stopTestTone();
+  }
+  startTestTone() {
+    if (this.testTone || !this.ctx) return;
+    const osc = this.ctx.createOscillator(), g = this.ctx.createGain();
+    osc.type = 'sine'; osc.frequency.value = 0.1 * this.ctx.sampleRate / (2 * Math.PI);
+    g.gain.value = 20000 / 32768;
+    osc.connect(g).connect(this.ctx.destination);
+    osc.start();
+    this.testTone = { osc, g };
+    this.master.gain.value = 0;
+  }
+  stopTestTone() {
+    if (!this.testTone) return;
+    try { this.testTone.osc.stop(); } catch { /* stopped */ }
+    this.testTone.osc.disconnect?.(); this.testTone.g.disconnect?.();
+    this.testTone = null;
+    if (this.master) this.master.gain.value = this.volume;
   }
 
   async playEvents(rows, listener) {

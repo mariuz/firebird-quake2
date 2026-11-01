@@ -3039,7 +3039,7 @@ AS
 DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION; DECLARE yaw DOUBLE PRECISION;
 DECLARE php INTEGER; DECLARE pmh INTEGER; DECLARE pfl INTEGER;
 BEGIN
-  IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = :pid)) THEN INSERT INTO player (id) VALUES (:pid);
+  IF (NOT EXISTS (SELECT 1 FROM player p WHERE p.id = :pid)) THEN INSERT INTO player (id, enter_time) VALUES (:pid, now_());   -- (InitClientResp: a client into the game running enters now; a level's own at 0)
   IF ((SELECT g.deathmatch FROM game g WHERE g.id = 1) = 1) THEN EXECUTE PROCEDURE init_client_persistant(pid);
   EXECUTE PROCEDURE select_spawn_point(pid, spawnpoint) RETURNING_VALUES x, y, z, yaw;
   IF (x IS NULL) THEN EXIT;
