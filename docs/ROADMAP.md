@@ -1363,8 +1363,13 @@ words with the demo pak. In the order they are to be taken.
   words through the page, the name cleaned, the usage, "Not doing a server record.", the joined page, Tab; the
   browser test records with serverrecord, sees more entities a frame than the view's, and reads the file back whole
   with entities in its frames, on both builds.
-- **`pingservers`**: `CL_PingServers_f` over the address book: each entry's relay asked for its code, the answer
-  (the host's name and its map, or none) and the time it took shown, as the join server menu listed the LAN's.
+- **`pingservers`**: done. `CL_PingServers_f` over the address book, a LAN's broadcast having no browser counterpart:
+  each entry (a relay and a code, or a code at the page's relay: `parseAddress`) is asked of its relay
+  (`SignalClient.ping`), and a line each in the scrollback says the room's state (a host waiting, joined already, no
+  game, or the relay silent) and the round trip; the line sums them. The relay keeps only the offer, so the host's
+  name and map are not known before joining. `test:net` the four states against the relay in-process and the entries
+  parsed; `test:console` the lines, the sum, an empty book, Tab; the browser test pings an entry at the test's relay
+  with no room, on both builds.
 - **`sv addip`, `sv removeip`, `sv listip` and `sv writeip`**: g_svcmds.c's filter over the guests at the host:
   a guest by its code or name kept out at the connect (`SV_FilterPacket`'s "You are banned"), the list printed,
   `writeip` keeping it with the settings as listip.cfg was kept; `filterban` 1 bans the listed, 0 allows only them.

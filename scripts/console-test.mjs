@@ -86,6 +86,18 @@ check(host.settings.skill === 2 && status.at(-1)?.[0] === '"skill" is "2"', 'wit
 running = true;
 await con.submit('save'); check(last() === 'saveGame', 'save saves');
 await con.submit('load'); check(last() === 'loadGame', 'load loads');
+// pingservers (CL_PingServers_f): the address book's rooms through the page, a line each, the sum on the line
+{
+  let printed = null; const hadPrint = host.print;
+  host.print = (t) => { printed = t; };
+  host.pingServers = async () => [];
+  await con.submit('pingservers'); check(/the address book is empty/.test(status.at(-1)?.[0] ?? '') && status.at(-1)?.[1] === true, 'pingservers with no entries says so');
+  host.pingServers = async () => [{ entry: 'http://r K9H2', state: 'waiting', ms: 12 }, { entry: 'AB12', state: 'none', ms: 3 }, { entry: 'CD34', state: 'no relay' }];
+  await con.submit('pingservers');
+  check(printed === 'http://r K9H2: a host waiting (12 ms)\nAB12: no game (3 ms)\nCD34: no relay' && status.at(-1)?.[0] === '3 entries pinged: 1 with a host waiting' && con.complete('pings') === 'pingservers ',
+    'pingservers prints each entry\'s room and round trip and sums them on the line; Tab completes it');
+  delete host.pingServers; host.print = hadPrint;
+}
 // serverrecord and serverstop (SV_ServerRecord_f, SV_ServerStop_f): through the page, the name cleaned as record cleans it
 {
   let srec = null, guest = false;

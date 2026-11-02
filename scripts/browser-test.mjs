@@ -1518,6 +1518,14 @@ try {
         `rcon at the joined page asks for rcon_password first ("${rcNo}"), runs status at the host with it ("${rcOk.line}", the lines on its scrollback, the host's saying ${JSON.stringify(rcHost.filter((l) => /rcon/i.test(l)))}) and is refused with another ("${rcBad}", ${JSON.stringify(rcHostBad.filter((l) => /rcon/i.test(l)))})`);
       const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
+      // pingservers at the host: an address book entry at the test's relay with no room under it says no game
+      const bookWas = await page.evaluate(() => window.quake2.settings.addressBook.slice()).catch(() => []);
+      await page.evaluate((port) => { window.quake2.settings.addressBook = [`http://localhost:${port} ZZZZ`]; }, RELAY_PORT).catch(() => undefined);
+      await typeOn(page, 'pingservers');
+      let pings = {};
+      for (let i = 0; i < 20 && !/entr(y|ies) pinged/.test(pings.line ?? ''); i++) { await sleep(250); pings = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(4) })).catch(() => ({})); }
+      await page.evaluate((b) => { window.quake2.settings.addressBook = b; }, bookWas).catch(() => undefined);
+      assert(pings.line === '1 entry pinged: 0 with a host waiting' && pings.log?.some((l) => /ZZZZ: no game \(\d+ ms\)$/.test(l)), `pingservers asks the relay for the address book's room ("${pings.line}", ${JSON.stringify(pings.log?.slice(-1))})`);
       await typeOn(page, 'rtc_signal none');
       const relayOff = await page.evaluate(() => ({ setting: window.quake2.settings.rtcSignal, status: document.getElementById('status')?.textContent })).catch(() => ({}));
       assert(relayOff.setting === '' && /the offer and the answer as texts/.test(relayOff.status ?? ''), `rtc_signal none at the host's console clears it (${JSON.stringify(relayOff)})`);
@@ -1787,8 +1795,8 @@ try {
     await ctx.close();
   }
 
-  // nothing optional is loud: only the music tracks and the favicon may be missing
-  const unexpected = missing.filter((p) => !/\/music\/|favicon/.test(p));
+  // nothing optional is loud: only the music tracks, the favicon and the relay's room pingservers asked for (ZZZZ, none there) may be missing
+  const unexpected = missing.filter((p) => !/\/music\/|favicon|^\/rooms\/ZZZZ$/.test(p));
   assert(unexpected.length === 0, `no unexpected 404s (${missing.length} optional: ${[...new Set(missing)].join(', ') || 'none'})`);
   const loud = errors.filter((e) => !/404 \(Not Found\)/.test(e) && !(/\/music\//.test(e) && /Failed to load resource|ERR_INTERNET_DISCONNECTED|ERR_FAILED/.test(e)));   // (offline, the music is not there)
   assert(loud.length === 0, `no console errors${loud.length ? ':\n  ' + loud.join('\n  ') : ''}`);
