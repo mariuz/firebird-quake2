@@ -618,7 +618,9 @@ was up; a new game from the menu, the Map select, the console or a load, or the 
 none, ends the demo.
 
 A game is recorded the other way round (`src/record.js`; `record <name>` and `stop` at the console, as
-`CL_Record_f` and `CL_Stop_f`; a level change stops it). `DemoRecorder` writes the header `CL_Record_f` wrote
+`CL_Record_f` and `CL_Stop_f`; a level change stops it; `serverrecord <name>` and `serverstop` as `SV_ServerRecord_f` and
+`SV_ServerStop_f` write the same file with every alias model and sprite in the level in each frame, whatever the view sees,
+`Session.levelEnts`, but the recording client's own, which is its view; a joined page runs no server and is told so). `DemoRecorder` writes the header `CL_Record_f` wrote
 (`svc_serverdata` with protocol 34, the released Quake 2's; the configstrings: the level's name, the CD track,
 the sky, `g_spawn.c`'s status bar layout, one client, `CS_MAPCHECKSUM` as `Com_BlockChecksum` of the .bsp (an
 MD4, `qcommon/md4.c`), which the client checks against the map it loads, the map at `CS_MODELS + 1` and its
