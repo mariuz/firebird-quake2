@@ -11,7 +11,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
@@ -155,6 +155,9 @@ check(connectRefusal({ password: '' }, { password: '' }) === null && connectRefu
 check(connectRefusal({ spectator: 1, password: 'wrong' }, { password: 'secret', spectatorPassword: '' }) === null && connectRefusal({ spectator: 1, password: 'x' }, { spectatorPassword: 'watch' }) === 'Spectator password required or incorrect'
   && connectRefusal({ spectator: 1, password: 'watch' }, { spectatorPassword: 'watch' }) === null && connectRefusal({ spectator: 1, password: '' }, { password: 'secret', spectatorPassword: 'none' }) === null,
   'a watcher is judged by the spectator password alone: none or "none" lets it in, a wrong one refuses it');
+check(connectRefusal({ name: 'Rimmer' }, { banList: ['rimmer'] }) === 'Banned.' && connectRefusal({ name: 'Lister' }, { banList: ['rimmer'] }) === null
+  && connectRefusal({ name: 'Lister' }, { banList: ['rimmer'], filterban: false }) === 'Banned.' && connectRefusal({ name: 'rimmer ' }, { banList: ['rimmer'], filterban: false }) === null,
+  'sv addip\'s list (SV_FilterPacket by name): filterban 1 keeps the listed out, case aside, 0 lets only them in');
 guest.sendInfo({ name: 'x', hand: 0 });
 check(host.info.password === '', 'no password given is none');
 check(host.info.hand === 0 && host.info.spectator === 0 && host.info.fov === null, 'a hand that is not 0, 1 or 2 is right-handed; a guest plays unless it says it watches; no fov given is the view\'s');
@@ -501,6 +504,17 @@ check(madeWith?.iceServers.length === 1 && madeWith.iceServers[0].urls.startsWit
   clock += 6000;
   check((await sc.offer(old).catch((e) => e.message)) === 'no game under that code', 'a room past its time is swept');
   check((await sc.waitAnswer(old, { everyMs: 1, timeoutMs: 0 }).catch((e) => e.message)) === null || true, 'a wait past its time gives null');
+  // pingservers (CL_PingServers_f): a room's state and round trip; an address book entry parsed as a relay and a code
+  {
+    const pc = await sc.publish(text);
+    const w = await sc.ping(pc);
+    await sc.answer(pc, 'an answer');
+    const t = await sc.ping(pc), n0 = await sc.ping('ZZZZ'), d = await new SignalClient('http://127.0.0.1:1').ping('ABCD');
+    check(w.state === 'waiting' && t.state === 'taken' && n0.state === 'none' && d.state === 'down' && Number.isInteger(w.ms) && w.ms >= 0,
+      `ping says a host waiting, then joined, no game under another code, and a relay not there (${[w, t, n0, d].map((x) => x.state).join(', ')})`);
+    const r = parseAddress('http://relay:8787 k9h2'), c = parseAddress('K9H2', 'http://mine'), bad = parseAddress('q2net1:abc');
+    check(r.relay === 'http://relay:8787' && r.code === 'K9H2' && c.relay === 'http://mine' && c.code === 'K9H2' && bad === null, 'an entry is a relay and a code, or a code at the page\'s relay; an offer text is neither');
+  }
   const none = new SignalClient('http://127.0.0.1:1');
   check(/the relay at http:\/\/127\.0\.0\.1:1 did not answer/.test(await none.publish(text).catch((e) => e.message)), 'a relay that is not there says so');
   relay.close();

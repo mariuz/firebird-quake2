@@ -564,7 +564,10 @@ code after Join and its answer goes back the same way. The host keeps its code f
 Host again publishes under it, `POST /rooms/<code>`), so a guest's `reconnect` at the console finds the
 new offer under the code it joined with; `connect <code or offer>` is Join with the text, `disconnect` the
 Leave button (`CL_Connect_f`, `CL_Reconnect_f`, `CL_Disconnect_f`; `connectTo`, `disconnect` and
-`lastConnect` in `src/main.js`). By text (`packSignal`: the description gzipped and
+`lastConnect` in `src/main.js`); `pingservers` is `CL_PingServers_f` over the address book, a LAN's broadcast having no browser
+counterpart: each entry, a relay and a code or a code at the page's relay (`parseAddress`), is asked of its relay
+(`SignalClient.ping`), a line each in the scrollback with the room's state, a host waiting, joined already, no game or the relay
+silent, and the round trip, the sum on the line). By text (`packSignal`: the description gzipped and
 base64'd, some six hundred characters) the guest answers it the same way and the host accepts the answer;
 either way `ready` resolves with the Link when the channel opens. The guest predicts its own move, as `CL_PredictMovement` did with the client's pmove:
 `src/pmove.js` is the JS twin of `player_think`'s movement and of the traces in `sql/physics.sql` (`ClipMap`
@@ -880,7 +883,11 @@ page's alone; one the pak lacks is refused and the one up stays) and `hostname` 
 `password` and `spectator_password` (the network game's: a guest's info carries its `password`, and the host judges it as
 `SV_DirectConnect` and `ClientConnect` did, `connectRefusal` in `src/net.js`: a player's against the host's `password`, a
 watcher's against its `spectator_password`, empty or "none" asking nothing; a guest refused is kicked with the reason before it
-is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived), `rcon` and `rcon_password`
+is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived), `sv addip`, `sv removeip`,
+`sv listip` and `sv writeip` (g_svcmds.c's `ServerCommand`: a list of guest names, `settings.banList`, which `connectRefusal` checks at
+the connect as `SV_FilterPacket` checked addresses, a page having none of its own; a listed guest is kicked with "Banned.";
+`writeip` downloads listip.cfg, the lines that make the list again) and `filterban` (1 the listed kept out, 0 only they let in;
+archived), `rcon` and `rcon_password`
 (`CL_Rcon_f` and `SV_RemoteCommand_f`: a joined page's `rcon <line>` goes to the host with its `rcon_password`, `GuestLink.sendRcon`; the
 host's `Rcon_Validate` is its own `rcon_password`, none set taking none, and the line runs at its console with the prints and the status
 line kept meanwhile, `Com_BeginRedirect` as `rconOut`, and sent back as a `print` message onto the guest's scrollback and line; a wrong

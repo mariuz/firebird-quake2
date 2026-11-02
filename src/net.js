@@ -97,7 +97,11 @@ export function unpackFrame(p, sounds = [], fx = []) {
  * spectator_password (none when it is empty or "none"), a player's against the host's password (none when empty); the reason
  * to refuse it, or null. The host kicks a refused guest with the reason, as the connect was refused with it.
  */
-export function connectRefusal(info, { password = '', spectatorPassword = '' } = {}) {
+export function connectRefusal(info, { password = '', spectatorPassword = '', banList = [], filterban = true } = {}) {
+  // SV_FilterPacket (g_svcmds.c): a guest's name against the host's list, by its name, a page having no address of its own to
+  // filter; filterban 1 keeps the listed out, 0 lets only the listed in
+  const listed = (banList ?? []).includes(String(info?.name ?? '').trim().toLowerCase());
+  if (filterban !== false ? listed : !listed) return 'Banned.';
   const given = String(info?.password ?? '');
   if (info?.spectator) {
     const sp = String(spectatorPassword ?? '');
@@ -346,8 +350,28 @@ export class SignalClient {
     }
     return null;
   }
+  /**
+   * CL_PingServers_f's ask, of a room: 'waiting' (a host's offer is there, unanswered), 'taken' (a guest answered it), 'none' (no room
+   * under the code) or 'down' (the relay did not answer), with the round trip in whole milliseconds.
+   */
+  async ping(code, now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
+    const t0 = now();
+    try {
+      const { offer, answer } = await this.call('GET', `/rooms/${roomCode(code)}`);
+      return { state: !offer ? 'none' : answer ? 'taken' : 'waiting', ms: Math.round(now() - t0) };
+    } catch (err) {
+      return { state: /no game under that code/.test(err.message) ? 'none' : 'down', ms: Math.round(now() - t0) };
+    }
+  }
   /** The host's: the room is done with (a failure here is nobody's concern). */
   async drop(code) { await this.call('DELETE', `/rooms/${roomCode(code)}`).catch(() => undefined); }
+}
+/** An address book entry as { relay, code }: "<relay url> <code>" or a code alone at `relay`, the page's own; null for anything else (an offer text). */
+export function parseAddress(entry, relay = '') {
+  const words = String(entry ?? '').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 1 && isRoomCode(words[0])) return { relay: String(relay ?? ''), code: words[0].toUpperCase() };
+  if (words.length === 2 && /^https?:\/\//i.test(words[0]) && isRoomCode(words[1])) return { relay: words[0], code: words[1].toUpperCase() };
+  return null;
 }
 /** Whether a text is a room code (four of the relay's letters and digits) rather than an offer. */
 export const isRoomCode = (text) => /^[A-Z2-9]{4}$/i.test(String(text ?? '').trim());

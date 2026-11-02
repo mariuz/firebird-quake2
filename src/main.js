@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
-import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, iceServers, connectRefusal, silentPast } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, iceServers, connectRefusal, silentPast } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
@@ -595,6 +595,13 @@ const con = new Console({
   sndRestart: () => audio.restart(),                     // (snd_restart: the mixer made anew, the sounds decoded again as they play)
   reconnect: () => (lastConnect ? connectTo(lastConnect) : false),   // (reconnect: Join again with what this page last joined with)
   lastConnect: () => lastConnect,
+  // pingservers (CL_PingServers_f): each address book entry's relay asked for its room, the rooms' states and the round trips
+  pingServers: async () => Promise.all((settings.addressBook ?? []).filter(Boolean).map(async (entry) => {
+    const a = parseAddress(entry, settings.rtcSignal);
+    if (!a) return { entry, state: 'an offer text' };
+    if (!a.relay) return { entry, state: 'no relay' };
+    return { entry, ...(await new SignalClient(a.relay).ping(a.code)) };
+  })),
   // M_Init's menu_* commands: the menu opens over the view as the key or the menu's item would open it
   openMenu: (name) => {
     const open = { main: () => menu.main(), game: () => menu.game(), loadgame: () => menu.loadMenu(), savegame: () => menu.saveMenu(), options: () => menu.options(), keys: () => menu.keysMenu(),
