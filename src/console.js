@@ -217,7 +217,7 @@ const HISTORY = 32;
 
 /**
  * host: { db, pak, settings, saveSettings(), setStatus(msg, isError), startMap(name), mapString(string) → true once begun (map with a spawn, a picture or a cinematic), gameMap(string) → true once begun (gamemap), nextServer(text | null) → what follows (nextserver), setView(fov),
- *         saveGame(), loadGame(), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
+ *         saveGame(name), loadGame(name) (save, load: the quick slot without a name, save0..15 the slots, another a save of its own), toggleInventory(), isRunning(), setCvar(name, value), setSkill(n), playDemo(name),
  *         hasDemo(name), listDemos() → { pak, kept }, dropDemo(name) → dropped, record(name), stopRecord(), isRecording(),
  *         setSpectator(on | null) → 0 | 1 | null (null: this page has not joined a game), timedemo(name), screenshot(), say(text), messageMode(team) → true once the chat prompt is up (messagemode, messagemode2), setSetting(key, value) (the cvars: through the page's controls and the userinfo),
  *         download(name, text) (writeconfig), clearLog() (clear: the scrollback emptied), dumpLog(name) (condump: the scrollback downloaded as <name>.txt),
@@ -1165,8 +1165,16 @@ export class Console {
         say(lines.length ? lines.join(' · ') : 'no keys bound', false, 8000);
         return;
       }
-      case 'save': return h.saveGame();
-      case 'load': return h.loadGame();
+      case 'save': case 'load': {
+        // SV_Savegame_f and SV_Loadgame_f: alone the quick slot (F6, F9); with a name, save0 to save15 the menus' slots and any other
+        // name a save of its own (letters, digits and _, fifteen at most, as a save directory's name; "current" refused as Quake did)
+        const verb = cmd.toLowerCase();
+        if (!arg) return verb === 'save' ? h.saveGame() : h.loadGame();
+        const name = arg.trim().toLowerCase();
+        if (!/^[a-z0-9_]{1,15}$/.test(name)) { say(`${verb} takes a name of letters, digits and _, fifteen at most`, true); return; }
+        if (name === 'current') { say(`Can't ${verb === 'save' ? 'save to' : 'load from'} 'current'`, true); return; }
+        return verb === 'save' ? h.saveGame(name) : h.loadGame(name);
+      }
       case 'dmflags': case 'fraglimit': case 'timelimit': case 'cheats': {
         // the deathmatch cvars, and cheats (CheatsOk: god, notarget, noclip and give in a deathmatch only with it): no
         // argument shows one; a number sets it for the game running and the next ones

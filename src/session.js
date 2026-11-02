@@ -16,6 +16,16 @@ const ARR = { rowMode: 'array' };
 /** The storage key of a save slot (0 is the autosave) and of the quick slot. */
 export const SLOT_KEY = (i) => `firebird-quake2:save:save${i}`;
 export const QUICK_KEY = 'firebird-quake2:save:quick';
+/**
+ * SV_Savegame_f's and SV_Loadgame_f's name as a storage key: save0 to save15 are the menus' slots (save0 the autosave), quick the
+ * quick slot (F6, F9, and save and load alone), any other name a save of its own beside them. Names are lower-cased.
+ */
+export const saveKey = (name) => {
+  const n = String(name ?? '').toLowerCase();
+  const m = /^save(\d{1,2})$/.exec(n);
+  if (m && Number(m[1]) <= 15) return SLOT_KEY(Number(m[1]));
+  return n === 'quick' ? QUICK_KEY : `firebird-quake2:save:${n}`;
+};
 export const SLOTS = 15;
 
 /**

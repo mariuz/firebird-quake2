@@ -1348,9 +1348,13 @@ demo pak. In the order they are to be taken.
 The twentieth list: what the saves, the server's own words and a shared game's link still lack of Quake 2's own
 words with the demo pak. In the order they are to be taken.
 
-- **`save <name>` and `load <name>`**: `SV_Savegame_f` and `SV_Loadgame_f` with a name, as the console took them:
-  a slot by its number (`save1`, `load 3`) or a save named as typed, kept with the slots, `save` and `load` alone
-  staying the quick slot (F6 and F9).
+- **`save <name>` and `load <name>`**: done. `SV_Savegame_f` and `SV_Loadgame_f` take a name, as the console took them
+  (`saveKey`): save0 to save15 are the menus' slots (save0 the autosave, as Quake's was), quick the quick slot, and any
+  other name, letters, digits and _, fifteen at most, lower-cased, a save of its own beside them in the browser's
+  storage. `save` and `load` alone stay the quick slot (F6 and F9); "current" is refused as Quake refused it, and a
+  name not saved answers "No such savegame: <name>". `test:session` the names' keys; `test:console` the names through
+  the page, lower-cased, and the refusals; the browser test saves and loads a save of its own, is told of one not
+  saved, and writes the second slot by its name, on both builds.
 - **`serverrecord` and `serverstop`**: `SV_ServerRecord_f`, a recording of the game as the server sent it (every
   client's entities, not one view's), and `SV_ServerStop_f` ending it, kept with the recordings.
 - **`pingservers`**: `CL_PingServers_f` over the address book: each entry's relay asked for its code, the answer

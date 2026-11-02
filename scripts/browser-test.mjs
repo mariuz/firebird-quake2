@@ -491,6 +491,22 @@ try {
     await typeCommand('name Ace');
     let cvName = '';
     for (let i = 0; i < 20 && cvName !== 'Ace'; i++) { await sleep(250); cvName = await page.evaluate(() => window.quake2.session.last.NETNAME).catch(() => ''); }
+    // save and load with a name: save mine keeps a save of its own beside the slots, load mine plays it, load nosuch says so; save save2
+    // writes the menus' second slot
+    await typeCommand('save mine');
+    let named = '';
+    for (let i = 0; i < 20 && !/Game saved/.test(named); i++) { await sleep(250); named = await status(); }
+    const namedKey = await page.evaluate(() => (localStorage.getItem('firebird-quake2:save:mine') ?? '').slice(0, 5)).catch(() => '');
+    await typeCommand('load mine');
+    let namedLoaded = '';
+    for (let i = 0; i < 240 && !/Game loaded/.test(namedLoaded); i++) { await sleep(250); namedLoaded = await status(); }
+    await typeCommand('load nosuch'); const noSuch = await status();
+    await typeCommand('save save2');
+    let slot2 = null;
+    for (let i = 0; i < 20 && !slot2; i++) { await sleep(250); slot2 = await page.evaluate(() => localStorage.getItem('firebird-quake2:save:save2')).catch(() => null); }
+    await page.evaluate(() => { localStorage.removeItem('firebird-quake2:save:mine'); localStorage.removeItem('firebird-quake2:save:save2'); }).catch(() => undefined);
+    assert(/Game saved/.test(named) && namedKey === 'q2gz1' && /Game loaded/.test(namedLoaded) && noSuch === 'No such savegame: nosuch' && typeof slot2 === 'string' && slot2.startsWith('q2gz1'),
+      `save mine keeps a save of its own (${namedKey}), load mine plays it ("${namedLoaded}"), load nosuch says so ("${noSuch}"), save save2 writes the second slot`);
     // scr_conspeed 1: the console drops over half a second (SCR_RunConsole's half screen at a screen a second); 0 at once
     await typeCommand('scr_conspeed 1');
     await page.keyboard.press('Backquote'); await sleep(100);

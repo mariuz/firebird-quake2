@@ -8,7 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, SQL_FILES } from '../src/loader.js';
-import { Session, SLOT_KEY, QUICK_KEY, decodeFrame } from '../src/session.js';
+import { Session, SLOT_KEY, QUICK_KEY, decodeFrame, saveKey } from '../src/session.js';
+// save and load by name (SV_Savegame_f, SV_Loadgame_f): save0..save15 the menus' slots, quick the quick slot, another name a key of its own
+if (!(saveKey('save3') === SLOT_KEY(3) && saveKey('SAVE0') === SLOT_KEY(0) && saveKey('quick') === QUICK_KEY && saveKey('save16') === 'firebird-quake2:save:save16' && saveKey('Mine') === 'firebird-quake2:save:mine'))
+  throw new Error('saveKey: a slot by its name, the quick slot, a name of its own');
+console.log('ok   save names: save0..save15 the slots, quick the quick slot, any other a save of its own, lower-cased');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));

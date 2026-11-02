@@ -23,7 +23,7 @@ import { Effects } from './effects.js';
 import { Hud, viewFrameLerp } from './hud.js';
 import { Menu, saveComment, ADDRESS_BOOK } from './menu.js';
 import { parseChangeMap } from './levels.js';
-import { Session, SLOT_KEY, QUICK_KEY } from './session.js';
+import { Session, SLOT_KEY, QUICK_KEY, saveKey } from './session.js';
 import { SAVE_VERSION } from './savegame.js';
 import { Q2Audio } from './audio.js';
 import { WEAPONS, ITEMS, ARMOR_ICONS, TIMER_ICONS } from './gamedata.js';
@@ -426,7 +426,8 @@ const con = new Console({
   gameMap: (target) => { if (!res) return false; changeLevel(target, true).catch((err) => setStatus(err.message, true)); return true; },
   nextServer: (text) => { if (text != null) nextServer = String(text); return nextServer; },
   setView: (fov) => applyView(fov),
-  saveGame: () => saveGame(), loadGame: () => loadGame(),
+  // (save and load: the quick slot alone, a slot or a save of its own by name, SV_Savegame_f's and SV_Loadgame_f's)
+  saveGame: (name) => saveGame(name ? saveKey(name) : QUICK_KEY), loadGame: (name) => loadGame(name ? saveKey(name) : QUICK_KEY, name),
   toggleInventory: () => toggleScreen(0, 'inventory'),
   toggleScores: () => toggleScreen(0, 'scores'),                      // (score: Cmd_Score_f, the score board in a game of more than one client)
   putAway: () => { showHelp[0] = false; showInv[0] = false; showScores[0] = false; },   // (putaway: Cmd_PutAway_f)
@@ -701,10 +702,10 @@ async function saveGame(key = QUICK_KEY) {
     setTimeout(() => { if (statusEl.textContent.startsWith('Game saved')) setStatus(''); }, 2000);
   } catch (err) { console.error(err); setStatus(`Save failed: ${err.message}`, true); }
 }
-async function loadGame(key = QUICK_KEY) {
+async function loadGame(key = QUICK_KEY, name = null) {
   if (guestNotice()) return;
   const save = await session.readSave(key);
-  if (!save) { setStatus('No saved game', true); setTimeout(() => setStatus(''), 2000); return; }
+  if (!save) { setStatus(name ? `No such savegame: ${name}` : 'No saved game', true); setTimeout(() => setStatus(''), 2000); return; }
   await loadSaved(save);
 }
 /**
