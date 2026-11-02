@@ -1518,6 +1518,12 @@ try {
         `rcon at the joined page asks for rcon_password first ("${rcNo}"), runs status at the host with it ("${rcOk.line}", the lines on its scrollback, the host's saying ${JSON.stringify(rcHost.filter((l) => /rcon/i.test(l)))}) and is refused with another ("${rcBad}", ${JSON.stringify(rcHostBad.filter((l) => /rcon/i.test(l)))})`);
       const roomAfter = /^[A-Z2-9]{4}$/.test(offer) ? (await fetch(`http://localhost:${RELAY_PORT}/rooms/${offer}`)).status : 0;
       assert(roomAfter === 404, `the room at the relay is dropped once they are connected (${roomAfter})`);
+      // sv addip at the host lists a guest's name for the connect's filter, sv listip shows it, sv removeip takes it off
+      await typeOn(page, 'sv addip Rimmer'); await typeOn(page, 'sv listip');
+      const ipl = await page.evaluate(() => ({ line: document.getElementById('status')?.textContent, list: window.quake2.settings.banList.slice() })).catch(() => ({}));
+      await typeOn(page, 'sv removeip rimmer');
+      const ipl0 = await page.evaluate(() => window.quake2.settings.banList.length).catch(() => -1);
+      assert(ipl.line === 'Filter list: rimmer' && ipl.list?.join() === 'rimmer' && ipl0 === 0, `sv addip lists a name and listip shows it ("${ipl.line}"), removeip takes it off (${ipl0})`);
       // pingservers at the host: an address book entry at the test's relay with no room under it says no game
       const bookWas = await page.evaluate(() => window.quake2.settings.addressBook.slice()).catch(() => []);
       await page.evaluate((port) => { window.quake2.settings.addressBook = [`http://localhost:${port} ZZZZ`]; }, RELAY_PORT).catch(() => undefined);

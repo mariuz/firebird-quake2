@@ -883,7 +883,11 @@ page's alone; one the pak lacks is refused and the one up stays) and `hostname` 
 `password` and `spectator_password` (the network game's: a guest's info carries its `password`, and the host judges it as
 `SV_DirectConnect` and `ClientConnect` did, `connectRefusal` in `src/net.js`: a player's against the host's `password`, a
 watcher's against its `spectator_password`, empty or "none" asking nothing; a guest refused is kicked with the reason before it
-is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived), `rcon` and `rcon_password`
+is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived), `sv addip`, `sv removeip`,
+`sv listip` and `sv writeip` (g_svcmds.c's `ServerCommand`: a list of guest names, `settings.banList`, which `connectRefusal` checks at
+the connect as `SV_FilterPacket` checked addresses, a page having none of its own; a listed guest is kicked with "Banned.";
+`writeip` downloads listip.cfg, the lines that make the list again) and `filterban` (1 the listed kept out, 0 only they let in;
+archived), `rcon` and `rcon_password`
 (`CL_Rcon_f` and `SV_RemoteCommand_f`: a joined page's `rcon <line>` goes to the host with its `rcon_password`, `GuestLink.sendRcon`; the
 host's `Rcon_Validate` is its own `rcon_password`, none set taking none, and the line runs at its console with the prints and the status
 line kept meanwhile, `Com_BeginRedirect` as `rconOut`, and sent back as a `print` message onto the guest's scrollback and line; a wrong

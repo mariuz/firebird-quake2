@@ -1370,9 +1370,15 @@ words with the demo pak. In the order they are to be taken.
   name and map are not known before joining. `test:net` the four states against the relay in-process and the entries
   parsed; `test:console` the lines, the sum, an empty book, Tab; the browser test pings an entry at the test's relay
   with no room, on both builds.
-- **`sv addip`, `sv removeip`, `sv listip` and `sv writeip`**: g_svcmds.c's filter over the guests at the host:
-  a guest by its code or name kept out at the connect (`SV_FilterPacket`'s "You are banned"), the list printed,
-  `writeip` keeping it with the settings as listip.cfg was kept; `filterban` 1 bans the listed, 0 allows only them.
+- **`sv addip`, `sv removeip`, `sv listip` and `sv writeip`**: done. g_svcmds.c's filter at the host, over guest names
+  where Quake's was over addresses, since a page has no address of its own: `sv addip <name>` lists a name (lower-cased,
+  fifteen characters at most, `settings.banList`, kept across reloads), `sv removeip` takes it off ("Didn't find" one
+  not listed), `sv listip` prints the list, and `sv writeip` downloads listip.cfg, the lines that make the list again.
+  `connectRefusal` checks a guest's name at the connect as `SV_FilterPacket` checked an address; a listed guest is
+  kicked with "Banned.". `filterban` 1 keeps the listed out and 0 lets only them in; archived as Quake's was. A name
+  is the guest's own choosing, so the filter keeps out the careless, as an address filter did the lazy. `test:net`
+  the refusal both ways, case aside; `test:settings` the list and the cvar; `test:console` the four words, an unknown
+  one, filterban, config.cfg, Tab; the browser test lists, shows and removes a name at the host, on both builds.
 - **Delta frames and `cl_nodelta`**: the host sends a joined page every frame whole (five to seven kilobytes, twenty
   a second). `SV_WriteFrameToClient` sent the entities against the frame the client last acknowledged; here the
   face list, the entities and the styles would go as what changed since the guest's acknowledged frame, the

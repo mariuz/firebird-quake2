@@ -97,7 +97,11 @@ export function unpackFrame(p, sounds = [], fx = []) {
  * spectator_password (none when it is empty or "none"), a player's against the host's password (none when empty); the reason
  * to refuse it, or null. The host kicks a refused guest with the reason, as the connect was refused with it.
  */
-export function connectRefusal(info, { password = '', spectatorPassword = '' } = {}) {
+export function connectRefusal(info, { password = '', spectatorPassword = '', banList = [], filterban = true } = {}) {
+  // SV_FilterPacket (g_svcmds.c): a guest's name against the host's list, by its name, a page having no address of its own to
+  // filter; filterban 1 keeps the listed out, 0 lets only the listed in
+  const listed = (banList ?? []).includes(String(info?.name ?? '').trim().toLowerCase());
+  if (filterban !== false ? listed : !listed) return 'Banned.';
   const given = String(info?.password ?? '');
   if (info?.spectator) {
     const sp = String(spectatorPassword ?? '');

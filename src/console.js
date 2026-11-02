@@ -10,7 +10,7 @@ import { parseChangeMap } from './levels.js';
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_paused', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showclamp', 'cl_showmiss', 'cl_shownet', 'cl_sidespeed', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timedemo', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmd', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gamemap', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'impulse', 'in_joystick', 'in_mouse', 'in_restart', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'joy_forwardsensitivity', 'joy_forwardthreshold', 'joy_pitchsensitivity', 'joy_pitchthreshold', 'joy_sidesensitivity', 'joy_sidethreshold', 'joy_yawsensitivity', 'joy_yawthreshold', 'kick', 'kill', 'killserver', 'load', 'log_stats', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'nextserver', 'noclip', 'notarget', 'password', 'path', 'pause', 'pingservers', 'play', 'playerlist', 'players', 'putaway', 'quit', 'r_drawentities', 'r_drawworld', 'r_dspeeds', 'r_fullbright', 'r_lerpmodels', 'r_lockpvs', 'r_novis', 'r_speeds', 'rate', 'rcon', 'rcon_password', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_khz', 's_mixahead', 's_show', 's_testsound', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_conspeed', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'serverrecord', 'serverstop', 'set', 'showdrop', 'showpackets', 'sizedown', 'sizeup', 'skill', 'skin', 'skins', 'sky', 'snd_restart', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sv_showclamp', 'sw_aliasstats', 'sw_clearcolor', 'sw_drawflat', 'sw_maxsurfs', 'sw_mipcap', 'sw_mipscale', 'sw_reportsurfout', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'togglechat', 'toggleconsole', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'vid_mode', 'vid_ref', 'vid_restart', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig', 'z_stats'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_paused', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showclamp', 'cl_showmiss', 'cl_shownet', 'cl_sidespeed', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timedemo', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmd', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'filterban', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gamemap', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'impulse', 'in_joystick', 'in_mouse', 'in_restart', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'joy_forwardsensitivity', 'joy_forwardthreshold', 'joy_pitchsensitivity', 'joy_pitchthreshold', 'joy_sidesensitivity', 'joy_sidethreshold', 'joy_yawsensitivity', 'joy_yawthreshold', 'kick', 'kill', 'killserver', 'load', 'log_stats', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'nextserver', 'noclip', 'notarget', 'password', 'path', 'pause', 'pingservers', 'play', 'playerlist', 'players', 'putaway', 'quit', 'r_drawentities', 'r_drawworld', 'r_dspeeds', 'r_fullbright', 'r_lerpmodels', 'r_lockpvs', 'r_novis', 'r_speeds', 'rate', 'rcon', 'rcon_password', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_khz', 's_mixahead', 's_show', 's_testsound', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_conspeed', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'serverrecord', 'serverstop', 'set', 'showdrop', 'showpackets', 'sizedown', 'sizeup', 'skill', 'skin', 'skins', 'sky', 'snd_restart', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sv_showclamp', 'sw_aliasstats', 'sw_clearcolor', 'sw_drawflat', 'sw_maxsurfs', 'sw_mipcap', 'sw_mipscale', 'sw_reportsurfout', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'togglechat', 'toggleconsole', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'vid_mode', 'vid_ref', 'vid_restart', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig', 'z_stats'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -194,6 +194,8 @@ export const CVARS = {
   spectator_password: { key: 'spectatorPassword', show: (v) => String(v ?? ''), read: (w) => (/^[\x21-\x7e]{0,32}$/.test(w) ? w : null), help: 'at most 32 characters, no spaces', archive: false },
   // rcon_password (the client's rcon_password and the server's in one, as both were named: what rcon sends from a joined page, what the
   // host's Rcon_Validate asks for; empty, the host takes no rcon); not archived, as Quake's were not
+  // filterban (g_svcmds.c's: 1 the names sv addip lists are kept out, 0 only they are let in), archived as Quake's was
+  filterban: { key: 'filterban', show: (v) => (v === false ? '0' : '1'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1' },
   rcon_password: { key: 'rconPassword', show: (v) => String(v ?? ''), read: (w) => (/^[\x21-\x7e]{0,32}$/.test(w) ? w : null), help: 'at most 32 characters, no spaces', archive: false },
 };
 /**
@@ -472,7 +474,7 @@ export class Console {
       case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'm_filter': case 'in_joystick': case 'in_mouse': case 'joy_forwardthreshold': case 'joy_sidethreshold': case 'joy_pitchthreshold': case 'joy_yawthreshold': case 'joy_forwardsensitivity': case 'joy_sidesensitivity': case 'joy_pitchsensitivity': case 'joy_yawsensitivity': case 'netgraph': case 'timegraph': case 'debuggraph': case 'graphheight': case 'graphscale': case 'graphshift': case 'cl_predict': case 'cl_showmiss': case 'cl_shownet': case 'cl_showclamp': case 'sv_showclamp': case 'showpackets': case 'showdrop': case 'viewsize':
       case 'cl_add_entities': case 'cl_add_particles': case 'cl_add_lights': case 'cl_add_blend': case 'cl_testentities': case 'cl_testparticles': case 'cl_testlights': case 'cl_testblend':
       case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lockpvs': case 'r_dspeeds': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': case 'host_speeds': case 'developer': case 'sv_noreload': case 'sw_drawflat': case 'sw_waterwarp': case 'sw_clearcolor': case 'sw_mipcap': case 'sw_mipscale': case 'sw_stipplealpha': case 'sw_aliasstats': case 'sw_reportsurfout': case 'sw_maxsurfs':
-      case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname': case 'password': case 'spectator_password': case 'rcon_password':
+      case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname': case 'password': case 'spectator_password': case 'rcon_password': case 'filterban':
       case 'cl_yawspeed': case 'cl_pitchspeed': case 'cl_anglespeedkey': case 'cl_forwardspeed': case 'cl_sidespeed': case 'cl_upspeed': case 'timeout': case 'cl_timeout':
       case 'gun_x': case 'gun_y': case 'gun_z': case 'scr_centertime': case 'scr_conspeed': case 'cl_footsteps': case 'scr_showpause': case 'scr_showturtle': case 'cl_maxfps': {
         // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
@@ -1093,6 +1095,37 @@ export class Console {
         h.print?.(['userinfo', '--------', ...pairs.map(([k, v]) => `${k.padEnd(20)}${v}`)].join('\n'));
         say(`client ${n}: ${pairs.map(([k, v]) => `${k} "${v}"`).join(' · ')}`, false, 8000);
         return;
+      }
+      case 'sv': {
+        // ServerCommand (g_svcmds.c) at the host's console: addip, removeip, listip and writeip over a list of guest names (SV_FilterPacket
+        // filtered addresses; a page has none of its own, so a guest is known by the name its userinfo gives), checked at the connect
+        const [sub = '', ...rest] = arg.split(/\s+/).filter(Boolean);
+        const who = rest.join(' ').toLowerCase();
+        const list = h.settings.banList ?? [];
+        switch (sub.toLowerCase()) {
+          case 'addip':
+            if (!who || who.length > 15) { say('Usage: sv addip <name> (a guest\'s name, fifteen characters at most)', true); return; }
+            if (!list.includes(who)) { h.settings.banList = [...list, who]; h.saveSettings(); }
+            say(`${who} added to the filter (${h.settings.banList.length} listed)`);
+            return;
+          case 'removeip':
+            if (!who) { say('Usage: sv removeip <name>', true); return; }
+            if (!list.includes(who)) { say(`Didn't find ${who}.`, true); return; }
+            h.settings.banList = list.filter((n) => n !== who); h.saveSettings();
+            say('Removed.');
+            return;
+          case 'listip':
+            h.print?.(['Filter list:', ...list].join('\n'));
+            say(list.length ? `Filter list: ${list.join(', ')}` : 'Filter list: empty');
+            return;
+          case 'writeip':
+            h.download?.('listip.cfg', ['set filterban ' + (h.settings.filterban === false ? 0 : 1), ...list.map((n) => `sv addip ${n}`)].join('\n') + '\n');
+            say('Writing listip.cfg.');
+            return;
+          default:
+            say(sub ? `Unknown server command "${sub}"` : 'Usage: sv addip | removeip | listip | writeip', true);
+            return;
+        }
       }
       case 'kick': {
         // SV_Kick_f: the guest driving a client dropped by the client's number, at the host's console alone

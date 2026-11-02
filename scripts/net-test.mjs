@@ -155,6 +155,9 @@ check(connectRefusal({ password: '' }, { password: '' }) === null && connectRefu
 check(connectRefusal({ spectator: 1, password: 'wrong' }, { password: 'secret', spectatorPassword: '' }) === null && connectRefusal({ spectator: 1, password: 'x' }, { spectatorPassword: 'watch' }) === 'Spectator password required or incorrect'
   && connectRefusal({ spectator: 1, password: 'watch' }, { spectatorPassword: 'watch' }) === null && connectRefusal({ spectator: 1, password: '' }, { password: 'secret', spectatorPassword: 'none' }) === null,
   'a watcher is judged by the spectator password alone: none or "none" lets it in, a wrong one refuses it');
+check(connectRefusal({ name: 'Rimmer' }, { banList: ['rimmer'] }) === 'Banned.' && connectRefusal({ name: 'Lister' }, { banList: ['rimmer'] }) === null
+  && connectRefusal({ name: 'Lister' }, { banList: ['rimmer'], filterban: false }) === 'Banned.' && connectRefusal({ name: 'rimmer ' }, { banList: ['rimmer'], filterban: false }) === null,
+  'sv addip\'s list (SV_FilterPacket by name): filterban 1 keeps the listed out, case aside, 0 lets only them in');
 guest.sendInfo({ name: 'x', hand: 0 });
 check(host.info.password === '', 'no password given is none');
 check(host.info.hand === 0 && host.info.spectator === 0 && host.info.fov === null, 'a hand that is not 0, 1 or 2 is right-handed; a guest plays unless it says it watches; no fov given is the view\'s');
