@@ -1336,10 +1336,33 @@ demo pak. In the order they are to be taken.
   `test:settings` the archived names; `test:console` the flags (archived once, u and s refused on others, a lone value
   that reads as a flag), the flag column and the count, the usage; the browser test reads the flagged lines in the
   scrollback, on both builds.
-- **`scr_conspeed` and `scr_drawall`**: the console dropping over the view at `scr_conspeed`'s pixels a second as
-  `SCR_RunConsole` moved it (the page's console drawn in the view, `Con_DrawConsole`'s lines and the input line over
-  the frame when up, the page's input line standing in), and `scr_drawall` (`SCR_UpdateScreen`: the whole screen
-  painted each frame, the status bar's dirty rectangles aside).
+- **`scr_conspeed` and `scr_drawall`**: done for what the page has. `scr_conspeed` is `SCR_RunConsole`'s speed: the
+  console drops from above the view to its place over half the screen at that fraction of the screen a second, 500 /
+  speed ms (3 by default: a sixth of a second; 0 at once), the page's input line and scrollback animated (`conDrop`).
+  It goes up at once on Escape or Enter, the focus back to the view; not archived. `scr_drawall` is left out: it
+  made `SCR_UpdateScreen` paint the whole screen where it kept dirty rectangles round the status bar, and the painter
+  here paints the whole frame every time, so the cvar would have nothing to switch. `test:settings` the setting;
+  `test:console` shown, set, refused, left out of config.cfg, Tab; the browser test sees the console's drop take
+  500 ms at 1 and none at 0, on both builds.
+
+The twentieth list: what the saves, the server's own words and a shared game's link still lack of Quake 2's own
+words with the demo pak. In the order they are to be taken.
+
+- **`save <name>` and `load <name>`**: `SV_Savegame_f` and `SV_Loadgame_f` with a name, as the console took them:
+  a slot by its number (`save1`, `load 3`) or a save named as typed, kept with the slots, `save` and `load` alone
+  staying the quick slot (F6 and F9).
+- **`serverrecord` and `serverstop`**: `SV_ServerRecord_f`, a recording of the game as the server sent it (every
+  client's entities, not one view's), and `SV_ServerStop_f` ending it, kept with the recordings.
+- **`pingservers`**: `CL_PingServers_f` over the address book: each entry's relay asked for its code, the answer
+  (the host's name and its map, or none) and the time it took shown, as the join server menu listed the LAN's.
+- **`sv addip`, `sv removeip`, `sv listip` and `sv writeip`**: g_svcmds.c's filter over the guests at the host:
+  a guest by its code or name kept out at the connect (`SV_FilterPacket`'s "You are banned"), the list printed,
+  `writeip` keeping it with the settings as listip.cfg was kept; `filterban` 1 bans the listed, 0 allows only them.
+- **Delta frames and `cl_nodelta`**: the host sends a joined page every frame whole (five to seven kilobytes, twenty
+  a second). `SV_WriteFrameToClient` sent the entities against the frame the client last acknowledged; here the
+  face list, the entities and the styles would go as what changed since the guest's acknowledged frame, the
+  guest rebuilding the frame from its copy, and `cl_nodelta 1` (`CL_SendCmd`'s request) asking for whole frames
+  again. Measured by the bytes a second at the guest (`showpackets`) on a walk through demo1, both ways.
 
 ## Playing the demo
 

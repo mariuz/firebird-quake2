@@ -640,6 +640,7 @@ function drawChat(r, y) {
   r.drawString(hud.conchars, text, skip * 8, y);
   r.drawChar(hud.conchars, 10 + ((performance.now() >> 8) & 1), (text.length + skip) * 8, y);
 }
+let conDrop = null;   // scr_conspeed: the last drop's { ms } (SCR_RunConsole: the console moved to half the screen at scr_conspeed of it a second)
 function openConsole(prefill = '') {
   if (document.pointerLockElement) { quietUnlock = true; document.exitPointerLock?.(); }
   input.clear();
@@ -650,6 +651,11 @@ function openConsole(prefill = '') {
   conlog.hidden = !conlog.textContent;
   con.reset();
   cmdline.focus();
+  // scr_conspeed: the console drops from above the view to its place, the half screen at the speed's fraction of the screen a second
+  const speed = Number(settings.scrConspeed);
+  const ms = speed > 0 ? Math.round(500 / speed) : 0;
+  conDrop = { ms };
+  if (ms > 0) for (const el of [cmdline, conlog]) if (!el.hidden) el.animate?.([{ transform: 'translateY(-120%)' }, { transform: 'none' }], { duration: ms, easing: 'linear' });
 }
 function closeConsole() {
   cmdline.hidden = true;
@@ -2182,7 +2188,7 @@ async function boot() {
     db = await openDatabase();
     session = new Session(db, storage);
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
-    window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; },
+    window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },

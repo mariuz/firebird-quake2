@@ -830,7 +830,9 @@ kept within 1, and makes the upmove ±`cl_upspeed` for `+moveup` and `+movedown`
 and the duck below 0 and adds to the wish in water and, as a share of 200, in noclip; none archived, as Quake's were not),
 `cl_lightlevel` (`R_SetLightLevel`'s: the light at the eye, 150 at full light, from the lightmap under it, `lightLevel`; shown, never set),
 `gun_x`, `gun_y` and `gun_z` (`SV_CalcGunOffset`'s development tools, 0: the view weapon drawn moved along the view's right,
-forward and down, `drawFrame`'s) and `scr_centertime` (`SCR_DrawCenterString`: a centre print drawn 2.5 seconds from when it came,
+forward and down, `drawFrame`'s) `scr_conspeed` (`SCR_RunConsole`: the console drops from above the view to its place over half the screen at the speed's
+fraction of the screen a second, 500 / speed ms, 3 by default, 0 at once; the page's input line and scrollback animated, `conDrop`;
+it goes up at once on Escape or Enter, the focus going back to the view; not archived) and `scr_centertime` (`SCR_DrawCenterString`: a centre print drawn 2.5 seconds from when it came,
 `CenterPrint` in `src/notify.js`, a view each, whatever the row carries it for: the SQL keeps it three seconds, a demo's frames
 as written; none archived, as Quake's were not), `cl_footsteps` (0: no footstep played, `Q2Audio.footsteps`; the footsteps
 are `G_SetClientEvent`'s `EV_FOOTSTEP` in `player_think`, a `player/step1-4.wav` on the body channel each time the bob cycle's

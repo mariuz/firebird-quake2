@@ -491,6 +491,17 @@ try {
     await typeCommand('name Ace');
     let cvName = '';
     for (let i = 0; i < 20 && cvName !== 'Ace'; i++) { await sleep(250); cvName = await page.evaluate(() => window.quake2.session.last.NETNAME).catch(() => ''); }
+    // scr_conspeed 1: the console drops over half a second (SCR_RunConsole's half screen at a screen a second); 0 at once
+    await typeCommand('scr_conspeed 1');
+    await page.keyboard.press('Backquote'); await sleep(100);
+    const drop1 = await page.evaluate(() => ({ ms: window.quake2.conDrop?.ms, anim: document.getElementById('cmdline').getAnimations()[0]?.effect.getTiming().duration ?? null })).catch(() => ({}));
+    await page.keyboard.press('Escape'); await sleep(100);
+    await typeCommand('scr_conspeed 0');
+    await page.keyboard.press('Backquote'); await sleep(100);
+    const drop0 = await page.evaluate(() => ({ ms: window.quake2.conDrop?.ms, anims: document.getElementById('cmdline').getAnimations().length })).catch(() => ({}));
+    await page.keyboard.press('Escape'); await sleep(100);
+    await typeCommand('scr_conspeed 3');
+    assert(drop1.ms === 500 && drop1.anim === 500 && drop0.ms === 0 && drop0.anims === 0, `scr_conspeed 1 drops the console over 500 ms (${JSON.stringify(drop1)}), 0 at once (${JSON.stringify(drop0)})`);
     await typeCommand('cvarlist');
     const cvLog = await page.evaluate(() => window.quake2.notify.log(300)).catch(() => []);
     const cv = await page.evaluate(() => ({ sens: window.quake2.settings.sensitivity, stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).sensitivity, name: window.quake2.settings.name, list: document.getElementById('status')?.textContent })).catch(() => ({}));
