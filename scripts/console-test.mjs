@@ -21,8 +21,8 @@ const host = {
   setStatus: (msg, isError = false) => status.push([msg, isError]),
   startMap: async (name) => calls.push(['startMap', name]),
   setView: async (fov) => calls.push(['setView', fov]),
-  saveGame: async () => calls.push(['saveGame']),
-  loadGame: async () => calls.push(['loadGame']),
+  saveGame: async (n) => calls.push(n ? ['saveGame', n] : ['saveGame']),
+  loadGame: async (n) => calls.push(n ? ['loadGame', n] : ['loadGame']),
   toggleInventory: () => calls.push(['inven']),
   isRunning: () => running,
   playDemo: async (name) => calls.push(['playDemo', name]),
@@ -86,6 +86,15 @@ check(host.settings.skill === 2 && status.at(-1)?.[0] === '"skill" is "2"', 'wit
 running = true;
 await con.submit('save'); check(last() === 'saveGame', 'save saves');
 await con.submit('load'); check(last() === 'loadGame', 'load loads');
+// save and load with a name (SV_Savegame_f, SV_Loadgame_f): lower-cased, letters, digits and _, fifteen at most; current refused
+await con.submit('save Mine'); check(last() === 'saveGame mine', 'save Mine saves under the name, lower-cased');
+await con.submit('load save3'); check(last() === 'loadGame save3', 'load save3 loads the third slot by its name');
+{
+  const n = calls.length;
+  await con.submit('save two words'); check(calls.length === n && status.at(-1)?.[0] === 'save takes a name of letters, digits and _, fifteen at most' && status.at(-1)?.[1] === true, 'a name with a space is refused');
+  await con.submit('load sixteen_letters1'); check(calls.length === n && status.at(-1)?.[1] === true, 'a name past fifteen is refused');
+  await con.submit('save current'); check(calls.length === n && status.at(-1)?.[0] === "Can't save to 'current'", 'current is refused, as Quake refused it');
+}
 await con.submit('inven'); check(last() === 'inven', 'inven toggles the inventory');
 await con.submit('give all');
 check(last() === 'query SELECT msg FROM player_command(?, ?) give all', 'give all goes to player_command as (give, all)');

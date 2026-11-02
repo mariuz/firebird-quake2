@@ -694,7 +694,9 @@ the rest of a line to the next frame (`Console.tick` from the page's frame). `ma
 unit's levels forgotten; the string as `target_changelevel` writes one, `src/levels.js`: a `$` spawn point, a `.pcx` picture or a
 `.cin` cinematic with `+` what follows, the page's `changeLevel` without the keep), `gamemap <string>` (`SV_GameMap_f`: the level
 running kept aside with the unit's flags as an exit keeps it, `*` wiping the unit, then the string's way), `nextserver` (what follows
-the picture or the cinematic playing, held as `SV_Map` set the cvar; shown and set at the console), `save`, `load`, `fov`,
+the picture or the cinematic playing, held as `SV_Map` set the cvar; shown and set at the console), `save` and `load` (alone the quick slot, F6's and F9's; with a name as `SV_Savegame_f` and
+`SV_Loadgame_f` took one, `saveKey`: save0 to save15 the menus' slots, any other name, letters, digits and _, fifteen at most, a save
+of its own beside them; "current" refused, a name not saved "No such savegame"), `fov`,
 `seed` and `skill` are the page's (`skill 0`–`3`: the next map's skill, 3 the nightmare the menus stop short
 of, latched as the cvar was: "skill will be changed for next game."), as are the settings as cvars (`name`,
 `hand`, `sensitivity`, `cl_run`, `m_pitch`, `crosshair`, `s_volume`, `cd_volume`, the mouse look's `freelook`,
