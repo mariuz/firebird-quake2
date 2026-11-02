@@ -111,6 +111,48 @@ export function connectRefusal(info, { password = '', spectatorPassword = '', ba
   return pw && given !== pw ? 'Password required or incorrect' : null;
 }
 
+// ── delta frames (SV_WriteFrameToClient's delta from the frame the client acknowledged) ───────────────────────────────
+const DELTA_KEYS = ['ents', 'loops', 'styles', 'speakers', 'brushFrames', 'brushAngles', 'boxes'];
+export const DELTA_KEEP = 32;   // the packed frames each end keeps by number (UPDATE_BACKUP's sixteen, twice: a frame acked late still serves)
+/**
+ * A packed frame against a base the other end holds: each part equal to the base's left out, and the faces as runs of the base's
+ * (a [start, length] pair) between faces of their own (a face is five numbers or more), so a view standing or walking sends what
+ * changed. The faces' order is kept.
+ */
+export function deltaFrame(base, cur) {
+  const d = {};
+  for (const k of DELTA_KEYS) if (JSON.stringify(base[k]) !== JSON.stringify(cur[k])) d[k] = cur[k];
+  const at = new Map();
+  base.faces.forEach((f, i) => { const key = JSON.stringify(f); if (!at.has(key)) at.set(key, i); });
+  const runs = [];
+  let run = null;
+  for (const f of cur.faces) {
+    const i = at.get(JSON.stringify(f));
+    if (i === undefined) { run = null; runs.push(f); continue; }
+    if (run && run[0] + run[1] === i) { run[1]++; continue; }
+    run = [i, 1]; runs.push(run);
+  }
+  d.fr = runs;
+  return d;
+}
+/** A row against its base: the columns whose values changed (SV_WritePlayerstateToClient's delta of the player state). */
+export function deltaRow(base, row) {
+  const d = {};
+  for (const k of Object.keys(row)) if (JSON.stringify(row[k]) !== JSON.stringify(base?.[k])) d[k] = row[k];
+  return d;
+}
+/** The packed frame again from its base and a delta (deltaFrame's inverse). */
+export function undeltaFrame(base, d) {
+  const out = {};
+  for (const k of DELTA_KEYS) out[k] = k in d ? d[k] : base[k];
+  out.faces = [];
+  for (const r of d.fr ?? []) {
+    if (r.length === 2) for (let i = 0; i < r[1]; i++) out.faces.push(base.faces[r[0] + i]);
+    else out.faces.push(r);
+  }
+  return out;
+}
+
 /** SV_CheckTimeouts and CL_CheckTimeout: whether a link has been silent longer than `seconds` (0: never), by its clock. */
 export const silentPast = (link, seconds) => seconds > 0 && link.now() - link.heardAt > seconds * 1000;
 
@@ -118,6 +160,12 @@ export class HostLink {
   constructor(link, { now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) } = {}) {
     this.link = link;
     this.pending = [];      // the guest's commands since the last tic
+    this.frameNo = 0;       // the frames sent, numbered (the delta's base is one of them)
+    this.sentPacked = new Map();   // the last DELTA_KEEP packed frames sent, by number
+    this.sentRows = new Map();     // ... and their rows (a row goes as the columns changed since the base's)
+    this.frameAck = -1;     // the newest frame the guest says it holds (its commands carry it), the next delta's base
+    this.nodelta = false;   // cl_nodelta at the guest: every frame whole
+    this.deltaFrames = 0;   // the frames sent as deltas
     this.last = null;       // the last command the tic ran
     this.now = now;
     this.heardAt = now();   // when the guest was last heard (SV_CheckTimeouts: silent past the timeout cvar, it is dropped)
@@ -141,7 +189,11 @@ export class HostLink {
       if (!m) return;
       this.heardAt = this.now();
       this.onPacket?.('recv', String(m.t ?? '?'), size || JSON.stringify(m).length);
-      if (m.t === 'cmd' && Array.isArray(m.c)) { this.pending.push(m.c); this.wantInv = !!m.inv; if (Number.isInteger(m.seq)) this.pendingSeq = m.seq; }
+      if (m.t === 'cmd' && Array.isArray(m.c)) {
+        this.pending.push(m.c); this.wantInv = !!m.inv; if (Number.isInteger(m.seq)) this.pendingSeq = m.seq;
+        if (Number.isInteger(m.fa)) this.frameAck = m.fa;
+        this.nodelta = !!m.nd;
+      }
       else if (m.t === 'pong' && typeof m.at === 'number') this.ping = Math.max(0, Math.round(this.now() - m.at));
       else if (m.t === 'info') {
         this.info = { name: typeof m.name === 'string' ? m.name.slice(0, 15) : '', hand: [0, 1, 2].includes(m.hand) ? m.hand : 0, spectator: m.spectator ? 1 : 0,
@@ -182,7 +234,7 @@ export class HostLink {
     return c;
   }
   /** A map is in: its name and what the guest's page sets up from (the sky, the music, the speakers, the view). */
-  sendMap(setup) { this.send({ t: 'map', ...setup }); }
+  sendMap(setup) { this.sentPacked.clear(); this.sentRows.clear(); this.frameAck = -1; this.send({ t: 'map', ...setup }); }   // (a new map: no frame of the last is a base)
   /** A picture screen at a level's end (the guest shows it until the next map). */
   sendPic(file) { this.send({ t: 'pic', file }); }
   /** A cinematic at a level's end (the guest plays its own copy until the next map). */
@@ -205,7 +257,13 @@ export class HostLink {
     const at = this.now();
     while (this.sizes.length && this.sizes[0][0] <= at - 1000) this.sizes.shift();
     if (this.sizes.reduce((n, s) => n + s[1], 0) > (this.info?.rate ?? 500000)) { this.heldFrames++; this.onDrop?.('held', row?.TIC ?? 0); return false; }
-    const size = this.send({ t: 'f', row, f: packFrame(frame), sounds, fx, dt, ack: this.ack, ...(inv ? { inv } : {}) });
+    // (the frame whole, or against the newest one the guest holds: SV_WriteFrameToClient's delta, cl_nodelta asking for it whole)
+    const packed = packFrame(frame), n = ++this.frameNo;
+    const base = this.nodelta ? null : this.sentPacked.get(this.frameAck), baseRow = base ? this.sentRows.get(this.frameAck) : null;
+    this.sentPacked.set(n, packed); this.sentRows.set(n, row);
+    if (this.sentPacked.size > DELTA_KEEP) { const old = this.sentPacked.keys().next().value; this.sentPacked.delete(old); this.sentRows.delete(old); }
+    if (base) this.deltaFrames++;
+    const size = this.send({ t: 'f', n, ...(base ? { b: this.frameAck, df: deltaFrame(base, packed), rd: deltaRow(baseRow, row) } : { row, f: packed }), sounds, fx, dt, ack: this.ack, ...(inv ? { inv } : {}) });
     this.sizes.push([at, size]);
     this.sentFrames++;
     return true;
@@ -235,6 +293,11 @@ export class GuestLink {
     this.onPacket = null;   // showpackets: each message's direction ('send' | 'recv'), kind and size
     this.onDrop = null;     // showdrop (Netchan_Process's "Dropped %i packets at %i"): the frames missed before one, by the tics between, and its tic
     this.lastTic = null;    // the last frame's tic (the drops counted from it)
+    this.packedFrames = new Map();   // the last DELTA_KEEP packed frames by number (a delta's base)
+    this.rows = new Map();           // ... and their rows
+    this.frameAck = -1;     // the newest frame held, said to the host with each command
+    this.nodelta = false;   // cl_nodelta: every frame asked for whole
+    this.missedBases = 0;   // deltas whose base was not here (left out: the next whole frame or one against a held base replaces it)
     this.onClose = null;
     link.onMessage = (m) => this.receive(m);
     link.onClose = () => this.onClose?.();
@@ -248,13 +311,21 @@ export class GuestLink {
     this.onPacket?.('recv', String(m.t ?? '?'), size || JSON.stringify(m).length);
     if (this.onNet) this.onNet(String(m.t ?? '?'), size || JSON.stringify(m).length);   // (cl_shownet: each message's kind and size, as CL_ParseServerMessage printed them; a link in one process gives no text, so its size is the JSON's)
     switch (m.t) {
-      case 'map': this.map = m; this.frame = null; this.fresh = false; this.lastTic = null; this.onMap?.(m); break;
+      case 'map': this.map = m; this.frame = null; this.fresh = false; this.lastTic = null; this.packedFrames.clear(); this.rows.clear(); this.frameAck = -1; this.onMap?.(m); break;
       case 'f': {
+        // (a delta from a base not held is left out, the ack staying on the newest held, so the host's next delta is against it)
+        const packed = m.df ? (this.packedFrames.has(m.b) ? undeltaFrame(this.packedFrames.get(m.b), m.df) : null) : m.f;
+        if (!packed) { this.missedBases++; break; }
+        const row = m.df ? { ...this.rows.get(m.b), ...m.rd } : m.row;
+        if (Number.isInteger(m.n)) {
+          this.packedFrames.set(m.n, packed); this.rows.set(m.n, row); this.frameAck = m.n;
+          if (this.packedFrames.size > DELTA_KEEP) { const old = this.packedFrames.keys().next().value; this.packedFrames.delete(old); this.rows.delete(old); }
+        }
         // (showdrop: a frame's tic past the last one's by more than the tics it ran is frames the host held or dropped, Netchan_Process's gap)
-        const tic = m.row?.TIC, ran = Math.max(1, Math.round((m.dt ?? 0.05) / 0.05));
+        const tic = (m.row ?? m.rd)?.TIC, ran = Math.max(1, Math.round((m.dt ?? 0.05) / 0.05));
         if (Number.isInteger(tic) && Number.isInteger(this.lastTic) && tic - this.lastTic > ran) this.onDrop?.(tic - this.lastTic - ran, tic);
         if (Number.isInteger(tic)) this.lastTic = tic;
-        this.row = m.row; this.frame = unpackFrame(m.f, m.sounds ?? [], m.fx ?? []); this.dt = m.dt ?? 0.05; this.ack = Number.isInteger(m.ack) ? m.ack : -1;
+        this.row = row; this.frame = unpackFrame(packed, m.sounds ?? [], m.fx ?? []); this.dt = m.dt ?? 0.05; this.ack = Number.isInteger(m.ack) ? m.ack : -1;
         if (m.inv) this.inv = m.inv;
         this.fresh = true; this.frames++;
         break;
@@ -268,7 +339,7 @@ export class GuestLink {
     }
   }
   /** This tic's usercmd (Input.read's array); `inv` asks for the inventory rows with the frames; `seq` numbers it for the ack. */
-  sendCommand(cmd, { inv = false, seq } = {}) { this.send({ t: 'cmd', c: cmd, inv: !!inv, ...(Number.isInteger(seq) ? { seq } : {}) }); }
+  sendCommand(cmd, { inv = false, seq } = {}) { this.send({ t: 'cmd', c: cmd, inv: !!inv, ...(Number.isInteger(seq) ? { seq } : {}), fa: this.frameAck, ...(this.nodelta ? { nd: 1 } : {}) }); }
   /** The guest's userinfo (the name and the hand of its player setup, whether it only watches, its fov, its rate and skin), at the connect and whenever it changes. */
   sendInfo({ name = '', hand = 0, spectator = 0, fov = null, gender = 'male', msg = 1, rate = null, skin = null, password = '' } = {}) {
     this.send({ t: 'info', name: String(name).slice(0, 15), hand, spectator: spectator ? 1 : 0, ...(Number.isFinite(fov) ? { fov } : {}), gender: String(gender ?? 'male').slice(0, 15), msg,

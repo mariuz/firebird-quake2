@@ -11,7 +11,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
@@ -364,6 +364,35 @@ for (let i = 0; i < 40; i++) {
 check(acks === 40 && walked > 200, `forty commands, each acked by the frame of its tic, walk the guest ${walked.toFixed(0)} units with turns and two jumps`);
 check(predErr < 1e-6, `the guest's own move run ahead from each frame's row lands where the host's next frame lands (the largest difference ${predErr.toExponential(1)})`);
 check(typeof got.row.VX === 'number' && typeof got.row.ONGROUND === 'number', 'the row the frame carries has the move\'s state the prediction starts from');
+// delta frames (SV_WriteFrameToClient's delta from the frame the client acknowledged): the same walk sent whole (cl_nodelta) and as
+// deltas, the frames the guest rebuilds the same as the whole ones, and what each costs on the link
+{
+  const walkCost = async (nodelta) => {
+    guest.nodelta = nodelta;
+    let bytes = 0, frames = [];
+    for (let i = 0; i < 30; i++) {
+      guest.sendCommand([1, 1, 0, i < 15 ? 3 : -3, 0, 0, 0, 1, 0], { seq: 300 + i + (nodelta ? 100 : 0) });
+      const r = await hostTic();
+      bytes += host.sizes.at(-1)?.[1] ?? 0;
+      const g = guest.take();
+      frames.push([JSON.stringify(r.gf.faces) + JSON.stringify(session.clients[1]), JSON.stringify(g?.frame.faces) + JSON.stringify(g?.row)]);
+    }
+    return { bytes, same: frames.every(([a, b]) => a === b) };
+  };
+  await new Promise((r) => setTimeout(r, 1050));
+  const was = host.deltaFrames;
+  const whole = await walkCost(true);
+  const wholeDeltas = host.deltaFrames - was;
+  const delta = await walkCost(false);
+  guest.nodelta = false;
+  check(wholeDeltas === 0 && host.deltaFrames - was >= 28 && whole.same && delta.same && delta.bytes < whole.bytes * 0.6 && guest.missedBases === 0,
+    `a walk of 30 tics: ${whole.bytes} characters whole (cl_nodelta), ${delta.bytes} as deltas (${(100 * delta.bytes / whole.bytes).toFixed(0)} %), the guest's frames and rows the host's, face for face and column for column, both ways`);
+  const base = { faces: [[1, 0, 0, 0, 0], [2, 0, 0, 0, 0], [3, 0, 0, 0, 0]], ents: [[9]], loops: [], styles: [1], speakers: [], brushFrames: [], brushAngles: [], boxes: [] };
+  const cur = { ...base, faces: [[2, 0, 0, 0, 0], [3, 0, 0, 0, 0], [4, 0, 0, 0, 0]], styles: [2] };
+  const d = deltaFrame(base, cur);
+  check(JSON.stringify(d.fr) === '[[1,2],[4,0,0,0,0]]' && !('ents' in d) && d.styles[0] === 2 && JSON.stringify(undeltaFrame(base, d)) === JSON.stringify({ ents: base.ents, loops: [], styles: [2], speakers: [], brushFrames: [], brushAngles: [], boxes: [], faces: cur.faces }),
+    'a delta keeps a run of the base\'s faces as a pair, a new face whole, a part unchanged out, and rebuilds the frame');
+}
 // a message longer than a channel message goes in chunks and arrives whole
 const [c, d] = Loopback.pair();
 const big = new Link(c), bigIn = new Link(d);
@@ -381,10 +410,10 @@ a.bufferedAmount = 0;
 
 // the rate userinfo: the frames of the last second kept under the guest's bytes a second (SV_RateDrop: a frame past their sum is held,
 // counted as surpressCount counted it, not dropped), clamped as SV_UserinfoChanged clamped it; the skin kept with the info
-guest.sendInfo({ name: 'x', hand: 0, rate: 25000, skin: 'female/athena' });
-check(host.info.rate === 25000 && host.info.skin === 'female/athena', 'the rate and the skin reach the host with the info');
+guest.sendInfo({ name: 'x', hand: 0, rate: 8000, skin: 'female/athena' });
+check(host.info.rate === 8000 && host.info.skin === 'female/athena', 'the rate and the skin reach the host with the info');
 await session.setUserinfo(2, host.info);
-check(session.userinfo[2].rate === 25000 && session.userinfo[2].skin === 'female/athena', 'and the session keeps them with the client\'s userinfo');
+check(session.userinfo[2].rate === 8000 && session.userinfo[2].skin === 'female/athena', 'and the session keeps them with the client\'s userinfo');
 {
   await new Promise((r) => setTimeout(r, 1050));   // (the frames sent so far, at 500000, out of the last second's window)
   const was = { sent: host.sentFrames, held: host.heldFrames, dropped: host.droppedFrames };
@@ -392,7 +421,7 @@ check(session.userinfo[2].rate === 25000 && session.userinfo[2].skin === 'female
   for (let i = 0; i < 8; i++) { if ((await hostTic()).sent) sentN++; }
   const held = host.heldFrames - was.held, size = host.sizes.at(-1)?.[1] ?? 0;
   check(sentN >= 1 && held >= 1 && sentN + held === 8 && host.sentFrames - was.sent === sentN && host.droppedFrames === was.dropped && size > 1000,
-    `at a rate of 25000 bytes a second, frames of ${size} characters: ${sentN} of 8 in a row sent, ${held} held, none dropped`);
+    `at a rate of 8000 bytes a second, frames of ${size} characters: ${sentN} of 8 in a row sent, ${held} held, none dropped`);
 }
 guest.sendInfo({ name: 'x', hand: 0, rate: 10, skin: 'grunt' });
 check(host.info.rate === 1000 && host.info.skin === 'male/grunt', 'a rate under 1000 is clamped up to it, a skin without its model is male/grunt');
