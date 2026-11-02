@@ -15,7 +15,7 @@ export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, m
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
   coop: false, deathmatch: false,
-  dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, gender: 'male', msg: 1, rate: 500000, skin: 'male/grunt', rtcIce: '', rtcSignal: '', addressBook: Object.freeze([]), netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0 });
+  dmflags: 0, fraglimit: 0, timelimit: 0, cheats: 0, players: 2, binds: DEFAULT_BINDS, lines: DEFAULT_LINES, name: '', hand: 0, gender: 'male', msg: 1, rate: 500000, skin: 'male/grunt', rtcIce: '', rtcSignal: '', addressBook: Object.freeze([]), cvarArchive: Object.freeze([]), netgraph: false, timegraph: false, debuggraph: false, graphheight: 32, graphscale: 1, graphshift: 0 });
 
 // the options menu's "reset defaults" and the video menu's "reset" (M_Menu_Options_f, VID_MenuInit)
 export const OPTIONS_RESET = Object.freeze({ sfx: 70, musicMode: 'tracks', sensitivity: 7, alwaysRun: true, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, crosshair: 1 });
@@ -113,6 +113,8 @@ const CHECK = {
   // the signalling relay (scripts/signal.mjs) the network game's texts go through under a room code (rtc_signal): its http(s) url
   rtcSignal: (v) => (typeof v === 'string' && v.length <= 300 && (v === '' || /^https?:\/\/\S+$/i.test(v)) ? v : undefined),
   // the address book (the menu's adr0 to adr8): up to nine texts of printable characters, a code at the relay or a relay and a code
+  // the cvars `set <cvar> <value> a` archived beyond their own (Cvar_Set_f's CVAR_ARCHIVE flag): names, config.cfg writes them
+  cvarArchive: (v) => (Array.isArray(v) ? [...new Set(v.filter((e) => typeof e === 'string' && /^[a-z_0-9]{1,32}$/.test(e)))].slice(0, 256) : undefined),
   addressBook: (v) => (Array.isArray(v) ? v.slice(0, 9).map((e) => (typeof e === 'string' && /^[\x20-\x7e]{0,300}$/.test(e) ? e : '')) : undefined),
   netgraph: bool,        // the network graph along the bottom of a joined page's view (the netgraph cvar)
   timegraph: bool, debuggraph: bool, graphheight: int(1, 240), graphscale: num(-100, 100), graphshift: num(-240, 240),   // cl_scrn.c's debug graph: a frame's time as a column, the band drawn, its height, scale and shift
@@ -160,7 +162,7 @@ function checkLines(v) {
 export function loadSettings(storage) {
   let stored = {};
   try { stored = JSON.parse(storage?.getItem(KEY) || '{}') ?? {}; } catch { stored = {}; }
-  const out = { ...DEFAULTS, binds: defaultBinds(), lines: defaultLines(), addressBook: [] };
+  const out = { ...DEFAULTS, binds: defaultBinds(), lines: defaultLines(), addressBook: [], cvarArchive: [] };
   if (stored && typeof stored === 'object') {
     for (const [k, check] of Object.entries(CHECK)) {
       const v = check(stored[k]);

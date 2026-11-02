@@ -1327,10 +1327,15 @@ demo pak. In the order they are to be taken.
   game; not archived. Both in the console's list for Tab. `test:settings` the setting; `test:console` cl_timedemo both
   ways and refused, sv_showclamp shown, set, refused, left out of config.cfg, Tab; the browser test reads cl_timedemo
   with no timedemo and the game's clamps printed, on both builds.
-- **`set`'s flags and `cvarlist`'s**: `set <cvar> <value> [u | s | a]` as `Cvar_Set_f` took them (u the userinfo, s
-  the serverinfo, a archived: a cvar the page keeps marked for `userinfo`, `serverinfo` and config.cfg), and
-  `cvarlist`'s flag column before each cvar as `Cvar_List_f` printed it ("S", "U", "A", "L" for the serverinfo, the
-  userinfo, archived and latched).
+- **`set`'s flags and `cvarlist`'s**: done. `set <cvar> <value> [u | s | a]` takes a flag after the value as `Cvar_Set_f` did:
+  `a` archives the cvar, so config.cfg writes it from then on (`settings.cvarArchive`, kept across reloads); `u` and `s`
+  name the userinfo and the serverinfo, whose members are fixed here (the player setup's and the game's), so on another
+  cvar the value is set and the flag is said to be left out. `cvarlist` keeps its line of values and prints a line a
+  cvar in the scrollback with `Cvar_List_f`'s flag column ("*" archived, "U" the userinfo: name, hand, gender, msg,
+  rate, skin, fov; "S" the serverinfo: hostname, skill; "L" latched: skill, so skill reads "* SL"), then the count (`cvarFlags`).
+  `test:settings` the archived names; `test:console` the flags (archived once, u and s refused on others, a lone value
+  that reads as a flag), the flag column and the count, the usage; the browser test reads the flagged lines in the
+  scrollback, on both builds.
 - **`scr_conspeed` and `scr_drawall`**: the console dropping over the view at `scr_conspeed`'s pixels a second as
   `SCR_RunConsole` moved it (the page's console drawn in the view, `Con_DrawConsole`'s lines and the input line over
   the frame when up, the page's input line standing in), and `scr_drawall` (`SCR_UpdateScreen`: the whole screen

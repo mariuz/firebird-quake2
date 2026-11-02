@@ -1094,7 +1094,27 @@ check(con.complete('showp') === 'showpackets ' && con.complete('showd') === 'sho
     && host.settings.lines.KeyJ === 'god' && host.settings.lines.Mouse3 === 'say hello',
     `exec runs a config's lines (${n}): the comments and blanks skipped, the quotes off, a bad key refused and the rest run, the keys bound to lines among them`);
   await con.submit('set');
-  check(status.at(-1)?.[0] === 'usage: set <variable> <value>' && status.at(-1)?.[1] === true, 'set alone shows its usage');
+  check(status.at(-1)?.[0] === 'usage: set <variable> <value> [u / s / a]' && status.at(-1)?.[1] === true, 'set alone shows its usage');
+  // set's flags (Cvar_Set_f): a archives a cvar for config.cfg from then on; u and s on a cvar not in the userinfo or serverinfo set it and say so
+  s.cvarArchive = [];
+  await con.submit('set cl_gun 0 a');
+  check(s.clGun === false && s.cvarArchive.join() === 'cl_gun' && writeConfig(s).split('\n').includes('set cl_gun "0"') && status.at(-1)?.[1] !== true, 'set cl_gun 0 a sets it and archives it: config.cfg writes it now');
+  await con.submit('set cl_gun 1 a'); check(s.clGun === true && s.cvarArchive.join() === 'cl_gun', 'archived again, it is listed once');
+  await con.submit('set name Ace u'); check(s.name === 'Ace' && status.at(-1)?.[1] !== true, 'set name Ace u: name is the userinfo already');
+  await con.submit('set cl_gun 0 u'); check(s.clGun === false && status.at(-1)?.[0] === '"cl_gun" is set, but the userinfo here is the player setup\'s: u left out' && status.at(-1)?.[1] === true, 'u on another cvar sets it and says so');
+  await con.submit('set cl_gun 1 s'); check(s.clGun === true && /serverinfo here is the game's own: s left out/.test(status.at(-1)?.[0] ?? ''), 's likewise');
+  await con.submit('set name a'); check(s.name === 'a', 'a value alone that reads as a flag is the value');
+  // cvarlist's scrollback: a line each with Cvar_List_f's flag column, and the count
+  {
+    let printed = null; const hadPrint = host.print;
+    host.print = (t) => { printed = t; };
+    await con.submit('cvarlist');
+    const pl = printed?.split('\n') ?? [];
+    check(pl.includes('*U   name "a"') && pl.some((l) => /^\* SL skill "\d"$/.test(l)) && pl.includes('*    cl_gun "1"') && pl.includes('     m_yaw "0.022"') && /^\d+ cvars$/.test(pl.at(-1) ?? ''),
+      `cvarlist prints a line a cvar with its flags (* archived, U userinfo, S serverinfo, L latched) and the count (${pl.filter((l) => /name|skill|cl_gun|m_yaw|fov /.test(l)).join(' | ')})`);
+    host.print = hadPrint;
+  }
+  s.cvarArchive = []; s.name = ''; s.clGun = true;
   await con.submit('set bogus 1');
   check(status.at(-1)?.[0] === '"bogus" is not a cvar this page keeps' && status.at(-1)?.[1] === true, 'set on a cvar the page has not is refused');
   host.settings.fov = 160; host.settings.binds = defaultBinds(); host.settings.lines = {};

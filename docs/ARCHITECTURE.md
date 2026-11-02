@@ -715,7 +715,10 @@ archived, with `timegraph` (a frame's time as a column each painted frame, `cls.
 took it), `debuggraph` (the band drawn whatever it holds) and `graphheight`, `graphscale` and `graphshift` (the band's height, each
 column's scale and lift, as `SCR_DrawDebugGraph` laid it out), the names as cl_scrn.c registered the cvars, without the `scr_`;
 none archived: shown alone, set with a word through the page's `setSetting` so its controls, the menus and the
-userinfo follow; `cvarlist`; `set <cvar> <value>` as config.cfg sets one), `writeconfig` (the binds and the cvars as `config.cfg`, downloaded, as
+userinfo follow; `cvarlist`, the line summing the values and the scrollback a line each with `Cvar_List_f`'s flag column, "*" archived,
+"U" the userinfo, "S" the serverinfo, "L" latched, `cvarFlags`, and the count; `set <cvar> <value> [u | s | a]` as config.cfg sets one,
+`a` archiving the cvar for config.cfg from then on, `settings.cvarArchive`, `u` and `s` naming the userinfo and the serverinfo, whose
+members are fixed here: on another cvar the value is set and the flag said to be left out), `writeconfig` (the binds and the cvars as `config.cfg`, downloaded, as
 `Key_WriteBindings` and `Cvar_WriteVariables` wrote them) and `exec` (the Config control's picker; the file
 runs line by line through `Console.execText`; `exec autoexec` the kept autoexec.cfg, `unautoexec` dropping
 it), and `bind`, `unbind`, `unbindall` and

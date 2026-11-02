@@ -492,9 +492,11 @@ try {
     let cvName = '';
     for (let i = 0; i < 20 && cvName !== 'Ace'; i++) { await sleep(250); cvName = await page.evaluate(() => window.quake2.session.last.NETNAME).catch(() => ''); }
     await typeCommand('cvarlist');
+    const cvLog = await page.evaluate(() => window.quake2.notify.log(300)).catch(() => []);
     const cv = await page.evaluate(() => ({ sens: window.quake2.settings.sensitivity, stored: JSON.parse(localStorage.getItem('firebird-quake2:settings')).sensitivity, name: window.quake2.settings.name, list: document.getElementById('status')?.textContent })).catch(() => ({}));
-    assert(cv.sens === 5 && cv.stored === 5 && cv.name === 'Ace' && cvName === 'Ace' && /sensitivity "5"/.test(cv.list ?? '') && /name "Ace"/.test(cv.list ?? ''),
-      `sensitivity and name at the console reach the settings and the game's row, cvarlist shows them (${JSON.stringify(cv)})`);
+    assert(cv.sens === 5 && cv.stored === 5 && cv.name === 'Ace' && cvName === 'Ace' && /sensitivity "5"/.test(cv.list ?? '') && /name "Ace"/.test(cv.list ?? '')
+      && cvLog.some((l) => /^\* SL skill "\d"$/.test(l)) && cvLog.some((l) => /^\* {4}vid_ref "(soft|sql)"$/.test(l)) && cvLog.some((l) => /^\d+ cvars$/.test(l)),
+      `sensitivity and name at the console reach the settings and the game's row, cvarlist shows them (${JSON.stringify(cv)}) and its flagged lines in the scrollback (${JSON.stringify(cvLog.filter((l) => /skill|vid_ref|cvars$/.test(l)))})`);
     // the mouse look cvars reach the settings (free look is on by default; +mlook on \ by default), the options menu shows them
     await typeCommand('freelook 0'); await typeCommand('lookspring 1');
     const ml = await page.evaluate(() => ({ freelook: window.quake2.settings.freelook, lookspring: window.quake2.settings.lookspring, mlook: window.quake2.settings.binds.mlook.join() })).catch(() => ({}));
