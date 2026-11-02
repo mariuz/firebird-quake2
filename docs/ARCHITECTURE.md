@@ -715,7 +715,10 @@ archived, with `timegraph` (a frame's time as a column each painted frame, `cls.
 took it), `debuggraph` (the band drawn whatever it holds) and `graphheight`, `graphscale` and `graphshift` (the band's height, each
 column's scale and lift, as `SCR_DrawDebugGraph` laid it out), the names as cl_scrn.c registered the cvars, without the `scr_`;
 none archived: shown alone, set with a word through the page's `setSetting` so its controls, the menus and the
-userinfo follow; `cvarlist`; `set <cvar> <value>` as config.cfg sets one), `writeconfig` (the binds and the cvars as `config.cfg`, downloaded, as
+userinfo follow; `cvarlist`, the line summing the values and the scrollback a line each with `Cvar_List_f`'s flag column, "*" archived,
+"U" the userinfo, "S" the serverinfo, "L" latched, `cvarFlags`, and the count; `set <cvar> <value> [u | s | a]` as config.cfg sets one,
+`a` archiving the cvar for config.cfg from then on, `settings.cvarArchive`, `u` and `s` naming the userinfo and the serverinfo, whose
+members are fixed here: on another cvar the value is set and the flag said to be left out), `writeconfig` (the binds and the cvars as `config.cfg`, downloaded, as
 `Key_WriteBindings` and `Cvar_WriteVariables` wrote them) and `exec` (the Config control's picker; the file
 runs line by line through `Console.execText`; `exec autoexec` the kept autoexec.cfg, `unautoexec` dropping
 it), and `bind`, `unbind`, `unbindall` and
@@ -827,7 +830,9 @@ kept within 1, and makes the upmove ±`cl_upspeed` for `+moveup` and `+movedown`
 and the duck below 0 and adds to the wish in water and, as a share of 200, in noclip; none archived, as Quake's were not),
 `cl_lightlevel` (`R_SetLightLevel`'s: the light at the eye, 150 at full light, from the lightmap under it, `lightLevel`; shown, never set),
 `gun_x`, `gun_y` and `gun_z` (`SV_CalcGunOffset`'s development tools, 0: the view weapon drawn moved along the view's right,
-forward and down, `drawFrame`'s) and `scr_centertime` (`SCR_DrawCenterString`: a centre print drawn 2.5 seconds from when it came,
+forward and down, `drawFrame`'s) `scr_conspeed` (`SCR_RunConsole`: the console drops from above the view to its place over half the screen at the speed's
+fraction of the screen a second, 500 / speed ms, 3 by default, 0 at once; the page's input line and scrollback animated, `conDrop`;
+it goes up at once on Escape or Enter, the focus going back to the view; not archived) and `scr_centertime` (`SCR_DrawCenterString`: a centre print drawn 2.5 seconds from when it came,
 `CenterPrint` in `src/notify.js`, a view each, whatever the row carries it for: the SQL keeps it three seconds, a demo's frames
 as written; none archived, as Quake's were not), `cl_footsteps` (0: no footstep played, `Q2Audio.footsteps`; the footsteps
 are `G_SetClientEvent`'s `EV_FOOTSTEP` in `player_think`, a `player/step1-4.wav` on the body channel each time the bob cycle's

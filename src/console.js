@@ -10,7 +10,7 @@ import { parseChangeMap } from './levels.js';
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_paused', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showclamp', 'cl_showmiss', 'cl_shownet', 'cl_sidespeed', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timedemo', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmd', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gamemap', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'impulse', 'in_joystick', 'in_mouse', 'in_restart', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'joy_forwardsensitivity', 'joy_forwardthreshold', 'joy_pitchsensitivity', 'joy_pitchthreshold', 'joy_sidesensitivity', 'joy_sidethreshold', 'joy_yawsensitivity', 'joy_yawthreshold', 'kick', 'kill', 'killserver', 'load', 'log_stats', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'nextserver', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'playerlist', 'players', 'putaway', 'quit', 'r_drawentities', 'r_drawworld', 'r_dspeeds', 'r_fullbright', 'r_lerpmodels', 'r_lockpvs', 'r_novis', 'r_speeds', 'rate', 'rcon', 'rcon_password', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_khz', 's_mixahead', 's_show', 's_testsound', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'showdrop', 'showpackets', 'sizedown', 'sizeup', 'skill', 'skin', 'skins', 'sky', 'snd_restart', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sv_showclamp', 'sw_aliasstats', 'sw_clearcolor', 'sw_drawflat', 'sw_maxsurfs', 'sw_mipcap', 'sw_mipscale', 'sw_reportsurfout', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'togglechat', 'toggleconsole', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'vid_mode', 'vid_ref', 'vid_restart', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig', 'z_stats'];
+export const COMMANDS = ['alias', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_paused', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showclamp', 'cl_showmiss', 'cl_shownet', 'cl_sidespeed', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timedemo', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmd', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'drop', 'dumpuser', 'echo', 'exec', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gamemap', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'help', 'host_speeds', 'hostname', 'imagelist', 'impulse', 'in_joystick', 'in_mouse', 'in_restart', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'joy_forwardsensitivity', 'joy_forwardthreshold', 'joy_pitchsensitivity', 'joy_pitchthreshold', 'joy_sidesensitivity', 'joy_sidethreshold', 'joy_yawsensitivity', 'joy_yawthreshold', 'kick', 'kill', 'killserver', 'load', 'log_stats', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'maxclients', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'nextserver', 'noclip', 'notarget', 'password', 'path', 'pause', 'play', 'playerlist', 'players', 'putaway', 'quit', 'r_drawentities', 'r_drawworld', 'r_dspeeds', 'r_fullbright', 'r_lerpmodels', 'r_lockpvs', 'r_novis', 'r_speeds', 'rate', 'rcon', 'rcon_password', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_khz', 's_mixahead', 's_show', 's_testsound', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_conspeed', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'set', 'showdrop', 'showpackets', 'sizedown', 'sizeup', 'skill', 'skin', 'skins', 'sky', 'snd_restart', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_rollangle', 'sv_rollspeed', 'sv_showclamp', 'sw_aliasstats', 'sw_clearcolor', 'sw_drawflat', 'sw_maxsurfs', 'sw_mipcap', 'sw_mipscale', 'sw_reportsurfout', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'togglechat', 'toggleconsole', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'vid_mode', 'vid_ref', 'vid_restart', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig', 'z_stats'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -171,6 +171,9 @@ export const CVARS = {
   gun_x: { key: 'gunX', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && Math.abs(n) <= 100 ? n : null; }, help: 'units, -100 to 100', archive: false },
   gun_y: { key: 'gunY', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && Math.abs(n) <= 100 ? n : null; }, help: 'units, -100 to 100', archive: false },
   gun_z: { key: 'gunZ', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && Math.abs(n) <= 100 ? n : null; }, help: 'units, -100 to 100', archive: false },
+  // scr_conspeed (SCR_RunConsole: the console drops over the view at this fraction of the screen a second, half the screen in all,
+  // 3 by default: a sixth of a second; 0 drops it at once), not archived as Quake's was not
+  scr_conspeed: { key: 'scrConspeed', show: (v) => String(v), read: (w) => { const n = Number(w); return /^\d*\.?\d+$/.test(w) && n <= 100 ? n : null; }, help: '0 to 100, the screen a second', archive: false },
   scr_centertime: { key: 'scrCentertime', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && n >= 0 && n <= 60 ? n : null; }, help: 'seconds, 0 to 60', archive: false },
   // cl_footsteps (CL_EntityEvent: 0 plays no footstep, the game's and a demo's), not archived as Quake's was not
   cl_footsteps: { key: 'clFootsteps', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
@@ -263,11 +266,22 @@ const VID_MODES = ['low', 'high', 'ultra'];
  * `bind <key> "<command>"` for every key bound, in the actions' order, the keys bound to command lines after
  * them, then `set <cvar> "<value>"`), which `exec` runs back through the console line by line.
  */
+// the cvars' flags as Cvar_Get gave them: the userinfo's (CVAR_USERINFO), the serverinfo's (CVAR_SERVERINFO) and the latched one (CVAR_LATCH:
+// skill, for the next game); archived is a cvar's own archive, or `set … a`'s (settings.cvarArchive)
+const USERINFO_CVARS = new Set(['name', 'hand', 'gender', 'msg', 'rate', 'skin', 'fov']);
+const SERVERINFO_CVARS = new Set(['hostname', 'skill']);
+const LATCHED_CVARS = new Set(['skill']);
+const archived = (name, c, settings) => c.archive !== false || (settings?.cvarArchive ?? []).includes(name);
+/** Cvar_List_f's flag column: "*" archived, "U" the userinfo, "S" the serverinfo, "L" latched, a space for each missing. */
+export function cvarFlags(name, c, settings) {
+  return `${archived(name, c, settings) ? '*' : ' '}${USERINFO_CVARS.has(name) ? 'U' : ' '}${SERVERINFO_CVARS.has(name) ? 'S' : ' '}${LATCHED_CVARS.has(name) ? 'L' : ' '}`;
+}
+
 export function writeConfig(settings) {
   const lines = ['// generated by Firebird Quake 2, do not modify', 'unbindall'];
   for (const a of ACTIONS) for (const c of settings.binds?.[a.id] ?? []) lines.push(`bind ${keyName(c)} "${a.cmd}"`);
   for (const [c, line] of Object.entries(settings.lines ?? {})) lines.push(`bind ${keyName(c)} "${line}"`);
-  for (const [name, c] of Object.entries(CONFIG_CVARS())) if (c.archive !== false) lines.push(`set ${name} "${c.show(settings[c.key])}"`);
+  for (const [name, c] of Object.entries(CONFIG_CVARS())) if (archived(name, c, settings)) lines.push(`set ${name} "${c.show(settings[c.key])}"`);
   return lines.join('\n') + '\n';
 }
 
@@ -415,11 +429,20 @@ export class Console {
         return;
       }
       case 'set': {
-        // Cvar_Set_f: `set <cvar> <value>`, config.cfg's way of setting one (fov and skill among them)
+        // Cvar_Set_f: `set <cvar> <value> [u | s | a]`, config.cfg's way of setting one (fov and skill among them). A flag after the
+        // value: a archives the cvar (config.cfg writes it from then on, settings.cvarArchive); u and s name the userinfo and the
+        // serverinfo, whose members are fixed here (a cvar that is not one is set, and told so)
         const [name, ...words] = arg.split(/\s+/).filter(Boolean);
-        if (!name || !words.length) { say('usage: set <variable> <value>', true); return; }
-        if (!(name.toLowerCase() in CONFIG_CVARS())) { say(`"${name}" is not a cvar this page keeps`, true); return; }
-        return this.run(`${name} ${words.join(' ')}`);
+        let flag = null;
+        if (words.length >= 2 && /^[usa]$/i.test(words.at(-1))) flag = words.pop().toLowerCase();
+        if (!name || !words.length) { say('usage: set <variable> <value> [u / s / a]', true); return; }
+        const lname = name.toLowerCase(), cv = CONFIG_CVARS()[lname];
+        if (!cv) { say(`"${name}" is not a cvar this page keeps`, true); return; }
+        await this.run(`${name} ${words.join(' ')}`);
+        if (flag === 'a' && !archived(lname, cv, h.settings)) { h.settings.cvarArchive = [...(h.settings.cvarArchive ?? []), lname]; h.saveSettings(); }
+        else if (flag === 'u' && !USERINFO_CVARS.has(lname)) say(`"${lname}" is set, but the userinfo here is the player setup's: u left out`, true);
+        else if (flag === 's' && !SERVERINFO_CVARS.has(lname)) say(`"${lname}" is set, but the serverinfo here is the game's own: s left out`, true);
+        return;
       }
       case 'writeconfig':
         // Key_WriteBindings and Cvar_WriteVariables: the binds and the cvars as config.cfg, downloaded (Quake wrote it on
@@ -450,7 +473,7 @@ export class Console {
       case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lockpvs': case 'r_dspeeds': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': case 'host_speeds': case 'developer': case 'sv_noreload': case 'sw_drawflat': case 'sw_waterwarp': case 'sw_clearcolor': case 'sw_mipcap': case 'sw_mipscale': case 'sw_stipplealpha': case 'sw_aliasstats': case 'sw_reportsurfout': case 'sw_maxsurfs':
       case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname': case 'password': case 'spectator_password': case 'rcon_password':
       case 'cl_yawspeed': case 'cl_pitchspeed': case 'cl_anglespeedkey': case 'cl_forwardspeed': case 'cl_sidespeed': case 'cl_upspeed': case 'timeout': case 'cl_timeout':
-      case 'gun_x': case 'gun_y': case 'gun_z': case 'scr_centertime': case 'cl_footsteps': case 'scr_showpause': case 'scr_showturtle': case 'cl_maxfps': {
+      case 'gun_x': case 'gun_y': case 'gun_z': case 'scr_centertime': case 'scr_conspeed': case 'cl_footsteps': case 'scr_showpause': case 'scr_showturtle': case 'cl_maxfps': {
         // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
         // page's setSetting, so the menus and the page's controls agree; a word the cvar refuses leaves it
         const name = cmd.toLowerCase(), cv = CVARS[name];
@@ -499,8 +522,11 @@ export class Console {
         return;
       }
       case 'cvarlist': {
-        // Cvar_List_f: the cvars with their values, on the one line the page has (fov and skill with them)
-        say(Object.entries(CONFIG_CVARS()).map(([n, c]) => `${n} "${c.show(h.settings[c.key])}"`).join(' · '), false, 8000);
+        // Cvar_List_f: the cvars with their values, on the one line the page has (fov and skill with them); in the scrollback a line each
+        // with its flag column as it printed them ("*" archived, "U" userinfo, "S" serverinfo, "L" latched) and the count
+        const all = Object.entries(CONFIG_CVARS());
+        h.print?.([...all.map(([n, c]) => `${cvarFlags(n, c, h.settings)} ${n} "${c.show(h.settings[c.key])}"`), `${all.length} cvars`].join('\n'));
+        say(all.map(([n, c]) => `${n} "${c.show(h.settings[c.key])}"`).join(' · '), false, 8000);
         return;
       }
       case 'messagemode': case 'messagemode2': {
