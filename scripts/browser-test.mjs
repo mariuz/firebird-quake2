@@ -1343,6 +1343,14 @@ try {
       assert(gs.role === 'guest' && gs.map === 'demo1' && gs.frames > 20 && gs.w === 320 && gs.h === 240,
         `the guest has the host's map and paints the frames it is sent, at the host's view (${JSON.stringify(gs)})`);
       assert(/joined[^:]*: \d+ frames from the host/.test(await gstats()) && /hosting: \d+ frames sent/.test(await stats()), 'both stats lines say so');
+      // delta frames: the host sends the joined page deltas against the frame it holds; cl_nodelta 1 at the guest asks for them whole, 0 again
+      const deltasAt = () => page.evaluate(() => ({ d: window.quake2.net?.guests?.[0]?.host.deltaFrames ?? -1, n: window.quake2.net?.guests?.[0]?.host.frameNo ?? -1 })).catch(() => ({}));
+      const dl0 = await deltasAt(); await sleep(1000); const dl1 = await deltasAt();
+      await typeOn(gp, 'cl_nodelta 1'); await sleep(600); const nd0 = await deltasAt(); await sleep(1000); const nd1 = await deltasAt();
+      await typeOn(gp, 'cl_nodelta 0'); await sleep(600);
+      const gMissed = await gp.evaluate(() => window.quake2.net?.guest?.missedBases ?? -1).catch(() => -1);
+      assert(dl1.d - dl0.d > 5 && dl1.d - dl0.d >= (dl1.n - dl0.n) - 2 && nd1.n - nd0.n > 5 && nd1.d === nd0.d && gMissed === 0,
+        `the host sends the joined page deltas (${dl1.d - dl0.d} of ${dl1.n - dl0.n} frames in a second), with cl_nodelta 1 whole ones (${nd1.d - nd0.d} deltas of ${nd1.n - nd0.n}), no base missed (${gMissed})`);
       // cl_shownet 2 at the joined page prints each message's size and kind on its scrollback (the host's frames come as "f")
       await typeOn(gp, 'cl_shownet 2'); await sleep(600);
       const shown = await gp.evaluate(() => window.quake2.notify.log(12)).catch(() => []);
@@ -1383,18 +1391,18 @@ try {
       const ngAfter = await gp.evaluate(() => window.quake2.netgraph.added).catch(() => -1);
       assert(ng.on === true && ng.added > 10 && ng.last?.colour === 0xd0 && ngOff.on === false && ngAfter === ngOff.added,
         `netgraph 1 on the joined page adds a column a frame (${ng.added}, the last a ping column) and netgraph 0 stops it (${ngOff.added} → ${ngAfter})`);
-      // the guest's rate: rate 25000 at its console goes with its userinfo to the host, which holds its frames to it (SV_RateDrop: the
+      // the guest's rate: rate 2000 at its console goes with its userinfo to the host, which holds its frames to it (SV_RateDrop: the
       // frames of the last second under the bytes a second, the rest held and counted); rate 500000 lets them all go again
-      await typeOn(gp, 'rate 25000');
+      await typeOn(gp, 'rate 2000');
       let rt1 = {};
-      for (let i = 0; i < 40 && !(rt1.rate === 25000 && rt1.held > 5); i++) { await sleep(250); rt1 = await page.evaluate(() => ({ rate: window.quake2.net?.guests?.[0]?.host.info?.rate, held: window.quake2.net?.guests?.[0]?.host.heldFrames })).catch(() => ({})); }
+      for (let i = 0; i < 40 && !(rt1.rate === 2000 && rt1.held > 5); i++) { await sleep(250); rt1 = await page.evaluate(() => ({ rate: window.quake2.net?.guests?.[0]?.host.info?.rate, held: window.quake2.net?.guests?.[0]?.host.heldFrames })).catch(() => ({})); }
       await typeOn(gp, 'rate 500000');
       let rt2 = {};
       for (let i = 0; i < 40 && rt2.rate !== 500000; i++) { await sleep(250); rt2 = await page.evaluate(() => ({ rate: window.quake2.net?.guests?.[0]?.host.info?.rate, held: window.quake2.net?.guests?.[0]?.host.heldFrames })).catch(() => ({})); }
       await sleep(1500);
       const rt3 = await page.evaluate(() => ({ held: window.quake2.net?.guests?.[0]?.host.heldFrames, stats: document.getElementById('stats')?.textContent })).catch(() => ({}));
-      assert(rt1.rate === 25000 && rt1.held > 5 && rt2.rate === 500000 && rt3.held === rt2.held && /\d+ held/.test(rt3.stats ?? ''),
-        `rate 25000 at the guest's console reaches the host, which holds its frames to it (${rt1.held} held); rate 500000 lets them go (${rt2.held} → ${rt3.held}), the host's stats line counts them`);
+      assert(rt1.rate === 2000 && rt1.held > 5 && rt2.rate === 500000 && rt3.held === rt2.held && /\d+ held/.test(rt3.stats ?? ''),
+        `rate 2000 at the guest's console reaches the host, which holds its frames to it (${rt1.held} held); rate 500000 lets them go (${rt2.held} → ${rt3.held}), the host's stats line counts them`);
       // the host's save and load with the guest connected: F6 saves the shared game, F9 loads it; the guest's client is
       // kept and the map sent again, so its frames keep coming (as at a level change)
       await page.evaluate(() => document.activeElement?.blur?.()).catch(() => undefined);
@@ -1505,7 +1513,7 @@ try {
       await typeOn(gp, 'showpackets 1'); await sleep(600);
       const spk = await gp.evaluate(() => window.quake2.notify.log(24)).catch(() => []);
       await typeOn(gp, 'showpackets 0');
-      await typeOn(page, 'showdrop 1'); await typeOn(gp, 'showdrop 1'); await typeOn(gp, 'rate 25000');
+      await typeOn(page, 'showdrop 1'); await typeOn(gp, 'showdrop 1'); await typeOn(gp, 'rate 2000');
       let sdh = [], sdg = [];
       for (let i = 0; i < 40 && !(sdh.some((l) => /^client 2: Held frame at \d+$/.test(l)) && sdg.some((l) => /^Dropped \d+ frames at \d+$/.test(l))); i++) {
         await sleep(250); sdh = await page.evaluate(() => window.quake2.notify.log(24)).catch(() => []); sdg = await gp.evaluate(() => window.quake2.notify.log(24)).catch(() => []);

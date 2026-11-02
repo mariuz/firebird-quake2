@@ -1379,11 +1379,33 @@ words with the demo pak. In the order they are to be taken.
   is the guest's own choosing, so the filter keeps out the careless, as an address filter did the lazy. `test:net`
   the refusal both ways, case aside; `test:settings` the list and the cvar; `test:console` the four words, an unknown
   one, filterban, config.cfg, Tab; the browser test lists, shows and removes a name at the host, on both builds.
-- **Delta frames and `cl_nodelta`**: the host sends a joined page every frame whole (five to seven kilobytes, twenty
-  a second). `SV_WriteFrameToClient` sent the entities against the frame the client last acknowledged; here the
-  face list, the entities and the styles would go as what changed since the guest's acknowledged frame, the
-  guest rebuilding the frame from its copy, and `cl_nodelta 1` (`CL_SendCmd`'s request) asking for whole frames
-  again. Measured by the bytes a second at the guest (`showpackets`) on a walk through demo1, both ways.
+- **Delta frames and `cl_nodelta`**: done. The host sent a joined page every frame whole. Now a frame goes against
+  the newest one the guest holds, as `SV_WriteFrameToClient` wrote the entities against the frame the client
+  acknowledged. Frames are numbered, each end keeps the last 32 by number, and the guest's commands carry the number
+  of the newest it holds (`fa`). The delta (`deltaFrame`, `undeltaFrame`, `deltaRow`) leaves out each part equal to
+  the base's (the entities, the styles, the speakers, the brush models' places and frames, the boxes), sends the
+  faces as runs of the base's ([start, length] pairs) between faces of their own, the order kept, and sends the row
+  as the columns changed. A delta whose base the guest no longer holds is left out, its ack staying on a frame it
+  has. A new map starts whole. `cl_nodelta 1` at the guest asks for whole frames again (`CL_SendCmd`'s request); not
+  archived.
+  Measured in `test:net` on a walk of 30 tics with turns: 172,608 characters whole against 54,641 as deltas, 32 %, the
+  guest's frames and rows the host's face for face and column for column. A frame is about 1.8 KB in place of 5.8 KB,
+  so a guest's link needs a third of what it did, and the rate userinfo holds fewer frames. `test:net` the walk both
+  ways, the delta's runs, the rate's holds at 8000 (25000 no longer holds any); `test:settings` and `test:console` the
+  cvar; the browser test sees the host send deltas, whole frames under cl_nodelta 1, and no base missed, on both
+  builds.
+
+The twenty-first list: what a shared game's host still lacks of Quake 2's own guards and words. In the order they are
+to be taken.
+
+- **`sv_enforcetime`**: `SV_ClientThink`'s command-time budget: a guest whose commands claim more time than the
+  host's clock gave it (a page run fast) is held to the clock and, past the limit, told so, as the server dropped
+  the extra `msec`.
+- **`sv_reconnect_limit`**: how many times a second a guest may come back by its code (`SV_DirectConnect`'s), the
+  rest refused, so a page reconnecting in a loop cannot crowd the host.
+- **`allow_download` and `download`**: a joined page whose pak lacks the host's map asks the host for it
+  (`CL_Download_f`, `SV_BeginDownload_f`): the .bsp sent over the link in chunks, kept in the page's file store
+  beside the pak, and the map loaded from it; `allow_download 0` at the host refuses.
 
 ## Playing the demo
 

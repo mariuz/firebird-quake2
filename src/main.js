@@ -297,6 +297,7 @@ function setSetting(k, v) {
   if (k === 'cdNocd') audio.setNocd(!!v);
   if (k === 'inJoystick') input.joystick = v !== false;   // (in_joystick: the pads read, or not)
   if (k === 'inMouse') input.mouseOn = v !== false;   // (in_mouse: the mouse read, or not)
+  if (k === 'clNodelta' && netGuest() && net.guest) net.guest.nodelta = !!v;   // (cl_nodelta: the host asked for whole frames, or deltas again)
   if (k.startsWith('joy')) input.joy = joyFromSettings(settings);   // (the joy_ cvars: the sticks' dead zones and speeds)
   if (k === 'sKhz') audio.khz = Number(v) || 44;   // (s_khz: the rate at the next snd_restart)
   if (k === 'sMixahead') audio.mixahead = Number(v) || 0;   // (s_mixahead: the raw stream's lead)
@@ -2003,6 +2004,7 @@ async function netGo() {
       audio.stopLoops();
       net.guest = new GuestLink(link);
       // cl_shownet (CL_ParseServerMessage's prints): 1 the message's size alone, 2 "size:kind", on the scrollback as each comes
+      net.guest.nodelta = !!settings.clNodelta;   // (cl_nodelta: every frame asked for whole)
       net.guest.onNet = (kind, size) => { const n = Number(settings.clShownet) || 0; if (n) notify.add(n >= 2 ? `${String(size).padStart(5)}:${kind}` : String(size), gameClock(), { show: false }); };
       applyUserinfo();   // (the userinfo goes with the connect, as the client's did)
       net.guest.onMap = (m) => guestMap(m).catch((err) => { console.error(err); setStatus(err.message, true); });
