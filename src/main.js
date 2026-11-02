@@ -581,6 +581,8 @@ const con = new Console({
   listDemos: () => ({ pak: pakDemos(), kept: [...new Set([...kept, ...recordings.keys()])].sort() }),
   dropDemo: (name) => dropRecording(name),
   record: (name) => startRecording(name),
+  serverRecord: (name) => startRecording(name, { server: true }),   // (serverrecord: SV_ServerRecord_f, every entity in the level; 'guest' on a joined page)
+  isServerRecording: () => !!recorder?.server,
   stopRecord: () => stopRecording(),
   isRecording: () => !!recorder,
   setSpectator: (on) => setSpectator(on),
@@ -1242,17 +1244,19 @@ const model = (name) => res.models.get(res.byName.get(name))?.mdl;
  * sky, the track and the level's name, the brush models are named by their faces as the frames show them, and
  * its own entity is in no frame (the view's client is left out of its frame), so none is named.
  */
-async function startRecording(name) {
+async function startRecording(name, { server = false } = {}) {
   if (recorder || !running || !map || demo) return;
   const guest = netGuest();
+  if (server && guest) return 'guest';   // (SV_ServerRecord_f is the server's: a joined page runs none)
   const playerEnt = guest ? 0 : (await db.query('SELECT ent_id FROM player WHERE id = 1')).rows[0]?.ENT_ID ?? 0;
   const brushNames = guest ? new Map() : new Map((await db.query("SELECT e.id, m.name FROM ents e JOIN models m ON m.id = e.model_id WHERE m.kind = 'B' AND m.name STARTING WITH '*'", [], { rowMode: 'array' })).rows);
   const setup = guest ? net.guest.map : mapSetup ?? {};
   const rec = new DemoRecorder({ map: map.name, res, bsp: map.bsp, mapBytes: pak.get(`maps/${map.name}.bsp`), setup, playerEnt, brushNames,
     levelname: guest ? setup.levelname ?? '' : await session.levelName(), fov: viewFov(), netname: settings.name || 'player', skin: settings.skin });
-  recorder = { name, rec };
-  setStatus(`Recording to ${name}.dm2`);
-  setTimeout(() => { if (statusEl.textContent.startsWith('Recording to')) setStatus(''); }, 2500);
+  recorder = { name, rec, server, pe: playerEnt };
+  setStatus(`${server ? 'Server recording' : 'Recording'} to ${name}.dm2`);
+  setTimeout(() => { if (/^(Server recording|Recording) to/.test(statusEl.textContent)) setStatus(''); }, 2500);
+  return 'started';
 }
 /**
  * One tic to the recorder: the brush models' places go with it (a frame's faces carry them only in the fast mode,
@@ -1267,6 +1271,7 @@ async function recordFrame(row, f) {
       r.rec.frame(row, f);
       return;
     }
+    if (r.server) { const ents = await session.levelEnts(r.pe); r.maxEnts = Math.max(r.maxEnts ?? 0, ents.length); f = { ...f, ents }; }   // (serverrecord: every entity in the level)
     if (!r.rec.due(row)) { r.rec.frame(row, f); return; }
     const brushes = (await db.query('SELECT e.id, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.frame, e.effects FROM ents e WHERE e.mkind = \'B\'', [], { rowMode: 'array' })).rows;
     if (recorder === r) r.rec.frame(row, f, { brushes });
@@ -2194,7 +2199,7 @@ async function boot() {
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
       get logfile() { return { on: !!settings.logfile, kept: conLog.kept.length, pending: conLog.pending.length }; }, get logStats() { return { on: !!settings.logStats, kept: statsLog.kept.length, pending: statsLog.pending.length }; },
-      get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped } : null; },
+      get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped, server: !!recorder.server, maxEnts: recorder.maxEnts ?? 0 } : null; },
       recordings: (name) => (name ? recordings.get(name) ?? null : [...new Set([...recordings.keys(), ...kept])].sort()),
       demoStore, fileStore, get pickedPak() { return pickedPak; }, get autoexec() { return autoexec ? { ...autoexec } : null; },
       get netgraph() { return { added: netgraph.added, last: netgraph.added ? { value: netgraph.values[(netgraph.current + netgraph.n - 1) % netgraph.n], colour: netgraph.colours[(netgraph.current + netgraph.n - 1) % netgraph.n] } : null }; },

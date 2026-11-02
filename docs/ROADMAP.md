@@ -1355,8 +1355,14 @@ words with the demo pak. In the order they are to be taken.
   name not saved answers "No such savegame: <name>". `test:session` the names' keys; `test:console` the names through
   the page, lower-cased, and the refusals; the browser test saves and loads a save of its own, is told of one not
   saved, and writes the second slot by its name, on both builds.
-- **`serverrecord` and `serverstop`**: `SV_ServerRecord_f`, a recording of the game as the server sent it (every
-  client's entities, not one view's), and `SV_ServerStop_f` ending it, kept with the recordings.
+- **`serverrecord` and `serverstop`**: done. `serverrecord <name>` is `SV_ServerRecord_f`: the game written as a
+  demo with every alias model and sprite in the level in each frame, whatever the view sees (`Session.levelEnts`; a
+  client's `record` has its frustum's and PVS's), the first client's view as the player state. `serverstop`
+  (`SV_ServerStop_f`) writes it out as `stop` writes a client's, downloaded and kept with the recordings. One
+  recording at a time, as the page keeps one; a joined page runs no server and is told so. `test:console` the two
+  words through the page, the name cleaned, the usage, "Not doing a server record.", the joined page, Tab; the
+  browser test records with serverrecord, sees more entities a frame than the view's, and reads the file back whole
+  with entities in its frames, on both builds.
 - **`pingservers`**: `CL_PingServers_f` over the address book: each entry's relay asked for its code, the answer
   (the host's name and its map, or none) and the time it took shown, as the join server menu listed the LAN's.
 - **`sv addip`, `sv removeip`, `sv listip` and `sv writeip`**: g_svcmds.c's filter over the guests at the host:

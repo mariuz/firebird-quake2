@@ -86,6 +86,21 @@ check(host.settings.skill === 2 && status.at(-1)?.[0] === '"skill" is "2"', 'wit
 running = true;
 await con.submit('save'); check(last() === 'saveGame', 'save saves');
 await con.submit('load'); check(last() === 'loadGame', 'load loads');
+// serverrecord and serverstop (SV_ServerRecord_f, SV_ServerStop_f): through the page, the name cleaned as record cleans it
+{
+  let srec = null, guest = false;
+  host.serverRecord = async (n) => { if (guest) return 'guest'; srec = n; return 'started'; };
+  host.isServerRecording = () => srec !== null;
+  const hadStop = host.stopRecord; host.stopRecord = async () => { srec = null; };
+  await con.submit('serverstop'); check(status.at(-1)?.[0] === 'Not doing a server record.' && status.at(-1)?.[1] === true, 'serverstop with none says so');
+  await con.submit('serverrecord'); check(srec === null && status.at(-1)?.[0] === 'serverrecord <demoname>', 'serverrecord alone shows its usage');
+  await con.submit('serverrecord Big.dm2'); check(srec === 'big', 'serverrecord Big.dm2 records as big');
+  await con.submit('serverstop'); check(srec === null, 'serverstop ends it');
+  guest = true;
+  await con.submit('serverrecord x'); check(/a joined page runs no server/.test(status.at(-1)?.[0] ?? '') && status.at(-1)?.[1] === true, 'a joined page is told it runs no server');
+  check(con.complete('serverr') === 'serverrecord ' && con.complete('serverst') === 'serverstop ', 'Tab completes serverrecord and serverstop');
+  delete host.serverRecord; delete host.isServerRecording; host.stopRecord = hadStop;
+}
 // save and load with a name (SV_Savegame_f, SV_Loadgame_f): lower-cased, letters, digits and _, fifteen at most; current refused
 await con.submit('save Mine'); check(last() === 'saveGame mine', 'save Mine saves under the name, lower-cased');
 await con.submit('load save3'); check(last() === 'loadGame save3', 'load save3 loads the third slot by its name');

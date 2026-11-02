@@ -247,6 +247,15 @@ export class Session {
    * `client` is whose view it is (1 the first): the other client's model is in it, its own is not. `boxes` asks
    * for the box entities about the client (`boxes`: [{ id, mins, maxs, contents }]), for a guest's prediction.
    */
+  /**
+   * SV_ServerRecord_f's entities: every alias model and sprite in the level, whatever any view sees (a client's frame has the ones in its
+   * frustum and PVS), but the recording client's own; rows as decodeFrame's entities: [id, model, frame, skin, x, y, z, pitch, yaw, roll,
+   * effects, alpha, kind, renderfx].
+   */
+  async levelEnts(exceptEnt = 0) {
+    return (await this.db.query("SELECT e.id, e.model_id, e.frame, e.skin, e.x, e.y, e.z, e.pitch, e.yaw, e.roll, e.effects, e.alpha, e.mkind, e.renderfx FROM ents e WHERE e.mkind IN ('M', 'S') AND e.model_id IS NOT NULL AND e.id <> ? ORDER BY e.id", [exceptEnt], ARR)).rows;
+  }
+
   async frame({ sqlRenderer = false, client = 1, boxes = false } = {}) {
     const wantSpeakers = ++this.frameNo % 10 === 0;
     if (sqlRenderer && this.res.world && !this.res.world.faceVertsLoaded) await ensureFaceVerts(this.db, this.res);

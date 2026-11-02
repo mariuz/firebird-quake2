@@ -1071,6 +1071,18 @@ try {
     const after = await recState();
     assert(after.rec === null && after.list?.includes('run') && after.options?.includes('run') && /^Recorded run\.dm2: \d+ frames/.test(after.status ?? ''),
       `the recording ends, is kept by name and listed in the Demo select (${after.status})`);
+    // serverrecord (SV_ServerRecord_f): every entity in the level in each frame, not the view's; serverstop writes it as stop does
+    await typeCommand('serverrecord srv');
+    await sleep(1500);
+    const smid = await recState();
+    const viewEnts = await page.evaluate(() => window.quake2.frameInfo?.ents ?? 0).catch(() => 0);
+    const [dls] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('serverstop')]);
+    let sparsed = null;
+    try { sparsed = dls ? parseDemo(new Uint8Array(fs.readFileSync(await dls.path()))) : null; } catch (e) { errors.push(`the server recording does not parse: ${e.message}`); }
+    const sMax = sparsed ? Math.max(...sparsed.frames.map((fr) => fr.ents.size)) : 0;
+    const safter = await recState();
+    assert(smid.rec?.server === true && smid.rec.maxEnts > viewEnts && dls?.suggestedFilename() === 'srv.dm2' && sparsed?.frames.length > 3 && sMax > 2 && safter.rec === null && safter.list?.includes('srv'),
+      `serverrecord srv records every entity in the level (${smid.rec?.maxEnts} a frame against the view's ${viewEnts}; ${sMax} in a frame of the file), serverstop writes srv.dm2 (${sparsed?.frames.length} frames) and keeps it`);
     await page.selectOption('#demo', 'run');
     let rd = {};
     for (let i = 0; i < 240 && !(rd.demo?.name === 'run' && rd.demo.frame > 3); i++) { await sleep(250); rd = await page.evaluate(() => ({ demo: window.quake2?.demo, map: document.getElementById('mapname')?.textContent })).catch(() => ({})); }
