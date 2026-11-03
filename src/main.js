@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
-import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, iceServers, connectRefusal, silentPast } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, iceServers, connectRefusal, silentPast } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
@@ -569,6 +569,14 @@ const con = new Console({
   soundList: () => [...audio.buffers.keys()].map((name) => ({ name, size: pak?.files.get(`sound/${name}`)?.size ?? 0, loop: audio.loops.has(name) })),
   // a joined page's game commands (god, give, kill…) go to the host, which runs them for this page's client (Cmd_ForwardToServer)
   forward: (cmd, arg) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendConsole(cmd, arg); return true; },
+  // download (CL_Download_f): a map asked of the host by a joined page, kept beside the pak
+  downloadFile: (name) => {
+    if (!downloadable(name)) return 'bad';
+    if (pak?.has(name)) return 'exists';
+    if (!netGuest() || !net.guest?.open) return 'guest-only';
+    fetchFromHost(name).catch((err) => setStatus(`Couldn't download ${name}: ${err.message}`, true));
+    return 'started';
+  },
   rcon: (line) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendRcon(settings.rconPassword, line); return true; },   // (CL_Rcon_f: the line to the host with rcon_password)
   // the timescale cvar: shown (null leaves it), set (a guest's clock is the host's: the host's timescale rules it)
   setTimescale: (n) => { if (n !== null && n !== undefined) { if (netGuest()) return null; timescale = n; lastTic = performance.now(); } return timescale; },
@@ -1893,6 +1901,13 @@ async function hostAccept(peer, text) {
   // SV_RemoteCommand_f: the guest's rcon line runs at this console when its password is rcon_password's (Rcon_Validate: none set, none
   // taken), the prints and the line kept for it meanwhile (Com_BeginRedirect) and sent back; a bad one is told so, and this console says
   // "Bad rcon from" as the server's did
+  // SV_BeginDownload_f: a map the guest's pak lacks, sent in pieces when allow_download lets it and the pak has it
+  g.host.onFileRequest = (name) => {
+    if (!net?.guests.includes(g) || !g.host.open) return;
+    if (settings.allowDownload === false) { g.host.refuseFile(name, 'downloads are off at the host (allow_download 0)'); return; }
+    if (!downloadable(name) || !pak?.has(name)) { g.host.refuseFile(name, 'the host has no such file'); return; }
+    g.host.sendFile(name, pak.get(name));
+  };
   g.host.onRcon = async (pw, line) => {
     if (!net?.guests.includes(g)) return;
     const ok = !!settings.rconPassword && pw === settings.rconPassword;
@@ -2033,11 +2048,31 @@ async function netGo() {
     }
   } catch (err) { console.error(err); netState(err.message, true); }
 }
+/**
+ * CL_Download_f and CL_ParseDownload: a file asked of the host and kept in the file store beside the pak (dl:<name>), a kept one
+ * taken from there; the status line counts the bytes as they come. Resolves once the pak has it.
+ */
+async function fetchFromHost(name) {
+  const kept = await fileStore.get(`dl:${name}`).catch(() => null);
+  if (kept?.bytes) { pak.addFile(name, kept.bytes); return 'kept'; }
+  if (!netGuest() || !net.guest?.open) throw new Error('not joined to a game');
+  net.guest.onDownload = (n, got, total) => setStatus(`Downloading ${n}: ${Math.round(got / 1024)} of ${Math.round(total / 1024)} KB`);
+  const bytes = await net.guest.requestFile(name);
+  pak.addFile(name, bytes);
+  await fileStore.put(`dl:${name}`, { name, bytes }).catch((err) => console.warn('download:', err.message));
+  setStatus(`Downloaded ${name} (${Math.round(bytes.length / 1024)} KB)`);
+  return 'downloaded';
+}
 /** The guest's page takes the host's map: its geometry for the painter, the sky, the music, the view. */
 async function guestMap(m) {
   if (!netGuest()) return;
   if (cinematic) cinematic.finish();   // (the host's next map ends the guest's cinematic, however far it got)
   beginMap();
+  // (a map this pak lacks: kept from an earlier download, else asked of the host when allow_download lets this page, CL_RequestNextDownload's)
+  if (!pak.has(`maps/${m.name}.bsp`) && settings.allowDownload !== false && downloadable(`maps/${m.name}.bsp`)) {
+    try { await fetchFromHost(`maps/${m.name}.bsp`); } catch (err) { setStatus(`Couldn't download maps/${m.name}.bsp: ${err.message}`, true); return; }
+    if (!netGuest()) return;
+  }
   if (!pak.has(`maps/${m.name}.bsp`)) { setStatus(`${m.name} is not in this pak`, true); return; }
   if (m.nmodels !== res.byName.size) console.warn(`[firebird-quake2] the host's pak has ${m.nmodels} models, this one ${res.byName.size}: the models may not match`);
   setStatus(`Loading ${m.name} for the host's game…`);
@@ -2206,7 +2241,7 @@ async function boot() {
     db = await openDatabase();
     session = new Session(db, storage);
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
-    window.quake2 = { db, session, audio, menu, input, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
+    window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },

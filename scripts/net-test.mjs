@@ -11,7 +11,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal, DOWNLOAD_PIECE, downloadable } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
@@ -78,6 +78,24 @@ guest.sendSay('x'.repeat(200));
 check(said?.length === 150, 'and is cut at 150 characters, as Quake cut a say');
 said = null; guest.sendSay('   ');
 check(said === null, 'nothing said, nothing to the host');
+// downloads (CL_Download_f, SV_BeginDownload_f): a file asked of the host comes in pieces and arrives whole; a refusal is the
+// request's error; the pak takes the file beside its own; only a map of the maps directory may be asked for
+{
+  const file = new Uint8Array(DOWNLOAD_PIECE * 2 + 1234).map((_, i) => (i * 7) & 255);
+  const asked = [], progress = [];
+  host.onFileRequest = (n) => { asked.push(n); if (n === 'maps/big.bsp') host.sendFile(n, file); else host.refuseFile(n, 'the host has no such file'); };
+  guest.onDownload = (n, got, total) => progress.push([got, total]);
+  const got = await guest.requestFile('maps/big.bsp');
+  check(asked.join() === 'maps/big.bsp' && got.length === file.length && got.every((b, i) => b === file[i]) && progress.length === 3 && progress.at(-1)[0] === file.length,
+    `a ${file.length}-byte map comes in ${progress.length} pieces and arrives whole, each piece told`);
+  const refused = await guest.requestFile('maps/none.bsp').then(() => null, (e) => e.message);
+  check(refused === 'the host has no such file' && guest.downloads.size === 0, 'a file the host refuses is the request\'s error');
+  check(downloadable('maps/demo2.bsp') && !downloadable('maps/../pak0.pak') && !downloadable('pics/x.pcx') && !downloadable('maps/a b.bsp'), 'only a map of the maps directory may be asked for');
+  const p2 = new Pak(pak.bytes.slice().buffer);
+  p2.addFile('maps/Big.bsp', got);
+  check(p2.has('maps/big.bsp') && p2.get('maps/big.bsp').length === file.length && p2.list('maps/', '.bsp').includes('maps/big.bsp') && p2.has('maps/demo1.bsp'), 'the pak takes a downloaded file beside its own');
+  host.onFileRequest = null; guest.onDownload = null;
+}
 // a game command typed at the guest's console (Cmd_ForwardToServer): it reaches the host cut to the game's sizes, which runs
 // player_command for the guest's client: godmode on the second client, its message line answering, the first untouched
 const forwarded = [];

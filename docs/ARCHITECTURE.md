@@ -890,7 +890,11 @@ is in, "Password required or incorrect"; the serverinfo's `needpass` counts the 
 `sv listip` and `sv writeip` (g_svcmds.c's `ServerCommand`: a list of guest names, `settings.banList`, which `connectRefusal` checks at
 the connect as `SV_FilterPacket` checked addresses, a page having none of its own; a listed guest is kicked with "Banned.";
 `writeip` downloads listip.cfg, the lines that make the list again) and `filterban` (1 the listed kept out, 0 only they let in;
-archived), `rcon` and `rcon_password`
+archived), `download` and `allow_download` (`CL_Download_f`, `SV_BeginDownload_f` and `SV_NextDownload_f`: a joined page whose pak lacks
+the host's map asks for it at the map message, or `download maps/<name>.bsp` asks at the console; the host sends it in pieces of 192 KB
+over the link, `HostLink.sendFile`, and the guest puts them together, `GuestLink.requestFile`, keeps the file in its file store as
+`dl:<name>` and adds it beside the pak, `Pak.addFile`, where `has`, `get` and `list` find it; only a map of the maps directory may be
+asked for; `allow_download 0` at the host refuses, at a guest it asks for nothing; archived), `rcon` and `rcon_password`
 (`CL_Rcon_f` and `SV_RemoteCommand_f`: a joined page's `rcon <line>` goes to the host with its `rcon_password`, `GuestLink.sendRcon`; the
 host's `Rcon_Validate` is its own `rcon_password`, none set taking none, and the line runs at its console with the prints and the status
 line kept meanwhile, `Com_BeginRedirect` as `rconOut`, and sent back as a `print` message onto the guest's scrollback and line; a wrong

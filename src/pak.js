@@ -18,16 +18,21 @@ export class Pak {
     const dirOff = this.dv.getInt32(4, true);
     const dirLen = this.dv.getInt32(8, true);
     this.files = new Map();
+    this.extra = new Map();   // files added beside the pak's own (CL_Download_f's: a map from the host), name → bytes
     for (let p = dirOff; p < dirOff + dirLen; p += 64) {
       const name = cstr(this.bytes, p, 56).toLowerCase().replace(/\\/g, '/');
       this.files.set(name, { off: this.dv.getInt32(p + 56, true), size: this.dv.getInt32(p + 60, true) });
     }
   }
 
-  has(name) { return this.files.has(name.toLowerCase()); }
+  has(name) { const n = name.toLowerCase(); return this.files.has(n) || this.extra.has(n); }
+  /** A file beside the pak's own (a download), found by has, get and list as theirs are. */
+  addFile(name, bytes) { this.extra.set(String(name).toLowerCase(), bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)); }
 
   /** The file's bytes as a Uint8Array view (no copy). */
   get(name) {
+    const x = this.extra.get(name.toLowerCase());
+    if (x) return x;
     const e = this.files.get(name.toLowerCase());
     if (!e) throw new Error(`${name} not in pak`);
     return this.bytes.subarray(e.off, e.off + e.size);
@@ -39,7 +44,7 @@ export class Pak {
   }
 
   list(prefix = '', suffix = '') {
-    return [...this.files.keys()].filter((n) => n.startsWith(prefix) && n.endsWith(suffix)).sort();
+    return [...new Set([...this.files.keys(), ...this.extra.keys()])].filter((n) => n.startsWith(prefix) && n.endsWith(suffix)).sort();
   }
 
   mapNames() {

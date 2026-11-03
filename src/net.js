@@ -166,6 +166,23 @@ export function reconnectRefusal(name, seen, now, limit) {
   return null;
 }
 
+// ── downloads (CL_Download_f, SV_BeginDownload_f, SV_NextDownload_f) ───────────────────────────────────────────────────────
+export const DOWNLOAD_PIECE = 192 * 1024;   // the bytes a download message carries (Quake's were 1024 a packet; the link's chunks carry these)
+/** What a guest may ask a host for: a map of the maps directory, no path out of it (SV_BeginDownload_f's checks). */
+export const downloadable = (name) => /^maps\/[a-z0-9_]{1,32}\.bsp$/.test(String(name ?? ''));
+const b64enc = (bytes) => {
+  if (globalThis.Buffer) return globalThis.Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+const b64dec = (text) => {
+  if (globalThis.Buffer) return new Uint8Array(globalThis.Buffer.from(text, 'base64'));
+  const s = atob(text), out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+};
+
 /** SV_CheckTimeouts and CL_CheckTimeout: whether a link has been silent longer than `seconds` (0: never), by its clock. */
 export const silentPast = (link, seconds) => seconds > 0 && link.now() - link.heardAt > seconds * 1000;
 
@@ -189,6 +206,7 @@ export class HostLink {
     this.onSay = null;      // the guest's chat (Cmd_Say_f): the host says it for the guest's client
     this.onConsole = null;  // the guest's console command (Cmd_ForwardToServer): the host runs it for the guest's client
     this.onRcon = null;     // the guest's rcon (CL_Rcon_f): the password it sent and the line, for the host's SV_RemoteCommand_f
+    this.onFileRequest = null;   // the guest's download (SV_BeginDownload_f): the name asked for; the page answers with sendFile or refuseFile
     this.onPacket = null;   // showpackets (Netchan_Transmit's and Netchan_Process's prints): each message's direction ('send' | 'recv'), kind and size
     this.onDrop = null;     // showdrop: a frame not sent, 'dropped' (the channel behind) or 'held' (the guest's rate), with its tic
     this.onClose = null;
@@ -220,6 +238,7 @@ export class HostLink {
       }
       else if (m.t === 'say' && typeof m.text === 'string') { const text = m.text.replace(/[\r\n]+/g, ' ').trim().slice(0, 150); if (text) this.onSay?.(text); }
       else if (m.t === 'con' && typeof m.cmd === 'string') { const cmd = m.cmd.trim().slice(0, 32), arg = String(m.arg ?? '').trim().slice(0, 64); if (cmd) this.onConsole?.(cmd, arg); }
+      else if (m.t === 'dl' && typeof m.name === 'string') this.onFileRequest?.(m.name.slice(0, 64).toLowerCase());
       else if (m.t === 'rcon' && typeof m.cmd === 'string') { const line = m.cmd.trim().slice(0, 256); if (line) this.onRcon?.(String(m.password ?? '').slice(0, 32), line); }
     };
     link.onClose = () => this.onClose?.();
@@ -252,6 +271,16 @@ export class HostLink {
   sendPic(file) { this.send({ t: 'pic', file }); }
   /** A cinematic at a level's end (the guest plays its own copy until the next map). */
   sendCin(file) { this.send({ t: 'cin', file }); }
+  /** SV_NextDownload_f: a file sent in pieces of DOWNLOAD_PIECE bytes (base64), each saying where it is in the whole. */
+  sendFile(name, bytes) {
+    const total = bytes.length;
+    for (let at = 0; at < total || at === 0; at += DOWNLOAD_PIECE) {
+      this.send({ t: 'dlc', name, at, total, data: b64enc(bytes.subarray(at, Math.min(total, at + DOWNLOAD_PIECE))) });
+      if (total === 0) break;
+    }
+  }
+  /** A download refused, with the reason (SV_BeginDownload_f's "Couldn't download"). */
+  refuseFile(name, reason) { this.send({ t: 'dlc', name, refused: String(reason ?? 'refused').slice(0, 120) }); }
   /** A print for the guest's console (Com_BeginRedirect's RD_PACKET: what the host's console said to an rcon line, "Bad rcon_password." for a wrong one). */
   sendPrint(text) { this.send({ t: 'print', text: String(text ?? '').slice(0, 4000) }); }
   /** SV_Kick_f: the guest is told it was kicked (its page says so), then the channel closes. */
@@ -303,6 +332,8 @@ export class GuestLink {
     this.onCin = null;
     this.onKick = null;     // the host kicked this guest (SV_Kick_f): the reason, before the channel closes
     this.onPrint = null;    // a print from the host's console (an rcon line's answer, CL_ConnectionlessPacket's "print")
+    this.downloads = new Map();   // CL_Download_f's: name → { parts, got, total, resolve, reject }
+    this.onDownload = null;       // told each piece as it comes: (name, got, total)
     this.onPacket = null;   // showpackets: each message's direction ('send' | 'recv'), kind and size
     this.onDrop = null;     // showdrop (Netchan_Process's "Dropped %i packets at %i"): the frames missed before one, by the tics between, and its tic
     this.lastTic = null;    // the last frame's tic (the drops counted from it)
@@ -347,6 +378,18 @@ export class GuestLink {
       case 'cin': this.onCin?.(m.file); break;
       case 'kick': this.kicked = String(m.reason ?? 'kicked'); this.onKick?.(this.kicked); break;
       case 'print': if (typeof m.text === 'string') this.onPrint?.(m.text.slice(0, 4000)); break;
+      case 'dlc': {
+        // CL_ParseDownload: a piece of the file asked for, put where it says; the whole when every byte is in (or the host's refusal)
+        const d = this.downloads.get(m.name);
+        if (!d) break;
+        if (m.refused) { this.downloads.delete(m.name); d.reject(new Error(m.refused)); break; }
+        const total = Number(m.total) || 0, at = Number(m.at) || 0, data = b64dec(String(m.data ?? ''));
+        if (!d.bytes || d.bytes.length !== total) { d.bytes = new Uint8Array(total); d.got = 0; }
+        d.bytes.set(data.subarray(0, Math.max(0, total - at)), at); d.got += data.length;
+        this.onDownload?.(m.name, Math.min(d.got, total), total);
+        if (d.got >= total) { this.downloads.delete(m.name); d.resolve(d.bytes); }
+        break;
+      }
       case 'ping': if (typeof m.at === 'number') this.send({ t: 'pong', at: m.at }); break;   // (answered at once: the host's clock goes back as it came)
       default: break;
     }
@@ -362,6 +405,15 @@ export class GuestLink {
   sendSay(text) { this.send({ t: 'say', text: String(text ?? '').slice(0, 150) }); }
   /** A game command typed at the guest's console (god, give, kill…): the host runs it for the guest's client, as Cmd_ForwardToServer sent it. */
   sendConsole(cmd, arg = '') { this.send({ t: 'con', cmd: String(cmd ?? '').slice(0, 32), arg: String(arg ?? '').slice(0, 64) }); }
+  /** CL_Download_f: a file asked of the host; resolves to its bytes, rejects with the host's reason. */
+  requestFile(name) {
+    if (this.downloads.has(name)) return this.downloads.get(name).promise;
+    const d = {};
+    d.promise = new Promise((resolve, reject) => { d.resolve = resolve; d.reject = reject; });
+    this.downloads.set(name, d);
+    this.send({ t: 'dl', name });
+    return d.promise;
+  }
   /** CL_Rcon_f: a line for the host's console with the password (the host's Rcon_Validate judges it, its prints come back as a print message). */
   sendRcon(password, line) { this.send({ t: 'rcon', password: String(password ?? '').slice(0, 32), cmd: String(line ?? '').slice(0, 256) }); }
   /** The newest frame since the last take, with its row, or null. */
