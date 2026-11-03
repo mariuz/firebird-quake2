@@ -111,6 +111,14 @@ export function connectRefusal(info, { password = '', spectatorPassword = '', ba
   return pw && given !== pw ? 'Password required or incorrect' : null;
 }
 
+/**
+ * 3.20's maxspectators (ClientConnect, spectator_respawn): a client asking to watch while `watching` others already do and the
+ * limit is reached is refused; a player is never counted.
+ */
+export function spectatorRefusal(info, watching, max) {
+  return info?.spectator && watching >= Math.max(0, Number(max) || 0) ? 'Server spectator limit is full.' : null;
+}
+
 // ── delta frames (SV_WriteFrameToClient's delta from the frame the client acknowledged) ───────────────────────────────
 const DELTA_KEYS = ['ents', 'loops', 'styles', 'speakers', 'brushFrames', 'brushAngles', 'boxes'];
 export const DELTA_KEEP = 32;   // the packed frames each end keeps by number (UPDATE_BACKUP's sixteen, twice: a frame acked late still serves)

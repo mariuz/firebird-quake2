@@ -12,7 +12,7 @@ import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, missingMapFiles, SQL_FILES } from '../src/loader.js';
 import { Bsp } from '../src/bsp.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal, DOWNLOAD_PIECE, downloadable, downloadRefusal } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal, DOWNLOAD_PIECE, downloadable, downloadRefusal, spectatorRefusal } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
@@ -110,6 +110,10 @@ check(said === null, 'nothing said, nothing to the host');
     `a download resumed: asked for from the kept bytes' end (${offsets.join()}), the rest in two pieces and whole; an offset past a changed file starts over; a whole file kept asks for nothing more`);
   host.onFileRequest = null; guest.onDownload = null;
 }
+// maxspectators: a client asking to watch is refused once the limit watch already; a player never; 0 lets none watch
+check(spectatorRefusal({ spectator: 1 }, 3, 4) === null && spectatorRefusal({ spectator: 1 }, 4, 4) === 'Server spectator limit is full.' && spectatorRefusal({ spectator: 0 }, 9, 4) === null
+  && spectatorRefusal({ spectator: 1 }, 0, 0) === 'Server spectator limit is full.' && spectatorRefusal({ spectator: 1 }, 1, 2) === null,
+  'maxspectators (ClientConnect): a watcher past the limit is refused, a player never, 0 lets none watch');
 // SV_BeginDownload_f's switches: allow_download refuses all, allow_download_sounds the sounds, allow_download_maps the maps and the rest
 {
   const on = {}, sounds0 = { allowDownloadSounds: false }, maps0 = { allowDownloadMaps: false }, all0 = { allowDownload: false };

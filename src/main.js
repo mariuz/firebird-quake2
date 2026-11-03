@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView, missingMapFiles } from './loader.js';
-import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, downloadRefusal, iceServers, connectRefusal, silentPast } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, downloadRefusal, spectatorRefusal, iceServers, connectRefusal, silentPast } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
@@ -1893,7 +1893,12 @@ async function hostAccept(peer, text) {
     // SV_DirectConnect and ClientConnect: a guest without the host's password (a watcher without the spectator password) is refused, told why
     if (g.refused) return;
     // (sv_reconnect_limit: the connect, a guest's first userinfo, not a later change; the names' times kept across Host and Leave)
-    const why = connectRefusal(info, settings) ?? (g.joined ? null : reconnectRefusal(info.name, lastConnects, performance.now(), Number(settings.svReconnectLimit) || 0));
+    // (maxspectators: the other clients watching now; a guest past the limit is refused at its connect, and a joined one asking to watch
+    // later is kept a player and told, spectator_respawn's)
+    const watching = Object.entries(session.userinfo).filter(([c, i]) => Number(c) !== g.client && i?.spectator).length;
+    const full = spectatorRefusal(info, watching, settings.maxspectators ?? 4);
+    if (full && g.joined) { info = { ...info, spectator: 0 }; if (g.host.open) g.host.sendPrint(full); }
+    const why = connectRefusal(info, settings) ?? (g.joined ? null : full ?? reconnectRefusal(info.name, lastConnects, performance.now(), Number(settings.svReconnectLimit) || 0));
     if (why) {
       // (the channel closes a moment after the reason is sent, so the guest's page reads it before the close; a kick's does the same)
       g.refused = true;

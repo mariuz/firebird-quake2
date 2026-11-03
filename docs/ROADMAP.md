@@ -1478,9 +1478,13 @@ This ends the twenty-third list.
 The twenty-fourth list: what a shared game's host still lacks of Quake 2's own server cvars. In the order they are to
 be taken.
 
-- **`maxspectators`**: `SV_DirectConnect` counted the clients that came as spectators against `maxspectators` (4)
-  and refused one past it ("Server spectator limit is full."); here a guest that ticks spectate is put in as a
-  watcher however many already watch.
+- **`maxspectators`**: done. 3.20's `ClientConnect` counted the clients watching against `maxspectators` (4) and
+  refused one more asking to watch ("Server spectator limit is full."), and `spectator_respawn` kept a player that
+  asked later a player, told so. Here the host counts its other clients whose userinfo watches (`spectatorRefusal`):
+  a guest past the limit is kicked with the reason at its connect, and a joined guest that ticks spectate stays a
+  player and has the line printed. 4 by default, 0 to 16, archived and in the serverinfo as Quake's was. `test:net`
+  the limit, a player never counted, 0 letting none watch; `test:settings` and `test:console` the cvar; the browser
+  test's guest ticks spectate under maxspectators 0 at the host and stays a player, told, on both builds.
 - **`zombietime`**: `SV_CheckTimeouts` kept a dropped client's slot as a zombie for `zombietime` seconds (2) before
   it was free again, so a guest reconnecting at once did not land in a slot still being torn down; here a guest's
   client row is freed the moment its link drops.

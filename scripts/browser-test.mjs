@@ -1689,6 +1689,17 @@ try {
       let player2 = null;
       for (let i = 0; i < 40 && !player2; i++) { await sleep(250); const r = await c2(); if (r && r.SPECTATOR === 0 && r.SOLID === 3) player2 = r; }
       assert(player2 && player2.MOVETYPE === 3 && player2.TAKEDAMAGE === 2, `unticked, a player again (${JSON.stringify(player2)})`);
+      // maxspectators 0 at the host: the guest ticking spectate is kept a player and told the limit is full (spectator_respawn's)
+      await typeOn(page, 'maxspectators 0');
+      await gp.evaluate(() => document.exitPointerLock?.()); await sleep(300);
+      await gp.check('#net-spectate');
+      let msFull = {};
+      for (let i = 0; i < 40 && !/Server spectator limit is full\./.test(msFull.line ?? ''); i++) { await sleep(250); msFull = await gp.evaluate(() => ({ line: document.getElementById('status')?.textContent, log: window.quake2.notify.log(4) })).catch(() => ({})); }
+      await sleep(500);
+      const msRow = await c2();
+      await gp.uncheck('#net-spectate'); await typeOn(page, 'maxspectators 4');
+      assert(/Server spectator limit is full\./.test(msFull.line ?? '') && msRow?.SPECTATOR === 0 && msRow?.SOLID === 3,
+        `maxspectators 0 keeps a guest that ticks spectate a player and tells it ("${msFull.line}", ${JSON.stringify(msRow)})`);
       // a third page joins the game running: Host makes another offer while hosting, the third answers it, and the
       // host's game gets a third client (ClientBegin) that the third page drives, each guest sent its own frames
       const tctx = await browser.newContext({ viewport: { width: 960, height: 720 } });
