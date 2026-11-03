@@ -1507,6 +1507,13 @@ try {
       let dlNo = '';
       for (let i = 0; i < 40 && !/Couldn't download/.test(dlNo); i++) { await sleep(250); dlNo = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => ''); }
       await typeOn(page, 'allow_download 1');
+      // allow_download_maps 0 at the host: a map refused with its own reason while allow_download is on
+      await typeOn(page, 'allow_download_maps 0');
+      await typeOn(gp, 'download maps/hostonly2.bsp');
+      let dlNoMaps = '';
+      for (let i = 0; i < 40 && !/Couldn't download/.test(dlNoMaps); i++) { await sleep(250); dlNoMaps = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => ''); }
+      await typeOn(page, 'allow_download_maps 1');
+      assert(/allow_download_maps 0/.test(dlNoMaps), `allow_download_maps 0 at the host refuses a map ("${dlNoMaps}")`);
       const dlKept = await gp.evaluate(async () => !!(await window.quake2.fileStore.get('dl:maps/hostonly.bsp'))).catch(() => false);
       await gp.evaluate(() => window.quake2.fileStore.remove('dl:maps/hostonly.bsp')).catch(() => undefined);
       assert(dlHas === 'File already exists.' && dlGot.has && dlGot.size === hostSize && /^Downloaded maps\/hostonly\.bsp/.test(dlGot.line ?? '') && dlKept && /allow_download 0/.test(dlNo),

@@ -12,7 +12,7 @@ import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, missingMapFiles, SQL_FILES } from '../src/loader.js';
 import { Bsp } from '../src/bsp.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal, DOWNLOAD_PIECE, downloadable } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal, DOWNLOAD_PIECE, downloadable, downloadRefusal } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
@@ -98,6 +98,16 @@ check(said === null, 'nothing said, nothing to the host');
   p2.addFile('maps/Big.bsp', got);
   check(p2.has('maps/big.bsp') && p2.get('maps/big.bsp').length === file.length && p2.list('maps/', '.bsp').includes('maps/big.bsp') && p2.has('maps/demo1.bsp'), 'the pak takes a downloaded file beside its own');
   host.onFileRequest = null; guest.onDownload = null;
+}
+// SV_BeginDownload_f's switches: allow_download refuses all, allow_download_sounds the sounds, allow_download_maps the maps and the rest
+{
+  const on = {}, sounds0 = { allowDownloadSounds: false }, maps0 = { allowDownloadMaps: false }, all0 = { allowDownload: false };
+  const r = (n, s) => downloadRefusal(n, s);
+  check(r('maps/demo2.bsp', on) === null && r('sound/world/amb10.wav', on) === null
+    && /allow_download_sounds 0/.test(r('sound/world/amb10.wav', sounds0)) && r('maps/demo2.bsp', sounds0) === null
+    && /allow_download_maps 0/.test(r('maps/demo2.bsp', maps0)) && /allow_download_maps 0/.test(r('textures/e1u1/metal2_1.wal', maps0)) && /allow_download_maps 0/.test(r('env/unit1_rt.pcx', maps0)) && r('sound/world/amb10.wav', maps0) === null
+    && /allow_download 0/.test(r('sound/world/amb10.wav', all0)) && /allow_download 0/.test(r('maps/demo2.bsp', { ...all0, allowDownloadMaps: true })),
+    'allow_download_maps and allow_download_sounds each refuse their kind, the textures and skies with the maps; allow_download 0 refuses all');
 }
 // CL_RequestNextDownload's walk: what a map names that the pak lacks, its textures' animation chains followed, the sky's six, the sounds
 {

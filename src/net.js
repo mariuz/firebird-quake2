@@ -176,6 +176,15 @@ export const DOWNLOAD_PIECE = 192 * 1024;   // the bytes a download message carr
 const PART = '[a-z0-9_+~-]{1,32}';
 const DOWNLOADABLE = new RegExp(`^(?:maps/[a-z0-9_]{1,32}\\.bsp|textures/${PART}(?:/${PART}){0,3}\\.wal|env/${PART}\\.pcx|sound/${PART}(?:/${PART}){0,3}\\.wav)$`);
 export const downloadable = (name) => DOWNLOADABLE.test(String(name ?? ''));
+/**
+ * SV_BeginDownload_f's refusals at a host for a file the guest may ask for, or null: allow_download off refuses all, then 3.20's
+ * allow_download_sounds a sound, allow_download_maps a map (the map's textures and sky images going with it here).
+ */
+export function downloadRefusal(name, settings) {
+  if (settings?.allowDownload === false) return 'downloads are off at the host (allow_download 0)';
+  if (String(name).startsWith('sound/')) return settings?.allowDownloadSounds === false ? 'sounds are not sent by the host (allow_download_sounds 0)' : null;
+  return settings?.allowDownloadMaps === false ? 'maps are not sent by the host (allow_download_maps 0)' : null;
+}
 const b64enc = (bytes) => {
   if (globalThis.Buffer) return globalThis.Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
   let s = '';

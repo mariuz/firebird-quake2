@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView, missingMapFiles } from './loader.js';
-import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, iceServers, connectRefusal, silentPast } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, downloadRefusal, iceServers, connectRefusal, silentPast } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
@@ -1913,8 +1913,9 @@ async function hostAccept(peer, text) {
   // SV_BeginDownload_f: a map the guest's pak lacks, sent in pieces when allow_download lets it and the pak has it
   g.host.onFileRequest = (name) => {
     if (!net?.guests.includes(g) || !g.host.open) return;
-    if (settings.allowDownload === false) { g.host.refuseFile(name, 'downloads are off at the host (allow_download 0)'); return; }
-    if (!downloadable(name) || !pak?.has(name)) { g.host.refuseFile(name, 'the host has no such file'); return; }
+    if (!downloadable(name) || !pak?.has(name)) { g.host.refuseFile(name, downloadRefusal(name, settings) ?? 'the host has no such file'); return; }
+    const no = downloadRefusal(name, settings);
+    if (no) { g.host.refuseFile(name, no); return; }
     g.host.sendFile(name, pak.get(name));
   };
   g.host.onRcon = async (pw, line) => {
