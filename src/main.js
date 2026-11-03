@@ -2157,8 +2157,9 @@ const dlShow = new Map();   // the downloads under way: name → how their piece
 function downloadPiece(n, got, total, bytes) {
   const how = dlShow.get(n);
   if (!how) return;
-  // (the bytes in so far kept with each piece, the .tmp file CL_ParseDownload wrote to: a link lost now leaves them for the next try)
-  if (bytes && got < total) fileStore.put(`dlpart:${n}`, { name: n, bytes: bytes.slice(0, got) }).catch(() => undefined);
+  // (the bytes in so far kept, the .tmp file CL_ParseDownload wrote to: a link lost now leaves them for the next try; every 768 KB, not
+  // every piece, since each save copies all that came, which for a 2 MB map piece by piece was 11 MB of writes)
+  if (bytes && got < total && got - (how.saved ?? 0) >= 768 * 1024) { how.saved = got; fileStore.put(`dlpart:${n}`, { name: n, bytes: bytes.slice(0, got) }).catch(() => undefined); }
   dlNow = { name: n, percent: total > 0 ? Math.floor((got * 100) / total) : 100 };
   if (!cmdline.hidden) showConlog();   // (the console's bar, Con_DrawConsole's, for any download while the console is down)
   if (how.status) setStatus(`Downloading ${n}: ${Math.round(got / 1024)} of ${Math.round(total / 1024)} KB`);

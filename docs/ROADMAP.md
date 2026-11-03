@@ -1464,7 +1464,7 @@ The twenty-third list: what a joined page's downloads still lack of Quake 2's ow
   `test:net` each switch's kind and allow_download over both; `test:settings` and `test:console` the cvars; the
   browser test's host refuses a map under allow_download_maps 0 with its reason, on both builds.
 - **A download resumed**: done. `CL_CheckOrDownloadFile` kept a broken download as `.tmp` and asked for the rest from
-  its length (`download <name> <offset>`). Here the bytes in so far are kept in the file store with each piece
+  its length (`download <name> <offset>`). Here the bytes in so far are kept in the file store as they come (every 768 KB)
   (`dlpart:<name>`, CL_ParseDownload's .tmp), and the next request for the file, at the next join's map or the
   console's `download`, sends their length as the offset (`GuestLink.requestFile`'s prefix); the host sends the
   pieces from there (`HostLink.sendFile`'s offset, one past the file starting over, as a file changed since would),

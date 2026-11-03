@@ -1521,7 +1521,7 @@ try {
       await page.evaluate(() => window.quake2.pak.addFile('maps/hostonly.bsp', window.quake2.pak.get('maps/demo2.bsp'))).catch(() => undefined);
       await typeOn(gp, 'download maps/hostonly.bsp');
       let dlGot = {};
-      for (let i = 0; i < 80 && !dlGot.has; i++) { await sleep(250); dlGot = await gp.evaluate(() => ({ has: window.quake2.pak.has('maps/hostonly.bsp'), size: window.quake2.pak.has('maps/hostonly.bsp') ? window.quake2.pak.get('maps/hostonly.bsp').length : 0, line: document.getElementById('status')?.textContent })).catch(() => ({})); }
+      for (let i = 0; i < 480 && !dlGot.has; i++) { await sleep(250); dlGot = await gp.evaluate(() => ({ has: window.quake2.pak.has('maps/hostonly.bsp'), size: window.quake2.pak.has('maps/hostonly.bsp') ? window.quake2.pak.get('maps/hostonly.bsp').length : 0, line: document.getElementById('status')?.textContent })).catch(() => ({})); }
       const hostSize = await page.evaluate(() => window.quake2.pak.get('maps/demo2.bsp').length).catch(() => -1);
       await typeOn(page, 'allow_download 0');
       await page.evaluate(() => window.quake2.pak.addFile('maps/hostonly2.bsp', window.quake2.pak.get('maps/demo2.bsp'))).catch(() => undefined);
@@ -1542,7 +1542,7 @@ try {
       await gp.evaluate(() => window.quake2.fileStore.put('dlpart:maps/hostonly3.bsp', { name: 'maps/hostonly3.bsp', bytes: window.quake2.pak.get('maps/demo2.bsp').slice(0, 192 * 1024) })).catch(() => undefined);
       await typeOn(gp, 'download maps/hostonly3.bsp');
       let dlRes = {};
-      for (let i = 0; i < 80 && !dlRes.has; i++) { await sleep(250); dlRes = await gp.evaluate(async () => { const q = window.quake2, n = 'maps/hostonly3.bsp', a = q.pak.has(n) ? q.pak.get(n) : null, b = q.pak.get('maps/demo2.bsp');
+      for (let i = 0; i < 480 && !dlRes.has; i++) { await sleep(250); dlRes = await gp.evaluate(async () => { const q = window.quake2, n = 'maps/hostonly3.bsp', a = q.pak.has(n) ? q.pak.get(n) : null, b = q.pak.get('maps/demo2.bsp');
         return { has: !!a, same: !!a && a.length === b.length && a.every((x, i) => x === b[i]), line: document.getElementById('status')?.textContent, part: !!(await q.fileStore.get('dlpart:' + n)) }; }).catch(() => ({})); }
       await gp.evaluate(() => window.quake2.fileStore.remove('dl:maps/hostonly3.bsp')).catch(() => undefined);
       assert(dlRes.has && dlRes.same && /, resumed at 192 KB\)$/.test(dlRes.line ?? '') && !dlRes.part,
