@@ -20,7 +20,7 @@ import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
 import { Effects } from './effects.js';
-import { Hud, viewFrameLerp } from './hud.js';
+import { Hud, viewFrameLerp, downloadBar, textBar } from './hud.js';
 import { Menu, saveComment, ADDRESS_BOOK } from './menu.js';
 import { parseChangeMap } from './levels.js';
 import { Session, SLOT_KEY, QUICK_KEY, saveKey } from './session.js';
@@ -666,9 +666,8 @@ function openConsole(prefill = '') {
   input.clear();
   cmdline.hidden = false;
   cmdline.value = prefill;   // ("say " from the chat key: messagemode)
-  // the scrollback: the last lines printed, the lines typed and the answers, under the input line
-  conlog.textContent = notify.log(12).join('\n');
-  conlog.hidden = !conlog.textContent;
+  // the scrollback: the last lines printed, the lines typed and the answers, under the input line (the download's bar last)
+  showConlog();
   con.reset();
   cmdline.focus();
   // scr_conspeed: the console drops from above the view to its place, the half screen at the speed's fraction of the screen a second
@@ -676,6 +675,17 @@ function openConsole(prefill = '') {
   const ms = speed > 0 ? Math.round(500 / speed) : 0;
   conDrop = { ms };
   if (ms > 0) for (const el of [cmdline, conlog]) if (!el.hidden) el.animate?.([{ transform: 'translateY(-120%)' }, { transform: 'none' }], { duration: ms, easing: 'linear' });
+}
+/**
+ * The console's scrollback: the last lines, and while a download is under way Con_DrawConsole's bar on the bottom line (cls.download:
+ * the file's name, the bar, the percentage, `downloadBar` in text). `conBarShown` keeps the last bar the console showed.
+ */
+let dlNow = null, conBarShown = null;
+function showConlog() {
+  const lines = notify.log(12);
+  if (dlNow) { conBarShown = textBar(downloadBar(dlNow.name, dlNow.percent, Math.max(12, (viewWidth() >> 3) - 2))); lines.push(conBarShown); }
+  conlog.textContent = lines.join('\n');
+  conlog.hidden = !conlog.textContent;
 }
 function closeConsole() {
   cmdline.hidden = true;
@@ -2063,6 +2073,8 @@ const dlShow = new Map();   // the downloads under way: name → how their piece
 function downloadPiece(n, got, total) {
   const how = dlShow.get(n);
   if (!how) return;
+  dlNow = { name: n, percent: total > 0 ? Math.floor((got * 100) / total) : 100 };
+  if (!cmdline.hidden) showConlog();   // (the console's bar, Con_DrawConsole's, for any download while the console is down)
   if (how.status) setStatus(`Downloading ${n}: ${Math.round(got / 1024)} of ${Math.round(total / 1024)} KB`);
   if (how.plaque) drawLoadingPlaque({ name: n, percent: total > 0 ? Math.floor((got * 100) / total) : 100 });
 }
@@ -2078,7 +2090,10 @@ async function fetchFromHost(name, { quiet = false, plaque = false } = {}) {
   net.guest.onDownload = downloadPiece;
   if (plaque) drawLoadingPlaque({ name, percent: 0 });
   let bytes;
-  try { bytes = await net.guest.requestFile(name); } finally { dlShow.delete(name); }
+  try { bytes = await net.guest.requestFile(name); } finally {
+    dlShow.delete(name);
+    if (!dlShow.size) { dlNow = null; if (!cmdline.hidden) showConlog(); }   // (the last download done: the bar leaves the console)
+  }
   pak.addFile(name, bytes);
   await fileStore.put(`dl:${name}`, { name, bytes }).catch((err) => console.warn('download:', err.message));
   if (!quiet) setStatus(`Downloaded ${name} (${Math.round(bytes.length / 1024)} KB)`);
@@ -2294,7 +2309,7 @@ async function boot() {
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, fetchMapFiles: () => (map && net?.guest?.map ? fetchMapFiles(map.bsp, net.guest.map) : Promise.resolve([])), settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
-      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
       get logfile() { return { on: !!settings.logfile, kept: conLog.kept.length, pending: conLog.pending.length }; }, get logStats() { return { on: !!settings.logStats, kept: statsLog.kept.length, pending: statsLog.pending.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped, server: !!recorder.server, maxEnts: recorder.maxEnts ?? 0 } : null; },

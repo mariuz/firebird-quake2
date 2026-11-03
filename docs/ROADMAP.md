@@ -1452,8 +1452,11 @@ This ends the twenty-second list.
 
 The twenty-third list: what a joined page's downloads still lack of Quake 2's own. In the order they are to be taken.
 
-- **The download's bar on the console**: Con_DrawConsole drew the same bar on the console's bottom line while
-  `cls.download` was open; here a console dropped during a download shows only the status line's count.
+- **The download's bar on the console**: done. Con_DrawConsole drew the same bar on the console's bottom line while
+  `cls.download` was open; the page's console is text, so its scrollback's last line is the bar while a download is
+  under way (`showConlog`), the four glyphs written `[`, `=`, `O` and `]` (`textBar`), as wide as the view's line
+  (`con.linewidth`), and gone once the last download is done. `test:hud` the bar in text; the browser test drops the
+  joined page's console while a texture comes, sees the bar at 100 % on its last line and gone after, on both builds.
 - **`allow_download_maps`, `allow_download_sounds`**: 3.20's per-kind switches at the host (`SV_BeginDownload_f`), each
   refusing its kind with `allow_download` still on; the players' and models' ones have nothing to guard here (the
   models stay the guest's pak's).
