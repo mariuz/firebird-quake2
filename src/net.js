@@ -221,7 +221,7 @@ export class HostLink {
     this.onSay = null;      // the guest's chat (Cmd_Say_f): the host says it for the guest's client
     this.onConsole = null;  // the guest's console command (Cmd_ForwardToServer): the host runs it for the guest's client
     this.onRcon = null;     // the guest's rcon (CL_Rcon_f): the password it sent and the line, for the host's SV_RemoteCommand_f
-    this.onFileRequest = null;   // the guest's download (SV_BeginDownload_f): the name asked for; the page answers with sendFile or refuseFile
+    this.onFileRequest = null;   // the guest's download (SV_BeginDownload_f): the name asked for and the offset to start at; the page answers with sendFile or refuseFile
     this.onPacket = null;   // showpackets (Netchan_Transmit's and Netchan_Process's prints): each message's direction ('send' | 'recv'), kind and size
     this.onDrop = null;     // showdrop: a frame not sent, 'dropped' (the channel behind) or 'held' (the guest's rate), with its tic
     this.onClose = null;
@@ -253,7 +253,7 @@ export class HostLink {
       }
       else if (m.t === 'say' && typeof m.text === 'string') { const text = m.text.replace(/[\r\n]+/g, ' ').trim().slice(0, 150); if (text) this.onSay?.(text); }
       else if (m.t === 'con' && typeof m.cmd === 'string') { const cmd = m.cmd.trim().slice(0, 32), arg = String(m.arg ?? '').trim().slice(0, 64); if (cmd) this.onConsole?.(cmd, arg); }
-      else if (m.t === 'dl' && typeof m.name === 'string') this.onFileRequest?.(m.name.slice(0, 64).toLowerCase());
+      else if (m.t === 'dl' && typeof m.name === 'string') this.onFileRequest?.(m.name.slice(0, 64).toLowerCase(), Math.max(0, Math.floor(Number(m.offset) || 0)));
       else if (m.t === 'rcon' && typeof m.cmd === 'string') { const line = m.cmd.trim().slice(0, 256); if (line) this.onRcon?.(String(m.password ?? '').slice(0, 32), line); }
     };
     link.onClose = () => this.onClose?.();
@@ -287,12 +287,14 @@ export class HostLink {
   /** A cinematic at a level's end (the guest plays its own copy until the next map). */
   sendCin(file) { this.send({ t: 'cin', file }); }
   /** SV_NextDownload_f: a file sent in pieces of DOWNLOAD_PIECE bytes (base64), each saying where it is in the whole. */
-  sendFile(name, bytes) {
+  sendFile(name, bytes, offset = 0) {
+    // (SV_BeginDownload_f's offset: a resumed download's pieces from there; one past the file, a file changed since, starts over)
     const total = bytes.length;
-    for (let at = 0; at < total || at === 0; at += DOWNLOAD_PIECE) {
+    let at = offset > 0 && offset <= total ? offset : 0;
+    do {
       this.send({ t: 'dlc', name, at, total, data: b64enc(bytes.subarray(at, Math.min(total, at + DOWNLOAD_PIECE))) });
-      if (total === 0) break;
-    }
+      at += DOWNLOAD_PIECE;
+    } while (at < total);
   }
   /** A download refused, with the reason (SV_BeginDownload_f's "Couldn't download"). */
   refuseFile(name, reason) { this.send({ t: 'dlc', name, refused: String(reason ?? 'refused').slice(0, 120) }); }
@@ -348,7 +350,7 @@ export class GuestLink {
     this.onKick = null;     // the host kicked this guest (SV_Kick_f): the reason, before the channel closes
     this.onPrint = null;    // a print from the host's console (an rcon line's answer, CL_ConnectionlessPacket's "print")
     this.downloads = new Map();   // CL_Download_f's: name → { parts, got, total, resolve, reject }
-    this.onDownload = null;       // told each piece as it comes: (name, got, total)
+    this.onDownload = null;       // told each piece as it comes: (name, got, total, bytes), the first `got` of `bytes` in
     this.onPacket = null;   // showpackets: each message's direction ('send' | 'recv'), kind and size
     this.onDrop = null;     // showdrop (Netchan_Process's "Dropped %i packets at %i"): the frames missed before one, by the tics between, and its tic
     this.lastTic = null;    // the last frame's tic (the drops counted from it)
@@ -399,9 +401,13 @@ export class GuestLink {
         if (!d) break;
         if (m.refused) { this.downloads.delete(m.name); d.reject(new Error(m.refused)); break; }
         const total = Number(m.total) || 0, at = Number(m.at) || 0, data = b64dec(String(m.data ?? ''));
-        if (!d.bytes || d.bytes.length !== total) { d.bytes = new Uint8Array(total); d.got = 0; }
+        if (!d.bytes || d.bytes.length !== total) {
+          // (the first piece: a resumed download's kept bytes go first when the host starts where they end, else it starts over)
+          d.bytes = new Uint8Array(total); d.got = 0;
+          if (d.prefix?.length && at === d.prefix.length && at <= total) { d.bytes.set(d.prefix); d.got = at; }
+        }
         d.bytes.set(data.subarray(0, Math.max(0, total - at)), at); d.got += data.length;
-        this.onDownload?.(m.name, Math.min(d.got, total), total);
+        this.onDownload?.(m.name, Math.min(d.got, total), total, d.bytes);
         if (d.got >= total) { this.downloads.delete(m.name); d.resolve(d.bytes); }
         break;
       }
@@ -420,13 +426,14 @@ export class GuestLink {
   sendSay(text) { this.send({ t: 'say', text: String(text ?? '').slice(0, 150) }); }
   /** A game command typed at the guest's console (god, give, kill…): the host runs it for the guest's client, as Cmd_ForwardToServer sent it. */
   sendConsole(cmd, arg = '') { this.send({ t: 'con', cmd: String(cmd ?? '').slice(0, 32), arg: String(arg ?? '').slice(0, 64) }); }
-  /** CL_Download_f: a file asked of the host; resolves to its bytes, rejects with the host's reason. */
-  requestFile(name) {
+  /** CL_Download_f: a file asked of the host (`prefix`: the bytes a broken download kept, the rest asked for); resolves to its bytes, rejects with the host's reason. */
+  requestFile(name, { prefix = null } = {}) {
     if (this.downloads.has(name)) return this.downloads.get(name).promise;
-    const d = {};
+    const d = { prefix: prefix?.length ? prefix : null };
     d.promise = new Promise((resolve, reject) => { d.resolve = resolve; d.reject = reject; });
     this.downloads.set(name, d);
-    this.send({ t: 'dl', name });
+    // (CL_CheckOrDownloadFile's resume: the bytes kept from a broken download, asked for from their end)
+    this.send(d.prefix ? { t: 'dl', name, offset: d.prefix.length } : { t: 'dl', name });
     return d.promise;
   }
   /** CL_Rcon_f: a line for the host's console with the password (the host's Rcon_Validate judges it, its prints come back as a print message). */

@@ -1911,12 +1911,12 @@ async function hostAccept(peer, text) {
   // taken), the prints and the line kept for it meanwhile (Com_BeginRedirect) and sent back; a bad one is told so, and this console says
   // "Bad rcon from" as the server's did
   // SV_BeginDownload_f: a map the guest's pak lacks, sent in pieces when allow_download lets it and the pak has it
-  g.host.onFileRequest = (name) => {
+  g.host.onFileRequest = (name, offset) => {
     if (!net?.guests.includes(g) || !g.host.open) return;
     if (!downloadable(name) || !pak?.has(name)) { g.host.refuseFile(name, downloadRefusal(name, settings) ?? 'the host has no such file'); return; }
     const no = downloadRefusal(name, settings);
     if (no) { g.host.refuseFile(name, no); return; }
-    g.host.sendFile(name, pak.get(name));
+    g.host.sendFile(name, pak.get(name), offset);
   };
   g.host.onRcon = async (pw, line) => {
     if (!net?.guests.includes(g)) return;
@@ -2071,9 +2071,11 @@ function drawLoadingPlaque(dl = null) {
 }
 const dlShow = new Map();   // the downloads under way: name → how their pieces show ({ status, plaque })
 /** CL_ParseDownload's progress: the status line's count, the plaque's bar, as the download asked. */
-function downloadPiece(n, got, total) {
+function downloadPiece(n, got, total, bytes) {
   const how = dlShow.get(n);
   if (!how) return;
+  // (the bytes in so far kept with each piece, the .tmp file CL_ParseDownload wrote to: a link lost now leaves them for the next try)
+  if (bytes && got < total) fileStore.put(`dlpart:${n}`, { name: n, bytes: bytes.slice(0, got) }).catch(() => undefined);
   dlNow = { name: n, percent: total > 0 ? Math.floor((got * 100) / total) : 100 };
   if (!cmdline.hidden) showConlog();   // (the console's bar, Con_DrawConsole's, for any download while the console is down)
   if (how.status) setStatus(`Downloading ${n}: ${Math.round(got / 1024)} of ${Math.round(total / 1024)} KB`);
@@ -2087,17 +2089,22 @@ async function fetchFromHost(name, { quiet = false, plaque = false } = {}) {
   const kept = await fileStore.get(`dl:${name}`).catch(() => null);
   if (kept?.bytes) { pak.addFile(name, kept.bytes); return 'kept'; }
   if (!netGuest() || !net.guest?.open) throw new Error('not joined to a game');
+  // (CL_CheckOrDownloadFile: a download broken off before, its bytes kept as they came, goes on from where they end)
+  const part = await fileStore.get(`dlpart:${name}`).catch(() => null);
+  const prefix = part?.bytes?.length ? part.bytes : null;
   dlShow.set(name, { status: !quiet, plaque });
   net.guest.onDownload = downloadPiece;
   if (plaque) drawLoadingPlaque({ name, percent: 0 });
+  if (prefix && !quiet) setStatus(`Resuming ${name} at ${Math.round(prefix.length / 1024)} KB`);
   let bytes;
-  try { bytes = await net.guest.requestFile(name); } finally {
+  try { bytes = await net.guest.requestFile(name, { prefix }); } finally {
     dlShow.delete(name);
     if (!dlShow.size) { dlNow = null; if (!cmdline.hidden) showConlog(); }   // (the last download done: the bar leaves the console)
   }
   pak.addFile(name, bytes);
   await fileStore.put(`dl:${name}`, { name, bytes }).catch((err) => console.warn('download:', err.message));
-  if (!quiet) setStatus(`Downloaded ${name} (${Math.round(bytes.length / 1024)} KB)`);
+  await fileStore.remove(`dlpart:${name}`).catch(() => undefined);
+  if (!quiet) setStatus(`Downloaded ${name} (${Math.round(bytes.length / 1024)} KB${prefix ? `, resumed at ${Math.round(prefix.length / 1024)} KB` : ''})`);
   return 'downloaded';
 }
 /**

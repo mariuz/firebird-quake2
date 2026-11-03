@@ -1463,9 +1463,30 @@ The twenty-third list: what a joined page's downloads still lack of Quake 2's ow
   and models' switches are left out: the models stay the guest's pak's, so there is nothing for them to guard.
   `test:net` each switch's kind and allow_download over both; `test:settings` and `test:console` the cvars; the
   browser test's host refuses a map under allow_download_maps 0 with its reason, on both builds.
-- **A download resumed**: `CL_CheckOrDownloadFile` kept a broken download as `.tmp` and asked for the rest from its
-  length (`download <name> <offset>`); here a link that drops mid-map loses the pieces that came. Kept in the file
-  store as they arrive, the next join's request would start at the first missing byte.
+- **A download resumed**: done. `CL_CheckOrDownloadFile` kept a broken download as `.tmp` and asked for the rest from
+  its length (`download <name> <offset>`). Here the bytes in so far are kept in the file store with each piece
+  (`dlpart:<name>`, CL_ParseDownload's .tmp), and the next request for the file, at the next join's map or the
+  console's `download`, sends their length as the offset (`GuestLink.requestFile`'s prefix); the host sends the
+  pieces from there (`HostLink.sendFile`'s offset, one past the file starting over, as a file changed since would),
+  and the guest puts the kept bytes first. The status line says "Resuming … at N KB" and the download's end "resumed
+  at N KB"; the part is dropped once the file is whole. `test:net` a file resumed from its first piece (the offset
+  asked, the rest whole), one changed since starting over, and a whole one kept; the browser test keeps 192 KB of a
+  map as a broken download and sees the rest come and the file whole, on both builds.
+
+This ends the twenty-third list.
+
+The twenty-fourth list: what a shared game's host still lacks of Quake 2's own server cvars. In the order they are to
+be taken.
+
+- **`maxspectators`**: `SV_DirectConnect` counted the clients that came as spectators against `maxspectators` (4)
+  and refused one past it ("Server spectator limit is full."); here a guest that ticks spectate is put in as a
+  watcher however many already watch.
+- **`zombietime`**: `SV_CheckTimeouts` kept a dropped client's slot as a zombie for `zombietime` seconds (2) before
+  it was free again, so a guest reconnecting at once did not land in a slot still being torn down; here a guest's
+  client row is freed the moment its link drops.
+- **`map_noareas`**: `CM_SetAreaPortalState`'s switch: with `map_noareas 1` every area is connected whatever the
+  doors say (`CM_AreasConnected` true), so sounds and entities carry through closed doors; a debugging cvar of the
+  collision model, taken at the next map's load as Quake's was.
 
 ## Playing the demo
 
