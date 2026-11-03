@@ -285,6 +285,7 @@ function setSetting(k, v) {
     else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   } else { settings[k] = v; saveSettings(); }
   if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg' || k === 'rate' || k === 'skin' || k === 'password') applyUserinfo();
+  if (k === 'public') heartbeat(true).catch(() => undefined);   // (public 1 lists the game hosted now, 0 takes it off)
   if (k === 'viewsize') applyView().catch((err) => console.warn('viewsize:', err.message));   // (the 3D view's rectangle, the SQL's frustum with it)
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
   if (k === 'swDrawflat' && renderer) { renderer.drawflat = !!v; renderer.surfCache.clear(); }   // (sw_drawflat: the surfaces built again flat, or textured)
@@ -571,6 +572,7 @@ const con = new Console({
   // a joined page's game commands (god, give, kill…) go to the host, which runs them for this page's client (Cmd_ForwardToServer)
   forward: (cmd, arg) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendConsole(cmd, arg); return true; },
   // download (CL_Download_f): a map asked of the host by a joined page, kept beside the pak
+  heartbeat: () => heartbeat(true),   // (heartbeat: the listing sent now)
   downloadFile: (name) => {
     if (!downloadable(name)) return 'bad';
     if (pak?.has(name)) return 'exists';
@@ -1815,6 +1817,30 @@ function updateStats() {
 const netEl = { panel: $('net'), help: $('net-help'), text: $('net-text'), go: $('net-go'), state: $('net-state') };
 let netStage = null;   // 'offer' (hosting: the guest's answer goes in the box), 'code' (hosting through the relay), 'join' (the host's offer or code does)
 let hostCode = null;   // the code this page published its offers under at the relay: kept for the session, so Host again keeps it and a guest's reconnect finds it
+/**
+ * Master_Heartbeat and Master_Shutdown: while this page hosts through the relay with public 1, its serverinfo is listed at the relay under
+ * its code, sent again every HEARTBEAT_SECONDS (300, as Quake's) or at once when `force` (heartbeat, a new map, a guest in or out); off
+ * (public 0, Leave), the listing is taken off. Returns 'sent', 'not public', 'not hosting' or the relay's error.
+ */
+const HEARTBEAT_SECONDS = 300;
+let lastBeat = -Infinity, beatListed = null, lastBeatInfo = null;   // (beatListed: the relay and code listed, to take off)
+async function heartbeat(force = false) {
+  const relay = signalRelay();
+  if (!settings.public || net?.role !== 'host' || !hostCode || !relay) {
+    if (beatListed) { const was = beatListed; beatListed = null; await new SignalClient(was.relay).withdraw(was.code); }
+    return !settings.public ? 'not public' : 'not hosting';
+  }
+  if (!force && performance.now() - lastBeat < HEARTBEAT_SECONDS * 1000) return 'sent';
+  lastBeat = performance.now();
+  const si = (await con.host.serverInfo().catch(() => null)) ?? {};
+  const info = { hostname: settings.hostname || 'noname', mapname: si.mapname ?? map?.name ?? '', clients: 1 + (net?.guests?.length ?? 0), maxclients: MAX_PLAYERS,
+    needpass: si.needpass ?? 0, deathmatch: si.deathmatch ?? 0, coop: si.coop ?? 0 };
+  try { await relay.announce(hostCode, info); } catch (err) { return err.message; }
+  if (beatListed && (beatListed.relay !== relay.base || beatListed.code !== hostCode)) await new SignalClient(beatListed.relay).withdraw(beatListed.code);
+  beatListed = { relay: relay.base, code: hostCode }; lastBeatInfo = info;
+  return 'sent';
+}
+setInterval(() => { if (settings.public || beatListed) heartbeat().catch(() => undefined); }, 10000);   // (the heartbeat's clock: due every 300 s, a public 0 taken off within ten)
 let lastConnect = '';  // what this page last joined with (a code or an offer text): reconnect at the console joins it again
 const signalRelay = () => (settings.rtcSignal ? new SignalClient(settings.rtcSignal) : null);
 /** The address book (the menu's, in the settings): an entry joined by code goes first, once, the last one off past nine. */
@@ -1860,6 +1886,7 @@ async function hostGame() {
       if (net?.offer?.peer !== peer) { relay.drop(code); return; }
       net.offer.code = code;
       hostCode = code;
+      if (settings.public) heartbeat(true).catch(() => undefined);   // (public 1: the game listed at the relay as it is hosted)
       netStage = 'code';
       netPanel(`Tell the ${net.guests.length ? 'next' : 'other'} player the code ${code} (they type it after Join); the game starts when their answer comes.`, code, null);
       netState(`code ${code}: waiting for the answer${net.guests.length ? ` (${guestsState()})` : ''}`);
@@ -2186,6 +2213,7 @@ async function guestMap(m) {
 function leaveNet() {
   const was = net;
   net = null;
+  if (beatListed) heartbeat().catch(() => undefined);   // (Master_Shutdown: the listing taken off with the game)
   netStage = null;
   guestPred = null;
   netEl.panel.hidden = true;
@@ -2328,7 +2356,7 @@ async function boot() {
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, zombies, fetchMapFiles: () => (map && net?.guest?.map ? fetchMapFiles(map.bsp, net.guest.map) : Promise.resolve([])), settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
-      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get heartbeat() { return { listed: beatListed ? { ...beatListed } : null, info: lastBeatInfo }; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
       get logfile() { return { on: !!settings.logfile, kept: conLog.kept.length, pending: conLog.pending.length }; }, get logStats() { return { on: !!settings.logStats, kept: statsLog.kept.length, pending: statsLog.pending.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped, server: !!recorder.server, maxEnts: recorder.maxEnts ?? 0 } : null; },

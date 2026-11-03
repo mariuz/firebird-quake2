@@ -567,7 +567,10 @@ Leave button (`CL_Connect_f`, `CL_Reconnect_f`, `CL_Disconnect_f`; `connectTo`, 
 `lastConnect` in `src/main.js`); `pingservers` is `CL_PingServers_f` over the address book, a LAN's broadcast having no browser
 counterpart: each entry, a relay and a code or a code at the page's relay (`parseAddress`), is asked of its relay
 (`SignalClient.ping`), a line each in the scrollback with the room's state, a host waiting, joined already, no game or the relay
-silent, and the round trip, the sum on the line). By text (`packSignal`: the description gzipped and
+silent, and the round trip, the sum on the line); `public` and `heartbeat` are `Master_Heartbeat` and `SV_Heartbeat_f` at the relay:
+with `public 1` a host's serverinfo (hostname, map, clients, maxclients, needpass, the mode) is listed under its code (`POST /servers/<code>`,
+`SignalClient.announce`; the relay keeps the known keys alone and sweeps a listing past its time), sent again every 300 seconds and at
+once by `heartbeat`, and taken off at `public 0` or Leave (`Master_Shutdown`, `withdraw`); `GET /servers` is the list, newest first. By text (`packSignal`: the description gzipped and
 base64'd, some six hundred characters) the guest answers it the same way and the host accepts the answer;
 either way `ready` resolves with the Link when the channel opens. The guest predicts its own move, as `CL_PredictMovement` did with the client's pmove:
 `src/pmove.js` is the JS twin of `player_think`'s movement and of the traces in `sql/physics.sql` (`ClipMap`

@@ -1811,6 +1811,20 @@ try {
       const rejoinedStats = await gstats();
       const zClient = await page.evaluate(() => window.quake2.net?.guests?.map((g) => g.client) ?? []).catch(() => []);
       assert(zLeft.includes(2) && zClient.join() === '2', `the client the guest left is a zombie for zombietime (${JSON.stringify(zLeft)}), and given to it again past the time (${JSON.stringify(zClient)})`);
+      // public 1 at the host (Master_Heartbeat): its game listed at the relay under its code with its serverinfo; heartbeat sends it
+      // at once; public 0 takes it off (Master_Shutdown)
+      const listing = async () => (await (await fetch(`http://localhost:${RELAY_PORT}/servers`)).json()).servers ?? [];
+      await typeOn(page, 'public 1');
+      let pub = [];
+      for (let i = 0; i < 40 && !pub.some((x) => x.code === offer); i++) { await sleep(250); pub = await listing().catch(() => []); }
+      await typeOn(page, 'heartbeat');
+      const beatStatus = await page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      await typeOn(page, 'public 0');
+      let unpub = pub;
+      for (let i = 0; i < 40 && unpub.some((x) => x.code === offer); i++) { await sleep(250); unpub = await listing().catch(() => unpub); }
+      const mine = pub.find((x) => x.code === offer);
+      assert(mine?.info.hostname === 'Hal' && mine.info.mapname === 'demo1' && mine.info.clients === 2 && mine.info.maxclients === 4 && beatStatus === 'Heartbeat sent to the relay' && !unpub.some((x) => x.code === offer),
+        `public 1 lists the hosted game at the relay (${JSON.stringify(mine)}), heartbeat sends it ("${beatStatus}"), public 0 takes it off (${unpub.length} listed)`);
       assert(again === offer && lastJoined === null && hr.role === 'host' && hr.guests?.length === 1 && gr.role === 'guest' && gr.frames > 20 && gr.map === 'demo1' && /joined Hal: \d+ frames/.test(rejoinedStats),
         `Host again publishes under the code the host had (${again}), and reconnect at the guest's console joins the game again (${JSON.stringify({ hr, gr })}), its stats line naming the host (${rejoinedStats})`);
       // cl_timeout: the guest hearing nothing from the host that long leaves (CL_CheckTimeout: "Server connection timed out."); its page stands

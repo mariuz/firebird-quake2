@@ -11,6 +11,9 @@
 //   POST   /rooms/<code>/answer   the answer as the body → { ok } (409 once answered)
 //   GET    /rooms/<code>/answer   → { answer } (null until it comes)
 //   DELETE /rooms/<code>       → { ok }
+//   POST   /servers/<code>     a host's serverinfo as JSON, its public listing under its code (Master_Heartbeat) → { ok }
+//   DELETE /servers/<code>     the listing taken off (Master_Shutdown) → { ok }
+//   GET    /servers            → { servers: [{ code, info, age }] }, the listings, newest first (a master's list)
 //
 // `createSignalServer` is exported so the network test runs it in-process on a port of its own.
 
@@ -22,10 +25,22 @@ const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // (no 0/O, 1/I: a code i
 export const CODE_LENGTH = 4;
 const TTL = 10 * 60 * 1000;
 const MAX_TEXT = 16384;   // (an offer or an answer is under a kilobyte)
+const MAX_SERVERS = 256;  // (the listings kept: past it the oldest goes)
+const INFO_KEYS = { hostname: 'string', mapname: 'string', clients: 'number', maxclients: 'number', needpass: 'number', deathmatch: 'number', coop: 'number' };
+/** A listing's serverinfo: the known keys alone, strings cut to 32 characters, numbers whole. */
+function serverInfo(text) {
+  const raw = JSON.parse(text), info = {};
+  for (const [k, t] of Object.entries(INFO_KEYS)) {
+    if (t === 'string' && typeof raw?.[k] === 'string') info[k] = raw[k].replace(/[^\x20-\x7e]/g, '').slice(0, 32);
+    if (t === 'number' && Number.isFinite(raw?.[k])) info[k] = Math.max(0, Math.min(99, Math.floor(raw[k])));
+  }
+  return info;
+}
 
 export function createSignalServer({ ttlMs = TTL, now = Date.now } = {}) {
   const rooms = new Map();   // code → { offer, answer, at }
-  const sweep = () => { for (const [c, r] of rooms) if (now() - r.at > ttlMs) rooms.delete(c); };
+  const servers = new Map();   // code → { info, at }: the public listings, each heartbeat's
+  const sweep = () => { for (const m of [rooms, servers]) for (const [c, r] of m) if (now() - r.at > ttlMs) m.delete(c); };
   const newCode = () => { for (;;) { let c = ''; for (const b of randomBytes(CODE_LENGTH)) c += ALPHABET[b % ALPHABET.length]; if (!rooms.has(c)) return c; } };
   const server = http.createServer(async (req, res) => {
     // (any origin; Access-Control-Allow-Private-Network for Chrome's private network access, a public page reaching a relay
@@ -36,10 +51,28 @@ export function createSignalServer({ ttlMs = TTL, now = Date.now } = {}) {
     if (req.method === 'OPTIONS') return reply(204);
     sweep();
     const url = new URL(req.url, 'http://localhost');
+    const body = async () => { let t = ''; for await (const chunk of req) { t += chunk; if (t.length > MAX_TEXT) throw new Error('too long'); } return t.trim(); };
+    const isCode = (c) => c.length === CODE_LENGTH && [...c].every((ch) => ALPHABET.includes(ch));
+    // the public listings (the masters' list): a host's heartbeat under its code, the list, the listing taken off
+    const sv = /^\/servers(?:\/([A-Za-z0-9]+))?\/?$/.exec(url.pathname);
+    if (sv) {
+      const code = sv[1]?.toUpperCase();
+      try {
+        if (req.method === 'GET' && !code) return reply(200, { servers: [...servers].sort((a, b) => b[1].at - a[1].at).map(([c, s]) => ({ code: c, info: s.info, age: Math.round((now() - s.at) / 1000) })) });
+        if (!code || !isCode(code)) return reply(400, { error: 'not a code' });
+        if (req.method === 'POST') {
+          const info = serverInfo(await body());
+          servers.delete(code); servers.set(code, { info, at: now() });
+          if (servers.size > MAX_SERVERS) servers.delete(servers.keys().next().value);
+          return reply(200, { ok: true });
+        }
+        if (req.method === 'DELETE') { servers.delete(code); return reply(200, { ok: true }); }
+        return reply(405, { error: 'method not allowed' });
+      } catch (err) { return reply(400, { error: err.message }); }
+    }
     const m = /^\/rooms(?:\/([A-Za-z0-9]+))?(?:\/(answer))?\/?$/.exec(url.pathname);
     if (!m) return reply(404, { error: 'not found' });
     const code = m[1]?.toUpperCase(), part = m[2];
-    const body = async () => { let t = ''; for await (const chunk of req) { t += chunk; if (t.length > MAX_TEXT) throw new Error('too long'); } return t.trim(); };
     try {
       if (req.method === 'POST' && !code) {
         const offer = await body();
@@ -50,7 +83,7 @@ export function createSignalServer({ ttlMs = TTL, now = Date.now } = {}) {
       }
       if (req.method === 'POST' && code && !part) {
         // the host's own code (the one it had): the room made anew under it, an answer there before forgotten
-        if (code.length !== CODE_LENGTH || [...code].some((ch) => !ALPHABET.includes(ch))) return reply(400, { error: 'not a code' });
+        if (!isCode(code)) return reply(400, { error: 'not a code' });
         const offer = await body();
         if (!offer) return reply(400, { error: 'no offer' });
         rooms.set(code, { offer, answer: null, at: now() });
@@ -71,6 +104,7 @@ export function createSignalServer({ ttlMs = TTL, now = Date.now } = {}) {
     } catch (err) { return reply(400, { error: err.message }); }
   });
   server.rooms = rooms;
+  server.servers = servers;
   return server;
 }
 

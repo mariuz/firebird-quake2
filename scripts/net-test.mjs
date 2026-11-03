@@ -614,6 +614,25 @@ check(madeWith?.iceServers.length === 1 && madeWith.iceServers[0].urls.startsWit
     const r = parseAddress('http://relay:8787 k9h2'), c = parseAddress('K9H2', 'http://mine'), bad = parseAddress('q2net1:abc');
     check(r.relay === 'http://relay:8787' && r.code === 'K9H2' && c.relay === 'http://mine' && c.code === 'K9H2' && bad === null, 'an entry is a relay and a code, or a code at the page\'s relay; an offer text is neither');
   }
+  // the public listings (Master_Heartbeat, Master_Shutdown): a host's serverinfo under its code, the known keys alone, listed newest
+  // first; a heartbeat again replaces it; withdrawn, it is gone; past the relay's time, swept; a code that is not one refused
+  {
+    const a = await sc.publish(text), b = await sc.publish(text);
+    await sc.announce(a, { hostname: 'Hal', mapname: 'demo1', clients: 2, maxclients: 4, needpass: 0, extra: 'dropped' });
+    clock += 1000;
+    await sc.announce(b.toLowerCase(), { hostname: 'Holly\u0001 the very long name of a ship computer', mapname: 'demo2', clients: 1.7, maxclients: 4 });
+    const list = await sc.servers();
+    clock += 1000; await sc.announce(a, { hostname: 'Hal', mapname: 'demo2', clients: 3, maxclients: 4 });
+    const again = await sc.servers();
+    await sc.withdraw(b);
+    const off = await sc.servers();
+    clock += 6000;
+    const swept = await sc.servers();
+    const bad = await sc.announce('AB01', {}).catch((e) => e.message);
+    check(list.map((s) => s.code).join() === `${b},${a}` && list[1].info.hostname === 'Hal' && list[1].info.extra === undefined && list[1].age === 1 && list[0].info.hostname === 'Holly the very long name of a sh' && list[0].info.clients === 1
+      && again[0].code === a && again[0].info.mapname === 'demo2' && again.length === 2 && off.map((s) => s.code).join() === a && swept.length === 0 && /refused \(400: not a code\)/.test(bad ?? ''),
+      `public listings: announced under the code with the known keys (${JSON.stringify(list)}), the newest first, a heartbeat again replacing one, withdrawn gone, past the time swept, a bad code refused`);
+  }
   const none = new SignalClient('http://127.0.0.1:1');
   check(/the relay at http:\/\/127\.0\.0\.1:1 did not answer/.test(await none.publish(text).catch((e) => e.message)), 'a relay that is not there says so');
   relay.close();

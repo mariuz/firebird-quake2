@@ -1506,10 +1506,17 @@ This ends the twenty-fourth list.
 The twenty-fifth list: a list of public games at the relay, as Quake 2's master servers kept one. In the order they
 are to be taken.
 
-- **`public` and `heartbeat`**: `Master_Heartbeat` sent the serverinfo to the masters every few minutes while
-  `public` was 1, and `Master_Shutdown` took the server off; here a hosted game is found only by its code. With
-  `public 1` the host would list its room at the relay with its serverinfo (the hostname, the map, the players),
-  `heartbeat` sending it at once, the listing dropped at Leave or `public 0`.
+- **`public` and `heartbeat`**: done. `Master_Heartbeat` sent the serverinfo to the masters every few minutes while
+  `public` was 1, and `Master_Shutdown` took the server off; a hosted game here was found only by its code. The
+  relay keeps a list of public games beside its rooms now (`POST /servers/<code>`, `DELETE`, `GET /servers` newest
+  first; the known keys alone, swept past the relay's time like a room). With `public 1` a page hosting through the
+  relay lists its serverinfo under its code (`SignalClient.announce`: the hostname, the map, the clients and the
+  most, needpass, the mode) as it publishes its offer, again every 300 seconds (`HEARTBEAT_SECONDS`, Quake's), and at
+  once with `heartbeat` (`SV_Heartbeat_f`); `public 0` or Leave takes it off (`withdraw`). Off by default, not
+  archived. `test:net` the listing's keys and order, a heartbeat replacing one, withdrawn, swept and a bad code;
+  `test:settings` and `test:console` the cvar and the command's answers; the browser test's host lists its game at
+  the test's relay with public 1 (Hal, demo1, two clients), heartbeat says it was sent, and public 0 takes it off,
+  on both builds.
 - **`setmaster`**: `SV_SetMaster_f` named the masters the heartbeats went to (the first being id's); here the relay
   is `rtc_signal`'s alone. `setmaster <url> …` would name the relays the listing goes to, `rtc_signal` staying the
   one the offers go through.

@@ -78,7 +78,8 @@ paused single player alone. There is no signalling server on a static site, so t
 or through a relay of your own: `npm run signal` runs one (`scripts/signal.mjs`, a small HTTP server with
 four-letter room codes), `rtc_signal http://host:8787` at the console of both pages points them at it, and
 Host then shows a code for the other player to type after Join, or to give `connect <code>` at the console
-(`disconnect` leaves, `reconnect` joins the last host again: Host again keeps the host's code) (the page on Pages is https, which reaches
+(`disconnect` leaves, `reconnect` joins the last host again: Host again keeps the host's code; `public 1` lists the hosted game at the
+relay with its name, map and players, `heartbeat` sending the listing at once, as Quake 2's master servers listed games) (the page on Pages is https, which reaches
 an http relay only at `localhost`: anywhere else the relay goes behind https, a reverse proxy's). Two players whose networks a STUN server
 cannot cross (symmetric NATs) give both pages a TURN relay with `rtc_ice turn:host:3478 user pass` at the
 console, kept in the settings.

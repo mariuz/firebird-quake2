@@ -545,6 +545,12 @@ export class SignalClient {
   }
   /** The host's: the room is done with (a failure here is nobody's concern). */
   async drop(code) { await this.call('DELETE', `/rooms/${roomCode(code)}`).catch(() => undefined); }
+  /** Master_Heartbeat: the host's serverinfo listed at the relay under its code (public 1). */
+  async announce(code, info) { await this.call('POST', `/servers/${roomCode(code)}`, JSON.stringify(info ?? {})); }
+  /** Master_Shutdown: the listing taken off (public 0, Leave). */
+  async withdraw(code) { await this.call('DELETE', `/servers/${roomCode(code)}`).catch(() => undefined); }
+  /** The relay's public games, newest first: [{ code, info, age }] (a master's list). */
+  async servers() { const { servers } = await this.call('GET', '/servers'); return Array.isArray(servers) ? servers : []; }
 }
 /** An address book entry as { relay, code }: "<relay url> <code>" or a code alone at `relay`, the page's own; null for anything else (an offer text). */
 export function parseAddress(entry, relay = '') {
