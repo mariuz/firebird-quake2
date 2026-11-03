@@ -680,9 +680,11 @@ export class Console {
         say(`${COMMANDS.length} commands`);
         return;
       case 'path': {
-        // FS_Path_f: the search path, one pak here, with its files counted and where it came from
+        // FS_Path_f: the search path with its files counted and where it came from; several paks, a line each on the scrollback,
+        // the newest (searched first) at the top
         const pk = h.pakInfo?.();
         if (!pk) { say('path: no pak loaded yet', true); return; }
+        if (pk.paks?.length > 1) h.print?.(['Current search path:', ...pk.paks.map((p) => `${p.name} (${p.files} files)`)].join('\n'));
         say(`Current search path: ${pk.name} (${pk.files} files${pk.from ? `, ${pk.from}` : ''})`, false, 8000);
         return;
       }

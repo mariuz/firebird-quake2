@@ -36,8 +36,8 @@
       </div>
       <div id="stats" class="stats">&nbsp;</div>
       <div class="controls">
-        <label title="The Quake 2 demo's pak0.pak is downloaded; a pak picked here (a registered pak0.pak plays the full game's base unit) is kept in this browser and loads at the next start in its place, until the button forgets it">PAK <span id="pakname" class="pill">—</span>
-          <input id="pakfile" type="file" accept=".pak,.PAK">
+        <label title="The Quake 2 demo's pak0.pak is downloaded; a pak picked here (a registered pak0.pak plays the full game's base unit; several picked together, pak0.pak with pak1.pak and on, the later's files found first) is kept in this browser and loads at the next start in its place, until the button forgets it">PAK <span id="pakname" class="pill">—</span>
+          <input id="pakfile" type="file" accept=".pak,.PAK" multiple>
           <button id="pak-forget" type="button" hidden title="Forget the picked pak: the demo's pak0.pak loads now and at the next start">demo pak</button></label>
         <label>Map <select id="map"></select></label>
         <label title="The pak's recorded demos (demos/*.dm2), the ones recorded here (record name at the console; they are kept across reloads, deldemo name drops one) and a .dm2 file opened, played as the attract loop played them: the view and the entities are the recording's, the walls the database's; a key or a click brings the menu up over it, none again starts a game">Demo <select id="demo"><option value="">—</option></select>

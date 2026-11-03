@@ -19,13 +19,18 @@ export class Pak {
     const dirLen = this.dv.getInt32(8, true);
     this.files = new Map();
     this.extra = new Map();   // files added beside the pak's own (CL_Download_f's: a map from the host), name → bytes
+    this.layers = [];         // FS_AddGameDirectory's later paks over this one, newest first: { name, pak }, searched before its own files
     for (let p = dirOff; p < dirOff + dirLen; p += 64) {
       const name = cstr(this.bytes, p, 56).toLowerCase().replace(/\\/g, '/');
       this.files.set(name, { off: this.dv.getInt32(p + 56, true), size: this.dv.getInt32(p + 60, true) });
     }
   }
 
-  has(name) { const n = name.toLowerCase(); return this.files.has(n) || this.extra.has(n); }
+  has(name) { const n = name.toLowerCase(); return this.extra.has(n) || this.layers.some((l) => l.pak.files.has(n)) || this.files.has(n); }
+  /** A later pak over this one (pak1.pak over pak0.pak): its files found before these, as FS_AddGameDirectory searched newest first. */
+  overlay(other, name = 'pak') { this.layers.unshift({ name, pak: other }); }
+  /** The distinct files the paks hold together, the added ones with them. */
+  get fileCount() { return this.list().length; }
   /** A file beside the pak's own (a download), found by has, get and list as theirs are. */
   addFile(name, bytes) { this.extra.set(String(name).toLowerCase(), bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)); }
 
@@ -33,6 +38,7 @@ export class Pak {
   get(name) {
     const x = this.extra.get(name.toLowerCase());
     if (x) return x;
+    for (const l of this.layers) if (l.pak.files.has(name.toLowerCase())) return l.pak.get(name);
     const e = this.files.get(name.toLowerCase());
     if (!e) throw new Error(`${name} not in pak`);
     return this.bytes.subarray(e.off, e.off + e.size);
@@ -44,12 +50,30 @@ export class Pak {
   }
 
   list(prefix = '', suffix = '') {
-    return [...new Set([...this.files.keys(), ...this.extra.keys()])].filter((n) => n.startsWith(prefix) && n.endsWith(suffix)).sort();
+    return [...new Set([...this.files.keys(), ...this.extra.keys(), ...this.layers.flatMap((l) => [...l.pak.files.keys()])])].filter((n) => n.startsWith(prefix) && n.endsWith(suffix)).sort();
   }
 
   mapNames() {
     return this.list('maps/', '.bsp').map((n) => n.slice(5, -4));
   }
+}
+
+/** A PACK file made of `files` ({ name, bytes }): the header, the files' bytes, the directory of 64-byte entries (a test's pak, pak1.pak's shape). */
+export function buildPak(files) {
+  const enc = new TextEncoder();
+  const dataLen = files.reduce((n, f) => n + f.bytes.length, 0);
+  const out = new Uint8Array(12 + dataLen + 64 * files.length), dv = new DataView(out.buffer);
+  out.set(enc.encode('PACK'), 0);
+  dv.setInt32(4, 12 + dataLen, true); dv.setInt32(8, 64 * files.length, true);
+  let at = 12;
+  files.forEach((f, i) => {
+    out.set(f.bytes, at);
+    const e = 12 + dataLen + 64 * i;
+    out.set(enc.encode(f.name).subarray(0, 55), e);
+    dv.setInt32(e + 56, at, true); dv.setInt32(e + 60, f.bytes.length, true);
+    at += f.bytes.length;
+  });
+  return out;
 }
 
 /**

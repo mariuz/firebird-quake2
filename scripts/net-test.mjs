@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
-import { Pak } from '../src/pak.js';
+import { Pak, buildPak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, missingMapFiles, SQL_FILES } from '../src/loader.js';
 import { Bsp } from '../src/bsp.js';
 import { Session } from '../src/session.js';
@@ -96,6 +96,18 @@ check(said === null, 'nothing said, nothing to the host');
     'a map, a texture, a sky image or a sound may be asked for, lower-case and no path out of its directory; nothing else');
   const p2 = new Pak(pak.bytes.slice().buffer);
   p2.addFile('maps/Big.bsp', got);
+  // several paks (FS_AddGameDirectory): a later one's files found before the earlier's, its new ones beside them, the downloads first of all
+  {
+    const enc = (t) => new TextEncoder().encode(t);
+    const p1 = new Pak(buildPak([{ name: 'readme.txt', bytes: enc('pak0') }, { name: 'a/b.txt', bytes: enc('b') }]).buffer);
+    p1.overlay(new Pak(buildPak([{ name: 'readme.txt', bytes: enc('pak1') }, { name: 'maps/new.bsp', bytes: enc('x') }]).buffer), 'pak1.pak');
+    p1.overlay(new Pak(buildPak([{ name: 'readme.txt', bytes: enc('pak2') }]).buffer), 'pak2.pak');
+    const r1 = new TextDecoder().decode(p1.get('readme.txt'));
+    p1.addFile('readme.txt', enc('dl'));
+    check(r1 === 'pak2' && new TextDecoder().decode(p1.get('readme.txt')) === 'dl' && p1.has('maps/new.bsp') && new TextDecoder().decode(p1.get('a/b.txt')) === 'b' && p1.mapNames().join() === 'new'
+      && p1.fileCount === 3 && p1.layers.map((l) => l.name).join() === 'pak2.pak,pak1.pak',
+      `several paks: the newest's file first (${r1}), a download before all, the earlier's own and the later's new ones found, ${p1.fileCount} distinct files`);
+  }
   check(p2.has('maps/big.bsp') && p2.get('maps/big.bsp').length === file.length && p2.list('maps/', '.bsp').includes('maps/big.bsp') && p2.has('maps/demo1.bsp'), 'the pak takes a downloaded file beside its own');
   // a download resumed (CL_CheckOrDownloadFile, SV_BeginDownload_f's offset): the kept first piece sent as the prefix, the host asked
   // for the rest from its end, the file whole with two pieces sent; an offset past the file starts over

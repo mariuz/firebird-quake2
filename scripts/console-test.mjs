@@ -1148,6 +1148,9 @@ check(con.complete('showp') === 'showpackets ' && con.complete('showd') === 'sho
   await con.submit('dir *.bsp');
   check(printed === 'Directory of pak0.pak/*.bsp\n----' && status.at(-1)?.[0] === 'dir *.bsp: no files', 'a wildcard stays in its directory');
   check(dirList(['a/b.wav', 'a/c.wav', 'a/d/e.wav', 'b.wav'], 'a/?.wav').join() === 'a/b.wav,a/c.wav' && dirList(['x.txt', 'x+y.txt'], 'x+y.txt').join() === 'x+y.txt', 'dirList: ? is one character, the rest as written');
+  host.pakInfo = () => ({ name: 'pak0.pak + pak1.pak', files: 7, from: 'picked, kept in the browser', paks: [{ name: 'pak1.pak', files: 2 }, { name: 'pak0.pak', files: 5 }] });
+  await con.submit('path');
+  check(printed === 'Current search path:\npak1.pak (2 files)\npak0.pak (5 files)' && status.at(-1)?.[0] === 'Current search path: pak0.pak + pak1.pak (7 files, picked, kept in the browser)', 'with several paks, path lists them newest first on the scrollback');
   host.pakInfo = () => null;
   await con.submit('path'); check(status.at(-1)?.[0] === 'path: no pak loaded yet' && status.at(-1)?.[1] === true, 'path without a pak says so');
   await con.submit('dir'); check(status.at(-1)?.[1] === true, 'dir too');
