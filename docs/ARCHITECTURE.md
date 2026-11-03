@@ -572,7 +572,8 @@ with `public 1` a host's serverinfo (hostname, map, clients, maxclients, needpas
 `SignalClient.announce`; the relay keeps the known keys alone and sweeps a listing past its time), sent again every 300 seconds and at
 once by `heartbeat`, and taken off at `public 0` or Leave (`Master_Shutdown`, `withdraw`); `GET /servers` is the list, newest first;
 `setmaster <url> …` (`SV_SetMaster_f`) names the relays the listing goes to, rtc_signal's when none are, each listing carrying the offers'
-relay (`relay`) so a game listed at another can be joined. By text (`packSignal`: the description gzipped and
+relay (`relay`) so a game listed at another can be joined; the join server menu lists the masters' public games under the address
+book (`refreshPublic`, each pinged at its room's relay), one whose host waits joined by Enter. By text (`packSignal`: the description gzipped and
 base64'd, some six hundred characters) the guest answers it the same way and the host accepts the answer;
 either way `ready` resolves with the Link when the channel opens. The guest predicts its own move, as `CL_PredictMovement` did with the client's pmove:
 `src/pmove.js` is the JS twin of `player_think`'s movement and of the traces in `sql/physics.sql` (`ClipMap`
