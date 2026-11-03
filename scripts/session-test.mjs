@@ -190,6 +190,22 @@ check(!threw && empty && empty.faces.length === 0 && empty.ents.length === 0, `a
 try { empty = await session.frame({ client: 9, sqlRenderer: true }); } catch (err) { threw = err; }
 check(!threw && empty.faces.length === 0, 'in the SQL-projecting mode too');
 
+// map_noareas (CM_AreasConnected): a map loaded with it has every area in the one flood; loaded again without, its doors part them
+{
+  const floods = async () => Number((await db.query('SELECT COUNT(DISTINCT flood) n FROM area_flood')).rows[0].N);
+  const areas = Number((await db.query('SELECT COUNT(*) n FROM areas')).rows[0].N);
+  session.cvars.noareas = 1;
+  await session.startMap('demo1', { newGame: true, skill: 2, seed: 1 });
+  const one = await floods(), flag = (await db.query('SELECT map_noareas FROM game')).rows[0].MAP_NOAREAS;
+  await db.query('EXECUTE PROCEDURE flood_areas');
+  const still = await floods();
+  session.cvars.noareas = 0;
+  await session.startMap('demo1', { newGame: true, skill: 2, seed: 1 });
+  const parted = await floods();
+  delete session.cvars.noareas;
+  check(areas > 2 && one === 1 && flag === 1 && still === 1 && parted > 1, `map_noareas 1 makes demo1's ${areas} areas one flood at the load and after a flood (${one}, ${still}); 0 parts them by its doors again (${parted})`);
+}
+
 // no storage, no saves
 const bare = new Session(db);
 bare.use(pak, res);

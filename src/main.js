@@ -956,6 +956,7 @@ async function startMap(name, newGame, spawnpoint = null, autosave = true) {
   // the game's
   const modes = newGame ? { coop: netHost() ? !settings.deathmatch : settings.coop, deathmatch: settings.deathmatch, players: netHost() ? hostClients() : settings.players,
     cvars: { dmflags: settings.dmflags, fraglimit: settings.fraglimit, timelimit: settings.timelimit, cheats: settings.cheats } } : {};
+  session.cvars.noareas = settings.mapNoareas ? 1 : 0;   // (map_noareas: taken at each map's load, the collision model's)
   await mapLoaded(await session.startMap(name, { newGame, spawnpoint, skill: settings.skill, faceVerts: settings.renderer === 'sql', noreload: !!settings.svNoreload, ...modes }));   // (sv_noreload: a level come back to spawns fresh)
   console.log(`[firebird-quake2] ${name} loaded in ${(performance.now() - t0).toFixed(0)} ms`);
   setStatus('');
