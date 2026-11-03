@@ -1514,6 +1514,17 @@ try {
       for (let i = 0; i < 40 && !/Couldn't download/.test(dlNoMaps); i++) { await sleep(250); dlNoMaps = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => ''); }
       await typeOn(page, 'allow_download_maps 1');
       assert(/allow_download_maps 0/.test(dlNoMaps), `allow_download_maps 0 at the host refuses a map ("${dlNoMaps}")`);
+      // a download resumed: the first 192 KB of a map kept from a broken download (dlpart:), the rest asked for from there and the file
+      // whole, the part dropped once it is
+      await page.evaluate(() => window.quake2.pak.addFile('maps/hostonly3.bsp', window.quake2.pak.get('maps/demo2.bsp'))).catch(() => undefined);
+      await gp.evaluate(() => window.quake2.fileStore.put('dlpart:maps/hostonly3.bsp', { name: 'maps/hostonly3.bsp', bytes: window.quake2.pak.get('maps/demo2.bsp').slice(0, 192 * 1024) })).catch(() => undefined);
+      await typeOn(gp, 'download maps/hostonly3.bsp');
+      let dlRes = {};
+      for (let i = 0; i < 80 && !dlRes.has; i++) { await sleep(250); dlRes = await gp.evaluate(async () => { const q = window.quake2, n = 'maps/hostonly3.bsp', a = q.pak.has(n) ? q.pak.get(n) : null, b = q.pak.get('maps/demo2.bsp');
+        return { has: !!a, same: !!a && a.length === b.length && a.every((x, i) => x === b[i]), line: document.getElementById('status')?.textContent, part: !!(await q.fileStore.get('dlpart:' + n)) }; }).catch(() => ({})); }
+      await gp.evaluate(() => window.quake2.fileStore.remove('dl:maps/hostonly3.bsp')).catch(() => undefined);
+      assert(dlRes.has && dlRes.same && /, resumed at 192 KB\)$/.test(dlRes.line ?? '') && !dlRes.part,
+        `a download broken off goes on from the bytes kept and arrives whole (${JSON.stringify(dlRes)})`);
       const dlKept = await gp.evaluate(async () => !!(await window.quake2.fileStore.get('dl:maps/hostonly.bsp'))).catch(() => false);
       await gp.evaluate(() => window.quake2.fileStore.remove('dl:maps/hostonly.bsp')).catch(() => undefined);
       assert(dlHas === 'File already exists.' && dlGot.has && dlGot.size === hostSize && /^Downloaded maps\/hostonly\.bsp/.test(dlGot.line ?? '') && dlKept && /allow_download 0/.test(dlNo),

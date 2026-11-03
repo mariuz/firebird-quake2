@@ -97,6 +97,17 @@ check(said === null, 'nothing said, nothing to the host');
   const p2 = new Pak(pak.bytes.slice().buffer);
   p2.addFile('maps/Big.bsp', got);
   check(p2.has('maps/big.bsp') && p2.get('maps/big.bsp').length === file.length && p2.list('maps/', '.bsp').includes('maps/big.bsp') && p2.has('maps/demo1.bsp'), 'the pak takes a downloaded file beside its own');
+  // a download resumed (CL_CheckOrDownloadFile, SV_BeginDownload_f's offset): the kept first piece sent as the prefix, the host asked
+  // for the rest from its end, the file whole with two pieces sent; an offset past the file starts over
+  const offsets = [], pieces = [];
+  host.onFileRequest = (n, off) => { offsets.push(off); host.sendFile(n, n === 'maps/changed.bsp' ? file.subarray(0, 1000) : file, off); };
+  guest.onDownload = (n, got, total) => pieces.push([n, got, total]);
+  const resumed = await guest.requestFile('maps/big.bsp', { prefix: file.slice(0, DOWNLOAD_PIECE) });
+  const changed = await guest.requestFile('maps/changed.bsp', { prefix: file.slice(0, DOWNLOAD_PIECE) });
+  const whole = await guest.requestFile('maps/big.bsp', { prefix: file.slice() });
+  check(offsets.join() === `${DOWNLOAD_PIECE},${DOWNLOAD_PIECE},${file.length}` && resumed.length === file.length && resumed.every((b, i) => b === file[i])
+    && pieces.filter((p) => p[0] === 'maps/big.bsp').length === 3 && changed.length === 1000 && changed.every((b, i) => b === file[i]) && whole.length === file.length && whole.every((b, i) => b === file[i]),
+    `a download resumed: asked for from the kept bytes' end (${offsets.join()}), the rest in two pieces and whole; an offset past a changed file starts over; a whole file kept asks for nothing more`);
   host.onFileRequest = null; guest.onDownload = null;
 }
 // SV_BeginDownload_f's switches: allow_download refuses all, allow_download_sounds the sounds, allow_download_maps the maps and the rest

@@ -898,7 +898,8 @@ asked for; after the map come its other files, `missingMapFiles`: its wall textu
 the speakers' sounds, each the pak lacks asked for in turn with the loading plaque and Con_DrawConsole's download bar drawn as the pieces come
 (`hud.drawLoading`, `downloadBar`; the console's last line too while it is down, `textBar`), and a sound the frames name later at its first play (`Q2Audio.onMissing`); the
 models stay the guest's pak's, a frame naming them by number; `allow_download 0` at the host refuses, at a guest it asks for nothing, and 3.20's `allow_download_maps 0` and `allow_download_sounds 0`
-refuse their kind with it on, the textures and skies going with the maps, `downloadRefusal`; archived), `rcon` and `rcon_password`
+refuse their kind with it on, the textures and skies going with the maps, `downloadRefusal`; a download broken off keeps its bytes as
+`dlpart:<name>` and the next request goes on from their end, `CL_CheckOrDownloadFile`'s resume; archived), `rcon` and `rcon_password`
 (`CL_Rcon_f` and `SV_RemoteCommand_f`: a joined page's `rcon <line>` goes to the host with its `rcon_password`, `GuestLink.sendRcon`; the
 host's `Rcon_Validate` is its own `rcon_password`, none set taking none, and the line runs at its console with the prints and the status
 line kept meanwhile, `Com_BeginRedirect` as `rconOut`, and sent back as a `print` message onto the guest's scrollback and line; a wrong
