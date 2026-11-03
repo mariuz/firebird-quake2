@@ -264,6 +264,24 @@ export class Hud {
     }
   }
 
+  /**
+   * SCR_DrawLoading: the loading plaque (pics/loading.pcx) centred; with a download under way (`dl`: { name, percent }), the
+   * bar Con_DrawConsole drew for cls.download under it: the file's name, the bar with its dot, the percentage, on a black line.
+   * Says whether it drew the plaque.
+   */
+  drawLoading(r, dl = null) {
+    const p = this.pic('loading');
+    let y = (r.h >> 1) - 4;
+    if (p) { r.drawPic(p, (r.w - p.w) >> 1, (r.h - p.h) >> 1); y = Math.min(r.h - 8, ((r.h - p.h) >> 1) + p.h + 8); }
+    if (dl && this.conchars) {
+      const line = downloadBar(dl.name, dl.percent, (r.w >> 3) - 2);
+      const x = Math.max(0, (r.w - line.length * 8) >> 1);
+      r.fillRect?.(x, y, line.length * 8, 8, 0);   // (the bar drawn again as the pieces come: the dot moved, not left behind)
+      for (let i = 0; i < line.length; i++) r.drawChar(this.conchars, line.charCodeAt(i), x + i * 8, y);
+    }
+    return !!p;
+  }
+
   /** SCR_DrawPause: the pause plaque (pics/pause.pcx) centred a little under the middle, as the screen drew it; nothing with scr_showpause 0 (`on` false). */
   drawPause(r, on = true) {
     if (!on) return false;
@@ -290,6 +308,25 @@ export class Hud {
 const narrow = (r) => r.w < 320 || r.h < 240;
 
 /** A line in pieces of at most `cols` characters, broken at spaces where there are any (a word longer is cut). */
+/**
+ * Con_DrawConsole's download bar for a line `cols` characters wide (con.linewidth): the file's name without its directories (a
+ * third of the line at most, "..." after a longer one), ": ", the bar (0x80, 0x81s with the dot 0x83 at the percentage, 0x82),
+ * and " 45%" (%02d: " 05%").
+ */
+export function downloadBar(name, percent, cols) {
+  const text = String(name ?? '').split('/').pop();
+  const pc = Math.max(0, Math.min(100, Math.floor(Number(percent) || 0)));
+  const x = cols - Math.floor((cols * 7) / 40);
+  const third = Math.floor(cols / 3);
+  let y = x - text.length - 8, bar = text;
+  if (text.length > third) { y = x - third - 11; bar = text.slice(0, third) + '...'; }
+  y = Math.max(1, y);
+  bar += ': \x80';
+  const n = pc === 0 ? 0 : Math.floor((y * pc) / 100);
+  for (let j = 0; j < y; j++) bar += j === n ? '\x83' : '\x81';
+  return `${bar}\x82 ${String(pc).padStart(2, '0')}%`;
+}
+
 export function wrap(line, cols) {
   if (line.length <= cols) return [line];
   const out = [];

@@ -1438,8 +1438,28 @@ taken.
   next frame of an animation; a sky's six and a sound); `test:console` the refusal's words; the browser test takes
   two of demo1's animated textures and a sky image out of the joined page's pak, sees the walk bring them from the
   host, and `download textures/e1u1/metal2_1.wal` at the console, on both builds.
-- **A download's progress on the loading plaque**: `SCR_DrawLoading` with `cls.downloadpercent`: the map's name and the
-  percentage drawn while the pieces come, the status line's count kept as it is.
+- **A download's progress on the loading plaque**: done. While a joined page's map and its files come from the host,
+  the loading plaque is drawn over the last frame (`SCR_DrawLoading`, `hud.drawLoading`) with the bar Con_DrawConsole
+  drew for `cls.download` under it (`downloadBar`): the file's name without its directories (a third of the line at
+  most, "..." after a longer one), the bar with its dot at `cls.downloadpercent`, and the percentage as `%02d%%`,
+  drawn again on a black line as each piece arrives. The status line's count is kept as it was for the console's
+  `download`; the map's other files say which of how many on it. The host's own level change draws the plaque
+  through the same routine. `test:hud` the bar's text (the dot at 45 %, at 0 and none at 100, a long name cut, " 05%")
+  and the plaque with the bar centred inside the view at 320 and 160; the browser test sees the bar drawn at 100 %
+  for the last of the map's files the joined page fetched, on both builds.
+
+This ends the twenty-second list.
+
+The twenty-third list: what a joined page's downloads still lack of Quake 2's own. In the order they are to be taken.
+
+- **The download's bar on the console**: Con_DrawConsole drew the same bar on the console's bottom line while
+  `cls.download` was open; here a console dropped during a download shows only the status line's count.
+- **`allow_download_maps`, `allow_download_sounds`**: 3.20's per-kind switches at the host (`SV_BeginDownload_f`), each
+  refusing its kind with `allow_download` still on; the players' and models' ones have nothing to guard here (the
+  models stay the guest's pak's).
+- **A download resumed**: `CL_CheckOrDownloadFile` kept a broken download as `.tmp` and asked for the rest from its
+  length (`download <name> <offset>`); here a link that drops mid-map loses the pieces that came. Kept in the file
+  store as they arrive, the next join's request would start at the first missing byte.
 
 ## Playing the demo
 

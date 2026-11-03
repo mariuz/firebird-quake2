@@ -1358,7 +1358,7 @@ async function demoBytes(name) {
  * loop's next demo). A key, a click or the pad brings the menu up; the demo's end plays the pak's next.
  */
 const DEMO_FRAME = 0.1;   // a recording's frames are a tenth of a second apart (the server's 10 Hz)
-let lastTimedemo = null;  // { frames, seconds, report }: the last timedemo's figures
+let lastTimedemo = null;  // { name, frames, seconds, report }: the last timedemo's figures
 /** The demo played, with the main menu over it (the attract loop), or as a timedemo (CL_Timedemo_f: a frame a painted frame, the figures at the end). */
 async function playDemo(name, { withMenu = false, timedemo = false } = {}) {
   const bytes = await demoBytes(name);
@@ -1401,7 +1401,7 @@ function nextDemo() {
 function timedemoDone(d) {
   const seconds = (performance.now() - d.timedemo.start) / 1000;
   const report = `${d.timedemo.frames} frames, ${seconds.toFixed(1)} seconds: ${(d.timedemo.frames / Math.max(seconds, 1e-3)).toFixed(1)} fps`;
-  lastTimedemo = { frames: d.timedemo.frames, seconds, report };
+  lastTimedemo = { name: d.name, frames: d.timedemo.frames, seconds, report };
   demo = null;
   $('demo').value = '';
   startMap(session.firstMap(), true).then(() => { setStatus(report); notify.add(report, gameClock(), { show: false }); }).catch((err) => setStatus(err.message, true));
@@ -1514,9 +1514,7 @@ async function changeLevel(target, keep = true) {
     await sleep(2500);
     return endGame();
   }
-  // SCR_DrawLoading: the plaque over the last frame while the next level loads
-  const plaque = hud.pic('loading');
-  if (plaque && renderer) { renderer.drawPic(plaque, (renderer.w - plaque.w) >> 1, (renderer.h - plaque.h) >> 1); renderer.present(); }
+  drawLoadingPlaque();   // (SCR_DrawLoading: the plaque over the last frame while the next level loads)
   await startMap(c.map, !kept, c.spawn);
 }
 
@@ -2050,15 +2048,37 @@ async function netGo() {
   } catch (err) { console.error(err); netState(err.message, true); }
 }
 /**
+ * SCR_DrawLoading over the last frame (the loop paints nothing while a map loads, so it stays): the plaque, and with a download (`dl`:
+ * { name, percent }, cls.downloadname and cls.downloadpercent) the bar under it. `loadingDrawn` keeps what was drawn last.
+ */
+let loadingDrawn = null;
+function drawLoadingPlaque(dl = null) {
+  if (!renderer || !hud) return;
+  hud.drawLoading(renderer, dl);
+  renderer.present();
+  loadingDrawn = dl ? { ...dl } : { name: null, percent: null };
+}
+const dlShow = new Map();   // the downloads under way: name → how their pieces show ({ status, plaque })
+/** CL_ParseDownload's progress: the status line's count, the plaque's bar, as the download asked. */
+function downloadPiece(n, got, total) {
+  const how = dlShow.get(n);
+  if (!how) return;
+  if (how.status) setStatus(`Downloading ${n}: ${Math.round(got / 1024)} of ${Math.round(total / 1024)} KB`);
+  if (how.plaque) drawLoadingPlaque({ name: n, percent: total > 0 ? Math.floor((got * 100) / total) : 100 });
+}
+/**
  * CL_Download_f and CL_ParseDownload: a file asked of the host and kept in the file store beside the pak (dl:<name>), a kept one
  * taken from there; the status line counts the bytes as they come. Resolves once the pak has it.
  */
-async function fetchFromHost(name, { quiet = false } = {}) {
+async function fetchFromHost(name, { quiet = false, plaque = false } = {}) {
   const kept = await fileStore.get(`dl:${name}`).catch(() => null);
   if (kept?.bytes) { pak.addFile(name, kept.bytes); return 'kept'; }
   if (!netGuest() || !net.guest?.open) throw new Error('not joined to a game');
-  if (!quiet) net.guest.onDownload = (n, got, total) => setStatus(`Downloading ${n}: ${Math.round(got / 1024)} of ${Math.round(total / 1024)} KB`);
-  const bytes = await net.guest.requestFile(name);
+  dlShow.set(name, { status: !quiet, plaque });
+  net.guest.onDownload = downloadPiece;
+  if (plaque) drawLoadingPlaque({ name, percent: 0 });
+  let bytes;
+  try { bytes = await net.guest.requestFile(name); } finally { dlShow.delete(name); }
   pak.addFile(name, bytes);
   await fileStore.put(`dl:${name}`, { name, bytes }).catch((err) => console.warn('download:', err.message));
   if (!quiet) setStatus(`Downloaded ${name} (${Math.round(bytes.length / 1024)} KB)`);
@@ -2069,7 +2089,7 @@ async function fetchFromHost(name, { quiet = false } = {}) {
  * host one after another (kept ones from the file store), walked again for the animation frames the new textures name. A file the
  * host refuses is drawn or heard as missing; the map loads either way. Returns the files that came.
  */
-async function fetchMapFiles(bsp, m) {
+async function fetchMapFiles(bsp, m, { plaque = true } = {}) {
   const got = [], failed = new Set();
   const sounds = (m.speakers ?? []).map((r) => r?.[4]).filter(Boolean);
   for (let round = 0; round < 8; round++) {
@@ -2078,7 +2098,7 @@ async function fetchMapFiles(bsp, m) {
     for (const [i, f] of need.entries()) {
       if (!netGuest()) return got;
       setStatus(`Downloading ${f} (${i + 1} of ${need.length})…`);
-      try { await fetchFromHost(f, { quiet: true }); got.push(f); } catch (err) { failed.add(f); console.warn(`download ${f}:`, err.message); }
+      try { await fetchFromHost(f, { quiet: true, plaque }); got.push(f); } catch (err) { failed.add(f); console.warn(`download ${f}:`, err.message); }
     }
   }
   if (failed.size) console.warn(`[firebird-quake2] ${failed.size} of the map's files did not come from the host: they draw or play as missing`);
@@ -2096,7 +2116,7 @@ async function guestMap(m) {
   beginMap();
   // (a map this pak lacks: kept from an earlier download, else asked of the host when allow_download lets this page, CL_RequestNextDownload's)
   if (!pak.has(`maps/${m.name}.bsp`) && settings.allowDownload !== false && downloadable(`maps/${m.name}.bsp`)) {
-    try { await fetchFromHost(`maps/${m.name}.bsp`); } catch (err) { setStatus(`Couldn't download maps/${m.name}.bsp: ${err.message}`, true); return; }
+    try { await fetchFromHost(`maps/${m.name}.bsp`, { plaque: true }); } catch (err) { setStatus(`Couldn't download maps/${m.name}.bsp: ${err.message}`, true); return; }
     if (!netGuest()) return;
   }
   if (!pak.has(`maps/${m.name}.bsp`)) { setStatus(`${m.name} is not in this pak`, true); return; }
@@ -2274,7 +2294,7 @@ async function boot() {
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, fetchMapFiles: () => (map && net?.guest?.map ? fetchMapFiles(map.bsp, net.guest.map) : Promise.resolve([])), settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
-      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
       get logfile() { return { on: !!settings.logfile, kept: conLog.kept.length, pending: conLog.pending.length }; }, get logStats() { return { on: !!settings.logStats, kept: statsLog.kept.length, pending: statsLog.pending.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped, server: !!recorder.server, maxEnts: recorder.maxEnts ?? 0 } : null; },

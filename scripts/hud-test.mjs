@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pak } from '../src/pak.js';
-import { Hud, wrap } from '../src/hud.js';
+import { Hud, wrap, downloadBar } from '../src/hud.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pak = new Pak(fs.readFileSync(process.env.PAK ?? path.join(root, 'public/pak/pak0.pak')).buffer);
@@ -199,6 +199,27 @@ assert(inside(r) && textOverlaps(r) === 0 && !picAt(r, 'tag1') && textAt(r, 4) =
   const r4 = recorder(320, 240);
   const seq2 = [hud.drawTurtle(r4, 0.05, true), hud.drawTurtle(r4, 0.1, true), hud.drawTurtle(r4, 0.1, true), hud.drawTurtle(r4, 0.1, false), hud.drawTurtle(r4, 0.1, true)];
   assert(seq2.join() === 'false,false,false,false,false' && r4.drawn.length === 0, 'a fast frame starts the count over, and the switch off resets it and draws nothing');
+}
+
+// SCR_DrawLoading with a download: the plaque centred, Con_DrawConsole's bar under it (the name, the bar with its dot at the
+// percentage, " 45%"), inside the view at 320 and at 160
+{
+  const b = downloadBar('maps/demo2.bsp', 45, 38), b0 = downloadBar('env/unit1_rt.pcx', 0, 38), b100 = downloadBar('x.wav', 100, 38), b5 = downloadBar('a.wal', 5, 38);
+  const long = downloadBar('textures/e1u1/a_very_long_texture_name_here.wal', 50, 38);
+  const dots = (s) => [...s].filter((c) => c === '\x81').length;
+  assert(b === 'demo2.bsp: \x80' + '\x81'.repeat(6) + '\x83' + '\x81'.repeat(8) + '\x82 45%' && b0.startsWith('unit1_rt.pcx: \x80\x83') && b100.endsWith('\x81\x82 100%') && !b100.includes('\x83') && b5.endsWith(' 05%')
+    && long.startsWith('a_very_long_...: \x80') && dots(long) + 1 === 32 - 12 - 11,
+    `the download bar is Con_DrawConsole's: the name, the dot at the percentage, %02d (${JSON.stringify(b)})`);
+  const lp = hud.pic('loading');
+  for (const w of [320, 160]) {
+    const r = recorder(w, 240);
+    const drew = hud.drawLoading(r, { name: 'maps/demo2.bsp', percent: 45 });
+    const chars = r.drawn.filter((d) => d.kind === 'char');
+    assert(drew && lp && picAt(r, 'loading')?.x === (w - lp.w) >> 1 && chars.length > 10 && chars.every((c) => c.y >= picAt(r, 'loading').y + lp.h) && chars.some((c) => c.n === 0x83) && inside(r),
+      `the loading plaque at ${w} is centred with the download's bar under it, inside the view (${chars.length} characters)`);
+  }
+  const r0 = recorder(320, 240);
+  assert(hud.drawLoading(r0) && r0.drawn.length === 1, 'with no download the plaque alone');
 }
 
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
