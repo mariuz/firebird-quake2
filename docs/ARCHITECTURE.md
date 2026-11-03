@@ -886,7 +886,11 @@ page's alone; one the pak lacks is refused and the one up stays) and `hostname` 
 `password` and `spectator_password` (the network game's: a guest's info carries its `password`, and the host judges it as
 `SV_DirectConnect` and `ClientConnect` did, `connectRefusal` in `src/net.js`: a player's against the host's `password`, a
 watcher's against its `spectator_password`, empty or "none" asking nothing; a guest refused is kicked with the reason before it
-is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived), `sv addip`, `sv removeip`,
+is in, "Password required or incorrect"; the serverinfo's `needpass` counts the two; neither archived), `maxspectators` (3.20's: a guest asking to watch while that many
+others already do is refused at its connect, "Server spectator limit is full.", and a joined one ticking spectate is kept a player
+and told, `spectatorRefusal`; 4, archived, in the serverinfo), `zombietime` (`SV_CheckTimeouts`' zombies: the client a guest left is
+not given to another for that many seconds, `freeSlot`, and a guest finding every client taken or a zombie is told "Server is full."; 2,
+not archived), `sv addip`, `sv removeip`,
 `sv listip` and `sv writeip` (g_svcmds.c's `ServerCommand`: a list of guest names, `settings.banList`, which `connectRefusal` checks at
 the connect as `SV_FilterPacket` checked addresses, a page having none of its own; a listed guest is kicked with "Banned.";
 `writeip` downloads listip.cfg, the lines that make the list again) and `filterban` (1 the listed kept out, 0 only they let in;

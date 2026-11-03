@@ -111,6 +111,28 @@ export function connectRefusal(info, { password = '', spectatorPassword = '', ba
   return pw && given !== pw ? 'Password required or incorrect' : null;
 }
 
+/**
+ * 3.20's maxspectators (ClientConnect, spectator_respawn): a client asking to watch while `watching` others already do and the
+ * limit is reached is refused; a player is never counted.
+ */
+export function spectatorRefusal(info, watching, max) {
+  return info?.spectator && watching >= Math.max(0, Number(max) || 0) ? 'Server spectator limit is full.' : null;
+}
+
+/**
+ * SV_DirectConnect's free slot, the zombies kept (SV_CheckTimeouts' cs_zombie): the first client from 2 to `max` no guest has and none
+ * left less than `zombietime` seconds before `now` (ms; `zombies` the Map of client → when it left), or null ("Server is full.").
+ */
+export function freeSlot(taken, zombies, now, zombietime, max) {
+  for (let c = 2; c <= max; c++) {
+    if (taken.includes(c)) continue;
+    const left = zombies.get(c);
+    if (left !== undefined && now - left < Math.max(0, Number(zombietime) || 0) * 1000) continue;
+    return c;
+  }
+  return null;
+}
+
 // ── delta frames (SV_WriteFrameToClient's delta from the frame the client acknowledged) ───────────────────────────────
 const DELTA_KEYS = ['ents', 'loops', 'styles', 'speakers', 'brushFrames', 'brushAngles', 'boxes'];
 export const DELTA_KEEP = 32;   // the packed frames each end keeps by number (UPDATE_BACKUP's sixteen, twice: a frame acked late still serves)
