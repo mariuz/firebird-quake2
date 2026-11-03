@@ -11,7 +11,7 @@ export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, m
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false,
   crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rLockpvs: false, rSpeeds: false, rDspeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, swAliasstats: false, swReportsurfout: false, swMaxsurfs: 0, developer: false, logfile: false, logStats: false, svNoreload: false, svReconnectLimit: 3, sShow: false, inJoystick: true, inMouse: true, sKhz: 44, sMixahead: 0.05, sTestsound: false, clShownet: 0, clNodelta: false, clShowclamp: false, svShowclamp: false, showpackets: false, showdrop: false,
   joyForwardthreshold: 0.15, joySidethreshold: 0.15, joyPitchthreshold: 0.15, joyYawthreshold: 0.15, joyForwardsensitivity: -1, joySidesensitivity: -1, joyPitchsensitivity: 1, joyYawsensitivity: -1,
-  mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '', rconPassword: '', banList: Object.freeze([]), filterban: true,
+  mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '', rconPassword: '', banList: Object.freeze([]), filterban: true, allowDownload: true,
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, scrConspeed: 3, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
   coop: false, deathmatch: false,
@@ -92,6 +92,7 @@ const CHECK = {
   // sv addip's list (g_svcmds.c's ipfilters, by guest name here: a page has no address of its own) and filterban (1: the listed kept out, 0: only they let in)
   banList: (v) => (Array.isArray(v) ? [...new Set(v.filter((e) => typeof e === 'string' && /^[\x20-\x7e]{1,15}$/.test(e)).map((e) => e.trim().toLowerCase()))].slice(0, 1024) : undefined),
   filterban: (v) => (typeof v === 'boolean' ? v : undefined),
+  allowDownload: (v) => (typeof v === 'boolean' ? v : undefined),   // allow_download: a host sends its maps to a joined page that lacks one, a joined page asks
   rconPassword: (v) => (typeof v === 'string' && /^[\x21-\x7e]{0,32}$/.test(v) ? v : undefined),
   coop: bool,            // a new game with two players: the view split, the gamepad the second's
   deathmatch: bool,      // ... against each other (deathmatch wins over coop)

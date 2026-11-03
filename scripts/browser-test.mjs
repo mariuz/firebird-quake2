@@ -1492,6 +1492,24 @@ try {
       await typeOn(gp, 'skins');
       const gsk = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
       assert(/^1: .+\\male\/grunt · 2: .+\\male\/grunt$/.test(gsk), `skins at the joined page lists both clients' skins ("${gsk}")`);
+      // download at the joined page: a map its pak has is not asked for; a map only the host has comes over the link (the host's pak
+      // given a copy of demo2 under another name), kept beside the guest's pak; allow_download 0 at the host refuses
+      await typeOn(gp, 'download maps/demo1.bsp'); const dlHas = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      await page.evaluate(() => window.quake2.pak.addFile('maps/hostonly.bsp', window.quake2.pak.get('maps/demo2.bsp'))).catch(() => undefined);
+      await typeOn(gp, 'download maps/hostonly.bsp');
+      let dlGot = {};
+      for (let i = 0; i < 80 && !dlGot.has; i++) { await sleep(250); dlGot = await gp.evaluate(() => ({ has: window.quake2.pak.has('maps/hostonly.bsp'), size: window.quake2.pak.has('maps/hostonly.bsp') ? window.quake2.pak.get('maps/hostonly.bsp').length : 0, line: document.getElementById('status')?.textContent })).catch(() => ({})); }
+      const hostSize = await page.evaluate(() => window.quake2.pak.get('maps/demo2.bsp').length).catch(() => -1);
+      await typeOn(page, 'allow_download 0');
+      await page.evaluate(() => window.quake2.pak.addFile('maps/hostonly2.bsp', window.quake2.pak.get('maps/demo2.bsp'))).catch(() => undefined);
+      await typeOn(gp, 'download maps/hostonly2.bsp');
+      let dlNo = '';
+      for (let i = 0; i < 40 && !/Couldn't download/.test(dlNo); i++) { await sleep(250); dlNo = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => ''); }
+      await typeOn(page, 'allow_download 1');
+      const dlKept = await gp.evaluate(async () => !!(await window.quake2.fileStore.get('dl:maps/hostonly.bsp'))).catch(() => false);
+      await gp.evaluate(() => window.quake2.fileStore.remove('dl:maps/hostonly.bsp')).catch(() => undefined);
+      assert(dlHas === 'File already exists.' && dlGot.has && dlGot.size === hostSize && /^Downloaded maps\/hostonly\.bsp/.test(dlGot.line ?? '') && dlKept && /allow_download 0/.test(dlNo),
+        `download says a map the pak has exists ("${dlHas}"), brings one only the host has over the link (${dlGot.size} of ${hostSize} bytes, "${dlGot.line}"), keeps it (${dlKept}), and allow_download 0 at the host refuses ("${dlNo}")`);
       // rcon at the joined page: nothing without rcon_password; with the host's, the line runs at the host's console and its prints come back
       // (status's lines on the guest's scrollback, its sum on the line, "Rcon from client 2" on the host's scrollback); with another, "Bad
       // rcon_password." on the guest's line and "Bad rcon from client 2" at the host

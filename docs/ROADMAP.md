@@ -1409,9 +1409,27 @@ to be taken.
   a connect. 3 by default, 0 never refuses; archived as Quake's was. `test:net` the refusal, another name, the same
   after the limit and 0; `test:settings` and `test:console` the cvar; the browser test's reconnect, tens of seconds
   after the first connect, still joins.
-- **`allow_download` and `download`**: a joined page whose pak lacks the host's map asks the host for it
-  (`CL_Download_f`, `SV_BeginDownload_f`): the .bsp sent over the link in chunks, kept in the page's file store
-  beside the pak, and the map loaded from it; `allow_download 0` at the host refuses.
+- **`allow_download` and `download`**: done. A joined page whose pak lacks the host's map asks the host for it at the
+  map message (`CL_RequestNextDownload`'s), or `download maps/<name>.bsp` asks at the console (`CL_Download_f`; "File
+  already exists." for one it has). The host sends the .bsp in pieces of 192 KB over the link (`SV_BeginDownload_f`,
+  `SV_NextDownload_f`; `HostLink.sendFile`), the status line counting the kilobytes. The guest puts them together
+  (`GuestLink.requestFile`), keeps the file in its file store as `dl:<name>` for the next time, and adds it beside the
+  pak (`Pak.addFile`, found by `has`, `get` and `list`), and the map loads from it. Only a map of the maps directory may
+  be asked for. `allow_download 0` at the host refuses with the reason, and at a guest it asks for nothing; archived,
+  as Quake's was. The textures, sounds and models a map names are the demo pak's either way. `test:net` a file of
+  three pieces arriving whole, a refusal, the paths allowed, the pak's added file; `test:settings` and `test:console`
+  the words; the browser test downloads a map only the host has at a joined page, keeps it, and is refused under
+  allow_download 0, on both builds.
+
+The twenty-second list: what a joined page still lacks to play a map its pak does not have. In the order they are to be
+taken.
+
+- **The map's other files downloaded**: `CL_RequestNextDownload` walked the map's models, their skins, the sounds, the
+  wall textures and the sky after the .bsp. Here a map downloaded from a host draws with the guest's pak's textures and
+  models, so one the demo pak lacks (a registered map's) shows checkerboards; the same request over the link would
+  bring each file the map names that the guest's pak has not, kept beside it as the map is.
+- **A download's progress on the loading plaque**: `SCR_DrawLoading` with `cls.downloadpercent`: the map's name and the
+  percentage drawn while the pieces come, the status line's count kept as it is.
 
 ## Playing the demo
 
