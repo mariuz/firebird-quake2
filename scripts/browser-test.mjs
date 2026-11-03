@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { parseDemo } from '../src/demo.js';
 import { makeCin } from '../src/cinematic.js';
+import { Pak, buildPak } from '../src/pak.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const coi = process.argv.includes('--coi');
@@ -1271,6 +1272,26 @@ try {
       let fp = {};
       for (let i = 0; i < 480 && !(fp.name === 'pak0.pak' && fp.demo); i++) { await sleep(250); fp = await pakState(); }
       assert(fp.name === 'pak0.pak' && fp.picked === null && !fp.forget && fp.pak === null && fp.kept?.join() === 'music/track09', `the button forgets it: the demo's pak loads, the store keeps the track alone (${JSON.stringify(fp)})`);
+      // several paks picked together (FS_AddGameDirectory): the copy of the demo's and a pak1.pak with a map of its own, in their names'
+      // order, the later over the first: its map in the select and played, pak1.pak the layer over pak0.pak, both kept; the button forgets both
+      const base = new Pak(fs.readFileSync(pickedPath).buffer.slice(0));
+      const twoDir = path.join(pickedDir, 'two'); fs.mkdirSync(twoDir);
+      const pak0Path = path.join(twoDir, 'pak0.pak'), pak1Path = path.join(twoDir, 'pak1.pak');
+      fs.copyFileSync(pickedPath, pak0Path);
+      fs.writeFileSync(pak1Path, buildPak([{ name: 'maps/demo9.bsp', bytes: base.get('maps/demo2.bsp') }]));
+      await page.setInputFiles('#pakfile', [pak1Path, pak0Path]);
+      let mp = {};
+      for (let i = 0; i < 480 && !(mp.name === 'pak0.pak + pak1.pak' && mp.demo && mp.kept?.includes('pak+1')); i++) { await sleep(250); mp = { ...(await pakState()), maps: await page.evaluate(() => [...document.querySelectorAll('#map option')].map((o) => o.value)).catch(() => []), status: await page.evaluate(() => document.getElementById('status')?.textContent).catch(() => '') }; }
+      await page.selectOption('#map', 'demo9');
+      let on9 = {};
+      for (let i = 0; i < 240 && !(on9.demo === null && on9.running === true && on9.map === 'demo9'); i++) { await sleep(250); on9 = await attractState(); }
+      const mpLayers = await page.evaluate(() => ({ layers: window.quake2.pak.layers.map((l) => l.name), own: window.quake2.pak.layers[0]?.pak.has('maps/demo9.bsp'), base: window.quake2.pak.files.has('maps/demo9.bsp') })).catch(() => ({}));
+      if (await page.isVisible('#pak-forget')) await page.click('#pak-forget');
+      let mf = {};
+      for (let i = 0; i < 480 && !(mf.name === 'pak0.pak' && mf.demo); i++) { await sleep(250); mf = await pakState(); }
+      assert(mp.name === 'pak0.pak + pak1.pak' && mp.pak === 'pak0.pak' && mp.kept?.includes('pak+1') && mp.maps?.includes('demo9') && mp.maps?.includes('demo1')
+        && on9.map === 'demo9' && mpLayers.layers?.join() === 'pak1.pak' && mpLayers.own && !mpLayers.base && !mf.kept?.some((n) => /^pak/.test(n)),
+        `several paks load together, the later's map beside the first's (${JSON.stringify({ name: mp.name, maps: mp.maps, kept: mp.kept, status: mp.status })}), pak1's map plays (${on9.map}), pak1.pak over pak0.pak (${JSON.stringify(mpLayers)}), the button forgets both (${JSON.stringify(mf.kept)})`);
     }
     fs.rmSync(pickedDir, { recursive: true, force: true });
   }

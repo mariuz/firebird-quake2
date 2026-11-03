@@ -124,8 +124,8 @@ The page installs as an app (a web app manifest, `public/manifest.webmanifest`, 
 pak's console font by `scripts/icon.mjs`) and runs without a network once it has run once: a caching
 service worker (`public/sw.js`) serves the build's files and the pak from the caches the page fills after
 its first load (the "offline ready" pill says when), each build in its own cache and the pak in one that
-outlives them. A pak picked from the PAK control is kept in the browser (IndexedDB, as the recordings are)
-and loads at the next start in the demo's place, until the button beside the control forgets it; a picked
+outlives them. A pak picked from the PAK control is kept in the browser (IndexedDB, as the recordings are; several picked
+together, pak0.pak with pak1.pak and on, are searched the later first, as Quake 2 searched its paks) and loads at the next start in the demo's place, until the button beside the control forgets it; a picked
 music folder's tracks are kept as they play. The browser test reloads the page offline and plays, the picked
 pak and track found again.
 

@@ -1540,10 +1540,16 @@ This ends the twenty-fifth list.
 The twenty-sixth list: what the page's files still lack of Quake 2's file system (`files.c`). In the order they are to be
 taken.
 
-- **Several paks, the later over the earlier**: `FS_AddGameDirectory` opened pak0.pak to pak9.pak in turn, a file in a
-  later pak found before the same in an earlier one (the point releases' patches shipped that way); here the page
-  holds one pak. Picked together, the paks would be searched newest first, `path` listing them in that order and the
-  picked ones kept for the next start as the one is.
+- **Several paks, the later over the earlier**: done. `FS_AddGameDirectory` opened pak0.pak to pak9.pak in turn, a
+  file in a later pak found before the same in an earlier one (the point releases' patches shipped that way). The PAK
+  control takes several files now: in their names' order (pak0.pak first, numbers as numbers), the first is the base
+  and each later one goes over the ones before (`Pak.overlay`: `has`, `get` and `list` search the newest first, the
+  downloads before all; `buildPak` makes one, a test's). The maps of all of them are in the select, `path` lists the
+  paks newest first on the scrollback with their own files, and the picked ones are kept for the next start, the
+  first as `pak` and the later ones as `pak+1` and on, the button forgetting them all. `test:net` a file found in the
+  newest of three, a download before all, an earlier pak's own and a later one's new files; `test:console` path's
+  lines; the browser test picks a copy of the demo's pak as pak0.pak with a pak1.pak holding a map of its own, finds
+  both kept and pak1.pak the layer over pak0.pak, plays that map, and forgets both, on both builds.
 - **`game`**: `FS_SetGamedir` put a mod's directory over baseq2 at the next map, latched; here there is the one tree.
   With a mod's pak picked under `game <name>`, its files would come before the base's, `game ""` going back.
 - **`link`**: `FS_Link_f`: `link <from> <to>` made the files under one path come from another (a link with no target

@@ -545,7 +545,9 @@ const con = new Console({
   version: () => `Firebird Quake 2 ${typeof __VERSION__ === 'string' ? __VERSION__ : 'dev'} build ${typeof __BUILD__ === 'string' ? __BUILD__ : 'dev'}, firebird-wasm ${typeof __FBWASM__ === 'string' ? __FBWASM__ : 'dev'}, ${$('engine').textContent}`,   // eslint-disable-line no-undef
   togglePause: () => { if (netHost() || netGuest() || !running) return null; paused = !paused; return paused; },   // (pause: a single-player game running, as CL_Pause_f allowed)
   // path and dir: the pak in use, its files counted and where it came from (the demo's download, or the picked one the browser keeps)
-  pakInfo: () => (pak ? { name: pickedPak ?? 'pak0.pak', files: pak.files.size, from: pickedPak ? 'picked, kept in the browser' : "the demo's, ./pak/pak0.pak" } : null),
+  // (paks: the search path newest first, FS_Path_f's lines: a later pak over the first, each with its own files)
+  pakInfo: () => (pak ? { name: pickedPak ?? 'pak0.pak', files: pak.fileCount, from: pickedPak ? 'picked, kept in the browser' : "the demo's, ./pak/pak0.pak",
+    paks: [...pak.layers.map((l) => ({ name: l.name, files: l.pak.files.size })), { name: pakBase ?? pickedPak ?? 'pak0.pak', files: pak.files.size }] } : null),
   // modellist: the models loaded (the MD2s and sprites by name, the full game's monsters on a row without a mesh at size 0) with their size in the pak
   modelList: () => (res ? [...res.models.values()].map((m) => ({ name: m.name, size: pak?.files.get(m.name)?.size ?? 0 })) : []),
   // z_stats: the surfaces the painter holds (each its pixels), the sounds decoded (their samples), the pak (one block), the page's heap where
@@ -2360,9 +2362,15 @@ function vidRestart() {
   for (const L of lerps) { L.prev = null; L.cur = null; }   // (the frames held were the old painter's)
   return true;
 }
-async function usePak(buffer, label) {
+/** The base pak's own name when later paks are over it (FS_Path_f's last line). */
+let pakBase = null;
+async function usePak(buffer, label, more = []) {
   running = false;
   pak = new Pak(buffer);
+  // (FS_AddGameDirectory: pak1.pak and on over pak0.pak, the later's files found first)
+  pakBase = more.length ? label : null;
+  for (const m of more) pak.overlay(new Pak(m.buffer), m.name);
+  if (more.length) label = [label, ...more.map((m) => m.name)].join(' + ');
   const maps = pak.mapNames();
   if (!maps.length) throw new Error(`${label} has no maps`);
   setStatus(`Copying ${label} models into Firebird…`);
@@ -2435,16 +2443,26 @@ async function downloadPak() {
 async function useKeptPak() {
   const f = await fileStore.get('pak').catch((err) => { console.warn('the kept pak:', err.message); return null; });
   if (!f) return false;
-  setStatus(`Loading ${f.name}, the pak picked before…`);
+  // (the later paks picked with it, kept as pak+1, pak+2…, over it in that order)
+  const more = [];
+  for (let i = 1; i < 10; i++) { const m = await fileStore.get(`pak+${i}`).catch(() => null); if (!m) break; more.push(m); }
+  const ab = (x) => x.bytes.buffer.slice(x.bytes.byteOffset, x.bytes.byteOffset + x.bytes.byteLength);
+  const name = [f.name, ...more.map((m) => m.name)].join(' + ');
+  setStatus(`Loading ${name}, the pak picked before…`);
   try {
-    await usePak(f.bytes.buffer.slice(f.bytes.byteOffset, f.bytes.byteOffset + f.bytes.byteLength), f.name);
+    await usePak(ab(f), f.name, more.map((m) => ({ buffer: ab(m), name: m.name })));
   } catch (err) {
-    console.warn(`the kept pak ${f.name} does not load (${err.message}); forgotten`);
-    await fileStore.remove('pak').catch(() => undefined);
+    console.warn(`the kept pak ${name} does not load (${err.message}); forgotten`);
+    await forgetKeptPaks();
     return false;
   }
-  showPickedPak(f.name);
+  showPickedPak(name);
   return true;
+}
+/** The kept paks dropped from the store: the base and the later ones. */
+async function forgetKeptPaks() {
+  const names = await fileStore.list().catch(() => []);
+  for (const n of names) if (n === 'pak' || /^pak\+\d+$/.test(n)) await fileStore.remove(n).catch(() => undefined);
 }
 
 /** The PAK controls say a picked pak is in use (the button to forget it shows), or the demo's. */
@@ -2455,7 +2473,7 @@ function showPickedPak(name) {
 
 /** Forget the picked pak: dropped from the store, and the demo's pak loads now. */
 async function forgetPak() {
-  await fileStore.remove('pak').catch((err) => console.warn('the kept pak:', err.message));
+  await forgetKeptPaks();
   showPickedPak(null);
   await downloadPak();
 }
@@ -2483,15 +2501,17 @@ async function offlineReady(pakResponse) {
 }
 
 $('pakfile').addEventListener('change', async (e) => {
-  const f = e.target.files[0];
+  // (several picked together: in their names' order, pak0.pak first, each later one over the ones before, FS_AddGameDirectory's)
+  const picked = [...e.target.files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).slice(0, 10);
   e.target.value = '';   // (the same file again is a change again)
-  if (!f || !db) return;
+  if (!picked.length || !db) return;
   try {
-    const buffer = await f.arrayBuffer();
-    await usePak(buffer, f.name);
-    // kept for the next start (src/demostore.js); a browser without the store plays it for the page
-    showPickedPak(f.name);
-    fileStore.put('pak', { name: f.name, bytes: new Uint8Array(buffer) }).catch((err) => console.warn('the pak is not kept:', err.message));
+    const buffers = await Promise.all(picked.map((f) => f.arrayBuffer()));
+    await usePak(buffers[0], picked[0].name, picked.slice(1).map((f, i) => ({ buffer: buffers[i + 1], name: f.name })));
+    // kept for the next start (src/demostore.js): the first as pak, the later ones as pak+1…; a browser without the store plays them for the page
+    showPickedPak(picked.map((f) => f.name).join(' + '));
+    await forgetKeptPaks();
+    picked.forEach((f, i) => fileStore.put(i ? `pak+${i}` : 'pak', { name: f.name, bytes: new Uint8Array(buffers[i]) }).catch((err) => console.warn('the pak is not kept:', err.message)));
   } catch (err) { setStatus(err.message, true); }
 });
 $('pak-forget').addEventListener('click', () => forgetPak().catch((err) => setStatus(err.message, true)));
