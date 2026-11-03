@@ -1398,11 +1398,17 @@ words with the demo pak. In the order they are to be taken.
 The twenty-first list: what a shared game's host still lacks of Quake 2's own guards and words. In the order they are
 to be taken.
 
-- **`sv_enforcetime`**: `SV_ClientThink`'s command-time budget: a guest whose commands claim more time than the
-  host's clock gave it (a page run fast) is held to the clock and, past the limit, told so, as the server dropped
-  the extra `msec`.
-- **`sv_reconnect_limit`**: how many times a second a guest may come back by its code (`SV_DirectConnect`'s), the
-  rest refused, so a page reconnecting in a loop cannot crowd the host.
+- **`sv_enforcetime`**: left out, there being nothing to enforce. `SV_ClientThink` held a client's commands to the
+  `msec` the server's clock gave it, because a Quake 2 client's command carried its own time. Here a guest's commands
+  carry none: the host merges whatever arrived into one command for its own tic (`takeCommand`: the move the latest,
+  the turns summed, the buttons any), so a page run fast moves no further and no sooner than one run at the rate.
+  The host's tic is the clock already.
+- **`sv_reconnect_limit`**: done. `SV_DirectConnect`'s limit: a guest whose name connected less than that many
+  seconds ago is refused at its connect with "Reconnect rejected: too soon" (`reconnectRefusal`, the names' times
+  kept across Host and Leave), so a page reconnecting in a loop cannot crowd the host; a later userinfo change is not
+  a connect. 3 by default, 0 never refuses; archived as Quake's was. `test:net` the refusal, another name, the same
+  after the limit and 0; `test:settings` and `test:console` the cvar; the browser test's reconnect, tens of seconds
+  after the first connect, still joins.
 - **`allow_download` and `download`**: a joined page whose pak lacks the host's map asks the host for it
   (`CL_Download_f`, `SV_BeginDownload_f`): the .bsp sent over the link in chunks, kept in the page's file store
   beside the pak, and the map loaded from it; `allow_download 0` at the host refuses.

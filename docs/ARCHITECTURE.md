@@ -878,7 +878,8 @@ and its value after, the line summing it: this page's, a guest's from its connec
 `dumpUser`; a joined page is sent to the host, a client not in the game "is not active"); `weapnext` and `weapprev` (`Cmd_WeapNext_f`, `Cmd_WeapPrev_f` as words, the
 impulses 12 and 22), `sv_maplist` (a text on the game row, `setGameString`: the deathmatch rotation `end_dm_level` follows
 through `maplist_next`, the map after the one running in the list, round again from the end, a map not in it going where the
-exit leads), `sv_noreload` (3.20's: with it a level of the unit come back to spawns fresh, what was left in it unread, as a coop
+exit leads), `sv_reconnect_limit` (`SV_DirectConnect`'s: a guest whose name connected less than that many seconds ago is refused at its
+connect, "Reconnect rejected: too soon", `reconnectRefusal`, the names' times kept across Host and Leave; 3, 0 never; archived), `sv_noreload` (3.20's: with it a level of the unit come back to spawns fresh, what was left in it unread, as a coop
 game wants its monsters back; `Session.startMap`'s `noreload`, the kept level staying aside; not archived) and `sky <name> [rotate] [axis x y z]` (`SCR_Sky_f`: the sky box of the map running changed and spun, `setSky`, this
 page's alone; one the pak lacks is refused and the one up stays) and `hostname` (the host's name, archived as Quake's was,
 "noname" when empty: the serverinfo's, and the map message carries it so a joined page's stats line names the host),

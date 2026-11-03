@@ -11,7 +11,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
@@ -158,6 +158,12 @@ check(connectRefusal({ spectator: 1, password: 'wrong' }, { password: 'secret', 
 check(connectRefusal({ name: 'Rimmer' }, { banList: ['rimmer'] }) === 'Banned.' && connectRefusal({ name: 'Lister' }, { banList: ['rimmer'] }) === null
   && connectRefusal({ name: 'Lister' }, { banList: ['rimmer'], filterban: false }) === 'Banned.' && connectRefusal({ name: 'rimmer ' }, { banList: ['rimmer'], filterban: false }) === null,
   'sv addip\'s list (SV_FilterPacket by name): filterban 1 keeps the listed out, case aside, 0 lets only them in');
+{
+  const seen = new Map();
+  const first = reconnectRefusal('Ace', seen, 1000, 3), soon = reconnectRefusal('ace', seen, 2500, 3), other = reconnectRefusal('Lister', seen, 2500, 3), later = reconnectRefusal('Ace', seen, 4100, 3), never = reconnectRefusal('Ace', seen, 4200, 0), anon = [reconnectRefusal('', seen, 5000, 3), reconnectRefusal('', seen, 5001, 3)];
+  check(first === null && soon === 'Reconnect rejected: too soon' && other === null && later === null && never === null && anon.every((x) => x === null),
+    'sv_reconnect_limit (SV_DirectConnect): a name back within three seconds is refused, case aside; another name, or the same after the limit, comes; 0 never refuses; guests with no name are not told apart');
+}
 guest.sendInfo({ name: 'x', hand: 0 });
 check(host.info.password === '', 'no password given is none');
 check(host.info.hand === 0 && host.info.spectator === 0 && host.info.fov === null, 'a hand that is not 0, 1 or 2 is right-handed; a guest plays unless it says it watches; no fov given is the view\'s');

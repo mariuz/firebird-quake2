@@ -153,6 +153,19 @@ export function undeltaFrame(base, d) {
   return out;
 }
 
+/**
+ * SV_DirectConnect's sv_reconnect_limit: a guest coming back under a name that connected less than `limit` seconds ago is refused
+ * ("reconnect rejected : too soon"); a name that may come is noted at `now`. `seen` is the host's Map of name → when (ms). 0 never refuses.
+ */
+export function reconnectRefusal(name, seen, now, limit) {
+  const key = String(name ?? '').trim().toLowerCase();
+  if (!key) return null;   // (a guest with no name is nobody to know again: two of them may come at once)
+  const at = seen.get(key);
+  if (limit > 0 && at !== undefined && now - at < limit * 1000) return 'Reconnect rejected: too soon';
+  seen.set(key, now);
+  return null;
+}
+
 /** SV_CheckTimeouts and CL_CheckTimeout: whether a link has been silent longer than `seconds` (0: never), by its clock. */
 export const silentPast = (link, seconds) => seconds > 0 && link.now() - link.heardAt > seconds * 1000;
 
