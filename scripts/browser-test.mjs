@@ -1171,7 +1171,8 @@ try {
     for (let i = 0; i < 480 && !td.done; i++) { await sleep(250); td = await tdState(); }
     if (!td.done) await page.selectOption('#demo', '');   // (not done: the demo stopped, so the rest of the test goes on)
     for (let i = 0; i < 240 && !(td.demo === null && td.running); i++) { await sleep(250); td = await tdState(); }
-    assert(/\(timedemo run\)/.test(tdMap ?? '') && td.done && Math.abs(td.done.frames - tdFrames) <= 2 && td.done.seconds > 0 && /^\d+ frames, [\d.]+ seconds: [\d.]+ fps$/.test(td.done.report) && td.demo === null && td.running,
+    // (the map's name says the timedemo while it plays; a short one can be over between two looks, so its figures name it too)
+    assert((/\(timedemo run\)/.test(tdMap ?? '') || td.done?.name === 'run') && td.done && Math.abs(td.done.frames - tdFrames) <= 2 && td.done.seconds > 0 && /^\d+ frames, [\d.]+ seconds: [\d.]+ fps$/.test(td.done.report) && td.demo === null && td.running,
       `timedemo plays the recording as fast as the page paints, a frame of its ${tdFrames} a painted frame, and reports it (${td.done?.report}), the game starting again`);
     const [shot] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }).catch(() => null), typeCommand('screenshot')]);
     const shotBytes = shot ? fs.readFileSync(await shot.path()) : Buffer.alloc(0);
@@ -1515,15 +1516,15 @@ try {
       const mfGone = ['textures/e1u1/+0cgrate1_1.wal', 'textures/e1u1/+1cgrate1_1.wal', 'env/unit1_rt.pcx'];
       const mfGot = await gp.evaluate(async (gone) => {
         const q = window.quake2; for (const f of gone) q.pak.files.delete(f);
-        const got = await q.fetchMapFiles(); return { got, has: gone.map((f) => q.pak.has(f)) };
+        const got = await q.fetchMapFiles(); return { got, has: gone.map((f) => q.pak.has(f)), loading: q.loading };
       }, mfGone).catch((e) => ({ error: e.message }));
       await gp.evaluate(() => window.quake2.pak.files.delete('textures/e1u1/metal2_1.wal')).catch(() => undefined);
       await typeOn(gp, 'download textures/e1u1/metal2_1.wal');
       let mfCon = {};
       for (let i = 0; i < 40 && !mfCon.has; i++) { await sleep(250); mfCon = await gp.evaluate(() => ({ has: window.quake2.pak.has('textures/e1u1/metal2_1.wal'), line: document.getElementById('status')?.textContent })).catch(() => ({})); }
       await gp.evaluate(async (gone) => { for (const f of gone) await window.quake2.fileStore.remove(`dl:${f}`); }, [...mfGone, 'textures/e1u1/metal2_1.wal']).catch(() => undefined);
-      assert(mfGot.got?.slice().sort().join() === mfGone.slice().sort().join() && mfGot.has?.every(Boolean) && mfCon.has && /^Downloaded textures\/e1u1\/metal2_1\.wal/.test(mfCon.line ?? ''),
-        `the map's textures and sky images the joined page lacks come from the host (${JSON.stringify(mfGot)}), and download fetches a texture ("${mfCon.line}")`);
+      assert(mfGot.got?.slice().sort().join() === mfGone.slice().sort().join() && mfGot.has?.every(Boolean) && mfGot.loading?.percent === 100 && mfGone.includes(mfGot.loading?.name) && mfCon.has && /^Downloaded textures\/e1u1\/metal2_1\.wal/.test(mfCon.line ?? ''),
+        `the map's textures and sky images the joined page lacks come from the host, the loading plaque's bar drawn for each (${JSON.stringify(mfGot)}), and download fetches a texture ("${mfCon.line}")`);
       // rcon at the joined page: nothing without rcon_password; with the host's, the line runs at the host's console and its prints come back
       // (status's lines on the guest's scrollback, its sum on the line, "Rcon from client 2" on the host's scrollback); with another, "Bad
       // rcon_password." on the guest's line and "Bad rcon from client 2" at the host
