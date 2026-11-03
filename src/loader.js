@@ -15,7 +15,7 @@
 
 import { Bsp, parseVec, SURF } from './bsp.js';
 import { Md2, Sp2 } from './md2.js';
-import { loadPcx } from './pak.js';
+import { loadPcx, Wal } from './pak.js';
 import { MONSTERS, DECORATIONS, LIGHTSTYLES, EXTRA_ANIMS } from './gamedata.js';
 
 const BATCH = 8192;   // rows per execBatch call: one transaction, a buffer of a few hundred KB
@@ -241,6 +241,27 @@ const ENT_NUM = ['angle', 'spawnflags', 'wait', 'delay', 'random', 'speed', 'acc
  * and the `*n` models the frame's rows name), no database touched. A networked game's guest paints the
  * host's frames with this and nothing else; loadMap does the same first, then fills the tables.
  */
+/**
+ * CL_RequestNextDownload's walk: the files a map names that `pak` lacks, lower-case: its wall textures (each one's animation
+ * chain followed through the ones the pak has), the sky's six images, and `sounds` (the speakers' and any other names). A texture
+ * that arrives may name another frame of its chain: walked again with it in the pak, that one is missing next.
+ */
+export function missingMapFiles(pak, bsp, sky = '', sounds = []) {
+  const out = new Set(), seen = new Set(), tex = [...bsp.textureNames];
+  while (tex.length) {
+    const n = String(tex.shift() ?? '').toLowerCase();
+    if (!n || seen.has(n)) continue;
+    seen.add(n);
+    const file = `textures/${n}.wal`;
+    if (!pak.has(file)) { out.add(file); continue; }
+    try { const w = new Wal(pak.get(file), n); if (w.animname) tex.push(w.animname); } catch { /* (a bad .wal draws as the missing one) */ }
+  }
+  const name = String(sky ?? '').toLowerCase();
+  if (name) for (const suf of ['rt', 'bk', 'lf', 'ft', 'up', 'dn']) if (!pak.has(`env/${name}${suf}.pcx`)) out.add(`env/${name}${suf}.pcx`);
+  for (const s of sounds) { const f = `sound/${String(s ?? '').toLowerCase()}`; if (s && !pak.has(f)) out.add(f); }
+  return [...out];
+}
+
 export function loadMapModels(pak, res, name, { faceVerts = true } = {}) {
   const bsp = new Bsp(pak.buffer(`maps/${name}.bsp`), `maps/${name}.bsp`);
   for (const [id, m] of [...res.models]) if (m.kind === 'B') res.models.delete(id);

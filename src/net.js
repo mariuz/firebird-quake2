@@ -168,8 +168,14 @@ export function reconnectRefusal(name, seen, now, limit) {
 
 // ── downloads (CL_Download_f, SV_BeginDownload_f, SV_NextDownload_f) ───────────────────────────────────────────────────────
 export const DOWNLOAD_PIECE = 192 * 1024;   // the bytes a download message carries (Quake's were 1024 a packet; the link's chunks carry these)
-/** What a guest may ask a host for: a map of the maps directory, no path out of it (SV_BeginDownload_f's checks). */
-export const downloadable = (name) => /^maps\/[a-z0-9_]{1,32}\.bsp$/.test(String(name ?? ''));
+/**
+ * What a guest may ask a host for (SV_BeginDownload_f's checks): a map of the maps directory, a wall texture, a sky's image or a
+ * sound, the names CL_RequestNextDownload walked after the map, lower-case and no path out of their directory (no dot but the
+ * extension's). The models are the guest's pak's: their numbers are the frame's, so one the guest lacks could not be drawn anyway.
+ */
+const PART = '[a-z0-9_+~-]{1,32}';
+const DOWNLOADABLE = new RegExp(`^(?:maps/[a-z0-9_]{1,32}\\.bsp|textures/${PART}(?:/${PART}){0,3}\\.wal|env/${PART}\\.pcx|sound/${PART}(?:/${PART}){0,3}\\.wav)$`);
+export const downloadable = (name) => DOWNLOADABLE.test(String(name ?? ''));
 const b64enc = (bytes) => {
   if (globalThis.Buffer) return globalThis.Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64');
   let s = '';

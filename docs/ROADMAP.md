@@ -1424,10 +1424,20 @@ to be taken.
 The twenty-second list: what a joined page still lacks to play a map its pak does not have. In the order they are to be
 taken.
 
-- **The map's other files downloaded**: `CL_RequestNextDownload` walked the map's models, their skins, the sounds, the
-  wall textures and the sky after the .bsp. Here a map downloaded from a host draws with the guest's pak's textures and
-  models, so one the demo pak lacks (a registered map's) shows checkerboards; the same request over the link would
-  bring each file the map names that the guest's pak has not, kept beside it as the map is.
+- **The map's other files downloaded**: done. `CL_RequestNextDownload` walked the map's models, their skins, the
+  sounds, the wall textures and the sky after the .bsp. Here, after the map message and the .bsp, a joined page walks
+  the map's wall textures (each one's animation chain followed, the frames a new texture names walked again once it
+  is in), the sky's six images and the speakers' sounds (`missingMapFiles`), and asks the host for each its pak lacks,
+  one after another, kept in the file store beside the map; the textures drawn as missing before are drawn again. A
+  sound the frames name later that the pak lacks is asked for at its first play, quietly (`S_RegisterSound`'s moment),
+  and plays from the next. What may be asked for widens to `textures/….wal`, `env/….pcx` and `sound/….wav` beside
+  the maps, lower-case and with no path out of their directory. The models stay the guest's pak's: a frame names
+  them by number, so a model the guest lacks could not be drawn even if it came; a pak the host's differs from is
+  warned of as before. A file the host refuses draws or plays as missing and the map loads anyway. `test:net` the
+  names allowed and the walk over the demo pak (nothing missing; demo1's 127 e1u1 textures when they are gone; the
+  next frame of an animation; a sky's six and a sound); `test:console` the refusal's words; the browser test takes
+  two of demo1's animated textures and a sky image out of the joined page's pak, sees the walk bring them from the
+  host, and `download textures/e1u1/metal2_1.wal` at the console, on both builds.
 - **A download's progress on the loading plaque**: `SCR_DrawLoading` with `cls.downloadpercent`: the map's name and the
   percentage drawn while the pieces come, the status line's count kept as it is.
 

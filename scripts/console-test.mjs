@@ -115,7 +115,7 @@ await con.submit('sv_reconnect_limit 3');
   await con.submit('download'); check(status.at(-1)?.[0] === 'Usage: download <filename>' && status.at(-1)?.[1] === true, 'download alone shows its usage');
   await con.submit('download Maps/Base1.bsp'); check(asked === 'maps/base1.bsp', 'download asks the page for the file, lower-cased');
   ans = 'exists'; await con.submit('download maps/demo1.bsp'); check(status.at(-1)?.[0] === 'File already exists.', 'a file this page has is not asked for');
-  ans = 'bad'; await con.submit('download pak0.pak'); check(status.at(-1)?.[0] === 'download takes a map, maps/<name>.bsp' && status.at(-1)?.[1] === true, 'anything but a map is refused');
+  ans = 'bad'; await con.submit('download pak0.pak'); check(/^download takes a map, a texture, a sky or a sound/.test(status.at(-1)?.[0] ?? '') && status.at(-1)?.[1] === true, 'anything but a map, a texture, a sky or a sound is refused');
   ans = 'guest-only'; await con.submit('download maps/x.bsp'); check(/only a page that has joined a game/.test(status.at(-1)?.[0] ?? ''), 'a page of its own is told');
   delete host.downloadFile;
   await con.submit('allow_download 0'); check(host.settings.allowDownload === false && last() === 'set allowDownload false', 'allow_download 0 through the page');

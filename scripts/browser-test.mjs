@@ -1510,6 +1510,20 @@ try {
       await gp.evaluate(() => window.quake2.fileStore.remove('dl:maps/hostonly.bsp')).catch(() => undefined);
       assert(dlHas === 'File already exists.' && dlGot.has && dlGot.size === hostSize && /^Downloaded maps\/hostonly\.bsp/.test(dlGot.line ?? '') && dlKept && /allow_download 0/.test(dlNo),
         `download says a map the pak has exists ("${dlHas}"), brings one only the host has over the link (${dlGot.size} of ${hostSize} bytes, "${dlGot.line}"), keeps it (${dlKept}), and allow_download 0 at the host refuses ("${dlNo}")`);
+      // the map's other files (CL_RequestNextDownload): two of demo1's textures and a sky image gone from the joined page's pak come
+      // from the host when the map's files are walked, the textures drawn again; download asks for a texture at the console too
+      const mfGone = ['textures/e1u1/+0cgrate1_1.wal', 'textures/e1u1/+1cgrate1_1.wal', 'env/unit1_rt.pcx'];
+      const mfGot = await gp.evaluate(async (gone) => {
+        const q = window.quake2; for (const f of gone) q.pak.files.delete(f);
+        const got = await q.fetchMapFiles(); return { got, has: gone.map((f) => q.pak.has(f)) };
+      }, mfGone).catch((e) => ({ error: e.message }));
+      await gp.evaluate(() => window.quake2.pak.files.delete('textures/e1u1/metal2_1.wal')).catch(() => undefined);
+      await typeOn(gp, 'download textures/e1u1/metal2_1.wal');
+      let mfCon = {};
+      for (let i = 0; i < 40 && !mfCon.has; i++) { await sleep(250); mfCon = await gp.evaluate(() => ({ has: window.quake2.pak.has('textures/e1u1/metal2_1.wal'), line: document.getElementById('status')?.textContent })).catch(() => ({})); }
+      await gp.evaluate(async (gone) => { for (const f of gone) await window.quake2.fileStore.remove(`dl:${f}`); }, [...mfGone, 'textures/e1u1/metal2_1.wal']).catch(() => undefined);
+      assert(mfGot.got?.slice().sort().join() === mfGone.slice().sort().join() && mfGot.has?.every(Boolean) && mfCon.has && /^Downloaded textures\/e1u1\/metal2_1\.wal/.test(mfCon.line ?? ''),
+        `the map's textures and sky images the joined page lacks come from the host (${JSON.stringify(mfGot)}), and download fetches a texture ("${mfCon.line}")`);
       // rcon at the joined page: nothing without rcon_password; with the host's, the line runs at the host's console and its prints come back
       // (status's lines on the guest's scrollback, its sum on the line, "Rcon from client 2" on the host's scrollback); with another, "Bad
       // rcon_password." on the guest's line and "Bad rcon from client 2" at the host

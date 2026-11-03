@@ -9,7 +9,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
-import { createSchema, loadResources, loadMapModels, SQL_FILES } from '../src/loader.js';
+import { createSchema, loadResources, loadMapModels, missingMapFiles, SQL_FILES } from '../src/loader.js';
+import { Bsp } from '../src/bsp.js';
 import { Session } from '../src/session.js';
 import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal, DOWNLOAD_PIECE, downloadable } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
@@ -90,11 +91,25 @@ check(said === null, 'nothing said, nothing to the host');
     `a ${file.length}-byte map comes in ${progress.length} pieces and arrives whole, each piece told`);
   const refused = await guest.requestFile('maps/none.bsp').then(() => null, (e) => e.message);
   check(refused === 'the host has no such file' && guest.downloads.size === 0, 'a file the host refuses is the request\'s error');
-  check(downloadable('maps/demo2.bsp') && !downloadable('maps/../pak0.pak') && !downloadable('pics/x.pcx') && !downloadable('maps/a b.bsp'), 'only a map of the maps directory may be asked for');
+  check(downloadable('maps/demo2.bsp') && downloadable('textures/e1u1/+0btn.wal') && downloadable('env/unit1_rt.pcx') && downloadable('sound/world/amb10.wav')
+    && !downloadable('maps/../pak0.pak') && !downloadable('textures/../x.wal') && !downloadable('pics/x.pcx') && !downloadable('models/x/tris.md2') && !downloadable('sound/a.wav.js') && !downloadable('maps/a b.bsp') && !downloadable('TEXTURES/A.wal'),
+    'a map, a texture, a sky image or a sound may be asked for, lower-case and no path out of its directory; nothing else');
   const p2 = new Pak(pak.bytes.slice().buffer);
   p2.addFile('maps/Big.bsp', got);
   check(p2.has('maps/big.bsp') && p2.get('maps/big.bsp').length === file.length && p2.list('maps/', '.bsp').includes('maps/big.bsp') && p2.has('maps/demo1.bsp'), 'the pak takes a downloaded file beside its own');
   host.onFileRequest = null; guest.onDownload = null;
+}
+// CL_RequestNextDownload's walk: what a map names that the pak lacks, its textures' animation chains followed, the sky's six, the sounds
+{
+  const bsp = new Bsp(pak.buffer('maps/demo1.bsp'), 'maps/demo1.bsp');
+  const without = (gone) => ({ has: (f) => !gone(f) && pak.has(f), get: (f) => pak.get(f) });
+  const none = missingMapFiles(pak, bsp, 'unit1_', ['world/amb10.wav']);
+  const noE1 = missingMapFiles(without((f) => f.startsWith('textures/e1u1/')), bsp, 'unit1_', []);
+  const chain = missingMapFiles(without((f) => f === 'textures/e1u1/+1cgrate1_1.wal'), { textureNames: ['e1u1/+0cgrate1_1'] });
+  const sky = missingMapFiles(pak, { textureNames: [] }, 'Nosuch', ['world/nosuch.wav', 'world/amb10.wav']);
+  check(none.length === 0 && noE1.length === bsp.textureNames.filter((n) => n.startsWith('e1u1/')).length && noE1.every((f) => /^textures\/e1u1\/.+\.wal$/.test(f) && downloadable(f))
+    && chain.join() === 'textures/e1u1/+1cgrate1_1.wal' && sky.join() === 'env/nosuchrt.pcx,env/nosuchbk.pcx,env/nosuchlf.pcx,env/nosuchft.pcx,env/nosuchup.pcx,env/nosuchdn.pcx,sound/world/nosuch.wav',
+    `a map's files the pak lacks: none in the demo's (${none.length}), its e1u1 textures when they are gone (${noE1.length}), the next frame of an animation, the sky's six and a sound (${sky.length})`);
 }
 // a game command typed at the guest's console (Cmd_ForwardToServer): it reaches the host cut to the game's sizes, which runs
 // player_command for the guest's client: godmode on the second client, its message line answering, the first untouched
