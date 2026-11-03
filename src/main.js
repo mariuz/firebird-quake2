@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
-import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, iceServers, connectRefusal, silentPast } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, iceServers, connectRefusal, silentPast } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
@@ -1858,6 +1858,7 @@ async function hostGame() {
   } catch (err) { console.error(err); netState(err.message, true); if (net?.role === 'host' && !net.guests.length) leaveNet(); else if (net) { net.offer?.peer.close(); net.offer = null; } }
 }
 /** Host: the guest's answer accepted; the guest's client put into a new game, or into the game running. */
+const lastConnects = new Map();   // sv_reconnect_limit: each guest name's last connect (ms), SV_DirectConnect's lastconnect
 async function hostAccept(peer, text) {
   netState('connecting…');
   await peer.accept(text);
@@ -1874,7 +1875,8 @@ async function hostAccept(peer, text) {
     if (!net?.guests.includes(g)) return;
     // SV_DirectConnect and ClientConnect: a guest without the host's password (a watcher without the spectator password) is refused, told why
     if (g.refused) return;
-    const why = connectRefusal(info, settings);
+    // (sv_reconnect_limit: the connect, a guest's first userinfo, not a later change; the names' times kept across Host and Leave)
+    const why = connectRefusal(info, settings) ?? (g.joined ? null : reconnectRefusal(info.name, lastConnects, performance.now(), Number(settings.svReconnectLimit) || 0));
     if (why) {
       // (the channel closes a moment after the reason is sent, so the guest's page reads it before the close; a kick's does the same)
       g.refused = true;
@@ -1882,6 +1884,7 @@ async function hostAccept(peer, text) {
       setTimeout(() => guestLeft(g), 300);
       return;
     }
+    g.joined = true;
     session.setUserinfo(g.client, info).catch((err) => console.warn('userinfo:', err.message));
   };
   g.host.onSay = (text) => { if (net?.guests.includes(g) && map && !demo) session.say(g.client, text).catch((err) => console.warn('say:', err.message)); };
