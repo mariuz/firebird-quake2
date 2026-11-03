@@ -32,12 +32,13 @@ const skinOf = (skin) => (/^[\w-]{1,15}\/[\w-]{1,15}$/.test(String(skin ?? '')) 
 export const RULES = ['single player', 'cooperative', 'deathmatch'];
 /** The address book's entries (NUM_ADDRESSBOOK_ENTRIES). */
 export const ADDRESS_BOOK = 9;
+export const PUBLIC_ROWS = 4;   // the public games the join server menu lists (the relay's, CL_PingServers_f's masters' answer)
 
 export class Menu {
   /**
    * host: { hud, playing(), newGame(skill), slots() → [{ valid, name }] × 15, loadSlot(i), saveSlot(i),
    *         downloadSlot(i), get(key), set(key, value), resetDefaults(), resetVideo(), bind(action, code), unbind(action),
-   *         credits() → lines, console(), quit(), sound(name), netHost(), netJoin() (the last two optional: greyed without),
+   *         credits() → lines, console(), quit(), sound(name), netHost(), netJoin() (the last two optional: greyed without), publicGames() and refreshPublic() (the join menu's public games),
    *         maps() → the pak's map names, gameMode() → { coop, deathmatch, players }, setGameMode({ coop, deathmatch, players }),
    *         startServer(map) (the start server menu's), connect(text), addressBook() → nine texts, setAddressBook(texts)
    *         (the join server menu's and the address book's) }
@@ -385,6 +386,9 @@ export class Menu {
    * the menu goes, the page's panel shows the answer or waits for the host); under "connect to...", the address book's
    * entries as the found servers were listed, each joining with its code (a relay named in it is set first), "<no
    * server>" greyed where the book is empty. The rows read the book live, so the address book's edits show on return.
+   * Under them, "public games" (Enter asks again) and the relay's public listings (the masters' list CL_PingServers_f asked
+   * for after the book), each "hostname map clients/most", pinged: one with a host waiting joins by its relay and code, the
+   * others greyed. The menu asks for them as it opens, as JoinServer_MenuInit searched for games.
    */
   joinServer() {
     const h = this.host;
@@ -409,8 +413,19 @@ export class Menu {
       Object.defineProperty(row, 'grayed', { get: () => !entries()[i] });
       items.push(row);
     }
+    // the public games (the relay's listings, pinged): "hostname map 2/4", one with a host waiting joined by its relay and code
+    const games = () => h.publicGames?.() ?? [];
+    const label = (g) => `${g.hostname} ${g.mapname} ${g.clients}/${g.maxclients}${g.state === 'waiting' ? '' : g.state === 'taken' ? ' (joining)' : ' (no offer)'}`.slice(0, 32);
+    items.push(action('public games', 160, () => h.refreshPublic?.(), { left: true, statusbar: 'the relay\'s public games: Enter asks again' }));
+    for (let i = 0; i < PUBLIC_ROWS; i++) {
+      const row = action(() => (games()[i] ? label(games()[i]) : i === 0 ? '<none listed>' : ''), 170 + i * 10, () => { const g = games()[i]; if (g?.state === 'waiting') join(`${g.relay} ${g.code}`); },
+        { left: true, statusbar: 'a game listed at the relay: Enter joins it while its host waits' });
+      Object.defineProperty(row, 'grayed', { get: () => games()[i]?.state !== 'waiting' });
+      items.push(row);
+    }
+    h.refreshPublic?.();
     const m = this.framework({ id: 'joinserver', banner: 'm_banner_join_server', items });
-    m.layout = (r) => { m.x = (r.w >> 1) - 40; m.y = (r.h - 170) >> 1; };
+    m.layout = (r) => { m.x = (r.w >> 1) - 40; m.y = Math.max(0, (r.h - 220) >> 1); };
     this.push(m);
   }
 

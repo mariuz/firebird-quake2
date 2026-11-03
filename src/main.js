@@ -270,6 +270,8 @@ const menu = new Menu({
   // the join server menu and the address book: Join with a text (a code at the relay, or an offer), the book in the settings
   connect: (text) => connectTo(text).catch((err) => netState(err.message, true)),
   addressBook: () => settings.addressBook ?? [],
+  publicGames: () => publicList,   // (the join server menu's public games, as last asked for)
+  refreshPublic: () => { refreshPublic().catch(() => undefined); },
   setAddressBook: (texts) => { settings.addressBook = texts.slice(0, ADDRESS_BOOK).map((t) => String(t ?? '')); saveSettings(); },
 });
 /** A setting changed from a menu: through the page's own control where there is one, so both agree. */
@@ -1839,6 +1841,28 @@ async function withdrawListing() {
   const was = beatListed; beatListed = null;
   await Promise.all(was.relays.map((r) => new SignalClient(r).withdraw(was.code)));
 }
+/**
+ * CL_PingServers_f's masters' answer: the public games listed at the masters (setmaster's, else rtc_signal's relay), each pinged at
+ * the relay its room is at, kept for the join server menu: [{ code, relay, hostname, mapname, clients, maxclients, state }].
+ */
+let publicList = [];
+async function refreshPublic() {
+  const from = masters.length ? masters : settings.rtcSignal ? [String(settings.rtcSignal).replace(/\/+$/, '')] : [];
+  const seen = new Set(), out = [];
+  for (const r of from) {
+    const list = await new SignalClient(r).servers().catch(() => []);
+    for (const s of list) {
+      const relay = s.info?.relay ?? r, key = `${relay} ${s.code}`;
+      if (seen.has(key) || s.code === hostCode && net?.role === 'host') continue;   // (this page's own game left out)
+      seen.add(key);
+      out.push({ code: s.code, relay, hostname: s.info?.hostname ?? 'noname', mapname: s.info?.mapname ?? '?', clients: s.info?.clients ?? 0, maxclients: s.info?.maxclients ?? 4 });
+    }
+  }
+  const rows = out.slice(0, 8);
+  await Promise.all(rows.map(async (g) => { g.state = (await new SignalClient(g.relay).ping(g.code)).state; }));
+  publicList = rows;
+  return rows;
+}
 async function heartbeat(force = false) {
   const relay = signalRelay();
   if (!settings.public || net?.role !== 'host' || !hostCode || !relay) {
@@ -2375,7 +2399,7 @@ async function boot() {
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, zombies, fetchMapFiles: () => (map && net?.guest?.map ? fetchMapFiles(map.bsp, net.guest.map) : Promise.resolve([])), settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
-      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get heartbeat() { return { listed: beatListed ? { ...beatListed } : null, info: lastBeatInfo, masters: masters.slice() }; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get heartbeat() { return { listed: beatListed ? { ...beatListed } : null, info: lastBeatInfo, masters: masters.slice() }; }, get publicGames() { return publicList.map((g) => ({ ...g })); }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
       get logfile() { return { on: !!settings.logfile, kept: conLog.kept.length, pending: conLog.pending.length }; }, get logStats() { return { on: !!settings.logStats, kept: statsLog.kept.length, pending: statsLog.pending.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped, server: !!recorder.server, maxEnts: recorder.maxEnts ?? 0 } : null; },

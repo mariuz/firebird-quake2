@@ -263,8 +263,8 @@ Object.assign(settings, { map: 'demo2', timelimit: 0, fraglimit: 0, hostname: ''
 // nine fields writing the settings as typed, read live by the join menu on return
 settings.rtcSignal = ''; settings.addressBook = [];
 menu.mainCursor = 1; menu.main(); keys('Enter');
-assert(keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter') === 'joinserver' && menu.current.items.length === 5 + 9 && menu.current.items[0].name === 'address book',
-  'the multiplayer menu\'s join server opens the join server menu: the address book, the relay, the code, connect and nine rows');
+assert(keys('ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter') === 'joinserver' && menu.current.items.length === 5 + 9 + 1 + 4 && menu.current.items[0].name === 'address book' && menu.current.items[14].name === 'public games',
+  'the multiplayer menu\'s join server opens the join server menu: the address book, the relay, the code, connect, nine rows, and four for the public games');
 draw();
 assert(drawn.some(([k, p]) => k === 'pic' && p === hud.pic('m_banner_join_server')) && drawn.some(([k, s]) => k === 'str' && s === '<no server>') && menu.current.items[5].grayed === true && menu.current.items[6].name() === '',
   'under the join server banner, the first row says <no server> greyed with the book empty, the rest blank');
@@ -290,6 +290,25 @@ assert(menu.current.cursor === 6 && keys('Enter') === '-' && calls.at(-2) === 'c
 menu.mainCursor = 1; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown');
 assert(menu.current.cursor === 7 && keys('Enter') === 'joinserver' && calls.at(-2) !== 'connect ', 'Enter on a blank row does nothing');
 keys('Escape'); keys('Escape'); keys('Escape');
+// the public games (the relay's listings, pinged): asked for as the menu opens; a game with a host waiting reads "hostname map
+// 2/4" and joins by its relay and code, one without an offer greyed; "public games" asks again; none, "<none listed>"
+{
+  let asked = 0, list = [];
+  host.publicGames = () => list; host.refreshPublic = () => { asked++; };
+  menu.mainCursor = 1; menu.main(); keys('Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter');
+  const it = menu.current.items;
+  const none = it[15].name(), noneGray = it[15].grayed;
+  list = [{ code: 'K9H2', relay: 'http://relay:8787', hostname: 'Hal', mapname: 'demo1', clients: 2, maxclients: 4, state: 'waiting' }, { code: 'AB12', relay: 'http://relay:8787', hostname: 'Holly', mapname: 'demo2', clients: 4, maxclients: 4, state: 'none' }];
+  const one = it[15].name(), two = it[16].name(), gray = [it[15].grayed, it[16].grayed];
+  menu.current.cursor = 14; keys('Enter');
+  const askedAgain = asked;
+  menu.current.cursor = 16; keys('Enter'); const stays = menu.active;
+  menu.current.cursor = 15; keys('Enter');
+  assert(asked >= 2 && askedAgain === 2 && none === '<none listed>' && noneGray && one === 'Hal demo1 2/4' && two === 'Holly demo2 4/4 (no offer)' && gray.join() === 'false,true' && stays
+    && calls.at(-2) === 'connect K9H2' && settings.rtcSignal === 'http://relay:8787' && !menu.active,
+    `the public games: asked for at the open and again (${asked}), "${one}" joining by its relay and code (${calls.at(-2)}), "${two}" greyed, "${none}" when none`);
+  delete host.publicGames; delete host.refreshPublic;
+}
 settings.rtcSignal = ''; settings.addressBook = [];
 settings.dmflags = 0;
 menu.mainCursor = 1; menu.main(); keys('Enter');

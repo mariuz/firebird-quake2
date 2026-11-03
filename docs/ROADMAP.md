@@ -1525,9 +1525,29 @@ are to be taken.
   listed at another master can be joined. The masters are the page's for the session, as Quake's were the server's.
   `test:net` the listing's relay and the words parsed; `test:console` the command's answers; the browser test names
   the test's relay as the master and finds the listing there naming the offers' relay, on both builds.
-- **The public games in the join menu**: `CL_PingServers_f` asked the masters for their lists after the address
-  book; the join server menu would list the relay's public rooms beside the address book's, each pinged, a key
-  joining by its code.
+- **The public games in the join menu**: done. `CL_PingServers_f` asked the masters for their lists after the address
+  book, and the join server menu listed what answered. The join server menu has a "public games" row under the
+  address book's now (Enter asks again) and four rows of the games listed at the masters (`setmaster`'s, else
+  `rtc_signal`'s relay; `refreshPublic`), each pinged at the relay its room is at and shown as "hostname map 2/4":
+  one whose host waits with an offer joins by its relay and code, as an address book entry does; one without an offer
+  says so, greyed; "<none listed>" when there are none. The menu asks as it opens, as `JoinServer_MenuInit` searched,
+  and this page's own game is left out. `test:menu` the rows, the greyed one, the join and the asking again; the
+  browser test's joined page, with the host listed under public 1, finds the host's game in the menu's list, on both
+  builds.
+
+This ends the twenty-fifth list.
+
+The twenty-sixth list: what the page's files still lack of Quake 2's file system (`files.c`). In the order they are to be
+taken.
+
+- **Several paks, the later over the earlier**: `FS_AddGameDirectory` opened pak0.pak to pak9.pak in turn, a file in a
+  later pak found before the same in an earlier one (the point releases' patches shipped that way); here the page
+  holds one pak. Picked together, the paks would be searched newest first, `path` listing them in that order and the
+  picked ones kept for the next start as the one is.
+- **`game`**: `FS_SetGamedir` put a mod's directory over baseq2 at the next map, latched; here there is the one tree.
+  With a mod's pak picked under `game <name>`, its files would come before the base's, `game ""` going back.
+- **`link`**: `FS_Link_f`: `link <from> <to>` made the files under one path come from another (a link with no target
+  dropped it), `path` listing the links; here every name is the pak's own.
 
 ## Playing the demo
 

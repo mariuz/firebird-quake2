@@ -57,6 +57,7 @@ const browser = await chromium.launch(process.env.CHROME ? { executablePath: pro
 const page = await browser.newPage({ viewport: { width: 960, height: 720 } });
 const errors = [];
 const missing = [];
+const pingedRooms = new Set();   // (rooms the join menu's public games pinged after their answer came: gone at the relay, a 404 expected)
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 page.on('response', (r) => { if (r.status() === 404) missing.push(new URL(r.url()).pathname); });
@@ -1817,6 +1818,15 @@ try {
       await typeOn(page, 'public 1');
       let pub = [];
       for (let i = 0; i < 40 && !pub.some((x) => x.code === offer); i++) { await sleep(250); pub = await listing().catch(() => []); }
+      // the public games in the joined page's join server menu: opened, it asks the relay, and the host's game is listed by its name and map
+      pingedRooms.add(`/rooms/${offer}`);
+      await gp.evaluate(() => window.quake2.menu.joinServer()).catch(() => undefined);
+      let pg = [];
+      for (let i = 0; i < 40 && !pg.some((x) => x.code === offer); i++) { await sleep(250); pg = await gp.evaluate(() => window.quake2.publicGames).catch(() => []); }
+      await gp.evaluate(() => window.quake2.menu.off()).catch(() => undefined);
+      const pgMine = pg.find((x) => x.code === offer);
+      assert(pgMine?.hostname === 'Hal' && pgMine.mapname === 'demo1' && pgMine.relay === `http://localhost:${RELAY_PORT}` && ['waiting', 'taken', 'none'].includes(pgMine.state),
+        `the joined page's join server menu lists the host's public game (${JSON.stringify(pgMine)})`);
       await typeOn(page, 'heartbeat');
       const beatStatus = await page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
       // setmaster (SV_SetMaster_f): the test's relay named as the master, the listing there carries the offers' relay
@@ -1914,8 +1924,9 @@ try {
     await ctx.close();
   }
 
-  // nothing optional is loud: only the music tracks, the favicon and the relay's room pingservers asked for (ZZZZ, none there) may be missing
-  const unexpected = missing.filter((p) => !/\/music\/|favicon|^\/rooms\/ZZZZ$/.test(p));
+  // nothing optional is loud: only the music tracks, the favicon, the relay's room pingservers asked for (ZZZZ, none there) and the
+  // public game's room the join menu pinged once it was answered may be missing
+  const unexpected = missing.filter((p) => !/\/music\/|favicon|^\/rooms\/ZZZZ$/.test(p) && !pingedRooms.has(p));
   assert(unexpected.length === 0, `no unexpected 404s (${missing.length} optional: ${[...new Set(missing)].join(', ') || 'none'})`);
   const loud = errors.filter((e) => !/404 \(Not Found\)/.test(e) && !(/\/music\//.test(e) && /Failed to load resource|ERR_INTERNET_DISCONNECTED|ERR_FAILED/.test(e)));   // (offline, the music is not there)
   assert(loud.length === 0, `no console errors${loud.length ? ':\n  ' + loud.join('\n  ') : ''}`);
