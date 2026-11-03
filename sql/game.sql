@@ -498,12 +498,16 @@ BEGIN
 END^
 
 -- FloodAreaConnections: areas reachable through open portals share a flood number. A change
--- forgets the marked view, since the eye may now see more, or less.
+-- forgets the marked view, since the eye may now see more, or less. With map_noareas every area
+-- is the one flood (CM_AreasConnected's `if (map_noareas->value) return true`).
 CREATE OR ALTER PROCEDURE flood_areas
 AS
 DECLARE a INTEGER; DECLARE n INTEGER = 0; DECLARE other INTEGER; DECLARE grew SMALLINT;
 BEGIN
   DELETE FROM area_flood;
+  IF (EXISTS (SELECT 1 FROM game g WHERE g.id = 1 AND g.map_noareas = 1)) THEN
+    INSERT INTO area_flood (area, flood) SELECT ar.id, 1 FROM areas ar;
+  ELSE
   FOR SELECT ar.id FROM areas ar ORDER BY ar.id INTO a
   DO
   BEGIN

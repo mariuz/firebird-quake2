@@ -1493,9 +1493,29 @@ be taken.
   `test:net` the slot passed over and given again after the time, 0 at once, none free; `test:settings` and
   `test:console` the cvar; the browser test's third page, joining after the second's reconnect, is given a client
   as before, on both builds.
-- **`map_noareas`**: `CM_SetAreaPortalState`'s switch: with `map_noareas 1` every area is connected whatever the
-  doors say (`CM_AreasConnected` true), so sounds and entities carry through closed doors; a debugging cvar of the
-  collision model, taken at the next map's load as Quake's was.
+- **`map_noareas`**: done. The collision model's switch: with `map_noareas 1` every area is connected whatever the
+  doors say (`CM_AreasConnected` true), so entities show and sounds carry through closed doors. Here `flood_areas`
+  puts every area in the one flood while `game.map_noareas` is 1, which the loader writes before the spawn from the
+  page's setting at each map's load (`loadMap`'s `noareas`, the session's cvars); a door opening or closing floods
+  again to the same one. Off by default, not archived, as Quake's was not. `test:session` loads demo1 with it and
+  finds its areas one flood, at the load and after a flood, and parted by its doors again without; `test:settings`
+  and `test:console` the cvar.
+
+This ends the twenty-fourth list.
+
+The twenty-fifth list: a list of public games at the relay, as Quake 2's master servers kept one. In the order they
+are to be taken.
+
+- **`public` and `heartbeat`**: `Master_Heartbeat` sent the serverinfo to the masters every few minutes while
+  `public` was 1, and `Master_Shutdown` took the server off; here a hosted game is found only by its code. With
+  `public 1` the host would list its room at the relay with its serverinfo (the hostname, the map, the players),
+  `heartbeat` sending it at once, the listing dropped at Leave or `public 0`.
+- **`setmaster`**: `SV_SetMaster_f` named the masters the heartbeats went to (the first being id's); here the relay
+  is `rtc_signal`'s alone. `setmaster <url> …` would name the relays the listing goes to, `rtc_signal` staying the
+  one the offers go through.
+- **The public games in the join menu**: `CL_PingServers_f` asked the masters for their lists after the address
+  book; the join server menu would list the relay's public rooms beside the address book's, each pinged, a key
+  joining by its code.
 
 ## Playing the demo
 
