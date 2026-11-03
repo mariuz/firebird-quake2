@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pak } from '../src/pak.js';
-import { Hud, wrap, downloadBar } from '../src/hud.js';
+import { Hud, wrap, downloadBar, textBar } from '../src/hud.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pak = new Pak(fs.readFileSync(process.env.PAK ?? path.join(root, 'public/pak/pak0.pak')).buffer);
@@ -218,6 +218,8 @@ assert(inside(r) && textOverlaps(r) === 0 && !picAt(r, 'tag1') && textAt(r, 4) =
     assert(drew && lp && picAt(r, 'loading')?.x === (w - lp.w) >> 1 && chars.length > 10 && chars.every((c) => c.y >= picAt(r, 'loading').y + lp.h) && chars.some((c) => c.n === 0x83) && inside(r),
       `the loading plaque at ${w} is centred with the download's bar under it, inside the view (${chars.length} characters)`);
   }
+  assert(textBar(b) === 'demo2.bsp: [======O========] 45%' && textBar(b100) === 'x.wav: [' + '='.repeat(textBar(b100).length - 14) + '] 100%',
+    `the console prints the bar in text ("${textBar(b)}")`);
   const r0 = recorder(320, 240);
   assert(hud.drawLoading(r0) && r0.drawn.length === 1, 'with no download the plaque alone');
 }

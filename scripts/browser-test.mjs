@@ -1507,6 +1507,13 @@ try {
       let dlNo = '';
       for (let i = 0; i < 40 && !/Couldn't download/.test(dlNo); i++) { await sleep(250); dlNo = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => ''); }
       await typeOn(page, 'allow_download 1');
+      // allow_download_maps 0 at the host: a map refused with its own reason while allow_download is on
+      await typeOn(page, 'allow_download_maps 0');
+      await typeOn(gp, 'download maps/hostonly2.bsp');
+      let dlNoMaps = '';
+      for (let i = 0; i < 40 && !/Couldn't download/.test(dlNoMaps); i++) { await sleep(250); dlNoMaps = await gp.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => ''); }
+      await typeOn(page, 'allow_download_maps 1');
+      assert(/allow_download_maps 0/.test(dlNoMaps), `allow_download_maps 0 at the host refuses a map ("${dlNoMaps}")`);
       const dlKept = await gp.evaluate(async () => !!(await window.quake2.fileStore.get('dl:maps/hostonly.bsp'))).catch(() => false);
       await gp.evaluate(() => window.quake2.fileStore.remove('dl:maps/hostonly.bsp')).catch(() => undefined);
       assert(dlHas === 'File already exists.' && dlGot.has && dlGot.size === hostSize && /^Downloaded maps\/hostonly\.bsp/.test(dlGot.line ?? '') && dlKept && /allow_download 0/.test(dlNo),
@@ -1525,6 +1532,23 @@ try {
       await gp.evaluate(async (gone) => { for (const f of gone) await window.quake2.fileStore.remove(`dl:${f}`); }, [...mfGone, 'textures/e1u1/metal2_1.wal']).catch(() => undefined);
       assert(mfGot.got?.slice().sort().join() === mfGone.slice().sort().join() && mfGot.has?.every(Boolean) && mfGot.loading?.percent === 100 && mfGone.includes(mfGot.loading?.name) && mfCon.has && /^Downloaded textures\/e1u1\/metal2_1\.wal/.test(mfCon.line ?? ''),
         `the map's textures and sky images the joined page lacks come from the host, the loading plaque's bar drawn for each (${JSON.stringify(mfGot)}), and download fetches a texture ("${mfCon.line}")`);
+      // the console's download bar (Con_DrawConsole's): the console down at the joined page while a texture comes, the bar its last line,
+      // gone from it once the download is done
+      await gp.evaluate(() => document.activeElement?.blur?.()).catch(() => undefined);
+      if (await gp.evaluate(() => !!document.pointerLockElement).catch(() => false)) { await gp.evaluate(() => document.exitPointerLock?.()); await sleep(400); }
+      await gp.locator('#screen').click(); await sleep(200);
+      await gp.keyboard.press('Backquote'); await sleep(200);
+      const cbar = await gp.evaluate(async () => {
+        const q = window.quake2; q.pak.files.delete('textures/e1u1/+0cgrate3_1.wal');
+        const open = !document.getElementById('cmdline').hidden;
+        await q.fetchMapFiles();
+        const after = document.getElementById('conlog').textContent;
+        await q.fileStore.remove('dl:textures/e1u1/+0cgrate3_1.wal');
+        return { open, bar: q.conBar, after };
+      }).catch((e) => ({ error: e.message }));
+      await gp.keyboard.press('Escape');
+      assert(cbar.open && /^\+0cgrate3_1.*: \[=*O?=*\] 100%$/.test(cbar.bar ?? '') && !/\] \d+%$/.test(cbar.after ?? ''),
+        `the console shows the download's bar on its last line while a file comes ("${cbar.bar}") and drops it after (${JSON.stringify(cbar)})`);
       // rcon at the joined page: nothing without rcon_password; with the host's, the line runs at the host's console and its prints come back
       // (status's lines on the guest's scrollback, its sum on the line, "Rcon from client 2" on the host's scrollback); with another, "Bad
       // rcon_password." on the guest's line and "Bad rcon from client 2" at the host

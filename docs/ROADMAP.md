@@ -1452,11 +1452,17 @@ This ends the twenty-second list.
 
 The twenty-third list: what a joined page's downloads still lack of Quake 2's own. In the order they are to be taken.
 
-- **The download's bar on the console**: Con_DrawConsole drew the same bar on the console's bottom line while
-  `cls.download` was open; here a console dropped during a download shows only the status line's count.
-- **`allow_download_maps`, `allow_download_sounds`**: 3.20's per-kind switches at the host (`SV_BeginDownload_f`), each
-  refusing its kind with `allow_download` still on; the players' and models' ones have nothing to guard here (the
-  models stay the guest's pak's).
+- **The download's bar on the console**: done. Con_DrawConsole drew the same bar on the console's bottom line while
+  `cls.download` was open; the page's console is text, so its scrollback's last line is the bar while a download is
+  under way (`showConlog`), the four glyphs written `[`, `=`, `O` and `]` (`textBar`), as wide as the view's line
+  (`con.linewidth`), and gone once the last download is done. `test:hud` the bar in text; the browser test drops the
+  joined page's console while a texture comes, sees the bar at 100 % on its last line and gone after, on both builds.
+- **`allow_download_maps`, `allow_download_sounds`**: done. 3.20's per-kind switches at the host (`SV_BeginDownload_f`):
+  each refuses its kind with `allow_download` still on, saying which switch (`downloadRefusal`); a map's textures and
+  sky images go with the maps, there being no switch of their own. Both 1 and archived, as Quake's were. The players'
+  and models' switches are left out: the models stay the guest's pak's, so there is nothing for them to guard.
+  `test:net` each switch's kind and allow_download over both; `test:settings` and `test:console` the cvars; the
+  browser test's host refuses a map under allow_download_maps 0 with its reason, on both builds.
 - **A download resumed**: `CL_CheckOrDownloadFile` kept a broken download as `.tmp` and asked for the rest from its
   length (`download <name> <offset>`); here a link that drops mid-map loses the pieces that came. Kept in the file
   store as they arrive, the next join's request would start at the first missing byte.

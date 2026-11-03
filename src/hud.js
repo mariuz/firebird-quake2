@@ -327,6 +327,9 @@ export function downloadBar(name, percent, cols) {
   return `${bar}\x82 ${String(pc).padStart(2, '0')}%`;
 }
 
+/** The download bar as the page's console prints it, its four conchars glyphs in text: 0x80 '[', 0x81 '=', 0x83 'O' (the dot), 0x82 ']'. */
+export const textBar = (bar) => String(bar).replace(/[\x80-\x83]/g, (c) => ({ '\x80': '[', '\x81': '=', '\x82': ']', '\x83': 'O' })[c]);
+
 export function wrap(line, cols) {
   if (line.length <= cols) return [line];
   const out = [];
