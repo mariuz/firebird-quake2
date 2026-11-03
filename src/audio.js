@@ -93,7 +93,11 @@ export class Q2Audio {
       let file = 'sound/' + name;
       // (S_RegisterSexedSound: a female client's sound a pak lacks, the demo's has none, plays the male's)
       if (!this.pak.has(file) && name.startsWith('player/female/')) file = 'sound/player/male/' + name.slice('player/female/'.length);
-      if (!this.pak.has(file)) return null;
+      if (!this.pak.has(file)) {
+        // (a joined page's sound the pak lacks, asked of the host: once it is in, the next play decodes it)
+        this.onMissing?.(file)?.then((ok) => { if (ok && this.buffers.get(name) === p) this.buffers.delete(name); });
+        return null;
+      }
       try {
         const b = await this.ctx.decodeAudioData(this.pak.buffer(file));
         if (b) this.decodedBytes += (b.length ?? 0) * (b.numberOfChannels ?? 1) * 4;

@@ -14,7 +14,7 @@ import weaponsSql from '../sql/weapons.sql';
 import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
-import { createSchema, loadResources, loadMapModels, setView } from './loader.js';
+import { createSchema, loadResources, loadMapModels, setView, missingMapFiles } from './loader.js';
 import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, iceServers, connectRefusal, silentPast } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
@@ -110,6 +110,7 @@ const saveSettings = () => saveSettingsTo(settings, storage);
 const viewWidth = () => viewSize(settings)[0];
 const viewHeight = () => viewSize(settings)[1];
 const audio = new Q2Audio();
+audio.onMissing = (file) => soundFromHost(file);   // (a joined page's sound its pak lacks, from the host)
 audio.setVolume(settings.sfx / 100);
 audio.setMusicVolume(settings.music / 100);
 audio.musicMode = settings.musicMode;
@@ -2052,16 +2053,41 @@ async function netGo() {
  * CL_Download_f and CL_ParseDownload: a file asked of the host and kept in the file store beside the pak (dl:<name>), a kept one
  * taken from there; the status line counts the bytes as they come. Resolves once the pak has it.
  */
-async function fetchFromHost(name) {
+async function fetchFromHost(name, { quiet = false } = {}) {
   const kept = await fileStore.get(`dl:${name}`).catch(() => null);
   if (kept?.bytes) { pak.addFile(name, kept.bytes); return 'kept'; }
   if (!netGuest() || !net.guest?.open) throw new Error('not joined to a game');
-  net.guest.onDownload = (n, got, total) => setStatus(`Downloading ${n}: ${Math.round(got / 1024)} of ${Math.round(total / 1024)} KB`);
+  if (!quiet) net.guest.onDownload = (n, got, total) => setStatus(`Downloading ${n}: ${Math.round(got / 1024)} of ${Math.round(total / 1024)} KB`);
   const bytes = await net.guest.requestFile(name);
   pak.addFile(name, bytes);
   await fileStore.put(`dl:${name}`, { name, bytes }).catch((err) => console.warn('download:', err.message));
-  setStatus(`Downloaded ${name} (${Math.round(bytes.length / 1024)} KB)`);
+  if (!quiet) setStatus(`Downloaded ${name} (${Math.round(bytes.length / 1024)} KB)`);
   return 'downloaded';
+}
+/**
+ * CL_RequestNextDownload after the map: each texture, sky image and speaker sound the map names that this pak lacks, asked of the
+ * host one after another (kept ones from the file store), walked again for the animation frames the new textures name. A file the
+ * host refuses is drawn or heard as missing; the map loads either way. Returns the files that came.
+ */
+async function fetchMapFiles(bsp, m) {
+  const got = [], failed = new Set();
+  const sounds = (m.speakers ?? []).map((r) => r?.[4]).filter(Boolean);
+  for (let round = 0; round < 8; round++) {
+    const need = missingMapFiles(pak, bsp, m.sky, sounds).filter((f) => downloadable(f) && !failed.has(f));
+    if (!need.length) break;
+    for (const [i, f] of need.entries()) {
+      if (!netGuest()) return got;
+      setStatus(`Downloading ${f} (${i + 1} of ${need.length})…`);
+      try { await fetchFromHost(f, { quiet: true }); got.push(f); } catch (err) { failed.add(f); console.warn(`download ${f}:`, err.message); }
+    }
+  }
+  if (failed.size) console.warn(`[firebird-quake2] ${failed.size} of the map's files did not come from the host: they draw or play as missing`);
+  return got;
+}
+/** A joined page's sound its pak lacks (S_RegisterSound at the first play), asked of the host quietly when allow_download lets it. */
+function soundFromHost(file) {
+  if (!netGuest() || !net.guest?.open || settings.allowDownload === false || !downloadable(file)) return null;
+  return fetchFromHost(file, { quiet: true }).then(() => true, () => false);
 }
 /** The guest's page takes the host's map: its geometry for the painter, the sky, the music, the view. */
 async function guestMap(m) {
@@ -2077,6 +2103,11 @@ async function guestMap(m) {
   if (m.nmodels !== res.byName.size) console.warn(`[firebird-quake2] the host's pak has ${m.nmodels} models, this one ${res.byName.size}: the models may not match`);
   setStatus(`Loading ${m.name} for the host's game…`);
   const { bsp } = loadMapModels(pak, res, m.name, { faceVerts: false });
+  if (settings.allowDownload !== false && net.guest?.open) {
+    const got = await fetchMapFiles(bsp, m);
+    if (!netGuest()) return;
+    for (const f of got) if (f.startsWith('textures/')) renderer.textures.delete(f.slice(9, -4));   // (one drawn as missing before is drawn again)
+  }
   map = { name: m.name, bsp };
   // the prediction's clip data for this map, and which brush model each face belongs to (the frame names the faces)
   const modelOfFace = new Int32Array(bsp.faces.length).fill(-1);
@@ -2241,7 +2272,7 @@ async function boot() {
     db = await openDatabase();
     session = new Session(db, storage);
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
-    window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
+    window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, fetchMapFiles: () => (map && net?.guest?.map ? fetchMapFiles(map.bsp, net.guest.map) : Promise.resolve([])), settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },

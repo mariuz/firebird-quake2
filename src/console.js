@@ -819,7 +819,7 @@ export class Console {
         if (!arg) { say('Usage: download <filename>', true); return; }
         const r = await h.downloadFile?.(arg.trim().toLowerCase());
         if (r === 'exists') say(`File already exists.`);
-        else if (r === 'bad') say('download takes a map, maps/<name>.bsp', true);
+        else if (r === 'bad') say('download takes a map, a texture, a sky or a sound: maps/<name>.bsp, textures/<name>.wal, env/<name>.pcx, sound/<name>.wav', true);
         else if (r === 'guest-only') say('download: only a page that has joined a game can download', true);
         return;
       }
