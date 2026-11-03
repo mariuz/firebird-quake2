@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView, missingMapFiles } from './loader.js';
-import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, downloadRefusal, spectatorRefusal, iceServers, connectRefusal, silentPast } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, downloadRefusal, spectatorRefusal, freeSlot, iceServers, connectRefusal, silentPast } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
@@ -1885,6 +1885,8 @@ async function hostAccept(peer, text) {
   netStage = null;
   const g = { client: freeClient(), peer, host: new HostLink(link) };
   net.guests.push(g);
+  // (SV_DirectConnect: every slot taken or a zombie still, "Server is full.")
+  if (g.client == null) { g.refused = true; g.host.sendKick('Server is full.'); setTimeout(() => guestLeft(g), 300); netState('a guest was refused: every client is taken or a zombie still', true); return; }
   paused = false;   // (a shared game does not pause)
   g.host.onClose = () => guestLeft(g);
   // the guest's name and hand are its client's (ClientUserinfoChanged), now and with every map
@@ -1949,7 +1951,9 @@ async function hostAccept(peer, text) {
 }
 const guestsState = () => `${net.guests.length} guest${net.guests.length === 1 ? '' : 's'} connected`;
 /** A guest's client number: the lowest of 2 to 4 no guest drives (a guest that left leaves its client to the next). */
-const freeClient = () => { for (let c = 2; c <= MAX_PLAYERS; c++) if (!net.guests.some((g) => g.client === c)) return c; return null; };
+// (zombietime: a guest's client that left stays a zombie that long before a new guest is given it, SV_CheckTimeouts' cs_zombie)
+const zombies = new Map();   // client → when its guest left (ms)
+const freeClient = () => freeSlot(net.guests.map((g) => g.client).filter((c) => c != null), zombies, performance.now(), settings.zombietime ?? 2, MAX_PLAYERS);
 /**
  * SV_Status_f's list: the game's clients, each with its number, its name and what drives it (this page, a guest with the
  * frames sent, dropped and held and whether it watches, a pad, or nothing: standing); 'guest' on a joined page, null with no game.
@@ -1993,6 +1997,7 @@ function guestLeft(g) {
   net.guests.splice(net.guests.indexOf(g), 1);
   g.host.close(); g.peer.close();
   delete session.userinfo[g.client];   // (the guest's name and hand leave with it)
+  if (g.client != null) zombies.set(g.client, performance.now());   // (its slot a zombie for zombietime)
   if (net.guests.length || net.offer) netState(`a guest left: ${guestsState()}`);
   else { netState('the guest left'); net = null; netStage = null; netEl.panel.hidden = true; }
 }
@@ -2320,7 +2325,7 @@ async function boot() {
     db = await openDatabase();
     session = new Session(db, storage);
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
-    window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, fetchMapFiles: () => (map && net?.guest?.map ? fetchMapFiles(map.bsp, net.guest.map) : Promise.resolve([])), settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
+    window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, zombies, fetchMapFiles: () => (map && net?.guest?.map ? fetchMapFiles(map.bsp, net.guest.map) : Promise.resolve([])), settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
       get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },

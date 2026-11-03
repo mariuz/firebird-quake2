@@ -1785,6 +1785,8 @@ try {
       let left = await hstate();
       for (let i = 0; i < 40 && left.role !== undefined; i++) { await sleep(250); left = await hstate(); }
       assert(left.role === undefined && left.clients === (tready ? 3 : 2), `disconnect at the guest's console leaves, and the host's game goes on with its other players (${JSON.stringify(left)})`);
+      // (zombietime: the client the guest left is noted, a zombie for two seconds before another guest may be given it)
+      const zLeft = await page.evaluate(() => [...window.quake2.zombies.keys()]).catch(() => []);
       const h1 = await frames(page); await sleep(700); const h2 = await frames(page);
       assert(h2 > h1, `the host's frames keep coming (${h2 - h1} in 0.7 s)`);
       let own = false;
@@ -1807,6 +1809,8 @@ try {
       let hr = {}, gr = {};
       for (let i = 0; i < 240 && !(hr.guests?.length === 1 && gr.role === 'guest' && gr.frames > 20); i++) { await sleep(250); hr = await hstate(); gr = await gstate(); }
       const rejoinedStats = await gstats();
+      const zClient = await page.evaluate(() => window.quake2.net?.guests?.map((g) => g.client) ?? []).catch(() => []);
+      assert(zLeft.includes(2) && zClient.join() === '2', `the client the guest left is a zombie for zombietime (${JSON.stringify(zLeft)}), and given to it again past the time (${JSON.stringify(zClient)})`);
       assert(again === offer && lastJoined === null && hr.role === 'host' && hr.guests?.length === 1 && gr.role === 'guest' && gr.frames > 20 && gr.map === 'demo1' && /joined Hal: \d+ frames/.test(rejoinedStats),
         `Host again publishes under the code the host had (${again}), and reconnect at the guest's console joins the game again (${JSON.stringify({ hr, gr })}), its stats line naming the host (${rejoinedStats})`);
       // cl_timeout: the guest hearing nothing from the host that long leaves (CL_CheckTimeout: "Server connection timed out."); its page stands
