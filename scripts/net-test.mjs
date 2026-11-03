@@ -12,7 +12,7 @@ import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMapModels, missingMapFiles, SQL_FILES } from '../src/loader.js';
 import { Bsp } from '../src/bsp.js';
 import { Session } from '../src/session.js';
-import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal, DOWNLOAD_PIECE, downloadable, downloadRefusal, spectatorRefusal, freeSlot } from '../src/net.js';
+import { Link, Loopback, HostLink, GuestLink, connectRefusal, silentPast, Peer, SignalClient, isRoomCode, packSignal, unpackSignal, parseIceServer, iceServers, CHUNK, BACKLOG, parseAddress, deltaFrame, undeltaFrame, reconnectRefusal, DOWNLOAD_PIECE, downloadable, downloadRefusal, spectatorRefusal, freeSlot, parseMasters } from '../src/net.js';
 import { createSignalServer, CODE_LENGTH } from './signal.mjs';
 import { ClipMap, pmove, stateFromRow } from '../src/pmove.js';
 
@@ -629,6 +629,14 @@ check(madeWith?.iceServers.length === 1 && madeWith.iceServers[0].urls.startsWit
     clock += 6000;
     const swept = await sc.servers();
     const bad = await sc.announce('AB01', {}).catch((e) => e.message);
+    // (the offers' relay goes with a listing, an http(s) URL alone; setmaster's words parsed as relay URLs)
+    const c = await sc.publish(text);
+    await sc.announce(c, { hostname: 'Kryten', relay: 'http://relay.example:8787' }); const withRelay = (await sc.servers()).find((x) => x.code === c);
+    await sc.announce(c, { hostname: 'Kryten', relay: 'javascript:alert(1)' }); const badRelay = (await sc.servers()).find((x) => x.code === c);
+    await sc.withdraw(c);
+    const pm = parseMasters(['http://a:8787/', 'https://b.example', 'http://a:8787']), pmBad = parseMasters(['http://a:8787', 'ftp://c']);
+    check(withRelay?.info.relay === 'http://relay.example:8787' && badRelay?.info.relay === undefined && pm.join() === 'http://a:8787,https://b.example' && pmBad === null && parseMasters([]).length === 0,
+      'a listing carries the offers\' relay when it is an http(s) URL; setmaster\'s words are relay URLs, once each, anything else refused');
     check(list.map((s) => s.code).join() === `${b},${a}` && list[1].info.hostname === 'Hal' && list[1].info.extra === undefined && list[1].age === 1 && list[0].info.hostname === 'Holly the very long name of a sh' && list[0].info.clients === 1
       && again[0].code === a && again[0].info.mapname === 'demo2' && again.length === 2 && off.map((s) => s.code).join() === a && swept.length === 0 && /refused \(400: not a code\)/.test(bad ?? ''),
       `public listings: announced under the code with the known keys (${JSON.stringify(list)}), the newest first, a heartbeat again replacing one, withdrawn gone, past the time swept, a bad code refused`);

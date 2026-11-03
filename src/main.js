@@ -15,7 +15,7 @@ import monstersSql from '../sql/monsters.sql';
 import renderSql from '../sql/render.sql';
 import { Pak, loadColormap, loadPcx } from './pak.js';
 import { createSchema, loadResources, loadMapModels, setView, missingMapFiles } from './loader.js';
-import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, downloadRefusal, spectatorRefusal, freeSlot, iceServers, connectRefusal, silentPast } from './net.js';
+import { HostLink, GuestLink, Peer, SignalClient, isRoomCode, parseAddress, reconnectRefusal, downloadable, downloadRefusal, spectatorRefusal, freeSlot, parseMasters, iceServers, connectRefusal, silentPast } from './net.js';
 import { parseDemo, DemoPlayer } from './demo.js';
 import { FrameLerp } from './lerp.js';
 import { Renderer, lightPoint, dlightAt, entityFrame, vrectSize } from './renderer.js';
@@ -573,6 +573,15 @@ const con = new Console({
   forward: (cmd, arg) => { if (!netGuest() || !net.guest?.open) return false; net.guest.sendConsole(cmd, arg); return true; },
   // download (CL_Download_f): a map asked of the host by a joined page, kept beside the pak
   heartbeat: () => heartbeat(true),   // (heartbeat: the listing sent now)
+  // setmaster (SV_SetMaster_f): the relays the listing goes to, listed now when public; none given, the ones set (null: a word not a URL)
+  setMasters: (words) => {
+    if (!words.length) return masters.slice();
+    const list = parseMasters(words);
+    if (!list) return null;
+    masters = list; lastBeat = -Infinity;
+    heartbeat(true).catch(() => undefined);
+    return list;
+  },
   downloadFile: (name) => {
     if (!downloadable(name)) return 'bad';
     if (pak?.has(name)) return 'exists';
@@ -1823,22 +1832,32 @@ let hostCode = null;   // the code this page published its offers under at the r
  * (public 0, Leave), the listing is taken off. Returns 'sent', 'not public', 'not hosting' or the relay's error.
  */
 const HEARTBEAT_SECONDS = 300;
-let lastBeat = -Infinity, beatListed = null, lastBeatInfo = null;   // (beatListed: the relay and code listed, to take off)
+let lastBeat = -Infinity, beatListed = null, lastBeatInfo = null;   // (beatListed: the relays and the code listed, to take off)
+let masters = [];   // SV_SetMaster_f's: the relays the listing goes to (none set: rtc_signal's, the offers' own)
+async function withdrawListing() {
+  if (!beatListed) return;
+  const was = beatListed; beatListed = null;
+  await Promise.all(was.relays.map((r) => new SignalClient(r).withdraw(was.code)));
+}
 async function heartbeat(force = false) {
   const relay = signalRelay();
   if (!settings.public || net?.role !== 'host' || !hostCode || !relay) {
-    if (beatListed) { const was = beatListed; beatListed = null; await new SignalClient(was.relay).withdraw(was.code); }
+    await withdrawListing();
     return !settings.public ? 'not public' : 'not hosting';
   }
   if (!force && performance.now() - lastBeat < HEARTBEAT_SECONDS * 1000) return 'sent';
   lastBeat = performance.now();
   const si = (await con.host.serverInfo().catch(() => null)) ?? {};
+  // (relay: where the code's room is, so a listing at another master can be joined)
   const info = { hostname: settings.hostname || 'noname', mapname: si.mapname ?? map?.name ?? '', clients: 1 + (net?.guests?.length ?? 0), maxclients: MAX_PLAYERS,
-    needpass: si.needpass ?? 0, deathmatch: si.deathmatch ?? 0, coop: si.coop ?? 0 };
-  try { await relay.announce(hostCode, info); } catch (err) { return err.message; }
-  if (beatListed && (beatListed.relay !== relay.base || beatListed.code !== hostCode)) await new SignalClient(beatListed.relay).withdraw(beatListed.code);
-  beatListed = { relay: relay.base, code: hostCode }; lastBeatInfo = info;
-  return 'sent';
+    needpass: si.needpass ?? 0, deathmatch: si.deathmatch ?? 0, coop: si.coop ?? 0, relay: relay.base };
+  const to = masters.length ? masters : [relay.base];
+  if (beatListed && (beatListed.code !== hostCode || beatListed.relays.some((r) => !to.includes(r)))) await withdrawListing();   // (a master no longer named: its listing off)
+  const sent = await Promise.all(to.map((r) => new SignalClient(r).announce(hostCode, info).then(() => null, (err) => `${r}: ${err.message}`)));
+  const failed = sent.filter(Boolean);
+  beatListed = { relays: to.filter((r, i) => !sent[i]), code: hostCode }; lastBeatInfo = info;
+  if (!beatListed.relays.length) beatListed = null;
+  return failed.length === to.length ? failed.join('; ') : 'sent';
 }
 setInterval(() => { if (settings.public || beatListed) heartbeat().catch(() => undefined); }, 10000);   // (the heartbeat's clock: due every 300 s, a public 0 taken off within ten)
 let lastConnect = '';  // what this page last joined with (a code or an offer text): reconnect at the console joins it again
@@ -2213,7 +2232,7 @@ async function guestMap(m) {
 function leaveNet() {
   const was = net;
   net = null;
-  if (beatListed) heartbeat().catch(() => undefined);   // (Master_Shutdown: the listing taken off with the game)
+  if (beatListed) withdrawListing().catch(() => undefined);   // (Master_Shutdown: the listing taken off with the game)
   netStage = null;
   guestPred = null;
   netEl.panel.hidden = true;
@@ -2356,7 +2375,7 @@ async function boot() {
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, zombies, fetchMapFiles: () => (map && net?.guest?.map ? fetchMapFiles(map.bsp, net.guest.map) : Promise.resolve([])), settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
-      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get heartbeat() { return { listed: beatListed ? { ...beatListed } : null, info: lastBeatInfo }; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get heartbeat() { return { listed: beatListed ? { ...beatListed } : null, info: lastBeatInfo, masters: masters.slice() }; }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
       get logfile() { return { on: !!settings.logfile, kept: conLog.kept.length, pending: conLog.pending.length }; }, get logStats() { return { on: !!settings.logStats, kept: statsLog.kept.length, pending: statsLog.pending.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped, server: !!recorder.server, maxEnts: recorder.maxEnts ?? 0 } : null; },

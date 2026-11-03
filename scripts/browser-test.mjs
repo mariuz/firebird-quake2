@@ -1819,6 +1819,14 @@ try {
       for (let i = 0; i < 40 && !pub.some((x) => x.code === offer); i++) { await sleep(250); pub = await listing().catch(() => []); }
       await typeOn(page, 'heartbeat');
       const beatStatus = await page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      // setmaster (SV_SetMaster_f): the test's relay named as the master, the listing there carries the offers' relay
+      await typeOn(page, `setmaster http://localhost:${RELAY_PORT}/`);
+      const smLine = await page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+      let smList = [];
+      for (let i = 0; i < 20 && !smList.some((x) => x.code === offer && x.info.relay); i++) { await sleep(250); smList = await listing().catch(() => []); }
+      const smMine = smList.find((x) => x.code === offer);
+      assert(smLine === `Master server at http://localhost:${RELAY_PORT}` && smMine?.info.relay === `http://localhost:${RELAY_PORT}`,
+        `setmaster names the relay the listing goes to ("${smLine}"), the listing naming the offers' relay (${JSON.stringify(smMine)})`);
       await typeOn(page, 'public 0');
       let unpub = pub;
       for (let i = 0; i < 40 && unpub.some((x) => x.code === offer); i++) { await sleep(250); unpub = await listing().catch(() => unpub); }

@@ -552,6 +552,16 @@ export class SignalClient {
   /** The relay's public games, newest first: [{ code, info, age }] (a master's list). */
   async servers() { const { servers } = await this.call('GET', '/servers'); return Array.isArray(servers) ? servers : []; }
 }
+/** SV_SetMaster_f's addresses: each an http(s) relay URL, its trailing slashes off; null if any is not one. At most eight. */
+export function parseMasters(words) {
+  const list = [];
+  for (const w of words) {
+    const u = String(w ?? '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\/[\x21-\x7e]{1,200}$/.test(u)) return null;
+    if (!list.includes(u)) list.push(u);
+  }
+  return list.slice(0, 8);
+}
 /** An address book entry as { relay, code }: "<relay url> <code>" or a code alone at `relay`, the page's own; null for anything else (an offer text). */
 export function parseAddress(entry, relay = '') {
   const words = String(entry ?? '').trim().split(/\s+/).filter(Boolean);

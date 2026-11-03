@@ -127,6 +127,15 @@ await con.submit('map_noareas 0');
   beat = 'sent'; await con.submit('heartbeat'); check(status.at(-1)?.[0] === 'Heartbeat sent to the relay' && !status.at(-1)?.[1], 'heartbeat sends the listing');
   check(con.complete('heart') === 'heartbeat ' && con.complete('publ') === 'public ', 'Tab completes both');
   delete host.heartbeat; await con.submit('public 0');
+  // setmaster (SV_SetMaster_f): alone the masters set (none: rtc_signal's relay), relay URLs set them, a word not one refused
+  let ms = [];
+  host.setMasters = (w) => { if (!w.length) return ms; if (w.some((x) => !/^https?:/.test(x))) return null; ms = w; return w; };
+  await con.submit('setmaster'); check(status.at(-1)?.[0] === "No master servers: the listing goes to rtc_signal's relay", 'setmaster alone says none are set');
+  await con.submit('setmaster http://a:8787'); check(status.at(-1)?.[0] === 'Master server at http://a:8787' && ms.join() === 'http://a:8787', 'setmaster names a relay');
+  await con.submit('setmaster http://a:8787 https://b'); check(status.at(-1)?.[0] === '2 master servers set', 'and several');
+  await con.submit('setmaster'); check(status.at(-1)?.[0] === 'Master servers: http://a:8787, https://b', 'alone, it lists them');
+  await con.submit('setmaster host:8787'); check(/^setmaster takes relay URLs/.test(status.at(-1)?.[0] ?? '') && status.at(-1)?.[1] === true && con.complete('setm') === 'setmaster ', 'a word not a URL is refused; Tab completes it');
+  delete host.setMasters;
 }
 // download (CL_Download_f) through the page, and allow_download, archived
 {

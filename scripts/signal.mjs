@@ -26,13 +26,14 @@ export const CODE_LENGTH = 4;
 const TTL = 10 * 60 * 1000;
 const MAX_TEXT = 16384;   // (an offer or an answer is under a kilobyte)
 const MAX_SERVERS = 256;  // (the listings kept: past it the oldest goes)
-const INFO_KEYS = { hostname: 'string', mapname: 'string', clients: 'number', maxclients: 'number', needpass: 'number', deathmatch: 'number', coop: 'number' };
-/** A listing's serverinfo: the known keys alone, strings cut to 32 characters, numbers whole. */
+const INFO_KEYS = { hostname: 'string', mapname: 'string', clients: 'number', maxclients: 'number', needpass: 'number', deathmatch: 'number', coop: 'number', relay: 'url' };
+/** A listing's serverinfo: the known keys alone, strings cut to 32 characters, numbers whole, `relay` (where the code's room is) an http(s) URL. */
 function serverInfo(text) {
   const raw = JSON.parse(text), info = {};
   for (const [k, t] of Object.entries(INFO_KEYS)) {
     if (t === 'string' && typeof raw?.[k] === 'string') info[k] = raw[k].replace(/[^\x20-\x7e]/g, '').slice(0, 32);
     if (t === 'number' && Number.isFinite(raw?.[k])) info[k] = Math.max(0, Math.min(99, Math.floor(raw[k])));
+    if (t === 'url' && typeof raw?.[k] === 'string' && /^https?:\/\/[\x21-\x7e]{1,200}$/.test(raw[k])) info[k] = raw[k];
   }
   return info;
 }

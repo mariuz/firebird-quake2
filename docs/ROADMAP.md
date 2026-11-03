@@ -1517,9 +1517,14 @@ are to be taken.
   `test:settings` and `test:console` the cvar and the command's answers; the browser test's host lists its game at
   the test's relay with public 1 (Hal, demo1, two clients), heartbeat says it was sent, and public 0 takes it off,
   on both builds.
-- **`setmaster`**: `SV_SetMaster_f` named the masters the heartbeats went to (the first being id's); here the relay
-  is `rtc_signal`'s alone. `setmaster <url> …` would name the relays the listing goes to, `rtc_signal` staying the
-  one the offers go through.
+- **`setmaster`**: done. `SV_SetMaster_f` named the masters the heartbeats went to ("Master server at …" each).
+  `setmaster <url> …` names the relays the public listing goes to (`parseMasters`: http(s) URLs, once each, eight at
+  most; a word not one refused), the listing sent to them at once and taken off a relay no longer named; `setmaster`
+  alone says which are set. None set, the listing goes to `rtc_signal`'s relay, which stays the one the offers go
+  through either way: each listing carries it (`relay`, an http(s) URL alone, which the relay checks), so a game
+  listed at another master can be joined. The masters are the page's for the session, as Quake's were the server's.
+  `test:net` the listing's relay and the words parsed; `test:console` the command's answers; the browser test names
+  the test's relay as the master and finds the listing there naming the offers' relay, on both builds.
 - **The public games in the join menu**: `CL_PingServers_f` asked the masters for their lists after the address
   book; the join server menu would list the relay's public rooms beside the address book's, each pinged, a key
   joining by its code.
