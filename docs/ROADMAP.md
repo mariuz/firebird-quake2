@@ -1550,10 +1550,54 @@ taken.
   newest of three, a download before all, an earlier pak's own and a later one's new files; `test:console` path's
   lines; the browser test picks a copy of the demo's pak as pak0.pak with a pak1.pak holding a map of its own, finds
   both kept and pak1.pak the layer over pak0.pak, plays that map, and forgets both, on both builds.
-- **`game`**: `FS_SetGamedir` put a mod's directory over baseq2 at the next map, latched; here there is the one tree.
-  With a mod's pak picked under `game <name>`, its files would come before the base's, `game ""` going back.
-- **`link`**: `FS_Link_f`: `link <from> <to>` made the files under one path come from another (a link with no target
-  dropped it), `path` listing the links; here every name is the pak's own.
+- **`game`**: done. `FS_SetGamedir` put a mod's directory over baseq2, latched to the next restart. `game <name>`
+  names a mod now (letters, digits and `_`, sixteen at most; no path): the paks kept for it in the browser
+  (`game:<name>`, `game:<name>+1`…) go over the base paks, newest first as the base's later paks do, `path` listing
+  them as `<name>/pak0.pak` above the base's, the PAK control's label saying "· game <name>". While a game is set,
+  the PAK control picks that game's paks, keeping the base. The change is taken at once, the paks loaded again
+  (`applyGame`), since a page restarts in seconds; `game ""` is the base alone, the mod's paks kept for the next
+  time. Archived and in the serverinfo, as Quake's was. `test:settings` and `test:console` the cvar (a path and a
+  space refused); the browser test sets a game, picks a pak1.pak with a map of its own for it over the demo's pak,
+  finds the map and the layer, goes back to the base without the map, and sets the game again to find it kept, on
+  both builds.
+- **`link`**: done. `FS_Link_f`: `link <from> <to>` makes the names starting with `from` come from `to` and the rest
+  (`Pak.link`, `resolve`; `has` and `get` follow it, a listing does not, as `FS_ListFiles` did not), `link <from> ""`
+  drops it, and `path` lists the links after the paks ("Links:", `from : to`). The links are the page's for its life,
+  put on every pak it loads, as Quake's were the run's. `test:net` a link followed in any case and dropped;
+  `test:console` the usage, a link set and dropped, path's lines; the browser test links maps/demo4.bsp to demo1's,
+  plays `map demo4` on demo1's geometry, and drops it, on both builds.
+
+This ends the twenty-sixth list.
+
+The twenty-seventh list: cvars of Quake 2's client the console still lacks. In the order they are to be taken.
+
+- **`paused`**: done. `cl_paused` showed the pause already (the client's, a value refused); the server's own cvar was
+  named `paused` (`sv_paused`), which a console could set. `paused` shows the pause, `paused 1` pauses and `paused 0`
+  goes on, as P and `pause` do (the same toggle, a value the same as now leaving it), and a shared game is refused with
+  `CL_Pause_f`'s words. `test:console` the cases; the browser test pauses and goes on with it, on both builds.
+- **`cl_stereo` and `cl_stereo_separation`**: done. `V_RenderView` drew the view twice, the eye moved half the
+  separation to each side, for shutter glasses. With `cl_stereo 1` the page draws the 3D view once for each eye (the
+  left one half `cl_stereo_separation` along the view's right, the right one as far the other way) and presents them
+  as a red-cyan anaglyph (`anaglyph`: the left eye's red, the right eye's green and blue, through the palette); the
+  2D (the status bar, the prints, the menus over the view) goes over both, grey. The separation is in world units,
+  Quake's -0.4 by default (a few units make the depth plain with red-cyan glasses); the switch is not archived, the
+  separation is, as Quake's were. The first view alone, the split screen drawing one eye. `test:painter` the
+  anaglyph's pixels; `test:settings` and `test:console` the cvars; the browser test turns it on at 8 units and finds
+  the left eye kept apart from the right, and none kept off, on both builds; off, the golden pictures and the
+  renderer comparison are as they were.
+
+This ends the twenty-seventh list.
+
+The twenty-eighth list: what the browser test, the long check every change waits on, still lacks. In the order they are to
+be taken.
+
+- **A relay already on the port refused**: the test spawns `scripts/signal.mjs` on its port, and a relay left from a
+  run stopped half-way kept the port with the code of its own day, so a new run talked to the old relay and failed on a
+  route it lacked. The test would ask the relay on its port what it is (its build's id on `GET /`), and stop with the
+  reason when it is not the one it started.
+- **A section run alone**: a change to the network game waits ten minutes a build for the whole test; `SECTION=net`
+  (and the others: menus, demos, files, touch) would run the page's load and that section alone, the full run staying
+  what CI does.
 
 ## Playing the demo
 

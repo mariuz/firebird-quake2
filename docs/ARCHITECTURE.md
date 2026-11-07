@@ -761,7 +761,9 @@ as the quit menu's yes does; the page stays), `killserver` (`SV_KillServer_f`: a
 again, its sky, its spin, the backtile and the view's rectangle put back) and `snd_restart` (`CL_Snd_Restart_f`: the mixer's context closed and made
 anew, `Q2Audio.restart`, the decoded sounds forgotten and decoded again as they play, the music played again), `path` (`FS_Path_f`: the pak in use, its files
 counted and where it came from, `pakInfo`; several paks picked together, pak1.pak and on over pak0.pak as `FS_AddGameDirectory` searched
-them, `Pak.overlay`, a line each on the scrollback newest first), `dir <wildcard>` (`FS_Dir_f`: the pak's files the wildcard names, `*.*` without one,
+them, `Pak.overlay`, a line each on the scrollback newest first; `game <name>`, `FS_SetGamedir`, puts the paks kept for that mod,
+`game:<name>` in the file store, over them all, the PAK control picking the game's paks while one is set, `applyGame` loading them again; `link <from> <to>`, `FS_Link_f`, makes names
+starting with `from` come from `to` and the rest, `Pak.link`, listed by `path`), `dir <wildcard>` (`FS_Dir_f`: the pak's files the wildcard names, `*.*` without one,
 `*` and `?` within a directory as the file system's glob had them, `dirList`; on the scrollback by their names under "Directory
 of"), `modellist`, `imagelist` and `soundlist` (`Mod_Modellist_f`, `R_ImageList_f`, `S_SoundList_f`: the models with their size in
 the pak, the pictures, wall textures and skins with their kind and size, the sounds decoded with L on the ones looping, a line
@@ -838,7 +840,9 @@ the game, none here where the SQL tic is the game, the game, the client outside 
 line and "Connection timed out" at its page, and a guest leaves a host silent past `cl_timeout`, 120, "Server connection timed
 out.", its page standing for a key as a kicked one does; 0 never, neither archived),
 `m_yaw` (the turn a mouse count, 0.022 as Quake had it, `Input.mouse`'s), `cl_gun` (0: no view weapon, as `CL_AddViewWeapon`
-had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
+had it), `cl_stereo` and `cl_stereo_separation` (`V_RenderView`'s two eyes: the 3D view drawn once an eye, half the separation to
+each side along the view's right, presented as a red-cyan anaglyph, `anaglyph` in src/renderer.js, the 2D over both; the separation
+archived), `paused` (`sv_paused`: shown, 1 pausing and 0 going on as `pause` does, single player alone) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
 `cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed`, `cl_sidespeed` and `cl_upspeed` (`CL_AdjustAngles` and `CL_BaseMove`'s
 speeds, Quake's defaults 140 and 150 degrees a second, 1.5 with `+speed` held, 200 units a second: `Input.read` turns and looks
 the keys and the right stick by them a tic and scales the walk and the sidestep in the full speed's 200, the command's fraction

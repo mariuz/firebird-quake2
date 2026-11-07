@@ -10,7 +10,7 @@ import { parseChangeMap } from './levels.js';
 import { parseIceServer } from './net.js';
 import { ACTIONS, actionOfCommand, bindKey, bindLine, unbindKey, checkLine, keyCode, keyName } from './input.js';
 
-export const COMMANDS = ['alias', 'allow_download', 'allow_download_maps', 'allow_download_sounds', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_nodelta', 'cl_paused', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showclamp', 'cl_showmiss', 'cl_shownet', 'cl_sidespeed', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timedemo', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmd', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'download', 'drop', 'dumpuser', 'echo', 'exec', 'filterban', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'gamemap', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'heartbeat', 'help', 'host_speeds', 'hostname', 'imagelist', 'impulse', 'in_joystick', 'in_mouse', 'in_restart', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'joy_forwardsensitivity', 'joy_forwardthreshold', 'joy_pitchsensitivity', 'joy_pitchthreshold', 'joy_sidesensitivity', 'joy_sidethreshold', 'joy_yawsensitivity', 'joy_yawthreshold', 'kick', 'kill', 'killserver', 'load', 'log_stats', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'map_noareas', 'maxclients', 'maxspectators', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'nextserver', 'noclip', 'notarget', 'password', 'path', 'pause', 'pingservers', 'play', 'playerlist', 'players', 'public', 'putaway', 'quit', 'r_drawentities', 'r_drawworld', 'r_dspeeds', 'r_fullbright', 'r_lerpmodels', 'r_lockpvs', 'r_novis', 'r_speeds', 'rate', 'rcon', 'rcon_password', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_khz', 's_mixahead', 's_show', 's_testsound', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_conspeed', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'serverrecord', 'serverstop', 'set', 'setmaster', 'showdrop', 'showpackets', 'sizedown', 'sizeup', 'skill', 'skin', 'skins', 'sky', 'snd_restart', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_reconnect_limit', 'sv_rollangle', 'sv_rollspeed', 'sv_showclamp', 'sw_aliasstats', 'sw_clearcolor', 'sw_drawflat', 'sw_maxsurfs', 'sw_mipcap', 'sw_mipscale', 'sw_reportsurfout', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'togglechat', 'toggleconsole', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'vid_mode', 'vid_ref', 'vid_restart', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig', 'z_stats', 'zombietime'];
+export const COMMANDS = ['alias', 'allow_download', 'allow_download_maps', 'allow_download_sounds', 'bind', 'bindlist', 'bob_pitch', 'bob_roll', 'bob_up', 'cd', 'cd_loopcount', 'cd_looptrack', 'cd_nocd', 'cd_volume', 'centerview', 'chase', 'cheats', 'cl_add_blend', 'cl_add_entities', 'cl_add_lights', 'cl_add_particles', 'cl_anglespeedkey', 'cl_footsteps', 'cl_forwardspeed', 'cl_gun', 'cl_lightlevel', 'cl_maxfps', 'cl_nodelta', 'cl_paused', 'cl_pitchspeed', 'cl_predict', 'cl_run', 'cl_showclamp', 'cl_showmiss', 'cl_shownet', 'cl_sidespeed', 'cl_stereo', 'cl_stereo_separation', 'cl_testblend', 'cl_testentities', 'cl_testlights', 'cl_testparticles', 'cl_timedemo', 'cl_timeout', 'cl_upspeed', 'cl_yawspeed', 'clear', 'cmd', 'cmdlist', 'con_notifytime', 'condump', 'connect', 'coop', 'crosshair', 'cvarlist', 'deathmatch', 'debuggraph', 'deldemo', 'demomap', 'demos', 'developer', 'dir', 'disconnect', 'dmflags', 'download', 'drop', 'dumpuser', 'echo', 'exec', 'filterban', 'fixedtime', 'flood_msgs', 'flood_persecond', 'flood_waitdelay', 'fov', 'fraglimit', 'freelook', 'g_select_empty', 'game', 'gamemap', 'gender', 'give', 'god', 'graphheight', 'graphscale', 'graphshift', 'gun_x', 'gun_y', 'gun_z', 'hand', 'heartbeat', 'help', 'host_speeds', 'hostname', 'imagelist', 'impulse', 'in_joystick', 'in_mouse', 'in_restart', 'invdrop', 'inven', 'invnext', 'invprev', 'invuse', 'joy_forwardsensitivity', 'joy_forwardthreshold', 'joy_pitchsensitivity', 'joy_pitchthreshold', 'joy_sidesensitivity', 'joy_sidethreshold', 'joy_yawsensitivity', 'joy_yawthreshold', 'kick', 'kill', 'killserver', 'link', 'load', 'log_stats', 'logfile', 'lookspring', 'lookstrafe', 'm_filter', 'm_forward', 'm_pitch', 'm_side', 'm_yaw', 'map', 'map_noareas', 'maxclients', 'maxspectators', 'menu_addressbook', 'menu_credits', 'menu_dmoptions', 'menu_game', 'menu_joinserver', 'menu_keys', 'menu_loadgame', 'menu_main', 'menu_multiplayer', 'menu_options', 'menu_playerconfig', 'menu_quit', 'menu_savegame', 'menu_startserver', 'menu_video', 'messagemode', 'messagemode2', 'modellist', 'msg', 'name', 'netgraph', 'nextserver', 'noclip', 'notarget', 'password', 'path', 'pause', 'paused', 'pingservers', 'play', 'playerlist', 'players', 'public', 'putaway', 'quit', 'r_drawentities', 'r_drawworld', 'r_dspeeds', 'r_fullbright', 'r_lerpmodels', 'r_lockpvs', 'r_novis', 'r_speeds', 'rate', 'rcon', 'rcon_password', 'reconnect', 'record', 'rtc_ice', 'rtc_signal', 'run_pitch', 'run_roll', 's_khz', 's_mixahead', 's_show', 's_testsound', 's_volume', 'save', 'say', 'say_team', 'score', 'scr_centertime', 'scr_conspeed', 'scr_showpause', 'scr_showturtle', 'screenshot', 'seed', 'sensitivity', 'serverinfo', 'serverrecord', 'serverstop', 'set', 'setmaster', 'showdrop', 'showpackets', 'sizedown', 'sizeup', 'skill', 'skin', 'skins', 'sky', 'snd_restart', 'soundinfo', 'soundlist', 'spectator', 'spectator_password', 'status', 'stop', 'stopsound', 'sv', 'sv_airaccelerate', 'sv_gravity', 'sv_maplist', 'sv_maxvelocity', 'sv_noreload', 'sv_reconnect_limit', 'sv_rollangle', 'sv_rollspeed', 'sv_showclamp', 'sw_aliasstats', 'sw_clearcolor', 'sw_drawflat', 'sw_maxsurfs', 'sw_mipcap', 'sw_mipscale', 'sw_reportsurfout', 'sw_stipplealpha', 'sw_waterwarp', 'timedemo', 'timegraph', 'timelimit', 'timeout', 'timerefresh', 'timescale', 'togglechat', 'toggleconsole', 'unautoexec', 'unbind', 'unbindall', 'use', 'userinfo', 'version', 'vid_fullscreen', 'vid_gamma', 'vid_mode', 'vid_ref', 'vid_restart', 'viewpos', 'viewsize', 'wait', 'wave', 'weaplast', 'weapnext', 'weapprev', 'writeconfig', 'z_stats', 'zombietime'];
 
 /**
  * The settings as Quake's cvars (the names the options and player setup menus set, as config.cfg named them): the
@@ -157,6 +157,10 @@ export const CVARS = {
   // lines' seconds, 3): none archived, as Quake's were not
   m_yaw: { key: 'mYaw', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && Math.abs(n) <= 10 ? n : null; }, help: 'a number, 0.022 as Quake had it', archive: false },
   cl_gun: { key: 'clGun', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  // cl_stereo (V_RenderView's two eyes, drawn here as a red-cyan anaglyph: the left eye red, the right green and blue; not archived) and
+  // cl_stereo_separation (the distance between the eyes in world units, Quake's -0.4, the left eye half of it along the view's right; archived)
+  cl_stereo: { key: 'clStereo', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
+  cl_stereo_separation: { key: 'clStereoSeparation', show: (v) => String(v ?? -0.4), read: (w) => { const n = Number(w); return w !== '' && Number.isFinite(n) && Math.abs(n) <= 16 ? n : null; }, help: 'a number, -16 to 16' },
   con_notifytime: { key: 'conNotifytime', show: (v) => String(v), read: (w) => { const n = Number(w); return Number.isFinite(n) && n >= 0 && n <= 60 ? n : null; }, help: 'seconds, 0 to 60', archive: false },
   // the keys' speeds (CL_AdjustAngles, CL_BaseMove; none archived, as Quake's were not): cl_yawspeed and cl_pitchspeed in degrees a second
   // (140 and 150), cl_anglespeedkey the run key's factor on them (1.5), cl_forwardspeed and cl_sidespeed in units a second (200, the
@@ -206,6 +210,9 @@ export const CVARS = {
   zombietime: { key: 'zombietime', show: (v) => String(v), read: (w) => (/^\d{1,2}$/.test(w) ? Number(w) : null), help: '0 to 99 seconds', archive: false },
   maxspectators: { key: 'maxspectators', show: (v) => String(v), read: (w) => (/^\d{1,2}$/.test(w) && Number(w) <= 16 ? Number(w) : null), help: '0 to 16' },
   // public (Master_Heartbeat's switch: a game hosted through the relay listed there with its serverinfo, 0 taken off), not archived as Quake's was not
+  // game (FS_SetGamedir: the mod whose paks the page keeps under its name, searched before the base's; '' the base alone; taken at once,
+  // the paks loaded again, where Quake's was latched to the next restart), archived, in the serverinfo as Quake's was
+  game: { key: 'game', show: (v) => String(v ?? ''), read: (w) => (/^[a-z0-9_]{0,16}$/.test(w) ? w : null), help: 'a name of letters, digits and _ (16 at most), "" for none' },
   public: { key: 'public', show: (v) => (v ? '1' : '0'), read: (w) => (/^(0|1)$/.test(w) ? w === '1' : null), help: '0 or 1', archive: false },
   // rcon_password (the client's rcon_password and the server's in one, as both were named: what rcon sends from a joined page, what the
   // host's Rcon_Validate asks for; empty, the host takes no rcon); not archived, as Quake's were not
@@ -277,7 +284,7 @@ const HISTORY = 32;
  *         vidRestart() → true once the painter is remade (vid_restart), sndRestart() → true once the mixer is remade (snd_restart),
  *         openMenu(name) → true once the menu is up (main, game, loadgame, savegame, options, keys, video, multiplayer, playerconfig, credits, quit; the menu_* commands),
  *         forward(cmd, arg) → true when the command went to the host (a joined page), false to run it here,
- *         heartbeat() → 'sent' | 'not public' | 'not hosting' | an error (heartbeat), setMasters(words) → the masters set, [] alone, or null for a word not a URL (setmaster), downloadFile(name) → 'started' | 'exists' | 'guest-only' | 'bad' (download), rcon(line) → true once the line went to the host with rcon_password (a joined page), false on a page of its own (rcon) }
+ *         heartbeat() → 'sent' | 'not public' | 'not hosting' | an error (heartbeat), setMasters(words) → the masters set, [] alone, or null for a word not a URL (setmaster), downloadFile(name) → 'started' | 'exists' | 'guest-only' | 'bad' (download), link(from, to) → true once set or dropped, false without a pak (link), rcon(line) → true once the line went to the host with rcon_password (a joined page), false on a page of its own (rcon) }
  */
 /** The cvars config.cfg carries (CVARS, and fov and skill with them), each with its setting and how it shows. */
 const CONFIG_CVARS = () => ({ ...CVARS, fov: { key: 'fov', show: (v) => String(v) }, skill: { key: 'skill', show: (v) => String(v) },
@@ -293,7 +300,7 @@ const VID_MODES = ['low', 'high', 'ultra'];
 // the cvars' flags as Cvar_Get gave them: the userinfo's (CVAR_USERINFO), the serverinfo's (CVAR_SERVERINFO) and the latched one (CVAR_LATCH:
 // skill, for the next game); archived is a cvar's own archive, or `set … a`'s (settings.cvarArchive)
 const USERINFO_CVARS = new Set(['name', 'hand', 'gender', 'msg', 'rate', 'skin', 'fov']);
-const SERVERINFO_CVARS = new Set(['hostname', 'skill', 'maxspectators']);
+const SERVERINFO_CVARS = new Set(['hostname', 'skill', 'maxspectators', 'game']);
 const LATCHED_CVARS = new Set(['skill']);
 const archived = (name, c, settings) => c.archive !== false || (settings?.cvarArchive ?? []).includes(name);
 /** Cvar_List_f's flag column: "*" archived, "U" the userinfo, "S" the serverinfo, "L" latched, a space for each missing. */
@@ -495,7 +502,7 @@ export class Console {
       case 'freelook': case 'lookspring': case 'lookstrafe': case 'm_forward': case 'm_side': case 'm_filter': case 'in_joystick': case 'in_mouse': case 'joy_forwardthreshold': case 'joy_sidethreshold': case 'joy_pitchthreshold': case 'joy_yawthreshold': case 'joy_forwardsensitivity': case 'joy_sidesensitivity': case 'joy_pitchsensitivity': case 'joy_yawsensitivity': case 'netgraph': case 'timegraph': case 'debuggraph': case 'graphheight': case 'graphscale': case 'graphshift': case 'cl_predict': case 'cl_showmiss': case 'cl_nodelta': case 'cl_shownet': case 'cl_showclamp': case 'sv_showclamp': case 'showpackets': case 'showdrop': case 'viewsize':
       case 'cl_add_entities': case 'cl_add_particles': case 'cl_add_lights': case 'cl_add_blend': case 'cl_testentities': case 'cl_testparticles': case 'cl_testlights': case 'cl_testblend':
       case 'r_fullbright': case 'r_drawentities': case 'r_drawworld': case 'r_lockpvs': case 'r_dspeeds': case 'r_lerpmodels': case 'r_novis': case 'r_speeds': case 'host_speeds': case 'developer': case 'sv_noreload': case 'sv_reconnect_limit': case 'sw_drawflat': case 'sw_waterwarp': case 'sw_clearcolor': case 'sw_mipcap': case 'sw_mipscale': case 'sw_stipplealpha': case 'sw_aliasstats': case 'sw_reportsurfout': case 'sw_maxsurfs':
-      case 'm_yaw': case 'cl_gun': case 'con_notifytime': case 'vid_gamma': case 'hostname': case 'password': case 'spectator_password': case 'maxspectators': case 'zombietime': case 'map_noareas': case 'public': case 'rcon_password': case 'filterban': case 'allow_download': case 'allow_download_maps': case 'allow_download_sounds':
+      case 'm_yaw': case 'cl_gun': case 'cl_stereo': case 'cl_stereo_separation': case 'con_notifytime': case 'vid_gamma': case 'hostname': case 'password': case 'spectator_password': case 'maxspectators': case 'zombietime': case 'map_noareas': case 'public': case 'game': case 'rcon_password': case 'filterban': case 'allow_download': case 'allow_download_maps': case 'allow_download_sounds':
       case 'cl_yawspeed': case 'cl_pitchspeed': case 'cl_anglespeedkey': case 'cl_forwardspeed': case 'cl_sidespeed': case 'cl_upspeed': case 'timeout': case 'cl_timeout':
       case 'gun_x': case 'gun_y': case 'gun_z': case 'scr_centertime': case 'scr_conspeed': case 'cl_footsteps': case 'scr_showpause': case 'scr_showturtle': case 'cl_maxfps': {
         // a setting as its cvar (Cvar_Command: the name alone shows it, a word sets it), kept with the settings through the
@@ -679,12 +686,21 @@ export class Console {
         h.print?.(COMMANDS.join('\n'));
         say(`${COMMANDS.length} commands`);
         return;
+      case 'link': {
+        // FS_Link_f: `link <from> <to>`, the names starting with from found as to and the rest; `link <from> ""` drops it
+        const words = (arg.match(/"[^"]*"|\S+/g) ?? []).map((w) => w.replace(/^"(.*)"$/, '$1'));
+        if (words.length !== 2 || !words[0]) { say('USAGE: link <from> <to>', true); return; }
+        if (!h.link?.(words[0], words[1])) { say('link: no pak loaded yet', true); return; }
+        say(words[1] ? `${words[0]} : ${words[1]}` : `link ${words[0]} dropped`);
+        return;
+      }
       case 'path': {
         // FS_Path_f: the search path with its files counted and where it came from; several paks, a line each on the scrollback,
         // the newest (searched first) at the top
         const pk = h.pakInfo?.();
         if (!pk) { say('path: no pak loaded yet', true); return; }
         if (pk.paks?.length > 1) h.print?.(['Current search path:', ...pk.paks.map((p) => `${p.name} (${p.files} files)`)].join('\n'));
+        if (pk.links?.length) h.print?.(['Links:', ...pk.links.map((l) => `${l.from} : ${l.to}`)].join('\n'));   // (FS_Path_f's links after the paths)
         say(`Current search path: ${pk.name} (${pk.files} files${pk.from ? `, ${pk.from}` : ''})`, false, 8000);
         return;
       }
@@ -727,6 +743,18 @@ export class Console {
         // the version command (Com_Printf of the version string): the page's version and build, the engine's package and Firebird's
         say(h.version?.() ?? 'version: unknown', false, 8000);
         return;
+      case 'paused': {
+        // sv_paused (the server's cvar named paused): shown; paused 1 pauses and paused 0 goes on, as P and pause do, in single player
+        const now = !!h.isPaused?.();
+        if (!arg) { say(`"paused" is "${now ? '1' : '0'}"`); return; }
+        if (!/^(0|1)$/.test(arg)) { say('paused takes 0 or 1', true); return; }
+        if ((arg === '1') !== now) {
+          const p = h.togglePause?.();
+          if (p === null || p === undefined) { say('Pause command is only valid in single player', true); return; }
+        }
+        say(`"paused" is "${h.isPaused?.() ? '1' : '0'}"`);
+        return;
+      }
       case 'pause': {
         // CL_Pause_f: a single-player game running pauses or goes on; a shared game, or none, "Pause command is only valid in single player"
         const p = h.togglePause?.();

@@ -1060,9 +1060,18 @@ export class Renderer {
       }
     }
     const { fb, pixels } = this;
-    for (let i = 0; i < fb.length; i++) pixels[i] = p[fb[i]];
+    if (this.stereoLeft) anaglyph(p, this.stereoLeft, fb, pixels);   // (cl_stereo: the left eye's red under the right eye's green and blue)
+    else for (let i = 0; i < fb.length; i++) pixels[i] = p[fb[i]];
     this.ctx.putImageData(this.image, (view % this.cols) * this.w, Math.floor(view / this.cols) * this.h);
   }
+}
+
+/**
+ * cl_stereo's two eyes as one picture, a red-cyan anaglyph: each pixel the left eye's red with the right eye's green and blue, both
+ * through the palette `pal` (0xAABBGGRR words), into `out`.
+ */
+export function anaglyph(pal, left, right, out) {
+  for (let i = 0; i < right.length; i++) out[i] = ((pal[right[i]] & 0xffffff00) | (pal[left[i]] & 0xff)) >>> 0;
 }
 
 /** SCR_CalcVrect's size: `size` percent of w × h, the width a multiple of 8 and the height of 2 (the whole at 100 for the page's sizes). */

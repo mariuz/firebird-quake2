@@ -402,6 +402,16 @@ try {
     await typeCommand('cl_paused'); const cp0 = await status();
     await typeCommand('pause'); await typeCommand('cl_paused'); const cp1 = await status();
     await typeCommand('pause'); await typeCommand('cl_paused'); const cp2 = await status();
+    // cl_stereo: the view drawn for two eyes 8 units apart, the left eye's kept and differing from the right's; off, none kept
+    await typeCommand('cl_stereo_separation 8'); await typeCommand('cl_stereo 1'); await sleep(600);
+    const st1 = await page.evaluate(() => { const r = window.quake2.renderer; const L = r.stereoLeft; let d = 0; if (L) for (let i = 0; i < L.length; i++) if (L[i] !== r.fb[i]) d++; return { kept: !!L, differ: d, of: r.fb.length }; }).catch(() => ({}));
+    await typeCommand('cl_stereo 0'); await typeCommand('cl_stereo_separation -0.4'); await sleep(400);
+    const st0 = await page.evaluate(() => window.quake2.renderer.stereoLeft === null).catch(() => false);
+    assert(st1.kept && st1.differ > 100 && st0, `cl_stereo 1 draws the left eye apart from the right (${st1.differ} of ${st1.of} pixels differ), off none is kept (${st0})`);
+    // paused (sv_paused): paused 1 pauses, paused 0 goes on
+    await typeCommand('paused 1'); const pz1 = await page.evaluate(() => window.quake2.paused).catch(() => null);
+    await typeCommand('paused 0'); const pz0 = await page.evaluate(() => window.quake2.paused).catch(() => null);
+    assert(pz1 === true && pz0 === false, `paused 1 pauses the game and paused 0 goes on (${pz1}, ${pz0})`);
     assert(ls1.on === true && ls1.kept > 0 && statsDl && statsDl.suggestedFilename() === 'stats.log' && statsLines[0] === 'entities,dlights,parts,frame time' && statsLines.length > 5 && statsLines.slice(1).every((l) => /^\d+,\d+,\d+,\d+$/.test(l))
       && joyOff.s === false && joyOff.i === false && joyOn.s === true && joyOn.i === true && cp0 === '"cl_paused" is "0"' && cp1 === '"cl_paused" is "1"' && cp2 === '"cl_paused" is "0"',
       `log_stats keeps a line a frame as stats.log (${statsLines.length} lines downloaded, the header first; ${JSON.stringify(ls1)}; the first line out of shape: ${JSON.stringify(statsLines.find((l, i) => i > 0 && !/^\d+,\d+,\d+,\d+$/.test(l)) ?? null)}), in_joystick reaches the input (${JSON.stringify(joyOff)} → ${JSON.stringify(joyOn)}), cl_paused follows pause (${cp0}, ${cp1}, ${cp2})`);
@@ -1165,6 +1175,16 @@ try {
     await typeCommand('sv_showclamp 0');
     assert(ctd0 === '"cl_timedemo" is "0"' && svc.some((l) => /^sv lowclamp \d+$/.test(l)),
       `cl_timedemo is 0 with no timedemo ("${ctd0}"); sv_showclamp prints the game's clamps (${JSON.stringify(svc.filter((l) => /^sv /.test(l)).slice(-2))})`);
+    // link (FS_Link_f): maps/demo4.bsp standing for demo1's, map demo4 plays demo1's geometry under the new name; dropped, demo4 is no map
+    await typeCommand('link maps/demo4.bsp maps/demo1.bsp');
+    await typeCommand('map demo4');
+    let lk = {};
+    for (let i = 0; i < 240 && !(lk.map === 'demo4' && lk.running && !lk.demo); i++) { await sleep(250); lk = await attractState(); }
+    await typeCommand('link maps/demo4.bsp ""');
+    const lkGone = await page.evaluate(() => window.quake2.pak.has('maps/demo4.bsp')).catch(() => null);
+    await typeCommand('map demo1');
+    for (let i = 0; i < 240 && !((await attractState()).map === 'demo1'); i++) await sleep(250);
+    assert(lk.map === 'demo4' && lk.running && lkGone === false, `link maps/demo4.bsp maps/demo1.bsp lets map demo4 play demo1's map (${JSON.stringify(lk)}); dropped, demo4 is gone (${lkGone})`);
     await typeCommand('timedemo run');
     let td = {};
     const tdState = () => page.evaluate(() => ({ done: window.quake2.lastTimedemo, demo: window.quake2.demo?.name ?? null, running: window.quake2.running, map: document.getElementById('mapname')?.textContent })).catch(() => ({}));
@@ -1292,6 +1312,33 @@ try {
       assert(mp.name === 'pak0.pak + pak1.pak' && mp.pak === 'pak0.pak' && mp.kept?.includes('pak+1') && mp.maps?.includes('demo9') && mp.maps?.includes('demo1')
         && on9.map === 'demo9' && mpLayers.layers?.join() === 'pak1.pak' && mpLayers.own && !mpLayers.base && !mf.kept?.some((n) => /^pak/.test(n)),
         `several paks load together, the later's map beside the first's (${JSON.stringify({ name: mp.name, maps: mp.maps, kept: mp.kept, status: mp.status })}), pak1's map plays (${on9.map}), pak1.pak over pak0.pak (${JSON.stringify(mpLayers)}), the button forgets both (${JSON.stringify(mf.kept)})`);
+      // game (FS_SetGamedir): a game set, the PAK control picks its pak (pak1.pak with demo9) over the demo's pak, kept under the game's
+      // name; game "" is the base alone, demo9 gone; the game set again finds its pak kept
+      const gameState = () => page.evaluate(async () => ({ game: window.quake2.gameLoaded, name: document.getElementById('pakname')?.textContent, maps: [...document.querySelectorAll('#map option')].map((o) => o.value),
+        layers: window.quake2.pak.layers.map((l) => l.name), kept: await window.quake2.fileStore.list(), demo: window.quake2.demo?.name ?? null })).catch(() => ({}));
+      await page.evaluate(() => window.quake2.setGame('mymod')).catch(() => undefined);
+      await sleep(500);
+      let gs0 = {};
+      for (let i = 0; i < 480 && !(gs0.demo && gs0.game === null && gs0.name === 'pak0.pak'); i++) { await sleep(250); gs0 = await gameState(); }
+      await page.setInputFiles('#pakfile', [pak1Path]);
+      let gs1 = {};
+      for (let i = 0; i < 480 && !(gs1.game === 'mymod' && gs1.demo); i++) { await sleep(250); gs1 = await gameState(); }
+      await page.evaluate(() => window.quake2.setGame('')).catch(() => undefined);
+      await sleep(500);
+      let gs2 = {};
+      for (let i = 0; i < 480 && !(gs2.game === null && gs2.demo && !gs2.maps?.includes('demo9')); i++) { await sleep(250); gs2 = await gameState(); }
+      await page.evaluate(() => window.quake2.setGame('mymod')).catch(() => undefined);
+      await sleep(500);
+      let gs3 = {};
+      for (let i = 0; i < 480 && !(gs3.game === 'mymod' && gs3.demo); i++) { await sleep(250); gs3 = await gameState(); }
+      await page.evaluate(() => window.quake2.setGame('')).catch(() => undefined);
+      await sleep(500);
+      await page.evaluate(async () => { for (const n of await window.quake2.fileStore.list()) if (n.startsWith('game:')) await window.quake2.fileStore.remove(n); }).catch(() => undefined);
+      let gs4 = {};
+      for (let i = 0; i < 480 && !(gs4.game === null && gs4.demo); i++) { await sleep(250); gs4 = await gameState(); }
+      assert(gs1.game === 'mymod' && gs1.name === 'pak0.pak · game mymod' && gs1.maps?.includes('demo9') && gs1.layers?.join() === 'mymod/pak1.pak' && gs1.kept?.includes('game:mymod') && !gs1.kept?.includes('pak')
+        && gs2.game === null && !gs2.maps?.includes('demo9') && gs2.kept?.includes('game:mymod') && gs3.game === 'mymod' && gs3.maps?.includes('demo9'),
+        `game mymod takes the pak picked as its own over the demo's (${JSON.stringify({ name: gs1.name, layers: gs1.layers, kept: gs1.kept })}), game "" is the base alone (${JSON.stringify(gs2.maps)}), and the game set again finds its pak kept (${JSON.stringify(gs3.layers)})`);
     }
     fs.rmSync(pickedDir, { recursive: true, force: true });
   }

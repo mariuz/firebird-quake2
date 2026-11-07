@@ -107,6 +107,11 @@ check(said === null, 'nothing said, nothing to the host');
     check(r1 === 'pak2' && new TextDecoder().decode(p1.get('readme.txt')) === 'dl' && p1.has('maps/new.bsp') && new TextDecoder().decode(p1.get('a/b.txt')) === 'b' && p1.mapNames().join() === 'new'
       && p1.fileCount === 3 && p1.layers.map((l) => l.name).join() === 'pak2.pak,pak1.pak',
       `several paks: the newest's file first (${r1}), a download before all, the earlier's own and the later's new ones found, ${p1.fileCount} distinct files`);
+    // FS_Link_f: names starting with a link's from found as its to and the rest; dropped, gone
+    p1.link('docs/', 'a/');
+    const linked = p1.has('Docs/B.txt') && new TextDecoder().decode(p1.get('docs/b.txt')) === 'b' && p1.resolve('docs/x/y') === 'a/x/y' && p1.resolve('maps/new.bsp') === 'maps/new.bsp';
+    p1.link('docs/', '');
+    check(linked && !p1.has('docs/b.txt') && p1.links.size === 0, 'link: a name\'s start stands for another\'s, in any case; dropped, gone');
   }
   check(p2.has('maps/big.bsp') && p2.get('maps/big.bsp').length === file.length && p2.list('maps/', '.bsp').includes('maps/big.bsp') && p2.has('maps/demo1.bsp'), 'the pak takes a downloaded file beside its own');
   // a download resumed (CL_CheckOrDownloadFile, SV_BeginDownload_f's offset): the kept first piece sent as the prefix, the host asked

@@ -287,6 +287,7 @@ function setSetting(k, v) {
     else if (!v && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   } else { settings[k] = v; saveSettings(); }
   if (k === 'name' || k === 'hand' || k === 'gender' || k === 'msg' || k === 'rate' || k === 'skin' || k === 'password') applyUserinfo();
+  if (k === 'game' && (v || '') !== gameAsked && lastBase) applyGame().then((said) => setStatus(said)).catch((err) => setStatus(err.message, true));   // (FS_SetGamedir: the paks again, the game's over the base)
   if (k === 'public') heartbeat(true).catch(() => undefined);   // (public 1 lists the game hosted now, 0 takes it off)
   if (k === 'viewsize') applyView().catch((err) => console.warn('viewsize:', err.message));   // (the 3D view's rectangle, the SQL's frustum with it)
   if (k === 'rFullbright' && renderer) { renderer.fullbright = !!v; renderer.surfCache.clear(); }   // (r_fullbright: the surfaces built again at full light, or lit)
@@ -547,7 +548,10 @@ const con = new Console({
   // path and dir: the pak in use, its files counted and where it came from (the demo's download, or the picked one the browser keeps)
   // (paks: the search path newest first, FS_Path_f's lines: a later pak over the first, each with its own files)
   pakInfo: () => (pak ? { name: pickedPak ?? 'pak0.pak', files: pak.fileCount, from: pickedPak ? 'picked, kept in the browser' : "the demo's, ./pak/pak0.pak",
-    paks: [...pak.layers.map((l) => ({ name: l.name, files: l.pak.files.size })), { name: pakBase ?? pickedPak ?? 'pak0.pak', files: pak.files.size }] } : null),
+    paks: [...pak.layers.map((l) => ({ name: l.name, files: l.pak.files.size })), { name: pakBase ?? pickedPak ?? 'pak0.pak', files: pak.files.size }],
+    links: [...pak.links].map(([from, to]) => ({ from, to })) } : null),
+  // link (FS_Link_f): a name's start standing for another's, kept for the page's life; an empty `to` drops it. False without a pak
+  link: (from, to) => { if (!pak) return false; if (to) pakLinks.set(from.toLowerCase(), to.toLowerCase()); else pakLinks.delete(from.toLowerCase()); pak.link(from, to); return true; },
   // modellist: the models loaded (the MD2s and sprites by name, the full game's monsters on a row without a mesh at size 0) with their size in the pak
   modelList: () => (res ? [...res.models.values()].map((m) => ({ name: m.name, size: pak?.files.get(m.name)?.size ?? 0 })) : []),
   // z_stats: the surfaces the painter holds (each its pixels), the sounds decoded (their samples), the pak (one block), the page's heap where
@@ -1645,6 +1649,10 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   const drawEnts = settings.rDrawentities && settings.clAddEntities !== false;
   // RDF_UNDERWATER: the eye in water, slime or lava draws the view into the 320×240 warp buffer and warps it up
   const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION && settings.swWaterwarp !== false;   // (sw_waterwarp 0: the view under water drawn as above it)
+  // cl_stereo (V_RenderView's two eyes): the 3D view drawn once for each eye, moved half cl_stereo_separation along the view's right, the
+  // left eye's kept for present to put its red under the right eye's green and blue; the 2D over both, once
+  let particles = r.particles;
+  const draw3D = (view) => {
   if (underwater) r.beginUnderwater();
   r.beginFrame(view);
   const tWorld = performance.now();
@@ -1684,7 +1692,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   perf.epoly = performance.now() - tEnts;   // (r_dspeeds: the models and the sprites)
   const tFx = performance.now();
   tempEnts.draw(r, bsp, time);
-  const particles = settings.clAddParticles === false ? [] : settings.clTestparticles ? r.particles.concat(testParticles(view, axes)) : r.particles;   // (cl_add_particles 0: none; cl_testparticles: the ring too)
+  particles = settings.clAddParticles === false ? [] : settings.clTestparticles ? r.particles.concat(testParticles(view, axes)) : r.particles;   // (cl_add_particles 0: none; cl_testparticles: the ring too)
   if (particles !== r.particles) { const own = r.particles; r.particles = particles; r.drawParticles(); r.particles = own; } else r.drawParticles();
   perf.fx = performance.now() - tFx;   // (r_dspeeds: the temporary entities and the particles)
   // the weapon in hand (depth hack: drawn over everything near); none at the intermission
@@ -1724,6 +1732,17 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   }
   // ... warped (D_WarpScreen) onto the screen; the status bar is drawn over that
   if (underwater) r.warpScreen(time);
+  };
+  const stereo = !!settings.clStereo && which === 0 && r.views === 1;
+  let eye3D = null;
+  if (stereo) {
+    const half = (Number(settings.clStereoSeparation) || 0) / 2, yr = (view.yaw * Math.PI) / 180;
+    const eye = (s) => ({ ...view, x: view.x + Math.sin(yr) * s, y: view.y - Math.cos(yr) * s });   // (along the view's right, beginFrame's)
+    draw3D(eye(half));
+    r.stereoLeft = r.fb.slice();
+    draw3D(eye(-half));
+    eye3D = r.fb.slice();
+  } else { if (which === 0) r.stereoLeft = null; draw3D(view); }
 
   // 2D: the status bar (with the help icon blinking while there is news on the help computer; at the
   // intermission too, as SCR_DrawStats drew it over the frozen view with no layout in single player), and this
@@ -1776,6 +1795,8 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   if (which === 0 && settings.logStats) statsLog.add(`${frameInfo.ents},${frameInfo.dlights},${frameInfo.particles},${Math.round(perf.draw)}`);   // (log_stats: CL_Frame's line a frame, the painter's last time)
   // SCR_DrawNet's turtle at the view's corner once three frames in a row took a tenth of a second or more (scr_showturtle), the first view's
   if (which === 0) turtleDrawn = hud.drawTurtle(r, dt, !!settings.scrShowturtle, r.vr.x, r.vr.y);
+  // (cl_stereo: what the 2D drew over the right eye's view goes over the left eye's too, so the status bar and the prints are grey, not cyan)
+  if (eye3D) { const L = r.stereoLeft, fb = r.fb; for (let i = 0; i < fb.length; i++) if (fb[i] !== eye3D[i]) L[i] = fb[i]; }
   r.present(tint, null, which);
 }
 const gunPrev = perPlayer(null);     // each view's angles of the last frame (the gun's lag)
@@ -2365,13 +2386,49 @@ function vidRestart() {
 }
 /** The base pak's own name when later paks are over it (FS_Path_f's last line). */
 let pakBase = null;
+const pakLinks = new Map();   // FS_Link_f's links, the page's for its life (Quake's were the run's): put on every pak loaded
+let lastBase = null;   // the base paks as last loaded ({ buffer, label, more }): a game's paks go over them, `game` loads them again
+let gameLoaded = null; // the game (mod) whose paks are over the base now, or null
+let gameAsked = null;  // the game cvar as the paks were last loaded with it (a config's `set game` of the same changes nothing)
+/** FS_SetGamedir's directory: the paks kept for game `name` (game:<name>, game:<name>+1…), in their order, as { buffer, name }. */
+async function gamePaks(name) {
+  if (!name) return [];
+  const out = [];
+  for (let i = 0; i < 10; i++) {
+    const f = await fileStore.get(i ? `game:${name}+${i}` : `game:${name}`).catch(() => null);
+    if (!f) break;
+    out.push({ buffer: f.bytes.buffer.slice(f.bytes.byteOffset, f.bytes.byteOffset + f.bytes.byteLength), name: `${name}/${f.name}` });
+  }
+  return out;
+}
+async function forgetGamePaks(name) {
+  const names = await fileStore.list().catch(() => []);
+  for (const n of names) if (n === `game:${name}` || n.startsWith(`game:${name}+`)) await fileStore.remove(n).catch(() => undefined);
+}
+/** The game cvar taken: the base paks loaded again with the game's over them (FS_SetGamedir, at once here). Says what it did. */
+async function applyGame() {
+  if (!lastBase || !db) return 'no pak loaded yet';
+  const name = settings.game || '';
+  const mods = await gamePaks(name);
+  await usePak(lastBase.buffer, lastBase.label, lastBase.more);
+  if (!name) return 'the base game alone';
+  return mods.length ? `game ${name}: ${mods.length} pak${mods.length === 1 ? '' : 's'} over the base` : `game ${name}: no paks kept for it yet; pick them with the PAK control`;
+}
 async function usePak(buffer, label, more = []) {
   running = false;
+  lastBase = { buffer, label, more };
   pak = new Pak(buffer);
-  // (FS_AddGameDirectory: pak1.pak and on over pak0.pak, the later's files found first)
+  for (const [f, t] of pakLinks) pak.link(f, t);
+  // (FS_AddGameDirectory: pak1.pak and on over pak0.pak, the later's files found first; then the game's, FS_SetGamedir's, over all)
   pakBase = more.length ? label : null;
   for (const m of more) pak.overlay(new Pak(m.buffer), m.name);
   if (more.length) label = [label, ...more.map((m) => m.name)].join(' + ');
+  const mods = await gamePaks(settings.game);
+  if (mods.length) pakBase = pakBase ?? label;
+  for (const m of mods) pak.overlay(new Pak(m.buffer), m.name);
+  gameLoaded = mods.length ? settings.game : null;
+  gameAsked = settings.game || '';
+  if (mods.length) label = `${label} · game ${settings.game}`;
   const maps = pak.mapNames();
   if (!maps.length) throw new Error(`${label} has no maps`);
   setStatus(`Copying ${label} models into Firebird…`);
@@ -2408,7 +2465,7 @@ async function boot() {
     applyUserinfo();   // the player setup's name and hand: this client's userinfo for every game the session starts
     window.quake2 = { db, session, audio, menu, input, get pak() { return pak; }, zombies, fetchMapFiles: () => (map && net?.guest?.map ? fetchMapFiles(map.bsp, net.guest.map) : Promise.resolve([])), settings, notify, get renderer() { return renderer; }, get net() { return net; }, get running() { return running; }, get paused() { return paused; }, get conDrop() { return conDrop; },
       get screens() { return { help: showHelp[0], inventory: showInv[0], scores: showScores[0] }; },
-      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get heartbeat() { return { listed: beatListed ? { ...beatListed } : null, info: lastBeatInfo, masters: masters.slice() }; }, get publicGames() { return publicList.map((g) => ({ ...g })); }, get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
+      get demo() { return demo ? { name: demo.name, time: demo.time, frame: demo.player.played, frames: demo.frames, timedemo: demo.timedemo ? { ...demo.timedemo } : null } : null; }, get paints() { return paints; }, get plaque() { return plaqueDrawn; }, get loading() { return loadingDrawn; }, get conBar() { return conBarShown; }, get heartbeat() { return { listed: beatListed ? { ...beatListed } : null, info: lastBeatInfo, masters: masters.slice() }; }, get publicGames() { return publicList.map((g) => ({ ...g })); }, get gameLoaded() { return gameLoaded; }, setGame: (n) => setSetting('game', n), get turtle() { return { drawn: turtleDrawn, slow: hud?.slow ?? 0 }; },
       get lastTimedemo() { return lastTimedemo; }, get timescale() { return timescale; }, get fixedtime() { return fixedtime; }, get chat() { return chat ? { ...chat } : null; }, get frameInfo() { return frameInfo; }, get nextServer() { return nextServer; },
       get logfile() { return { on: !!settings.logfile, kept: conLog.kept.length, pending: conLog.pending.length }; }, get logStats() { return { on: !!settings.logStats, kept: statsLog.kept.length, pending: statsLog.pending.length }; },
       get recorder() { return recorder ? { name: recorder.name, frames: recorder.rec.frames, size: recorder.rec.size, dropped: recorder.rec.dropped, server: !!recorder.server, maxEnts: recorder.maxEnts ?? 0 } : null; },
@@ -2506,6 +2563,16 @@ $('pakfile').addEventListener('change', async (e) => {
   const picked = [...e.target.files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).slice(0, 10);
   e.target.value = '';   // (the same file again is a change again)
   if (!picked.length || !db) return;
+  // (a game set: the paks picked are that game's, kept under its name and loaded over the base, which stays)
+  if (settings.game) {
+    try {
+      const buffers = await Promise.all(picked.map((f) => f.arrayBuffer()));
+      await forgetGamePaks(settings.game);
+      for (const [i, f] of picked.entries()) await fileStore.put(i ? `game:${settings.game}+${i}` : `game:${settings.game}`, { name: f.name, bytes: new Uint8Array(buffers[i]) });
+      setStatus(await applyGame());
+    } catch (err) { setStatus(err.message, true); }
+    return;
+  }
   try {
     const buffers = await Promise.all(picked.map((f) => f.arrayBuffer()));
     await usePak(buffers[0], picked[0].name, picked.slice(1).map((f, i) => ({ buffer: buffers[i + 1], name: f.name })));
