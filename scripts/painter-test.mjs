@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak, loadColormap } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
-import { Renderer, dlightAt, mipLevel, stippleKeep, skyTurn, entityFrame } from '../src/renderer.js';
+import { Renderer, dlightAt, mipLevel, stippleKeep, skyTurn, entityFrame, anaglyph } from '../src/renderer.js';
 import { SURF } from '../src/bsp.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -325,6 +325,14 @@ assert(levels[0] > 0 && levels[1] + levels[2] + levels[3] > 0, `a frame draws ne
     'warping reads it back up to 640×480: the two halves fill the screen');
   r.setSize(320, 240);
   assert(!r.beginUnderwater() && r.w === 320, 'at 320×240 the screen is the warp buffer');
+}
+
+// cl_stereo's anaglyph: the left eye's red under the right eye's green and blue, through the palette
+{
+  const pal = new Uint32Array(256); pal[1] = 0xff112233; pal[2] = 0xff445566;
+  const out = new Uint32Array(2);
+  anaglyph(pal, new Uint8Array([1, 2]), new Uint8Array([2, 2]), out);
+  assert(out[0] === 0xff445533 && out[1] === 0xff445566, `the anaglyph takes the left eye's red and the right's green and blue (${out[0].toString(16)}, ${out[1].toString(16)})`);
 }
 
 console.log(failed ? `${failed} FAILED` : 'all good');

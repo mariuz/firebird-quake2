@@ -840,7 +840,9 @@ the game, none here where the SQL tic is the game, the game, the client outside 
 line and "Connection timed out" at its page, and a guest leaves a host silent past `cl_timeout`, 120, "Server connection timed
 out.", its page standing for a key as a kicked one does; 0 never, neither archived),
 `m_yaw` (the turn a mouse count, 0.022 as Quake had it, `Input.mouse`'s), `cl_gun` (0: no view weapon, as `CL_AddViewWeapon`
-had it) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
+had it), `cl_stereo` and `cl_stereo_separation` (`V_RenderView`'s two eyes: the 3D view drawn once an eye, half the separation to
+each side along the view's right, presented as a red-cyan anaglyph, `anaglyph` in src/renderer.js, the 2D over both; the separation
+archived), `paused` (`sv_paused`: shown, 1 pausing and 0 going on as `pause` does, single player alone) and `con_notifytime` (the notify lines' seconds, 3, `Notify.seconds`), none archived as Quake's were not,
 `cl_yawspeed`, `cl_pitchspeed`, `cl_anglespeedkey`, `cl_forwardspeed`, `cl_sidespeed` and `cl_upspeed` (`CL_AdjustAngles` and `CL_BaseMove`'s
 speeds, Quake's defaults 140 and 150 degrees a second, 1.5 with `+speed` held, 200 units a second: `Input.read` turns and looks
 the keys and the right stick by them a tic and scales the walk and the sidestep in the full speed's 200, the command's fraction

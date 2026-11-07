@@ -402,6 +402,16 @@ try {
     await typeCommand('cl_paused'); const cp0 = await status();
     await typeCommand('pause'); await typeCommand('cl_paused'); const cp1 = await status();
     await typeCommand('pause'); await typeCommand('cl_paused'); const cp2 = await status();
+    // cl_stereo: the view drawn for two eyes 8 units apart, the left eye's kept and differing from the right's; off, none kept
+    await typeCommand('cl_stereo_separation 8'); await typeCommand('cl_stereo 1'); await sleep(600);
+    const st1 = await page.evaluate(() => { const r = window.quake2.renderer; const L = r.stereoLeft; let d = 0; if (L) for (let i = 0; i < L.length; i++) if (L[i] !== r.fb[i]) d++; return { kept: !!L, differ: d, of: r.fb.length }; }).catch(() => ({}));
+    await typeCommand('cl_stereo 0'); await typeCommand('cl_stereo_separation -0.4'); await sleep(400);
+    const st0 = await page.evaluate(() => window.quake2.renderer.stereoLeft === null).catch(() => false);
+    assert(st1.kept && st1.differ > 100 && st0, `cl_stereo 1 draws the left eye apart from the right (${st1.differ} of ${st1.of} pixels differ), off none is kept (${st0})`);
+    // paused (sv_paused): paused 1 pauses, paused 0 goes on
+    await typeCommand('paused 1'); const pz1 = await page.evaluate(() => window.quake2.paused).catch(() => null);
+    await typeCommand('paused 0'); const pz0 = await page.evaluate(() => window.quake2.paused).catch(() => null);
+    assert(pz1 === true && pz0 === false, `paused 1 pauses the game and paused 0 goes on (${pz1}, ${pz0})`);
     assert(ls1.on === true && ls1.kept > 0 && statsDl && statsDl.suggestedFilename() === 'stats.log' && statsLines[0] === 'entities,dlights,parts,frame time' && statsLines.length > 5 && statsLines.slice(1).every((l) => /^\d+,\d+,\d+,\d+$/.test(l))
       && joyOff.s === false && joyOff.i === false && joyOn.s === true && joyOn.i === true && cp0 === '"cl_paused" is "0"' && cp1 === '"cl_paused" is "1"' && cp2 === '"cl_paused" is "0"',
       `log_stats keeps a line a frame as stats.log (${statsLines.length} lines downloaded, the header first; ${JSON.stringify(ls1)}; the first line out of shape: ${JSON.stringify(statsLines.find((l, i) => i > 0 && !/^\d+,\d+,\d+,\d+$/.test(l)) ?? null)}), in_joystick reaches the input (${JSON.stringify(joyOff)} → ${JSON.stringify(joyOn)}), cl_paused follows pause (${cp0}, ${cp1}, ${cp2})`);

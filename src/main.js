@@ -1649,6 +1649,10 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   const drawEnts = settings.rDrawentities && settings.clAddEntities !== false;
   // RDF_UNDERWATER: the eye in water, slime or lava draws the view into the 320×240 warp buffer and warps it up
   const underwater = last.WATERLEVEL >= 3 && !last.INTERMISSION && settings.swWaterwarp !== false;   // (sw_waterwarp 0: the view under water drawn as above it)
+  // cl_stereo (V_RenderView's two eyes): the 3D view drawn once for each eye, moved half cl_stereo_separation along the view's right, the
+  // left eye's kept for present to put its red under the right eye's green and blue; the 2D over both, once
+  let particles = r.particles;
+  const draw3D = (view) => {
   if (underwater) r.beginUnderwater();
   r.beginFrame(view);
   const tWorld = performance.now();
@@ -1688,7 +1692,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   perf.epoly = performance.now() - tEnts;   // (r_dspeeds: the models and the sprites)
   const tFx = performance.now();
   tempEnts.draw(r, bsp, time);
-  const particles = settings.clAddParticles === false ? [] : settings.clTestparticles ? r.particles.concat(testParticles(view, axes)) : r.particles;   // (cl_add_particles 0: none; cl_testparticles: the ring too)
+  particles = settings.clAddParticles === false ? [] : settings.clTestparticles ? r.particles.concat(testParticles(view, axes)) : r.particles;   // (cl_add_particles 0: none; cl_testparticles: the ring too)
   if (particles !== r.particles) { const own = r.particles; r.particles = particles; r.drawParticles(); r.particles = own; } else r.drawParticles();
   perf.fx = performance.now() - tFx;   // (r_dspeeds: the temporary entities and the particles)
   // the weapon in hand (depth hack: drawn over everything near); none at the intermission
@@ -1728,6 +1732,17 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   }
   // ... warped (D_WarpScreen) onto the screen; the status bar is drawn over that
   if (underwater) r.warpScreen(time);
+  };
+  const stereo = !!settings.clStereo && which === 0 && r.views === 1;
+  let eye3D = null;
+  if (stereo) {
+    const half = (Number(settings.clStereoSeparation) || 0) / 2, yr = (view.yaw * Math.PI) / 180;
+    const eye = (s) => ({ ...view, x: view.x + Math.sin(yr) * s, y: view.y - Math.cos(yr) * s });   // (along the view's right, beginFrame's)
+    draw3D(eye(half));
+    r.stereoLeft = r.fb.slice();
+    draw3D(eye(-half));
+    eye3D = r.fb.slice();
+  } else { if (which === 0) r.stereoLeft = null; draw3D(view); }
 
   // 2D: the status bar (with the help icon blinking while there is news on the help computer; at the
   // intermission too, as SCR_DrawStats drew it over the frozen view with no layout in single player), and this
@@ -1780,6 +1795,8 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   if (which === 0 && settings.logStats) statsLog.add(`${frameInfo.ents},${frameInfo.dlights},${frameInfo.particles},${Math.round(perf.draw)}`);   // (log_stats: CL_Frame's line a frame, the painter's last time)
   // SCR_DrawNet's turtle at the view's corner once three frames in a row took a tenth of a second or more (scr_showturtle), the first view's
   if (which === 0) turtleDrawn = hud.drawTurtle(r, dt, !!settings.scrShowturtle, r.vr.x, r.vr.y);
+  // (cl_stereo: what the 2D drew over the right eye's view goes over the left eye's too, so the status bar and the prints are grey, not cyan)
+  if (eye3D) { const L = r.stereoLeft, fb = r.fb; for (let i = 0; i < fb.length; i++) if (fb[i] !== eye3D[i]) L[i] = fb[i]; }
   r.present(tint, null, which);
 }
 const gunPrev = perPlayer(null);     // each view's angles of the last frame (the gun's lag)

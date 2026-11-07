@@ -11,7 +11,7 @@ export const DEFAULTS = Object.freeze({ map: 'demo1', detail: 'high', sfx: 70, m
   renderer: 'fast', brightness: 1.4, alwaysRun: true, sensitivity: 7, invertMouse: false, freelook: true, lookspring: false, lookstrafe: false, mForward: 1, mSide: 1, mFilter: false,
   crosshair: 1, clPredict: true, clShowmiss: false, clAddEntities: true, clAddParticles: true, clAddLights: true, clAddBlend: true, clTestentities: false, clTestparticles: false, clTestlights: false, clTestblend: false, viewsize: 100, rFullbright: false, rDrawentities: true, rDrawworld: true, rLerpmodels: true, rNovis: false, rLockpvs: false, rSpeeds: false, rDspeeds: false, hostSpeeds: false, swDrawflat: false, swWaterwarp: true, swClearcolor: 0, swMipcap: 0, swMipscale: 1, swStipplealpha: false, swAliasstats: false, swReportsurfout: false, swMaxsurfs: 0, developer: false, logfile: false, logStats: false, svNoreload: false, svReconnectLimit: 3, sShow: false, inJoystick: true, inMouse: true, sKhz: 44, sMixahead: 0.05, sTestsound: false, clShownet: 0, clNodelta: false, clShowclamp: false, svShowclamp: false, showpackets: false, showdrop: false,
   joyForwardthreshold: 0.15, joySidethreshold: 0.15, joyPitchthreshold: 0.15, joyYawthreshold: 0.15, joyForwardsensitivity: -1, joySidesensitivity: -1, joyPitchsensitivity: 1, joyYawsensitivity: -1,
-  mYaw: 0.022, clGun: true, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '', maxspectators: 4, zombietime: 2, mapNoareas: false, public: false, game: '', rconPassword: '', banList: Object.freeze([]), filterban: true, allowDownload: true, allowDownloadMaps: true, allowDownloadSounds: true,
+  mYaw: 0.022, clGun: true, clStereo: false, clStereoSeparation: -0.4, conNotifytime: 3, hostname: '', password: '', spectatorPassword: '', maxspectators: 4, zombietime: 2, mapNoareas: false, public: false, game: '', rconPassword: '', banList: Object.freeze([]), filterban: true, allowDownload: true, allowDownloadMaps: true, allowDownloadSounds: true,
   clYawspeed: 140, clPitchspeed: 150, clAnglespeedkey: 1.5, clForwardspeed: 200, clSidespeed: 200, clUpspeed: 200, timeout: 125, clTimeout: 120,
   gunX: 0, gunY: 0, gunZ: 0, scrCentertime: 2.5, scrConspeed: 3, clFootsteps: true, scrShowpause: true, scrShowturtle: false, clMaxfps: 90,
   coop: false, deathmatch: false,
@@ -71,7 +71,7 @@ const CHECK = {
   joyForwardsensitivity: num(-10, 10), joySidesensitivity: num(-10, 10), joyPitchsensitivity: num(-10, 10), joyYawsensitivity: num(-10, 10),
   rLockpvs: bool, rDspeeds: bool,   // r_lockpvs: the view's cluster held where it was locked; r_dspeeds: the painter's times in detail   // s_khz: the mixer's rate; cl_shownet: a joined page's messages printed; cl_showclamp: the clock's clamps printed
   // m_yaw (the turn a mouse count, 0.022), cl_gun (the view weapon drawn), con_notifytime (the notify lines' seconds, 3)
-  mYaw: num(-10, 10), clGun: bool, conNotifytime: num(0, 60),
+  mYaw: num(-10, 10), clGun: bool, clStereo: bool, clStereoSeparation: num(-16, 16),   // (cl_stereo, cl_stereo_separation: the two eyes, the distance between them) conNotifytime: num(0, 60),
   // the keys' speeds (CL_AdjustAngles, CL_BaseMove): cl_yawspeed and cl_pitchspeed in degrees a second (140, 150), cl_anglespeedkey
   // the run key's factor on them (1.5), cl_forwardspeed and cl_sidespeed in units a second (200, the full speed: the command's 1)
   clYawspeed: num(0, 3600), clPitchspeed: num(0, 3600), clAnglespeedkey: num(0, 100), clForwardspeed: num(0, 1000), clSidespeed: num(0, 1000), clUpspeed: num(0, 1000),

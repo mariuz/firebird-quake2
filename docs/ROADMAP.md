@@ -1571,11 +1571,33 @@ This ends the twenty-sixth list.
 
 The twenty-seventh list: cvars of Quake 2's client the console still lacks. In the order they are to be taken.
 
-- **`paused`**: `cl_paused`, the cvar the pause sets (`P`, the menu in single player); `paused 1` at the console would
-  pause as P does and `paused 0` go on, cvarlist showing it, as `CL_Pause_f` toggled it.
-- **`cl_stereo` and `cl_stereo_separation`**: `V_RenderView` drew the view twice, the eye moved by the separation to
-  each side, for shutter glasses; the page would draw the two eyes as a red-cyan anaglyph, `cl_stereo_separation`
-  (-0.4) the distance between them.
+- **`paused`**: done. `cl_paused` showed the pause already (the client's, a value refused); the server's own cvar was
+  named `paused` (`sv_paused`), which a console could set. `paused` shows the pause, `paused 1` pauses and `paused 0`
+  goes on, as P and `pause` do (the same toggle, a value the same as now leaving it), and a shared game is refused with
+  `CL_Pause_f`'s words. `test:console` the cases; the browser test pauses and goes on with it, on both builds.
+- **`cl_stereo` and `cl_stereo_separation`**: done. `V_RenderView` drew the view twice, the eye moved half the
+  separation to each side, for shutter glasses. With `cl_stereo 1` the page draws the 3D view once for each eye (the
+  left one half `cl_stereo_separation` along the view's right, the right one as far the other way) and presents them
+  as a red-cyan anaglyph (`anaglyph`: the left eye's red, the right eye's green and blue, through the palette); the
+  2D (the status bar, the prints, the menus over the view) goes over both, grey. The separation is in world units,
+  Quake's -0.4 by default (a few units make the depth plain with red-cyan glasses); the switch is not archived, the
+  separation is, as Quake's were. The first view alone, the split screen drawing one eye. `test:painter` the
+  anaglyph's pixels; `test:settings` and `test:console` the cvars; the browser test turns it on at 8 units and finds
+  the left eye kept apart from the right, and none kept off, on both builds; off, the golden pictures and the
+  renderer comparison are as they were.
+
+This ends the twenty-seventh list.
+
+The twenty-eighth list: what the browser test, the long check every change waits on, still lacks. In the order they are to
+be taken.
+
+- **A relay already on the port refused**: the test spawns `scripts/signal.mjs` on its port, and a relay left from a
+  run stopped half-way kept the port with the code of its own day, so a new run talked to the old relay and failed on a
+  route it lacked. The test would ask the relay on its port what it is (its build's id on `GET /`), and stop with the
+  reason when it is not the one it started.
+- **A section run alone**: a change to the network game waits ten minutes a build for the whole test; `SECTION=net`
+  (and the others: menus, demos, files, touch) would run the page's load and that section alone, the full run staying
+  what CI does.
 
 ## Playing the demo
 
