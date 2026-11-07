@@ -20,13 +20,18 @@ export class Pak {
     this.files = new Map();
     this.extra = new Map();   // files added beside the pak's own (CL_Download_f's: a map from the host), name → bytes
     this.layers = [];         // FS_AddGameDirectory's later paks over this one, newest first: { name, pak }, searched before its own files
+    this.links = new Map();   // FS_Link_f's: a name's start → what stands for it (link maps/demo4.bsp maps/demo1.bsp)
     for (let p = dirOff; p < dirOff + dirLen; p += 64) {
       const name = cstr(this.bytes, p, 56).toLowerCase().replace(/\\/g, '/');
       this.files.set(name, { off: this.dv.getInt32(p + 56, true), size: this.dv.getInt32(p + 60, true) });
     }
   }
 
-  has(name) { const n = name.toLowerCase(); return this.extra.has(n) || this.layers.some((l) => l.pak.files.has(n)) || this.files.has(n); }
+  /** FS_Link_f: names starting with `from` found as `to` and the rest; an empty `to` drops the link. */
+  link(from, to) { const f = String(from).toLowerCase(); if (!to) this.links.delete(f); else this.links.set(f, String(to).toLowerCase()); }
+  /** FS_FOpenFile's links: the name a link stands for, the first link it starts with, or the name itself. */
+  resolve(name) { const n = name.toLowerCase(); for (const [f, t] of this.links) if (n.startsWith(f)) return t + n.slice(f.length); return n; }
+  has(name) { const n = this.resolve(name); return this.extra.has(n) || this.layers.some((l) => l.pak.files.has(n)) || this.files.has(n); }
   /** A later pak over this one (pak1.pak over pak0.pak): its files found before these, as FS_AddGameDirectory searched newest first. */
   overlay(other, name = 'pak') { this.layers.unshift({ name, pak: other }); }
   /** The distinct files the paks hold together, the added ones with them. */
@@ -36,6 +41,7 @@ export class Pak {
 
   /** The file's bytes as a Uint8Array view (no copy). */
   get(name) {
+    name = this.resolve(name);
     const x = this.extra.get(name.toLowerCase());
     if (x) return x;
     for (const l of this.layers) if (l.pak.files.has(name.toLowerCase())) return l.pak.get(name);

@@ -761,7 +761,9 @@ as the quit menu's yes does; the page stays), `killserver` (`SV_KillServer_f`: a
 again, its sky, its spin, the backtile and the view's rectangle put back) and `snd_restart` (`CL_Snd_Restart_f`: the mixer's context closed and made
 anew, `Q2Audio.restart`, the decoded sounds forgotten and decoded again as they play, the music played again), `path` (`FS_Path_f`: the pak in use, its files
 counted and where it came from, `pakInfo`; several paks picked together, pak1.pak and on over pak0.pak as `FS_AddGameDirectory` searched
-them, `Pak.overlay`, a line each on the scrollback newest first), `dir <wildcard>` (`FS_Dir_f`: the pak's files the wildcard names, `*.*` without one,
+them, `Pak.overlay`, a line each on the scrollback newest first; `game <name>`, `FS_SetGamedir`, puts the paks kept for that mod,
+`game:<name>` in the file store, over them all, the PAK control picking the game's paks while one is set, `applyGame` loading them again; `link <from> <to>`, `FS_Link_f`, makes names
+starting with `from` come from `to` and the rest, `Pak.link`, listed by `path`), `dir <wildcard>` (`FS_Dir_f`: the pak's files the wildcard names, `*.*` without one,
 `*` and `?` within a directory as the file system's glob had them, `dirList`; on the scrollback by their names under "Directory
 of"), `modellist`, `imagelist` and `soundlist` (`Mod_Modellist_f`, `R_ImageList_f`, `S_SoundList_f`: the models with their size in
 the pak, the pictures, wall textures and skins with their kind and size, the sounds decoded with L on the ones looping, a line

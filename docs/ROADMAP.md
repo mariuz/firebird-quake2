@@ -1550,10 +1550,32 @@ taken.
   newest of three, a download before all, an earlier pak's own and a later one's new files; `test:console` path's
   lines; the browser test picks a copy of the demo's pak as pak0.pak with a pak1.pak holding a map of its own, finds
   both kept and pak1.pak the layer over pak0.pak, plays that map, and forgets both, on both builds.
-- **`game`**: `FS_SetGamedir` put a mod's directory over baseq2 at the next map, latched; here there is the one tree.
-  With a mod's pak picked under `game <name>`, its files would come before the base's, `game ""` going back.
-- **`link`**: `FS_Link_f`: `link <from> <to>` made the files under one path come from another (a link with no target
-  dropped it), `path` listing the links; here every name is the pak's own.
+- **`game`**: done. `FS_SetGamedir` put a mod's directory over baseq2, latched to the next restart. `game <name>`
+  names a mod now (letters, digits and `_`, sixteen at most; no path): the paks kept for it in the browser
+  (`game:<name>`, `game:<name>+1`…) go over the base paks, newest first as the base's later paks do, `path` listing
+  them as `<name>/pak0.pak` above the base's, the PAK control's label saying "· game <name>". While a game is set,
+  the PAK control picks that game's paks, keeping the base. The change is taken at once, the paks loaded again
+  (`applyGame`), since a page restarts in seconds; `game ""` is the base alone, the mod's paks kept for the next
+  time. Archived and in the serverinfo, as Quake's was. `test:settings` and `test:console` the cvar (a path and a
+  space refused); the browser test sets a game, picks a pak1.pak with a map of its own for it over the demo's pak,
+  finds the map and the layer, goes back to the base without the map, and sets the game again to find it kept, on
+  both builds.
+- **`link`**: done. `FS_Link_f`: `link <from> <to>` makes the names starting with `from` come from `to` and the rest
+  (`Pak.link`, `resolve`; `has` and `get` follow it, a listing does not, as `FS_ListFiles` did not), `link <from> ""`
+  drops it, and `path` lists the links after the paks ("Links:", `from : to`). The links are the page's for its life,
+  put on every pak it loads, as Quake's were the run's. `test:net` a link followed in any case and dropped;
+  `test:console` the usage, a link set and dropped, path's lines; the browser test links maps/demo4.bsp to demo1's,
+  plays `map demo4` on demo1's geometry, and drops it, on both builds.
+
+This ends the twenty-sixth list.
+
+The twenty-seventh list: cvars of Quake 2's client the console still lacks. In the order they are to be taken.
+
+- **`paused`**: `cl_paused`, the cvar the pause sets (`P`, the menu in single player); `paused 1` at the console would
+  pause as P does and `paused 0` go on, cvarlist showing it, as `CL_Pause_f` toggled it.
+- **`cl_stereo` and `cl_stereo_separation`**: `V_RenderView` drew the view twice, the eye moved by the separation to
+  each side, for shutter glasses; the page would draw the two eyes as a red-cyan anaglyph, `cl_stereo_separation`
+  (-0.4) the distance between them.
 
 ## Playing the demo
 
