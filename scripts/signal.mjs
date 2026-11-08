@@ -14,6 +14,8 @@
 //   POST   /servers/<code>     a host's serverinfo as JSON, its public listing under its code (Master_Heartbeat) → { ok }
 //   DELETE /servers/<code>     the listing taken off (Master_Shutdown) → { ok }
 //   GET    /servers            → { servers: [{ code, info, age }] }, the listings, newest first (a master's list)
+//   GET    /                   → { relay: 'firebird-quake2', id }: what answers on the port (RELAY_ID, so the browser test
+//                                knows the relay it started from one a stopped run left behind)
 //
 // `createSignalServer` is exported so the network test runs it in-process on a port of its own.
 
@@ -38,7 +40,7 @@ function serverInfo(text) {
   return info;
 }
 
-export function createSignalServer({ ttlMs = TTL, now = Date.now } = {}) {
+export function createSignalServer({ ttlMs = TTL, now = Date.now, id = '' } = {}) {
   const rooms = new Map();   // code → { offer, answer, at }
   const servers = new Map();   // code → { info, at }: the public listings, each heartbeat's
   const sweep = () => { for (const m of [rooms, servers]) for (const [c, r] of m) if (now() - r.at > ttlMs) m.delete(c); };
@@ -52,6 +54,7 @@ export function createSignalServer({ ttlMs = TTL, now = Date.now } = {}) {
     if (req.method === 'OPTIONS') return reply(204);
     sweep();
     const url = new URL(req.url, 'http://localhost');
+    if (req.method === 'GET' && url.pathname === '/') return reply(200, { relay: 'firebird-quake2', id });
     const body = async () => { let t = ''; for await (const chunk of req) { t += chunk; if (t.length > MAX_TEXT) throw new Error('too long'); } return t.trim(); };
     const isCode = (c) => c.length === CODE_LENGTH && [...c].every((ch) => ALPHABET.includes(ch));
     // the public listings (the masters' list): a host's heartbeat under its code, the list, the listing taken off
@@ -111,5 +114,5 @@ export function createSignalServer({ ttlMs = TTL, now = Date.now } = {}) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const port = Number(process.env.PORT ?? 8787);
-  createSignalServer().listen(port, () => console.log(`signalling relay on http://localhost:${port}/ (rtc_signal http://<this machine>:${port} at the console of every page)`));
+  createSignalServer({ id: process.env.RELAY_ID ?? '' }).listen(port, () => console.log(`signalling relay on http://localhost:${port}/ (rtc_signal http://<this machine>:${port} at the console of every page)`));
 }
