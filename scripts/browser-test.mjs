@@ -26,6 +26,12 @@ import { Pak, buildPak } from '../src/pak.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const coi = process.argv.includes('--coi');
 const PORT = Number(process.env.PORT ?? 8097);
+// SECTION=net (or page, touch, retire; several with commas): the page's load and those sections alone, the 404s and the console's errors
+// checked after them as ever; none given, every section, CI's run. A change to one part waits for that part, not ten minutes a build
+const SECTIONS = (process.env.SECTION ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+const KNOWN_SECTIONS = ['page', 'net', 'touch', 'retire'];
+if (SECTIONS.some((x) => !KNOWN_SECTIONS.includes(x))) { console.error(`SECTION takes ${KNOWN_SECTIONS.join(', ')} (several with commas), not ${SECTIONS.join(',')}`); process.exit(1); }
+const section = (name) => { const on = !SECTIONS.length || SECTIONS.includes(name); if (!on) console.log(`--   the ${name} section left out (SECTION=${SECTIONS.join(',')})`); return on; };
 const base = `http://localhost:${PORT}/`;
 
 let failed = 0;
@@ -49,9 +55,27 @@ if (!up) { console.error('the dev server did not come up:\n' + serverLog); serve
 console.log(`serving on ${base} (${coi ? 'COOP/COEP from the server: the threaded build' : 'no headers, like Pages: the build without threads'})`);
 // the signalling relay (scripts/signal.mjs) on the next port, for the network section: the pages' rtc_signal
 const RELAY_PORT = PORT + 1;
-const relay = spawn(process.execPath, ['scripts/signal.mjs'], { cwd: root, env: { ...process.env, PORT: String(RELAY_PORT) }, stdio: ['ignore', 'ignore', 'pipe'] });
-let relayUp = false;
-for (let i = 0; i < 60 && !relayUp; i++) { try { relayUp = (await fetch(`http://localhost:${RELAY_PORT}/rooms/ZZZZ`)).status === 404; } catch { await sleep(500); } }
+// (the relay is told an id of this run's and asked for it back: a relay a stopped run left on the port answers with another, or with
+// none if it is older than the id, and this run would talk to it and its code, so the test stops and says so)
+const RELAY_ID = `run-${process.pid}-${Date.now()}`;
+const relay = spawn(process.execPath, ['scripts/signal.mjs'], { cwd: root, env: { ...process.env, PORT: String(RELAY_PORT), RELAY_ID }, stdio: ['ignore', 'ignore', 'pipe'] });
+let relayLog = '';
+relay.stderr.on('data', (d) => { relayLog += d; });
+let relayUp = false, relayOther = null;
+for (let i = 0; i < 60 && !relayUp && relayOther === null; i++) {
+  try {
+    const who = await (await fetch(`http://localhost:${RELAY_PORT}/`)).json().catch(() => ({}));
+    if (who.id === RELAY_ID) relayUp = true;
+    else if (relay.exitCode !== null) relayOther = who.id ?? '(a relay from before the id)';
+    else await sleep(500);
+  } catch { if (relay.exitCode !== null) relayOther = ''; else await sleep(500); }
+}
+if (!relayUp) {
+  console.error(relayOther === null || relayOther === ''
+    ? `the signalling relay did not come up on port ${RELAY_PORT}:\n${relayLog}`
+    : `port ${RELAY_PORT} is held by a relay this run did not start (${relayOther}), one a stopped run left behind: stop it (pkill -f scripts/signal.mjs) and run again`);
+  relay.kill(); server.kill(); process.exit(1);
+}
 
 // ── the browser ───────────────────────────────────────────────────────────────────────────
 const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
@@ -136,7 +160,7 @@ try {
   const icons = await page.evaluate(() => Promise.all(['./icon-192.png', './icon-512.png'].map((u) => fetch(u).then((r) => r.ok && r.headers.get('content-type'))))).catch(() => []);
   assert(icons.every((t) => /image\/png/.test(t || '')), `the icons are served as PNG (${icons.join(', ')})`);
 
-  if (ready) {
+  if (ready && section('page')) {
     // the loop advances: the frame counter in the stats line changes between reads
     const a = await frames(page); await sleep(700); const b = await frames(page);
     assert(b > a, `frames keep coming (${b - a} in 0.7 s)`);
@@ -1346,7 +1370,7 @@ try {
   // two pages over WebRTC: this one hosts, a second joins with the texts passed between them (the offer and
   // the answer, as the players would pass them); the host's game has the guest's player in it, the guest paints
   // the host's frames, and its keys move its player at the host; when it leaves the host plays on
-  if (ready) {
+  if (ready && section('net')) {
     const gctx = await browser.newContext({ viewport: { width: 960, height: 720 } });
     const gp = await gctx.newPage();
     gp.on('console', (m) => { if (m.type() === 'error') errors.push('guest: ' + m.text()); });
@@ -1934,7 +1958,7 @@ try {
   }
 
   // a touch screen: the on-screen buttons show, and taps on them and on the view's halves reach the game
-  if (ready) {
+  if (ready && section('touch')) {
     const touchCtx = await browser.newContext({ hasTouch: true, viewport: { width: 800, height: 600 } });
     const tp = await touchCtx.newPage();
     tp.on('console', (m) => { if (m.type() === 'error') errors.push('touch: ' + m.text()); });
@@ -1974,7 +1998,7 @@ try {
 
   // a browser that still has the old service worker (it isolated the page before firebird-wasm
   // 0.8.0): the script at its URL now removes itself, and reloads the page once without it
-  {
+  if (section('retire')) {
     const ctx = await browser.newContext();
     const sp = await ctx.newPage();
     sp.on('pageerror', (e) => errors.push(`retire pageerror: ${e.message}`));

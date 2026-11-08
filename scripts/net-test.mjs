@@ -588,9 +588,11 @@ check(madeWith?.iceServers.length === 1 && madeWith.iceServers[0].urls.startsWit
 // answer twice, a dropped room and a room past its time are refused
 {
   let clock = 1_000_000;
-  const relay = createSignalServer({ ttlMs: 5000, now: () => clock });
+  const relay = createSignalServer({ ttlMs: 5000, now: () => clock, id: 'run-1' });
   await new Promise((r) => relay.listen(0, '127.0.0.1', r));
   const sc = new SignalClient(`http://127.0.0.1:${relay.address().port}/`);
+  const who = await (await fetch(`http://127.0.0.1:${relay.address().port}/`)).json();
+  check(who.relay === 'firebird-quake2' && who.id === 'run-1', `the relay says what it is and the id it was started with (${JSON.stringify(who)})`);
   const code = await sc.publish(text);
   check(typeof code === 'string' && code.length === CODE_LENGTH && isRoomCode(code) && !isRoomCode(text) && !isRoomCode('AB') && relay.rooms.get(code)?.offer === text,
     `the host publishes its offer and gets a code (${code}), which is a code and an offer text is not`);

@@ -1591,13 +1591,34 @@ This ends the twenty-seventh list.
 The twenty-eighth list: what the browser test, the long check every change waits on, still lacks. In the order they are to
 be taken.
 
-- **A relay already on the port refused**: the test spawns `scripts/signal.mjs` on its port, and a relay left from a
-  run stopped half-way kept the port with the code of its own day, so a new run talked to the old relay and failed on a
-  route it lacked. The test would ask the relay on its port what it is (its build's id on `GET /`), and stop with the
-  reason when it is not the one it started.
-- **A section run alone**: a change to the network game waits ten minutes a build for the whole test; `SECTION=net`
-  (and the others: menus, demos, files, touch) would run the page's load and that section alone, the full run staying
-  what CI does.
+- **A relay already on the port refused**: done. The test spawns `scripts/signal.mjs` on its port, and a relay left from
+  a run stopped half-way kept the port with the code of its own day, so a new run talked to the old relay and failed on
+  a route it lacked. The relay answers `GET /` with what it is and the id it was started with (`RELAY_ID`); the test
+  starts its relay with an id of its own and waits for that id back. A relay on the port with another id (or none, one
+  from before the id) while its own relay has exited on the taken port stops the run at once with the reason and how to
+  clear it, and a relay that does not come up says so with its output. `test:net` the relay's answer; the browser test
+  runs as before on a free port, and was seen to stop with the reason with a relay of another id held on its port.
+- **A section run alone**: done. A change to the network game waited ten minutes a build for the whole test. The test
+  has four sections now by name: `page` (the one page: its loop, keys, menus, saves, demos, recordings, the files and the
+  paks), `net` (two and three pages over WebRTC and the relay), `touch` (a touch screen) and `retire` (the old service
+  worker); `SECTION=net` (several with commas) runs the page's load and those alone, saying which it left out, the 404s
+  and the console's errors checked after them as ever, and a name it does not know stops it with the list. None given,
+  every section runs, as CI does. Here `SECTION=net` took 201 seconds and `SECTION=touch,retire` 21, against about ten
+  minutes for the whole.
+
+This ends the twenty-eighth list.
+
+The twenty-ninth list: CI's run, which every merge waits on (about twenty-five minutes, every suite and both browser
+builds one after another in one job). In the order they are to be taken.
+
+- **The browser test's builds beside the suites**: done. The workflow has three jobs side by side now: `suites` (every
+  Node suite, the perf guard and the golden pictures) and `browser` on each of the page's two builds (a matrix, the
+  build without threads and the threaded one, `fail-fast` off so one build's failure does not hide the other's), each
+  with the npm cache and the pak's cache. A last job named `build` needs them all and builds and uploads the site, so
+  the check a merge waits on keeps its name and passes only when every job did; the deploy needs it as before. The
+  run takes as long as its longest job instead of the sum of them.
+- **The Node suites split**: the slow suites (the three smoke tests, the monsters, walkthrough, entities, save, coop)
+  in two or three jobs by their time, the quick ones together, so the longest job sets the run's time.
 
 ## Playing the demo
 

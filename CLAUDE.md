@@ -47,6 +47,7 @@ npm run test:hud                      # the status bar, the help computer, the i
 npm run test:predict                  # the player's move in JS (a guest's prediction) against the SQL's, tic by tic: the same numbers every tic, the traces, the water, no drift
 npm run test:cinematic                # a .cin made and read back: the Huffman trees as cl_cin.c built them, the decoder and the encoder, a whole file frame by frame, the player's clock
 npm run test:browser                  # the page in a headless Chromium (npx playwright install chromium once, or CHROME=/path/to/chrome)
+SECTION=net npm run test:browser      # its sections alone while working on one (page, net, touch, retire; several with commas): net is ~3 min, not ~10
 node scripts/screenshot.mjs demo1 /tmp/x --compare   # both renderer modes paint identical pixels
 npm run serve                         # dev server as Pages serves it: the engine's build without threads (PORT=8081 to pick a port)
 npm run serve -- --coi                # with COOP/COEP: cross-origin isolated, the threaded build
