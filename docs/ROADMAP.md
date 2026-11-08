@@ -1611,10 +1611,12 @@ This ends the twenty-eighth list.
 The twenty-ninth list: CI's run, which every merge waits on (about twenty-five minutes, every suite and both browser
 builds one after another in one job). In the order they are to be taken.
 
-- **The browser test's builds beside the suites**: the two browser runs (the build without threads and the threaded
-  one) as jobs of their own, side by side with the Node suites' job, the pak and node_modules cached for each, and a
-  last job named `build` that needs all three, so the check a merge waits on keeps its name and means all of them
-  passed; the deploy needing it as now.
+- **The browser test's builds beside the suites**: done. The workflow has three jobs side by side now: `suites` (every
+  Node suite, the perf guard and the golden pictures) and `browser` on each of the page's two builds (a matrix, the
+  build without threads and the threaded one, `fail-fast` off so one build's failure does not hide the other's), each
+  with the npm cache and the pak's cache. A last job named `build` needs them all and builds and uploads the site, so
+  the check a merge waits on keeps its name and passes only when every job did; the deploy needs it as before. The
+  run takes as long as its longest job instead of the sum of them.
 - **The Node suites split**: the slow suites (the three smoke tests, the monsters, walkthrough, entities, save, coop)
   in two or three jobs by their time, the quick ones together, so the longest job sets the run's time.
 

@@ -16,7 +16,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  # Three jobs side by side (the Node suites, and the page in a browser on each of its two builds), then the one named
+  # build, which needs them all: the check a merge waits on keeps its name and means every job passed. The run takes as
+  # long as its longest job, not the sum (about twenty-five minutes one after another).
+  suites:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -158,6 +161,38 @@ jobs:
       - name: Performance guard
         run: npm run perf
 
+      # The painter's look: the twelve docs screenshots rendered again and compared pixel for pixel
+      - name: The docs screenshots, pixel for pixel
+        run: npm run test:golden
+
+  browser:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [plain, coi]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The demo's pak0.pak sits inside the self-extracting q2-314-demo-x86.exe (a zip)
+      - name: Cache the demo pak
+        id: pak
+        uses: actions/cache@v4
+        with:
+          path: public/pak/
+          key: q2-314-demo-${{ hashFiles('scripts/fetch-pak.mjs') }}
+
+      - name: Fetch the demo pak
+        if: steps.pak.outputs.cache-hit != 'true'
+        run: npm run fetch-pak
+
       # The page itself in a headless Chromium, served without COOP/COEP as Pages serves it: the
       # engine's build without threads, the pak downloads, Firebird runs in its worker, keys, a
       # quick save and load, the menu, a coop game and a deathmatch from the players select, a game recorded
@@ -169,15 +204,33 @@ jobs:
       - name: Install Chromium for the browser test
         run: npx playwright install --with-deps chromium
 
-      - name: The page in a browser
-        run: npm run test:browser
+      - name: The page in a browser (${{ matrix.build == 'coi' && 'cross-origin isolated, the threaded build' || 'as Pages serves it, the build without threads' }})
+        run: npm run test:browser ${{ matrix.build == 'coi' && '-- --coi' || '' }}
 
-      - name: The page in a browser, cross-origin isolated (the threaded build)
-        run: npm run test:browser -- --coi
+  build:
+    needs: [suites, browser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      # The painter's look: the twelve docs screenshots rendered again and compared pixel for pixel
-      - name: The docs screenshots, pixel for pixel
-        run: npm run test:golden
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The demo's pak0.pak sits inside the self-extracting q2-314-demo-x86.exe (a zip)
+      - name: Cache the demo pak
+        id: pak
+        uses: actions/cache@v4
+        with:
+          path: public/pak/
+          key: q2-314-demo-${{ hashFiles('scripts/fetch-pak.mjs') }}
+
+      - name: Fetch the demo pak
+        if: steps.pak.outputs.cache-hit != 'true'
+        run: npm run fetch-pak
 
       - name: Build site
         run: npm run build
