@@ -91,6 +91,9 @@ const engines = new Set();
 page.on('request', (r) => { const m = /(firebird-embedded(-st)?\.wasm)/.exec(r.url()); if (m) engines.add(m[1]); });
 
 const status = () => page.evaluate(() => document.getElementById('status')?.textContent ?? '').catch(() => '');
+// (the status texts seen since the last clearSeen: the first matching `re`, else the line as it is now)
+const clearSeen = () => page.evaluate(() => { if (window.__statusSeen) window.__statusSeen.length = 0; }).catch(() => undefined);
+const seenStatus = (re) => page.evaluate((src) => (window.__statusSeen ?? []).find((t) => new RegExp(src).test(t)) ?? document.getElementById('status')?.textContent ?? '', re.source).catch(() => '');
 const stats = () => page.evaluate(() => document.getElementById('stats')?.textContent ?? '').catch(() => '');
 // The frames the game has played (src/session.js counts them): the stats line is rounded, and two reads of it
 // can match while frames come, so whether the game runs or stands is read from this count.
@@ -98,6 +101,15 @@ const frames = (p) => p.evaluate(() => window.quake2?.session?.frameNo ?? -1).ca
 const isolated = () => page.evaluate(() => window.crossOriginIsolated).catch(() => false);
 
 try {
+  // every text the status line shows, kept from the page's first moment: a message shown a moment (Game loaded, 2 s) can come and go
+  // between two looks when what it reports is quick (the same map's load keeps its geometry), so a check waits for it among these
+  await page.addInitScript(() => {
+    window.__statusSeen = [];
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('status');
+      if (el) new MutationObserver(() => { window.__statusSeen.push(el.textContent); if (window.__statusSeen.length > 200) window.__statusSeen.shift(); }).observe(el, { childList: true, characterData: true, subtree: true });
+    });
+  });
   await page.goto(base, { waitUntil: 'load' });
 
   // isolation comes from the server's headers or not at all: no service worker supplies it
@@ -172,9 +184,10 @@ try {
     let saved = '';
     for (let i = 0; i < 20 && !/Game saved/.test(saved); i++) { await sleep(250); saved = await status(); }
     assert(/Game saved \(demo1, \d+ KB\)/.test(saved), `F6 saves: ${JSON.stringify(saved)}`);
+    await clearSeen();
     await page.keyboard.press('F9');
     let loaded = '';
-    for (let i = 0; i < 240 && !/Game loaded/.test(loaded); i++) { await sleep(250); loaded = await status(); }
+    for (let i = 0; i < 240 && !/Game loaded/.test(loaded); i++) { await sleep(250); loaded = await seenStatus(/Game loaded/); }
     assert(/Game loaded/.test(loaded), `F9 loads: ${JSON.stringify(loaded)}`);
     await sleep(1500);
     assert(/q2_tic \d+ ms/.test(await stats()), `the game runs on after the load: ${await stats()}`);
@@ -267,9 +280,10 @@ try {
     const tSaved = await gameTime();
     await sleep(1000);
     const tOn = await gameTime();
+    await clearSeen();
     await page.setInputFiles('#save-file', { name: 'moved.q2sav', mimeType: 'text/plain', buffer: Buffer.from(dlText) });
     let fileLoaded = '';
-    for (let i = 0; i < 240 && !/Game loaded/.test(fileLoaded); i++) { await sleep(250); fileLoaded = await status(); }
+    for (let i = 0; i < 240 && !/Game loaded/.test(fileLoaded); i++) { await sleep(250); fileLoaded = await seenStatus(/Game loaded/); }
     // (the session's row is the last tic's: the first tic after the load brings the file's clock)
     let tBack = tOn;
     for (let i = 0; i < 40 && tBack >= tOn; i++) { await sleep(100); tBack = await gameTime(); }
@@ -533,9 +547,10 @@ try {
     let named = '';
     for (let i = 0; i < 20 && !/Game saved/.test(named); i++) { await sleep(250); named = await status(); }
     const namedKey = await page.evaluate(() => (localStorage.getItem('firebird-quake2:save:mine') ?? '').slice(0, 5)).catch(() => '');
+    await clearSeen();
     await typeCommand('load mine');
     let namedLoaded = '';
-    for (let i = 0; i < 240 && !/Game loaded/.test(namedLoaded); i++) { await sleep(250); namedLoaded = await status(); }
+    for (let i = 0; i < 240 && !/Game loaded/.test(namedLoaded); i++) { await sleep(250); namedLoaded = await seenStatus(/Game loaded/); }
     await typeCommand('load nosuch'); const noSuch = await status();
     await typeCommand('save save2');
     let slot2 = null;
@@ -1504,9 +1519,10 @@ try {
       let hsaved = '';
       for (let i = 0; i < 20 && !/Game saved/.test(hsaved); i++) { await sleep(250); hsaved = await status(); }
       const gf0 = await gp.evaluate(() => window.quake2.net?.guest?.frames ?? 0).catch(() => 0);
+      await clearSeen();
       await page.keyboard.press('F9');
       let hloaded = '';
-      for (let i = 0; i < 240 && !/Game loaded/.test(hloaded); i++) { await sleep(250); hloaded = await status(); }
+      for (let i = 0; i < 240 && !/Game loaded/.test(hloaded); i++) { await sleep(250); hloaded = await seenStatus(/Game loaded/); }
       let hl = {}, gl = {};
       for (let i = 0; i < 120 && !(hl.clients === 2 && gl.frames > gf0 + 20); i++) { await sleep(250); hl = await hstate(); gl = await gstate(); }
       assert(/Game saved/.test(hsaved) && /Game loaded/.test(hloaded) && hl.role === 'host' && hl.guests?.length === 1 && hl.clients === 2 && gl.role === 'guest' && gl.map === 'demo1' && gl.frames > gf0 + 20,

@@ -1629,10 +1629,17 @@ This ends the twenty-ninth list.
 The thirtieth list: the map's load, which a restart after death and every level change wait on. In the order they are
 to be taken.
 
-- **The same map kept**: a restart after death, `map` of the map that is up and a save loaded on it delete the
-  geometry tables and bulk-load them again from the same .bsp (half a second of `DELETE`s, then the inserts). With the
-  map's name and its .bsp's checksum the same as the loaded one's, the geometry would stay and only the entities, the
-  players and the frame's caches start over.
+- **The same map kept**: done. A restart after death, `map` of the map that is up and a save loaded on it deleted the
+  geometry tables and bulk-loaded them again from the same .bsp. `loadMapModels` keeps the map's name and its .bsp's
+  fingerprint in `res.world` now (`bspPrint`: the length and an FNV-1a over every seventh byte, a millisecond), and
+  `loadMap` with both the same keeps the geometry, which nothing in the game writes to: it clears the entities, the
+  events and the frame's caches and runs the spawn (`spawnMap`, the half of the old `loadMap` after the geometry;
+  `init_map` closes the area portals again), loading `face_verts` then only if the SQL-projecting mode wants them and
+  they were left out. Another map, or the same name from another pak, loads in full. `test:session` reloads demo2 in
+  130 ms against 1001 fresh, the same faces, a tic played and its frame drawn, and demo1 after it loads its own; the
+  smoke test's load without `face_verts` forgets the kept fingerprint first, as its check is of a fresh load. Every
+  suite all good, both demos' renderer comparison 0 of 76800 pixels, the perf guard's load 1.03× its baseline (it
+  loads once, fresh).
 - **`init_map` measured by its parts**: the spawn after the geometry, timed with `call-counts.mjs`'s counters per
   routine on demo1, for the one part worth a cut.
 

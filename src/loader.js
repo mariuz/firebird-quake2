@@ -262,14 +262,22 @@ export function missingMapFiles(pak, bsp, sky = '', sounds = []) {
   return [...out];
 }
 
+/** A .bsp's fingerprint: its length and an FNV-1a over every seventh byte (a millisecond for a map), to know the same map again. */
+export function bspPrint(bytes) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < bytes.length; i += 7) h = Math.imul(h ^ bytes[i], 16777619) >>> 0;
+  return `${bytes.length}:${h.toString(16)}`;
+}
+
 export function loadMapModels(pak, res, name, { faceVerts = true } = {}) {
-  const bsp = new Bsp(pak.buffer(`maps/${name}.bsp`), `maps/${name}.bsp`);
+  const bytes = pak.get(`maps/${name}.bsp`);
+  const bsp = new Bsp(bytes.slice().buffer, `maps/${name}.bsp`);
   for (const [id, m] of [...res.models]) if (m.kind === 'B') res.models.delete(id);
   const geo = geometryRows(bsp, res);
   for (const [mid, info] of geo.modelInfo) res.models.set(mid, info);
   // face_verts (37 k rows, a fifth of the load) is read only by frame_faces, the SQL-projecting renderer mode: the
   // page loads it on demand (ensureFaceVerts) when that mode is on, the scripts always
-  res.world = { bsp, modelIds: geo.modelIds, faceBase: 0, faceVertsLoaded: faceVerts, faceVerts: faceVerts ? null : geo.faceVerts };
+  res.world = { bsp, modelIds: geo.modelIds, faceBase: 0, faceVertsLoaded: faceVerts, faceVerts: faceVerts ? null : geo.faceVerts, name, print: bspPrint(bytes) };
   return { bsp, geo };
 }
 
@@ -280,10 +288,20 @@ export function loadMapModels(pak, res, name, { faceVerts = true } = {}) {
  */
 export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, spawnpoint = null, seed = null, faceVerts = true, coop = false, deathmatch = false, players = 2,
   dmflags = null, fraglimit = null, timelimit = null, cheats = null, noareas = null } = {}) {
+  // (the same map again, a restart or `map` of the map that is up: its name and its .bsp's fingerprint the loaded one's, the geometry
+  // stays, none of the game writes to it, and only the entities, the events and the frame's caches start over; init_map closes the
+  // area portals again)
+  if (res.world?.name === name && res.world.print === bspPrint(pak.get(`maps/${name}.bsp`))) {
+    await db.exec('DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents; DELETE FROM map_ents; DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL; DELETE FROM portal_state; DELETE FROM area_flood');
+    if (faceVerts && !res.world.faceVertsLoaded) await ensureFaceVerts(db, res);
+    res.world.kept = true;
+    return spawnMap(db, res.world.bsp, res.world.modelIds, name, { skill, newGame, spawnpoint, seed, coop, deathmatch, players, dmflags, fraglimit, timelimit, cheats, noareas });
+  }
   await db.exec(`DELETE FROM sound_events; DELETE FROM fx_events; DELETE FROM ents; DELETE FROM map_ents; DELETE FROM vis_faces; UPDATE viewcfg SET vis_cluster = NULL;
     DELETE FROM face_verts; DELETE FROM faces; DELETE FROM textures; DELETE FROM nodes; DELETE FROM leaves; DELETE FROM clusters; DELETE FROM leaffaces; DELETE FROM leafbrushes; DELETE FROM areas; DELETE FROM areaportals; DELETE FROM portal_state; DELETE FROM area_flood;
     DELETE FROM brushes; DELETE FROM brushsides; DELETE FROM models WHERE kind = 'B'`);
   const { bsp, geo } = loadMapModels(pak, res, name, { faceVerts });
+  res.world.kept = false;
 
   await bulkLoad(db, 'models', geo.models);
   await bulkLoad(db, 'textures', geo.textures);
@@ -298,6 +316,11 @@ export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, s
   await bulkLoad(db, 'leafbrushes', geo.leafbrushes);
   await bulkLoad(db, 'brushes', geo.brushes);
   await bulkLoad(db, 'brushsides', geo.brushsides);
+  return spawnMap(db, bsp, geo.modelIds, name, { skill, newGame, spawnpoint, seed, coop, deathmatch, players, dmflags, fraglimit, timelimit, cheats, noareas });
+}
+
+/** The spawn after the geometry: the map's entities as rows, the seed, the cvars, init_map. */
+async function spawnMap(db, bsp, modelIds, name, { skill, newGame, spawnpoint, seed, coop, deathmatch, players, dmflags, fraglimit, timelimit, cheats, noareas }) {
 
   const entRows = bsp.entities.map((e, i) => {
     const o = parseVec(e.origin);
@@ -320,7 +343,7 @@ export async function loadMap(db, pak, res, name, { skill = 1, newGame = true, s
   // them still loads, for ab-bench)
   const n = Math.min(4, Math.floor(players));
   const modes = (deathmatch || coop) && n > 2 ? `${deathmatch ? ', 0, 1' : ', 1, 0'}, ${n}` : deathmatch ? ', 0, 1' : coop ? ', 1' : '';
-  await db.exec(`EXECUTE PROCEDURE init_map('${name}', ${geo.modelIds[0]}, ${skill}, ${newGame ? 1 : 0}, ${spawnpoint ? "'" + String(spawnpoint).replace(/'/g, '') + "'" : 'NULL'}${modes})`);
+  await db.exec(`EXECUTE PROCEDURE init_map('${name}', ${modelIds[0]}, ${skill}, ${newGame ? 1 : 0}, ${spawnpoint ? "'" + String(spawnpoint).replace(/'/g, '') + "'" : 'NULL'}${modes})`);
   return bsp;
 }
 
