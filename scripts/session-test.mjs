@@ -190,6 +190,24 @@ check(!threw && empty && empty.faces.length === 0 && empty.ents.length === 0, `a
 try { empty = await session.frame({ client: 9, sqlRenderer: true }); } catch (err) { threw = err; }
 check(!threw && empty.faces.length === 0, 'in the SQL-projecting mode too');
 
+// the same map kept (SV_SpawnServer of the map that is up): its name and its .bsp's fingerprint the loaded one's, the geometry stays
+// and only the spawn runs again, faster; another map loads its own; the game and its frame are as after a fresh load
+{
+  const count = async () => Number((await db.query('SELECT COUNT(*) n FROM faces')).rows[0].N);
+  let t = performance.now();
+  await session.startMap('demo2', { newGame: true, skill: 2, seed: 1 });
+  const fresh = performance.now() - t, freshKept = res.world.kept, faces2 = await count();
+  t = performance.now();
+  await session.startMap('demo2', { newGame: true, skill: 2, seed: 1 });
+  const again = performance.now() - t, againKept = res.world.kept, faces2b = await count();
+  await session.tic(cmd({ fwd: 1 }));
+  const f = await session.frame({ client: 1 });
+  await session.startMap('demo1', { newGame: true, skill: 2, seed: 1 });
+  const other = res.world.kept, faces1 = await count();
+  check(freshKept === false && againKept === true && faces2b === faces2 && f.faces.length > 50 && other === false && faces1 !== faces2 && again < fresh,
+    `the same map loaded again keeps its geometry (${faces2b} faces) and plays (${f.faces.length} faces drawn), in ${again.toFixed(0)} ms against ${fresh.toFixed(0)} fresh; another map loads its own (${faces1})`);
+}
+
 // map_noareas (CM_AreasConnected): a map loaded with it has every area in the one flood; loaded again without, its doors part them
 {
   const floods = async () => Number((await db.query('SELECT COUNT(DISTINCT flood) n FROM area_flood')).rows[0].N);

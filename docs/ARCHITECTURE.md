@@ -98,7 +98,10 @@ insert into the primary key. The Outer Base loads in about two and a half second
 the SQL-projecting renderer mode: `loadMap(…, { faceVerts: false })` leaves it out and keeps the
 rows in `res.world`, `ensureFaceVerts(db, res)` loads them later, and the page does exactly that
 unless that mode is on (2561 → 2167 ms median, alternating four loads each). The scripts load
-everything.
+everything. The same map loaded again (a restart, `map` of the map that is up, a save of it loaded) keeps its geometry: `res.world`
+holds the map's name and its .bsp's fingerprint (`bspPrint`: the length and an FNV-1a over every seventh byte), and when both match
+only the entities, the events and the frame's caches are cleared and the spawn runs (`spawnMap`), nothing in the game writing to the
+geometry tables; demo2 again in 130 ms against 1001 fresh.
 
 How it got here: row-by-row `exec()` of 90 000 rows took minutes, and the WASM build bound every
 parameter as text, so each table had a generated `LOAD_<table>` procedure that parsed one 30 KB

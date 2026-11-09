@@ -925,8 +925,10 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
   assert((await cmd('fly')).startsWith('unknown command'), 'an unknown command says so');
 }
 
-// the page's fast renderer never reads face_verts, so it loads the map without them and asks for them on demand
+// the page's fast renderer never reads face_verts, so it loads the map without them and asks for them on demand (a fresh load: the
+// same map again would keep its geometry, the vertices with it, so the kept map's fingerprint is forgotten first)
 {
+  res.world.print = null;
   await loadMap(db, pak, res, mapName, { skill: 2, faceVerts: false });
   const n0 = (await db.query('SELECT COUNT(*) n FROM face_verts')).rows[0].N;
   assert(n0 === 0 && res.world.faceVertsLoaded === false, 'a map loaded without face_verts has none in the database');
