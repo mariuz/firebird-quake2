@@ -1649,9 +1649,25 @@ This ends the thirtieth list.
 
 The thirty-first list: the engine. In the order they are to be taken.
 
-- **firebird-wasm 0.20**: the page runs on 0.14.0, and 0.20.1 is out. Updated, it would be held to every suite, both
-  builds' browser test and the perf guard, and measured against 0.14.0 with `ab-bench` (a walking tic, the frame) and
-  the load, the changes it brings read for what the port can use.
+- **firebird-wasm 0.20**: 0.16.0 taken, 0.20.1 not. Under Node with `DirectTransport`, the way every suite runs the
+  engine, 0.20.1 fails every statement, `SELECT 1 FROM rdb$database` included, with the WebAssembly trap "null function
+  or function signature mismatch"; 0.16.0, the release between, runs everything: every suite all good, both demos'
+  renderer comparison 0 of 76800 pixels, the golden pictures, the perf guard, and the browser test on both builds.
+  Against 0.14.0, the perf guard three times each engine alternating, medians: a walking tic 5.6 → 5.4 ms, the frame
+  1.1 → 1.1, an idle tic 2.5 → 2.8, the load 1184 → 1230 ms, all within this machine's noise. Of what 0.15 and 0.16
+  bring, prepared statements executed by their handle were measured for the tic's queries and left: 18.4 µs a call
+  through `db.query` against 17.9 prepared, `db.query` reusing its statement already, against a 5 ms tic. The rest
+  (savepoints, timeouts, JS functions, snapshots, the profiler, replication) has no use in the game as it is.
+  0.20.1 waits for a release that runs under Node.
+
+This ends the thirty-first list.
+
+The thirty-second list: the engine past 0.16. In the order they are to be taken.
+
+- **firebird-wasm past 0.16.0**: 0.20.1 traps on its first statement under Node (`SELECT 1 FROM rdb$database` through
+  `DirectTransport` gives "null function or function signature mismatch"; 0.16.0 runs the same script). The
+  reproduction goes to firebird-wasm, and a release that runs it is taken here with the same checks and the same
+  measure against 0.16.0.
 
 ## Playing the demo
 
