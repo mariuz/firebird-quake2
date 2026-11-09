@@ -1617,8 +1617,24 @@ builds one after another in one job). In the order they are to be taken.
   with the npm cache and the pak's cache. A last job named `build` needs them all and builds and uploads the site, so
   the check a merge waits on keeps its name and passes only when every job did; the deploy needs it as before. The
   run takes as long as its longest job instead of the sum of them.
-- **The Node suites split**: the slow suites (the three smoke tests, the monsters, walkthrough, entities, save, coop)
-  in two or three jobs by their time, the quick ones together, so the longest job sets the run's time.
+- **The browser test's sections side by side**: done, in place of the Node suites split. The first item's run measured
+  the jobs: the suites 4 min 22 s, each browser build about 11 minutes, the whole 12, so splitting the suites would have
+  saved nothing; the browser test set the time. Each build's browser job is three now (a matrix of the build and
+  `SECTION`: `page`, `net`, and `touch,retire`, the page's load and the 404 and console-error checks in each), six
+  jobs beside the suites, so the run waits for the page section, the longest (391 s here alone, against about ten
+  minutes for the whole test). `build` still needs every job.
+
+This ends the twenty-ninth list.
+
+The thirtieth list: the map's load, which a restart after death and every level change wait on. In the order they are
+to be taken.
+
+- **The same map kept**: a restart after death, `map` of the map that is up and a save loaded on it delete the
+  geometry tables and bulk-load them again from the same .bsp (half a second of `DELETE`s, then the inserts). With the
+  map's name and its .bsp's checksum the same as the loaded one's, the geometry would stay and only the entities, the
+  players and the frame's caches start over.
+- **`init_map` measured by its parts**: the spawn after the geometry, timed with `call-counts.mjs`'s counters per
+  routine on demo1, for the one part worth a cut.
 
 ## Playing the demo
 

@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Three jobs side by side (the Node suites, and the page in a browser on each of its two builds), then the one named
+  # Jobs side by side (the Node suites, and the page in a browser on each of its two builds in three parts), then the one named
   # build, which needs them all: the check a merge waits on keeps its name and means every job passed. The run takes as
   # long as its longest job, not the sum (about twenty-five minutes one after another).
   suites:
@@ -169,8 +169,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # each build's test in three parts side by side (SECTION: the page, the network game, the touch screen with the
+      # retired service worker), the page's load in each, so the run waits for the longest part, not the whole test
       matrix:
         build: [plain, coi]
+        section: [page, net, 'touch,retire']
     steps:
       - uses: actions/checkout@v4
 
@@ -204,8 +207,10 @@ jobs:
       - name: Install Chromium for the browser test
         run: npx playwright install --with-deps chromium
 
-      - name: The page in a browser (${{ matrix.build == 'coi' && 'cross-origin isolated, the threaded build' || 'as Pages serves it, the build without threads' }})
+      - name: The page in a browser (${{ matrix.section }}; ${{ matrix.build == 'coi' && 'cross-origin isolated, the threaded build' || 'as Pages serves it, the build without threads' }})
         run: npm run test:browser ${{ matrix.build == 'coi' && '-- --coi' || '' }}
+        env:
+          SECTION: ${{ matrix.section }}
 
   build:
     needs: [suites, browser]
