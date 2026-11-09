@@ -1665,7 +1665,10 @@ This ends the thirty-first list.
 The thirty-second list: the engine past 0.16. In the order they are to be taken.
 
 - **firebird-wasm past 0.16.0**: 0.20.1 traps on its first statement under Node (`SELECT 1 FROM rdb$database` through
-  `DirectTransport` gives "null function or function signature mismatch"; 0.16.0 runs the same script). The
+  `DirectTransport` gives "null function or function signature mismatch"; 0.16.0 runs the same script). Narrowed
+  down, calling the transport step by step: `init`, `mkdir` and `exists` run, and the trap is in the engine's attach
+  path itself, both `createDatabase` on a new file and `attachDatabase` on a database 0.16.0 made and handed over
+  (2,228,224 bytes); the JS glue and the module agree on their 61 exports, so it is inside the engine's build. The
   reproduction goes to firebird-wasm, and a release that runs it is taken here with the same checks and the same
   measure against 0.16.0.
 
