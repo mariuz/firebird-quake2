@@ -1668,9 +1668,28 @@ The thirty-second list: the engine past 0.16. In the order they are to be taken.
   `DirectTransport` gives "null function or function signature mismatch"; 0.16.0 runs the same script). Narrowed
   down, calling the transport step by step: `init`, `mkdir` and `exists` run, and the trap is in the engine's attach
   path itself, both `createDatabase` on a new file and `attachDatabase` on a database 0.16.0 made and handed over
-  (2,228,224 bytes); the JS glue and the module agree on their 61 exports, so it is inside the engine's build. The
-  reproduction goes to firebird-wasm, and a release that runs it is taken here with the same checks and the same
-  measure against 0.16.0.
+  (2,228,224 bytes); the JS glue and the module agree on their 61 exports, so it is inside the engine's build.
+  Done with 0.20.3: the published 0.20.1 binaries were not the CI build of the same sources, and 0.20.3 ships CI's
+  (its publish now runs each build through a database's life first). Nothing here changes but the version: every
+  suite all good, both demos' renderer comparison 0 of 76800 pixels, the golden pictures, the perf guard, and the
+  browser test on both builds. Against 0.16.0, the perf guard three times each engine alternating, medians: the load
+  1616 → 1691 ms, an idle tic 3.7 → 3.5, a walking tic 7.6 → 7.8, the frame 1.5 → 1.5, all within this machine's
+  noise. The threaded build's run found a race in the browser test's `game` check: `usePak` names the game before
+  the models are copied, the old demo still playing, so the check could read the label from before; it waits for
+  the label now, the load's end. What 0.17 to 0.20 bring is replication (journals, publications, failover, meshes), which the game, whose
+  shared play is its own link, has no use for.
+
+This ends the thirty-second list.
+
+The thirty-third list: the hitches left in a frame (see *The cluster-change hitch* under *Engineering*). In the order
+they are to be taken.
+
+- **The first frame's mark**: a map's first frame marks the eye's cluster with nothing kept, the loading plaque
+  already down. `init_map` (or the page behind the plaque) would mark the spawn point's cluster before the first
+  frame, measured by the first frame's cost against now.
+- **A door's re-mark in the eye's areas**: a door in the eye's group of areas opening or closing drops the eye's own
+  marked set, and the next frame marks again (~17 ms). Measured first: how often a demo walk meets it, and whether the
+  flood's new areas can be added to the kept set in place of a fresh mark.
 
 ## Playing the demo
 

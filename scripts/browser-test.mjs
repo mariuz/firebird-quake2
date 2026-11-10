@@ -1361,7 +1361,8 @@ try {
       for (let i = 0; i < 480 && !(gs0.demo && gs0.game === null && gs0.name === 'pak0.pak'); i++) { await sleep(250); gs0 = await gameState(); }
       await page.setInputFiles('#pakfile', [pak1Path]);
       let gs1 = {};
-      for (let i = 0; i < 480 && !(gs1.game === 'mymod' && gs1.demo); i++) { await sleep(250); gs1 = await gameState(); }
+      // (usePak names the game before the models are copied, the old demo still playing: the label is the load's end)
+      for (let i = 0; i < 480 && !(gs1.game === 'mymod' && gs1.demo && gs1.name === 'pak0.pak · game mymod'); i++) { await sleep(250); gs1 = await gameState(); }
       await page.evaluate(() => window.quake2.setGame('')).catch(() => undefined);
       await sleep(500);
       let gs2 = {};
@@ -1369,12 +1370,12 @@ try {
       await page.evaluate(() => window.quake2.setGame('mymod')).catch(() => undefined);
       await sleep(500);
       let gs3 = {};
-      for (let i = 0; i < 480 && !(gs3.game === 'mymod' && gs3.demo); i++) { await sleep(250); gs3 = await gameState(); }
+      for (let i = 0; i < 480 && !(gs3.game === 'mymod' && gs3.demo && gs3.name === 'pak0.pak · game mymod'); i++) { await sleep(250); gs3 = await gameState(); }
       await page.evaluate(() => window.quake2.setGame('')).catch(() => undefined);
       await sleep(500);
       await page.evaluate(async () => { for (const n of await window.quake2.fileStore.list()) if (n.startsWith('game:')) await window.quake2.fileStore.remove(n); }).catch(() => undefined);
       let gs4 = {};
-      for (let i = 0; i < 480 && !(gs4.game === null && gs4.demo); i++) { await sleep(250); gs4 = await gameState(); }
+      for (let i = 0; i < 480 && !(gs4.game === null && gs4.demo && gs4.name === 'pak0.pak'); i++) { await sleep(250); gs4 = await gameState(); }
       assert(gs1.game === 'mymod' && gs1.name === 'pak0.pak · game mymod' && gs1.maps?.includes('demo9') && gs1.layers?.join() === 'mymod/pak1.pak' && gs1.kept?.includes('game:mymod') && !gs1.kept?.includes('pak')
         && gs2.game === null && !gs2.maps?.includes('demo9') && gs2.kept?.includes('game:mymod') && gs3.game === 'mymod' && gs3.maps?.includes('demo9'),
         `game mymod takes the pak picked as its own over the demo's (${JSON.stringify({ name: gs1.name, layers: gs1.layers, kept: gs1.kept })}), game "" is the base alone (${JSON.stringify(gs2.maps)}), and the game set again finds its pak kept (${JSON.stringify(gs3.layers)})`);
