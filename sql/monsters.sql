@@ -5,6 +5,7 @@ SET TERM ^ ;
 
 CREATE OR ALTER PROCEDURE run_think (eid INTEGER, think VARCHAR(24)) AS BEGIN END^
 CREATE OR ALTER PROCEDURE gunner_grenade (eid INTEGER) AS BEGIN END^
+CREATE OR ALTER PROCEDURE premark_view AS BEGIN END^   -- (render.sql's, which loads after; init_map calls it)
 -- (mover_blocked is defined in game.sql, which loads first: a stub here used to replace it with an empty body)
 
 -- the current frame of an entity's animation
@@ -1790,6 +1791,8 @@ BEGIN
   UPDATE lightstyles l SET l.base_pattern = l.pattern;
   -- the level name
   UPDATE player p SET p.cprint = (SELECT g.level_msg FROM game g WHERE g.id = 1), p.cprint_time = 3;
+  -- the first view's cluster marked now, behind the loading plaque, not in the first frame
+  EXECUTE PROCEDURE premark_view;
 END^
 
 SET TERM ; ^

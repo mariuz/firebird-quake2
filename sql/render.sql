@@ -281,6 +281,17 @@ BEGIN
   UPDATE viewcfg c SET c.vis_cluster = :vcluster, c.vis_area = :varea, c.vis_slot = :slot, c.world_lst = NULL WHERE c.id = 1;
 END^
 
+-- premark_view: the first client's view marked as the next frame would mark it (view_setup, mark_faces), run where the
+-- loading plaque is up (init_map, a save or a level come back to) so the first frame is not the mark's ~20 ms
+CREATE OR ALTER PROCEDURE premark_view
+AS
+DECLARE ex DOUBLE PRECISION; DECLARE d DOUBLE PRECISION; DECLARE w INTEGER; DECLARE h INTEGER;
+DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII; DECLARE vcl INTEGER; DECLARE vleaf INTEGER; DECLARE vslot SMALLINT;
+BEGIN
+  EXECUTE PROCEDURE view_setup(1) RETURNING_VALUES ex, d, d, d, d, d, d, d, d, d, d, d, w, h, d, d, d, d, pvs, vcl, vleaf;
+  IF (ex IS NOT NULL) THEN EXECUTE PROCEDURE mark_faces(pvs, vcl, vleaf) RETURNING_VALUES vslot;
+END^
+
 -- FRAME_FACES: the same faces, projected vertex by vertex in SQL.
 CREATE OR ALTER PROCEDURE frame_faces (client SMALLINT = 1)
 RETURNS (face INTEGER, seq INTEGER, vf DOUBLE PRECISION, vr DOUBLE PRECISION, vu DOUBLE PRECISION,

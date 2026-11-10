@@ -148,6 +148,7 @@ export async function importLevel(db, lv) {
     EXECUTE PROCEDURE flood_areas;
     EXECUTE PROCEDURE ai_set_sight_client;
     UPDATE viewcfg SET vis_cluster = NULL, vis_area = NULL, lv_ex = NULL, lv_leaf = NULL, world_lst = NULL, view_stamp = view_stamp + 1;
+    EXECUTE PROCEDURE premark_view;
   END`);
 }
 
@@ -178,5 +179,6 @@ export async function importSave(db, save) {
   if (save.rng != null) await db.query("SELECT RDB$SET_CONTEXT('USER_SESSION', 'rng', ?) FROM rdb$database", [Math.floor(save.rng)]);
   // the frame's caches describe a view and a cluster that are gone
   await db.exec('UPDATE viewcfg SET vis_cluster = NULL, lv_ex = NULL, lv_leaf = NULL, world_lst = NULL, view_stamp = view_stamp + 1;');
+  await db.exec('EXECUTE PROCEDURE premark_view');   // (the loaded view's cluster marked behind the plaque, as init_map does)
   return { version: save.version, dropped };
 }
