@@ -192,7 +192,7 @@ AS
 DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECLARE z DOUBLE PRECISION;
 DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE vh DOUBLE PRECISION;
 DECLARE n INTEGER; DECLARE t DOUBLE PRECISION; DECLARE leaf INTEGER; DECLARE cl INTEGER; DECLARE ar INTEGER; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII;
-DECLARE cur SMALLINT; DECLARE slot SMALLINT; DECLARE k INTEGER; DECLARE used INTEGER;
+DECLARE cur SMALLINT; DECLARE slot SMALLINT; DECLARE k INTEGER; DECLARE used INTEGER; DECLARE sig VARCHAR(1000);
 DECLARE yaw DOUBLE PRECISION; DECLARE fx DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
 BEGIN
   marked = NULL;
@@ -221,7 +221,8 @@ BEGIN
     SELECT l.cluster, l.area FROM leaves l WHERE l.id = :leaf INTO cl, ar;
     pvs = NULL;
     SELECT c.pvs FROM clusters c WHERE c.id = :cl INTO pvs;
-    IF (cl >= 0 AND NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.cluster = :cl AND s.area IS NOT DISTINCT FROM :ar)) THEN
+    sig = area_sig(ar);
+    IF (cl >= 0 AND NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.cluster = :cl AND s.area IS NOT DISTINCT FROM :ar AND s.areas IS NOT DISTINCT FROM :sig)) THEN
     BEGIN
       slot = NULL; k = 0;
       WHILE (k < 16 AND slot IS NULL) DO
@@ -244,14 +245,15 @@ BEGIN
 END^
 
 -- mark_faces: R_MarkLeaves, once per view cluster: every face of every leaf
--- in the PVS goes into VIS_FACES, in the slot it returns. The last 8 clusters'
--- sets are kept, each with the areas its flood joined; a new map or a load
--- (VIEWCFG.VIS_CLUSTER reset) drops them all, a portal opening or closing only
--- those whose area's connections changed (flood_areas).
+-- in the PVS goes into VIS_FACES, in the slot it returns. The last 16 sets are
+-- kept, each found by its cluster, its area and the areas its flood joined, so a
+-- door opening or closing finds the set of its other state when it had one; a
+-- new map or a load (VIEWCFG.VIS_CLUSTER reset) drops them all, a portal that
+-- changes the eye's connections only leaves its slot (flood_areas).
 CREATE OR ALTER PROCEDURE mark_faces (pvs VARCHAR(2048) CHARACTER SET ASCII, vcluster INTEGER, vleaf INTEGER)
 RETURNS (slot SMALLINT)
 AS
-DECLARE cur INTEGER; DECLARE curarea INTEGER; DECLARE varea INTEGER; DECLARE k INTEGER; DECLARE used INTEGER; DECLARE lk SMALLINT;
+DECLARE cur INTEGER; DECLARE curarea INTEGER; DECLARE varea INTEGER; DECLARE k INTEGER; DECLARE used INTEGER; DECLARE lk SMALLINT; DECLARE sig VARCHAR(1000);
 BEGIN
   SELECT l.area FROM leaves l WHERE l.id = :vleaf INTO varea;
   SELECT c.vis_cluster, c.vis_area, c.vis_slot, c.lockpvs FROM viewcfg c WHERE c.id = 1 INTO cur, curarea, slot, lk;
@@ -262,7 +264,8 @@ BEGIN
   SELECT COALESCE(MAX(s.used), 0) + 1 FROM vis_sets s INTO used;
   -- a set kept from before: switch to it
   slot = NULL;
-  SELECT s.slot FROM vis_sets s WHERE s.cluster = :vcluster AND s.area IS NOT DISTINCT FROM :varea INTO slot;
+  sig = area_sig(varea);
+  SELECT s.slot FROM vis_sets s WHERE s.cluster = :vcluster AND s.area IS NOT DISTINCT FROM :varea AND s.areas IS NOT DISTINCT FROM :sig INTO slot;
   IF (slot IS NOT NULL) THEN
   BEGIN
     UPDATE vis_sets s SET s.used = :used WHERE s.slot = :slot;

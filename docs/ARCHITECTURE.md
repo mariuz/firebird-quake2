@@ -311,9 +311,12 @@ costs ~17 ms (it was ~43). The marking itself is `build_vis_set(pvs, cluster, ar
 each in its own slot of `vis_faces` (primary key `slot, face`; `vis_sets` says which cluster and
 area a slot holds and when it was last used), so walking back into a recent cluster is a switch of
 `viewcfg.vis_slot` (~0.3 ms); the frame reads `WHERE v.slot = :vslot`, which costs nothing
-measurable. A new map or a load (`viewcfg.vis_cluster` reset) drops all the sets; a portal opening
-or closing (`flood_areas`) only those whose area's connections changed, each set keeping the areas
-its flood joined when it was marked, and the eye's set going means marking afresh.
+measurable. A new map or a load (`viewcfg.vis_cluster` reset) drops all the sets. A set is found by
+its cluster, its area and the areas its flood joined when it was marked (`area_sig`), so a portal
+opening or closing (`flood_areas`) drops none: when the eye's own set was marked for other connections
+the view leaves its slot (`viewcfg.vis_slot` NULL), and `mark_faces` finds the set of the new state if
+one is kept or marks it. A door's first opening marks (16–22 ms on the demo maps); every closing and
+opening after it switches (3–7 ms, the world list), where each used to mark (14–39 ms).
 
 `premark_ahead()` marks before the eye arrives: the page calls it after each frame whose tic, query
 and raster left spare time, and it probes four points (half a second and a second along the

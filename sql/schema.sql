@@ -70,8 +70,8 @@ CREATE TABLE game (
 );
 
 -- which cluster and area each kept slot of VIS_FACES (render.sql) holds, when it was last used, and the
--- areas the eye's area was joined to through open portals when it was marked (the flood): a door
--- opening or closing drops only the sets whose area's connections changed (FLOOD_AREAS)
+-- areas the eye's area was joined to through open portals when it was marked (the flood, area_sig): a set is
+-- found again only for the same connections, so a door's open and shut states each keep theirs
 CREATE TABLE vis_sets (
   slot    SMALLINT NOT NULL PRIMARY KEY,
   cluster INTEGER NOT NULL,

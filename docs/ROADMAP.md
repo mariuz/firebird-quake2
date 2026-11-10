@@ -1691,9 +1691,29 @@ they are to be taken.
   or a level come back to being read in, so the mark (14–22 ms) is part of the load, behind the plaque. The first
   frames are 6.9, 7.7, 8.1 and 10.7 ms now: what is left is the world list, which every frame after a move builds
   (a walking frame is 4–5 ms). `test:session` finds the load's cluster marked, a set built, and a loaded save's too.
-- **A door's re-mark in the eye's areas**: a door in the eye's group of areas opening or closing drops the eye's own
-  marked set, and the next frame marks again (~17 ms). Measured first: how often a demo walk meets it, and whether the
-  flood's new areas can be added to the kept set in place of a fresh mark.
+- **A door's re-mark in the eye's areas**: done. Each demo map has one area portal, its door, between areas 1 and 2.
+  With the eye in area 1, every opening and closing of that door dropped the eye's set (and every other set whose
+  connections changed) and the next frame marked again: measured toggling the portal six times on each map, the
+  frame after took 14–39 ms (demo1 24.9 to 39.5, demo2 and demo3 13–16), every time, and one set was left. So a
+  player passing through met two marks, and a door a monster opens and shuts as many. A set is found now by its
+  cluster, its area and the connections its flood joined (`area_sig` in game.sql), and `flood_areas` drops none:
+  when the eye's set was marked for other connections the view leaves its slot, and `mark_faces` finds the kept set
+  of the new state or marks it. The first opening still marks (16–22 ms); every toggle after it is a switch, 2.6–7.0
+  ms with the world list. Adding the flood's new areas to the kept set was not needed: the shut state's set is the
+  one the eye had, and the open state's is kept after its first mark. `sql-smoke` (`npm test`) takes the view off
+  its set with the near portal, marks the other state into another slot, and with the portal back finds its own
+  set again.
+
+This ends the thirty-third list.
+
+The thirty-fourth list: the frame after a move. In the order they are to be taken.
+
+- **The world list measured by its parts**: a frame whose view moved builds the world's face list afresh (4–5 ms in
+  Node on the demo maps, against about 2 for an idle view's kept list), every frame of a walk. Measured first: what
+  of it is the frustum scan of `vis_faces`, the sort, the `LIST()` and the rows' trip to JS, before any change.
+- **A door's first opening marked ahead**: the one mark a door leaves (16–22 ms) could be built in a frame's spare
+  time while the eye is in an area next to a shut portal, for the flood the portal's opening would make, as
+  `premark_ahead` builds the cluster ahead. Measured first: how often the spare time is there when a door opens.
 
 ## Playing the demo
 
@@ -2153,8 +2173,9 @@ picker). Missing for the rest of the game:
   a set for the first cluster that has none, in the slot used longest ago that is not the view's;
   sixteen sets are kept now instead of eight, as eight thrashed. On a 400-tic walk through the
   first rooms (18 clusters) the frames over 8 ms went from 19–22 to 9–10. What stays: corners where
-  two or three small clusters are crossed within a few tics, and the eye's
-  own re-mark when a door in its group of areas moves, since what it sees changes. Letting the
+  two or three small clusters are crossed within a few tics, and a door's first opening in the eye's
+  group of areas, since what it sees changes (its later openings and closings switch to kept sets: see the
+  thirty-third list). Letting the
   page mark up to three clusters a frame was measured and brought nothing (8–11 hitches against
   9–11, three more marks): the probes do not see round the corner, so more marks a frame mark the
   wrong clusters sooner.

@@ -275,10 +275,17 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
     if (near != null && eye0.C != null) {
       const o = await state(near);
       await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${near}, ${1 - o}); END`);
-      assert((await db.query('SELECT vis_cluster c FROM viewcfg')).rows[0].C === null, `a portal in the eye's group (${near}) drops its set: marked afresh`);
+      assert((await db.query('SELECT vis_slot s FROM viewcfg')).rows[0].S === null, `a portal in the eye's group (${near}) takes the view off its set`);
+      await db.query('SELECT COUNT(*) FROM frame_all(0, 2147483647, 2147483647, 0)');
+      const other = (await db.query('SELECT vis_slot s FROM viewcfg')).rows[0].S;
+      // (the portal back as it was: the set marked for those connections is kept, and the view switches back to it)
       await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${near}, ${o}); END`);
+      await db.query('SELECT COUNT(*) FROM frame_all(0, 2147483647, 2147483647, 0)');
+      const back = (await db.query('SELECT vis_slot s, vis_cluster c FROM viewcfg')).rows[0];
+      assert(other !== null && other !== eye0.S && back.S === eye0.S && back.C === eye0.C, `the portal's other state is marked into another slot (${other}), and back as it was the view finds its own set again (slot ${back.S}, was ${eye0.S})`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${near}, ${1 - o}); EXECUTE PROCEDURE set_portal_state(${near}, ${o}); END`);
     }
-    assert((await db.query('SELECT vis_cluster FROM viewcfg')).rows[0].VIS_CLUSTER === null, 'the marked view is forgotten when a portal changes');
+    assert((await db.query('SELECT vis_slot FROM viewcfg')).rows[0].VIS_SLOT === null, 'the marked view is left when a portal changes');
     assert((await db.query('SELECT COUNT(*) n FROM frame_all(0, 0, 0, 0) WHERE kind = 1')).rows[0].N > 0, 'the frame marks and draws again');
     await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE door_hit_bottom(${d}); END`);
     assert((await floods()) === closed, 'the door closing parts them again');
