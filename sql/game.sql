@@ -497,12 +497,24 @@ BEGIN
       (SELECT e.p1z FROM ents e WHERE e.id = :eid), spd, 'door_hit_bottom');
 END^
 
+-- area_sig: the areas joined to an area through open portals, as a list (the flood it is in, CM_WriteAreaBits): what
+-- a kept face set was marked for, and is found again by
+CREATE OR ALTER FUNCTION area_sig (a INTEGER) RETURNS VARCHAR(1000)
+AS
+DECLARE fl INTEGER; DECLARE sig VARCHAR(1000);
+BEGIN
+  SELECT f.flood FROM area_flood f WHERE f.area = :a INTO fl;
+  SELECT LIST(x.area, ',') FROM (SELECT f.area FROM area_flood f WHERE f.flood = :fl ORDER BY f.area) x INTO sig;
+  RETURN sig;
+END^
+
 -- FloodAreaConnections: areas reachable through open portals share a flood number. A change
--- forgets the marked view, since the eye may now see more, or less. With map_noareas every area
--- is the one flood (CM_AreasConnected's `if (map_noareas->value) return true`).
+-- leaves the marked view if the eye's set was marked for other connections, since the eye may now
+-- see more, or less. With map_noareas every area is the one flood (CM_AreasConnected's
+-- `if (map_noareas->value) return true`).
 CREATE OR ALTER PROCEDURE flood_areas
 AS
-DECLARE a INTEGER; DECLARE n INTEGER = 0; DECLARE other INTEGER; DECLARE grew SMALLINT;
+DECLARE a INTEGER; DECLARE n INTEGER = 0; DECLARE other INTEGER; DECLARE grew SMALLINT; DECLARE sig VARCHAR(1000);
 BEGIN
   DELETE FROM area_flood;
   IF (EXISTS (SELECT 1 FROM game g WHERE g.id = 1 AND g.map_noareas = 1)) THEN
@@ -531,11 +543,11 @@ BEGIN
       END
     END
   END
-  -- the kept face sets whose area's connections changed are stale; if the eye's own went, it is marked afresh
-  DELETE FROM vis_sets s
-   WHERE s.areas IS DISTINCT FROM (SELECT LIST(x.area, ',') FROM (SELECT f2.area FROM area_flood f2
-                                     WHERE f2.flood = (SELECT f1.flood FROM area_flood f1 WHERE f1.area = s.area) ORDER BY f2.area) x);
-  UPDATE viewcfg c SET c.vis_cluster = NULL, c.world_lst = NULL WHERE c.id = 1 AND NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.slot = c.vis_slot);
+  -- the kept face sets stay, each found by the connections it was marked for (a door shut again finds the shut
+  -- door's set); if the eye's own was marked for others, the view leaves its slot and mark_faces finds or marks one
+  SELECT c.vis_slot FROM viewcfg c WHERE c.id = 1 INTO a;
+  SELECT s.area, s.areas FROM vis_sets s WHERE s.slot = :a INTO other, sig;
+  IF (a IS NOT NULL AND sig IS DISTINCT FROM area_sig(other)) THEN UPDATE viewcfg c SET c.vis_slot = NULL, c.world_lst = NULL WHERE c.id = 1;
 END^
 
 -- gi.SetAreaPortalState
