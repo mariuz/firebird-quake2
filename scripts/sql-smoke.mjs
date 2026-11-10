@@ -84,7 +84,7 @@ assert((await db.query('SELECT jump_released j FROM player')).rows[0].J === 1, '
   const after = (await db.query('SELECT vis_slot s, vis_cluster c FROM viewcfg')).rows[0];
   const sets = (await db.query('SELECT COUNT(*) n FROM vis_sets')).rows[0].N;
   assert(after.S === before.S && after.C === before.C && sets <= 8, `premark_ahead leaves the view's set alone (marked ${m ?? 'nothing'}, ${sets} set(s) kept)`);
-  if (m != null) assert((await db.query('SELECT COUNT(*) n FROM vis_sets WHERE cluster = ?', [m])).rows[0].N === 1, 'and what it marked is kept');
+  if (m != null) assert((await db.query('SELECT COUNT(*) n FROM vis_sets WHERE cluster = ?', [m])).rows[0].N >= 1, 'and what it marked is kept');   // (the eye's own cluster may have a second set: a shut door's opening, marked ahead)
   // it probes four points, so a few more calls mark what is left and then there is nothing to do
   let calls = 0;
   while (calls < 6 && (await db.query('SELECT marked FROM premark_ahead')).rows[0].MARKED != null) calls++;
@@ -283,6 +283,24 @@ assert(missing2.length === 0, `all referenced sounds exist in the pak (${missing
       await db.query('SELECT COUNT(*) FROM frame_all(0, 2147483647, 2147483647, 0)');
       const back = (await db.query('SELECT vis_slot s, vis_cluster c FROM viewcfg')).rows[0];
       assert(other !== null && other !== eye0.S && back.S === eye0.S && back.C === eye0.C, `the portal's other state is marked into another slot (${other}), and back as it was the view finds its own set again (slot ${back.S}, was ${eye0.S})`);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${near}, ${1 - o}); EXECUTE PROCEDURE set_portal_state(${near}, ${o}); END`);
+      // a door's opening marked ahead: no set kept, the portal shut, premark_ahead (once nothing ahead is left) marks the eye's
+      // cluster with it open and leaves the portal, the floods and the view as they were; opened, the view switches to that set
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${near}, 0); END`);
+      await db.exec('DELETE FROM vis_faces; DELETE FROM vis_sets; UPDATE viewcfg SET vis_cluster = NULL WHERE id = 1');
+      await db.query('SELECT COUNT(*) FROM frame_all(0, 2147483647, 2147483647, 0)');
+      const floods0 = JSON.stringify((await db.query('SELECT area, flood FROM area_flood ORDER BY area', [], { rowMode: 'array' })).rows);
+      const view0 = (await db.query('SELECT vis_slot s, vis_cluster c, vis_area a FROM viewcfg')).rows[0];
+      for (let i = 0; i < 8 && (await db.query('SELECT marked m FROM premark_ahead')).rows[0].M !== null; i++);
+      const otherArea = (await db.query(`SELECT FIRST 1 ap.other_area o FROM areas a JOIN areaportals ap ON ap.id >= a.first_ap AND ap.id < a.first_ap + a.num_ap WHERE a.id = ${view0.A} AND ap.portal = ${near} AND ap.other_area <> a.id`)).rows[0]?.O;
+      const ahead = (await db.query(`SELECT FIRST 1 slot s FROM vis_sets WHERE cluster = ${view0.C} AND area = ${view0.A} AND (',' || areas || ',') LIKE '%,${otherArea},%'`)).rows[0]?.S;
+      const view1 = (await db.query('SELECT vis_slot s FROM viewcfg')).rows[0];
+      const floods1 = JSON.stringify((await db.query('SELECT area, flood FROM area_flood ORDER BY area', [], { rowMode: 'array' })).rows);
+      await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${near}, 1); END`);
+      await db.query('SELECT COUNT(*) FROM frame_all(0, 2147483647, 2147483647, 0)');
+      const opened = (await db.query('SELECT vis_slot s FROM viewcfg')).rows[0].S;
+      assert(otherArea != null && ahead != null && ahead !== view0.S && view1.S === view0.S && floods1 === floods0 && (await state(near)) === 1 && opened === ahead,
+        `premark_ahead marks the door's opening ahead (slot ${ahead}, the view's ${view0.S} kept, the floods as they were), and the door opened switches to it (${opened})`);
       await db.query(`EXECUTE BLOCK AS BEGIN EXECUTE PROCEDURE set_portal_state(${near}, ${1 - o}); EXECUTE PROCEDURE set_portal_state(${near}, ${o}); END`);
     }
     assert((await db.query('SELECT vis_slot FROM viewcfg')).rows[0].VIS_SLOT === null, 'the marked view is left when a portal changes');

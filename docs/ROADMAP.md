@@ -1708,12 +1708,34 @@ This ends the thirty-third list.
 
 The thirty-fourth list: the frame after a move. In the order they are to be taken.
 
-- **The world list measured by its parts**: a frame whose view moved builds the world's face list afresh (4–5 ms in
-  Node on the demo maps, against about 2 for an idle view's kept list), every frame of a walk. Measured first: what
-  of it is the frustum scan of `vis_faces`, the sort, the `LIST()` and the rows' trip to JS, before any change.
-- **A door's first opening marked ahead**: the one mark a door leaves (16–22 ms) could be built in a frame's spare
-  time while the eye is in an area next to a shut portal, for the flood the portal's opening would make, as
-  `premark_ahead` builds the cluster ahead. Measured first: how often the spare time is there when a door opens.
+- **The world list measured by its parts**: measured, and left. In Node on the three demo maps, a frame whose view
+  moved runs `frame_all` in 2.2–3.5 ms against 1.0–2.4 for the same view held, and the 4–5 ms of `session.frame` is
+  that and 0.5–1 ms of the rows' trip to JS and their decoding. The difference, the world's list, is 0.9–1.9 ms: the
+  view's setup 0.16, the scan of the slot's 540–760 rows of `vis_faces` 0.2, and the rest the six plane tests, about
+  1.5 µs a row; the `LIST()` adds nothing measurable. The back-face test, first, passes 80–90 % of the rows (the mark
+  already left out what no eye in the cluster can face), so the frustum's tests were tried first, at the start view
+  and turned 90 and 180 degrees on each map: 0.05 to 0.2 ms less (1.88 → 1.70 at demo1's start), within the noise. The
+  cost is the test of each row, which a frame of a moved view has to make.
+- **A door's first opening marked ahead**: done. The one mark a door left (16–22 ms, the thirty-third list) is built
+  in a frame's spare time now: `premark_ahead`, with no cluster ahead to mark, takes the eye's area's first shut
+  portal that no kept set of the view's cluster and area reaches through (none whose areas hold the portal's other
+  side), opens it in `portal_state`, floods, marks the view's cluster into a free or the oldest slot, shuts it, floods
+  again and puts the view's slot and world list back, so the game's state is as it was. The spare time is there: the
+  page calls it on any frame whose tic, query and raster took under 30 ms, and a walking frame's are about 8, 3 and 2
+  here (the perf guard's figures), and the eye's area changes rarely, so it is built long before the door is reached. Measured
+  with the eye beside each demo map's door: the mark ahead 12–21 ms once, the first opening's frame 2.7–4.5 ms
+  (it was 16–22), and a call with nothing to do 0.3–0.5 ms as before (0.44–0.69 on demo1, 0.30–0.45 on demo2, the old
+  SQL's alike). `sql-smoke` (`npm test`) clears the kept sets, lets `premark_ahead` run out, finds the door's opening
+  marked into another slot with the view's slot and the floods as they were, and the door opened switching to it.
+
+This ends the thirty-fourth list.
+
+The thirty-fifth list: the rows' trip to the page. In the order they are to be taken.
+
+- **The frame's decoding measured**: `session.frame` spends 0.5–1 ms over `frame_all`'s own time in Node, the rows
+  coming back through the transport and `decodeFrame` turning them into the painter's lists; in the browser the worker's
+  round trip adds to it. Measured first, by its parts (the transport, the binary rows, the face list's split), in Node
+  and in a headless Chromium on both builds.
 
 ## Playing the demo
 
@@ -2173,9 +2195,8 @@ picker). Missing for the rest of the game:
   a set for the first cluster that has none, in the slot used longest ago that is not the view's;
   sixteen sets are kept now instead of eight, as eight thrashed. On a 400-tic walk through the
   first rooms (18 clusters) the frames over 8 ms went from 19–22 to 9–10. What stays: corners where
-  two or three small clusters are crossed within a few tics, and a door's first opening in the eye's
-  group of areas, since what it sees changes (its later openings and closings switch to kept sets: see the
-  thirty-third list). Letting the
+  two or three small clusters are crossed within a few tics (a door's openings and closings switch to kept
+  sets, the first marked ahead: see the thirty-third and thirty-fourth lists). Letting the
   page mark up to three clusters a frame was measured and brought nothing (8–11 hitches against
   9–11, three more marks): the probes do not see round the corner, so more marks a frame mark the
   wrong clusters sooner.

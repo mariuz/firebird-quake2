@@ -183,9 +183,11 @@ END^
 -- crossing is a switch of slot and not a 17 ms hitch. Four points are probed: half a second and a
 -- second along the velocity, and 128 and 256 units along the view (where the player looks is where
 -- the player goes next, a corner or a door away); the first whose cluster and area have no kept
--- set gets one, in a free slot or the one used longest ago that is not the view's. Called by the
--- page in the spare time of a frame; returns the cluster it marked, or NULL when there was nothing
--- to do.
+-- set gets one, in a free slot or the one used longest ago that is not the view's. With none to
+-- mark, a shut portal of the eye's area whose opening has no kept set gets one: the portal opened
+-- for the mark and shut again, the floods and the view's slot as they were, so the door's first
+-- opening is a switch of slot. Called by the page in the spare time of a frame; returns the
+-- cluster it marked, or NULL when there was nothing to do.
 CREATE OR ALTER PROCEDURE premark_ahead
 RETURNS (marked INTEGER)
 AS
@@ -193,6 +195,7 @@ DECLARE pe INTEGER; DECLARE x DOUBLE PRECISION; DECLARE y DOUBLE PRECISION; DECL
 DECLARE vx DOUBLE PRECISION; DECLARE vy DOUBLE PRECISION; DECLARE vz DOUBLE PRECISION; DECLARE vh DOUBLE PRECISION;
 DECLARE n INTEGER; DECLARE t DOUBLE PRECISION; DECLARE leaf INTEGER; DECLARE cl INTEGER; DECLARE ar INTEGER; DECLARE pvs VARCHAR(2048) CHARACTER SET ASCII;
 DECLARE cur SMALLINT; DECLARE slot SMALLINT; DECLARE k INTEGER; DECLARE used INTEGER; DECLARE sig VARCHAR(1000);
+DECLARE pt INTEGER; DECLARE oa INTEGER; DECLARE wl BLOB SUB_TYPE TEXT CHARACTER SET ASCII;
 DECLARE yaw DOUBLE PRECISION; DECLARE fx DOUBLE PRECISION; DECLARE fy DOUBLE PRECISION; DECLARE px DOUBLE PRECISION; DECLARE py DOUBLE PRECISION; DECLARE pz DOUBLE PRECISION;
 BEGIN
   marked = NULL;
@@ -239,6 +242,35 @@ BEGIN
     END
     n = n + 1;
   END
+  -- the eye's area's shut portals: the first whose other area no kept set of the view's cluster and area
+  -- reaches (none marked with it open) is opened for the mark and shut again
+  SELECT c.vis_cluster, c.vis_area, c.world_lst FROM viewcfg c WHERE c.id = 1 INTO cl, ar, wl;
+  IF (cur IS NULL OR cl IS NULL OR cl < 0 OR ar IS NULL) THEN LEAVE;
+  pt = NULL;
+  SELECT FIRST 1 ap.portal, ap.other_area FROM areas a2 JOIN areaportals ap ON ap.id >= a2.first_ap AND ap.id < a2.first_ap + a2.num_ap
+   WHERE a2.id = :ar AND ap.other_area <> :ar
+     AND NOT EXISTS (SELECT 1 FROM portal_state ps WHERE ps.portal = ap.portal AND ps.open_ = 1)
+     AND NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.cluster = :cl AND s.area = :ar AND (',' || s.areas || ',') LIKE ('%,' || ap.other_area || ',%'))
+    INTO pt, oa;
+  IF (pt IS NULL) THEN LEAVE;
+  slot = NULL; k = 0;
+  WHILE (k < 16 AND slot IS NULL) DO
+  BEGIN
+    IF (k IS DISTINCT FROM cur AND NOT EXISTS (SELECT 1 FROM vis_sets s WHERE s.slot = :k)) THEN slot = k;
+    k = k + 1;
+  END
+  IF (slot IS NULL) THEN SELECT FIRST 1 s.slot FROM vis_sets s WHERE s.slot IS DISTINCT FROM :cur ORDER BY s.used INTO slot;
+  IF (slot IS NULL) THEN LEAVE;
+  SELECT COALESCE(MAX(s.used), 0) + 1 FROM vis_sets s INTO used;
+  pvs = NULL;
+  SELECT c.pvs FROM clusters c WHERE c.id = :cl INTO pvs;
+  UPDATE OR INSERT INTO portal_state (portal, open_) VALUES (:pt, 1) MATCHING (portal);
+  EXECUTE PROCEDURE flood_areas;
+  EXECUTE PROCEDURE build_vis_set(COALESCE(pvs, ''), cl, ar, slot, used);
+  UPDATE portal_state ps SET ps.open_ = 0 WHERE ps.portal = :pt;
+  EXECUTE PROCEDURE flood_areas;
+  UPDATE viewcfg c SET c.vis_slot = :cur, c.world_lst = :wl WHERE c.id = 1;
+  marked = cl;
   LEAVE;
   END
   SUSPEND;
