@@ -322,7 +322,12 @@ and area have none, in a free slot or the one used longest ago that is not the v
 when there is nothing to do, a mark's cost when there is). On a 400-tic walk through demo1's first
 rooms, 18 clusters crossed, frames over 8 ms went from 19–22 to 9–10 with sixteen slots (with
 eight they thrashed: 29 marks for 18 crossings, 15 hitches left). What stays are the corners where
-two or three small clusters are crossed within a few tics, and the first frame's mark.
+two or three small clusters are crossed within a few tics.
+
+`premark_view` marks the first client's view as the next frame would (`view_setup`, `mark_faces`), at the end of
+`init_map` and after a save or a level come back to is read in, all behind the loading plaque, so a map's first frame
+switches to a set already built (19–27 ms on the demo maps before, 7–11 after, the rest the world list every moved
+view builds).
 
 `frame_all(mode, last_sound, last_fx, want_speakers, client = 1, with_boxes = 0)` returns the frame of the client's view
 (`view_setup(client)`: its eye; its own model left out, the other client's in) as kind-tagged rows

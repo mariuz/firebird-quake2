@@ -1684,9 +1684,13 @@ This ends the thirty-second list.
 The thirty-third list: the hitches left in a frame (see *The cluster-change hitch* under *Engineering*). In the order
 they are to be taken.
 
-- **The first frame's mark**: a map's first frame marks the eye's cluster with nothing kept, the loading plaque
-  already down. `init_map` (or the page behind the plaque) would mark the spawn point's cluster before the first
-  frame, measured by the first frame's cost against now.
+- **The first frame's mark**: done. A map's first frame marked the eye's cluster with nothing kept, the loading plaque
+  already down: measured in Node on the three demo maps and demo1 again, the first frame took 19.4, 25.2, 26.0 and
+  27.0 ms against about 2 for the ones after it (an idle view's world list is kept). `premark_view` (render.sql:
+  `view_setup` and `mark_faces` for the first client, as the frame runs them) now ends `init_map` and follows a save
+  or a level come back to being read in, so the mark (14–22 ms) is part of the load, behind the plaque. The first
+  frames are 6.9, 7.7, 8.1 and 10.7 ms now: what is left is the world list, which every frame after a move builds
+  (a walking frame is 4–5 ms). `test:session` finds the load's cluster marked, a set built, and a loaded save's too.
 - **A door's re-mark in the eye's areas**: a door in the eye's group of areas opening or closing drops the eye's own
   marked set, and the next frame marks again (~17 ms). Measured first: how often a demo walk meets it, and whether the
   flood's new areas can be added to the kept set in place of a fresh mark.
@@ -2149,7 +2153,7 @@ picker). Missing for the rest of the game:
   a set for the first cluster that has none, in the slot used longest ago that is not the view's;
   sixteen sets are kept now instead of eight, as eight thrashed. On a 400-tic walk through the
   first rooms (18 clusters) the frames over 8 ms went from 19–22 to 9–10. What stays: corners where
-  two or three small clusters are crossed within a few tics, the first frame's mark, and the eye's
+  two or three small clusters are crossed within a few tics, and the eye's
   own re-mark when a door in its group of areas moves, since what it sees changes. Letting the
   page mark up to three clusters a frame was measured and brought nothing (8–11 hitches against
   9–11, three more marks): the probes do not see round the corner, so more marks a frame mark the

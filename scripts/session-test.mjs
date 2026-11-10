@@ -40,6 +40,10 @@ const setup = await session.startMap('demo1', { newGame: true, skill: 2, seed: 1
 check(session.map?.name === 'demo1' && setup.bsp && typeof setup.sky === 'string' && setup.sky.trim().length > 0,
   `startMap gives the map and its setup (sky ${setup.sky.trim()}, track ${setup.cdTrack}, ${setup.speakers.length} looped speakers)`);
 check(session.styleBase.some((v) => v > 0), 'the light styles\' resting values are read');
+// premark_view: the first view's cluster is marked by the load (behind the plaque), so the first frame only switches to it
+const viewMarked = async () => (await db.query('SELECT c.vis_cluster, (SELECT v.cluster FROM view_setup(1) v), (SELECT COUNT(*) FROM vis_sets) FROM viewcfg c WHERE c.id = 1', [], { rowMode: 'array' })).rows[0];
+const mk = await viewMarked();
+check(mk[0] !== null && mk[0] === mk[1] && mk[2] === 1, `the load marks the first view's cluster (${mk[0]}, the view's ${mk[1]}, ${mk[2]} set)`);
 
 // tics and frames
 const startSound = session.lastSoundId;
@@ -116,6 +120,8 @@ const loaded = await playerPos();
 check(loaded.TIC === saved.TIC && loaded.X === saved.X && loaded.Y === saved.Y && loaded.BULLETS === saved.BULLETS,
   `loading brings the game back as saved (tic ${loaded.TIC}, at ${loaded.X.toFixed(0)},${loaded.Y.toFixed(0)})`);
 check(session.lastFxId === 0 && session.lastSoundId >= 0, 'a load plays nothing that was queued before it');
+const mkl = await viewMarked();
+check(mkl[0] !== null && mkl[0] === mkl[1], `a loaded save's view is marked too (${mkl[0]}, the view's ${mkl[1]})`);
 await session.tic(cmd({ fwd: 1 }));
 check((await playerPos()).TIC === saved.TIC + 1, 'and the loaded game runs on');
 
