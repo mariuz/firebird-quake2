@@ -315,14 +315,18 @@ measurable. A new map or a load (`viewcfg.vis_cluster` reset) drops all the sets
 its cluster, its area and the areas its flood joined when it was marked (`area_sig`), so a portal
 opening or closing (`flood_areas`) drops none: when the eye's own set was marked for other connections
 the view leaves its slot (`viewcfg.vis_slot` NULL), and `mark_faces` finds the set of the new state if
-one is kept or marks it. A door's first opening marks (16–22 ms on the demo maps); every closing and
-opening after it switches (3–7 ms, the world list), where each used to mark (14–39 ms).
+one is kept or marks it. Every closing and opening after a door's first switches (3–7 ms, the world
+list), where each used to mark (14–39 ms); the first is marked ahead too (`premark_ahead`, below).
 
 `premark_ahead()` marks before the eye arrives: the page calls it after each frame whose tic, query
 and raster left spare time, and it probes four points (half a second and a second along the
 player's velocity, 128 and 256 units along the view) and builds a set for the first whose cluster
 and area have none, in a free slot or the one used longest ago that is not the view's (~0.3 ms
-when there is nothing to do, a mark's cost when there is). On a 400-tic walk through demo1's first
+when there is nothing to do, a mark's cost when there is). With no cluster ahead to mark, it takes the
+eye's area's first shut portal whose opening no kept set of the view's cluster and area covers (none whose
+areas reach the portal's other side), opens it in `portal_state`, floods, marks the view's cluster into a
+slot, shuts it, floods again and puts the view's slot and world list back: the game's state is as it was,
+and the door's first opening is a switch (2.7–4.5 ms on the demo maps, against 16–22). On a 400-tic walk through demo1's first
 rooms, 18 clusters crossed, frames over 8 ms went from 19–22 to 9–10 with sixteen slots (with
 eight they thrashed: 29 marks for 18 crossings, 15 hitches left). What stays are the corners where
 two or three small clusters are crossed within a few tics.
