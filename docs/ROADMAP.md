@@ -1780,10 +1780,25 @@ This ends the thirty-seventh list.
 
 The thirty-eighth list: the remaining two calls a tic. In the order they are to be taken.
 
-- **The tic and the frame in one round trip**: `q2_tic` and `frame_all` are two calls every tic, the second waiting on
-  the first's answer only for the sound and effect ids it passes on, which the page holds already. One `EXECUTE BLOCK`
-  running the tic and returning its row with the frame's rows would save a round trip a tic (0.1 ms without threads,
-  0.27 with them). Measured first: the time a tic takes from the page's call to the frame decoded, both ways.
+- **The tic and the frame in one round trip**: measured, and left. A first look promised a millisecond a tic: an
+  `EXECUTE BLOCK` that ran `q2_tic` (counting its rows) and returned the frame's rows took 6.3 ms in the page against
+  7.5 for the two calls without threads, 7.44 against 8.34 with them. But that block did not return the tic's row. Built
+  whole (`ticFrame`: the block made once from `q2_tic`'s 80 output columns in the catalogue, then FRAME_ALL's 16 as
+  `FR_` columns, each kind of row with the other's NULL), it gave the same tic rows and frames as the two calls, 60
+  tics walking and firing from one seed, and no time back: in the page, alternating 80 times a run, 6.0–6.1 ms for
+  the two calls against 6.1–6.6 for one without threads, and 5.5–12.9 against 7.5–10.4 with them over three runs; in
+  Node, 200 each alternating, 5.24 against 5.55 standing and 10.89 against 10.64 walking. A row of 96 columns, most of
+  them NULL, costs about what the round trip saved. Not taken; the code is not kept.
+
+This ends the thirty-eighth list.
+
+The thirty-ninth list: the tic in the page. In the order they are to be taken.
+
+- **The tic measured in the worker**: the perf guard holds the tic in Node (`DirectTransport`), where an idle tic is
+  about 3.7 ms and a walking one 7.5. In the page it runs in a worker, and on the threaded build behind a second
+  thread's handoff. Measured first, the same tics (`q2_tic` alone, standing and walking, demo1, seed 1) in Node and in a
+  headless Chromium on both builds, to see whether the page pays anything over the engine's own time; any part found
+  is the change.
 
 ## Playing the demo
 
