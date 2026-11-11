@@ -1127,7 +1127,8 @@ async function frame() {
     more.forEach((m, i) => lerps[i + 1].push(session.clients[i + 1] ?? last, m));
     if (!document.hidden && (settings.renderer === 'sql' || paintDue(now))) { paintFrames(now); overlayMenu(); }   // (a shared game's host hidden tics on and paints nothing; cl_maxfps caps the fast mode)
     // the frame's spare time marks the cluster the player is heading into (premark_ahead), so the
-    // crossing is a switch of slot and not a hitch; a call that finds nothing to do costs ~0.3 ms
+    // crossing is a switch of slot and not a hitch; a call that finds nothing to do (0.6 ms in the page, 1.1 threaded)
+    // is not made again while the player stands still, but once a second
     if (perf.tic + perf.faces + perf.draw < 30) await session.premark();
   } catch (err) {
     console.error(err);

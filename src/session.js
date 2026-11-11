@@ -99,6 +99,8 @@ export class Session {
     this.styleBase = new Float32Array(64);
     /** The unit's levels left by an ordinary exit, by map name (SV_WriteLevelFile), to come back to as they were left. */
     this.unitLevels = new Map();
+    this.premarkIdle = null;   // the player's stand when premark_ahead last found nothing to do (premark)
+    this.premarkAt = 0;
   }
 
   /** The pak and the resources loadResources made from it. */
@@ -314,9 +316,20 @@ export class Session {
     return this.frame({ client: 1 });
   }
 
-  /** The frame's spare time marks the cluster the player is heading into (premark_ahead). */
+  /**
+   * The frame's spare time marks the cluster the player is heading into (premark_ahead). A call that found nothing to do
+   * is not made again while the player stands as it stood (the position, the yaw and the cluster of the last tic's row),
+   * but for one a second: the probes see the same points, and a door's state is covered by that second. Returns what it
+   * marked, NULL for nothing, or undefined when it was not asked.
+   */
   async premark() {
-    await this.db.query('SELECT marked FROM premark_ahead');
+    const l = this.last;
+    const key = l ? `${l.PX},${l.PY},${l.PZ},${l.YAW},${l.CLUSTER}` : null;
+    if (key !== null && key === this.premarkIdle && this.frameNo - this.premarkAt < 20) return undefined;
+    const marked = (await this.db.query('SELECT marked FROM premark_ahead', [], ARR)).rows[0]?.[0] ?? null;
+    this.premarkIdle = marked === null ? key : null;
+    this.premarkAt = this.frameNo;
+    return marked;
   }
 
   /** The death screen's fire was pressed (exit_kind 3): the load menu, once. */
