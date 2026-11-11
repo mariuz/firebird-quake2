@@ -319,7 +319,8 @@ one is kept or marks it. Every closing and opening after a door's first switches
 list), where each used to mark (14–39 ms); the first is marked ahead too (`premark_ahead`, below).
 
 `premark_ahead()` marks before the eye arrives: the page calls it after each frame whose tic, query
-and raster left spare time, and it probes four points (half a second and a second along the
+and raster left spare time (but not again while the player stands as it stood when a call last found
+nothing, save once a second: `session.premark`), and it probes four points (half a second and a second along the
 player's velocity, 128 and 256 units along the view) and builds a set for the first whose cluster
 and area have none, in a free slot or the one used longest ago that is not the view's (~0.3 ms
 when there is nothing to do, a mark's cost when there is). With no cluster ahead to mark, it takes the

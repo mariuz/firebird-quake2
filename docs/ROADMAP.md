@@ -1764,11 +1764,26 @@ This ends the thirty-sixth list.
 
 The thirty-seventh list: the page's calls a frame. In the order they are to be taken.
 
-- **The calls counted**: a painted frame makes several calls to the worker (the tics' `q2_tic`, a coop game's
-  usercmds, the frame, `premark_ahead` in the spare time, the inventory or the score when shown), each a round trip
-  (0.1 ms without threads, 0.27 with them, measured with the thirty-fifth list). Counted first, in a headless Chromium
-  on both builds over a walk and a fight, by kind; any that run every frame without need, or that could ride another's
-  round trip, are the change.
+- **The calls counted**: done. Every call to the worker counted by its statement in a headless Chromium on demo1, five
+  seconds standing, walking and firing on each build: about one call per animation frame (300 in 5 s at 60 Hz), three
+  per tic: `q2_tic`, `frame_all` (once a tic, not once a painted frame: the frames between tics are the lerp's) and
+  `premark_ahead`, which ran on nearly every tic. Standing still it found nothing to do every time, at 0.6 ms in the
+  page without threads and 1.08 with them (its SQL and its round trip), 12–22 ms of the worker's time a second.
+  Folding it into the frame's call was not taken: when it does mark (12–21 ms) the frame's rows would wait for it,
+  and it runs after the paint on purpose. `session.premark` now keeps the player's stand (the position, the yaw and
+  the cluster of the last tic's row) when a call finds nothing, and asks again only when that changes or a second
+  (20 tics) has gone by, which covers a door's state. Counted again: standing, 5 calls in 5 s where it was 100, on
+  both builds; walking 39–42 (the walk meets a wall and stands). `test:session` runs it out, finds it not asked again
+  while the player stands, and asked a second later.
+
+This ends the thirty-seventh list.
+
+The thirty-eighth list: the remaining two calls a tic. In the order they are to be taken.
+
+- **The tic and the frame in one round trip**: `q2_tic` and `frame_all` are two calls every tic, the second waiting on
+  the first's answer only for the sound and effect ids it passes on, which the page holds already. One `EXECUTE BLOCK`
+  running the tic and returning its row with the frame's rows would save a round trip a tic (0.1 ms without threads,
+  0.27 with them). Measured first: the time a tic takes from the page's call to the frame decoded, both ways.
 
 ## Playing the demo
 

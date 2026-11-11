@@ -121,6 +121,16 @@ check(loaded.TIC === saved.TIC && loaded.X === saved.X && loaded.Y === saved.Y &
   `loading brings the game back as saved (tic ${loaded.TIC}, at ${loaded.X.toFixed(0)},${loaded.Y.toFixed(0)})`);
 check(session.lastFxId === 0 && session.lastSoundId >= 0, 'a load plays nothing that was queued before it');
 const mkl = await viewMarked();
+// premark: asked until it finds nothing to do, it is not asked again while the player stands still, then once a second
+{
+  let m, n = 0;
+  do { m = await session.premark(); n++; } while (m !== null && m !== undefined && n < 10);
+  const again = await session.premark();
+  const f0 = session.frameNo;
+  while (session.frameNo - f0 < 20) await session.frame();
+  const later = await session.premark();
+  check(m === null && again === undefined && later === null, `premark_ahead, run out after ${n} call(s), is not asked again while the player stands (${again}), and is a second later (${later})`);
+}
 check(mkl[0] !== null && mkl[0] === mkl[1], `a loaded save's view is marked too (${mkl[0]}, the view's ${mkl[1]})`);
 await session.tic(cmd({ fwd: 1 }));
 check((await playerPos()).TIC === saved.TIC + 1, 'and the loaded game runs on');
