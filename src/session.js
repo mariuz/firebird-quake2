@@ -62,6 +62,19 @@ export function genderCode(word) {
   return c === 'f' ? 1 : c === 'm' ? 0 : 2;
 }
 
+// demoFrame's statements: the demo's view on the player's entity and row, and a brush model where the demo has it, each relinked
+const DEMO_VIEW = `EXECUTE BLOCK (pe INTEGER = ?, x DOUBLE PRECISION = ?, y DOUBLE PRECISION = ?, z DOUBLE PRECISION = ?, yaw DOUBLE PRECISION = ?,
+    pitch DOUBLE PRECISION = ?, vo DOUBLE PRECISION = ?) AS BEGIN
+  UPDATE ents SET x = :x, y = :y, z = :z, yaw = :yaw, vx = 0, vy = 0, vz = 0, deadflag = 0 WHERE id = :pe;
+  UPDATE player SET pitch = :pitch, view_ofs = :vo, stepz = 0, bob_z = 0, bob_pitch = 0, bob_roll = 0 WHERE id = 1;
+  EXECUTE PROCEDURE link_ent(:pe);
+END`;
+const DEMO_BRUSH = `EXECUTE BLOCK (id INTEGER = ?, x DOUBLE PRECISION = ?, y DOUBLE PRECISION = ?, z DOUBLE PRECISION = ?, p DOUBLE PRECISION = ?,
+    yw DOUBLE PRECISION = ?, r DOUBLE PRECISION = ?, fr INTEGER = ?, ef INTEGER = ?) AS BEGIN
+  UPDATE ents SET x = :x, y = :y, z = :z, pitch = :p, yaw = :yw, roll = :r, frame = :fr, effects = :ef WHERE id = :id;
+  EXECUTE PROCEDURE link_ent(:id);
+END`;
+
 export class Session {
   /**
    * @param {object} db         a FirebirdBrowser with the schema created
@@ -288,16 +301,15 @@ export class Session {
    */
   async demoFrame(view, brushes = []) {
     const pe = (await this.db.query('SELECT ent_id FROM player WHERE id = 1')).rows[0].ENT_ID;
-    await this.db.exec(`UPDATE ents SET x = ${view.x}, y = ${view.y}, z = ${view.z}, yaw = ${view.yaw}, vx = 0, vy = 0, vz = 0, deadflag = 0 WHERE id = ${pe};
-      UPDATE player SET pitch = ${view.pitch}, view_ofs = ${view.viewZ - view.z}, stepz = 0, bob_z = 0, bob_pitch = 0, bob_roll = 0 WHERE id = 1;
-      EXECUTE PROCEDURE link_ent(${pe})`);
+    // (the values bound, as the frame's are: written into the text, every frame of a demo was a statement compiled afresh)
+    await this.db.query(DEMO_VIEW, [pe, view.x, view.y, view.z, view.yaw, view.pitch, view.viewZ - view.z]);
     for (const b of brushes) {
       const id = this.demoBrushes?.get(b.name);
       if (!id) continue;
       const key = [b.origin, b.angles, b.frame, b.effects ?? 0].flat().map((v) => Math.round(v * 8)).join(',');
       if (this.demoBrushState.get(id) === key) continue;
       this.demoBrushState.set(id, key);
-      await this.db.exec(`UPDATE ents SET x = ${b.origin[0]}, y = ${b.origin[1]}, z = ${b.origin[2]}, pitch = ${b.angles[0]}, yaw = ${b.angles[1]}, roll = ${b.angles[2]}, frame = ${b.frame}, effects = ${b.effects ?? 0} WHERE id = ${id}; EXECUTE PROCEDURE link_ent(${id})`);
+      await this.db.query(DEMO_BRUSH, [id, b.origin[0], b.origin[1], b.origin[2], b.angles[0], b.angles[1], b.angles[2], b.frame, b.effects ?? 0]);
     }
     return this.frame({ client: 1 });
   }

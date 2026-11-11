@@ -204,8 +204,11 @@ jobs:
       # joining the first's game over WebRTC with the texts passed between them, the caching service worker
       # registered with the build's files and the pak in its caches and the page reloaded offline, the retired
       # service worker removing itself, no console errors. Then the same with the headers, on the threaded build.
+      # (--with-deps fetches system packages from the Ubuntu mirrors, fonts on this image; when the runner cannot reach them,
+      # as on 2026-11-11 when it could not resolve security.ubuntu.com, Chromium alone is installed and the run goes on: the page
+      # draws its text from the pak's characters, and the image has the libraries Chromium needs)
       - name: Install Chromium for the browser test
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium || { echo "::warning::the system packages could not be installed; Chromium alone"; npx playwright install chromium; }
 
       - name: The page in a browser (${{ matrix.section }}; ${{ matrix.build == 'coi' && 'cross-origin isolated, the threaded build' || 'as Pages serves it, the build without threads' }})
         run: npm run test:browser ${{ matrix.build == 'coi' && '-- --coi' || '' }}
