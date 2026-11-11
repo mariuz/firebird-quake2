@@ -486,7 +486,9 @@ usercmd in, a coop game's second as a second argument; `last` is the first clien
 client's), the frame read in one
 round trip and decoded (`frame`, `decodeFrame`: the faces, the entities, the light styles, the sounds and
 effects not yet played, the brush models' frames and angles, the looped speakers every tenth frame; `client`
-picks whose view), a
+picks whose view; its arguments bound as parameters, so the text is the same every frame and the engine's
+statement cache keeps it compiled, where the growing sound and effect ids written into the text made a new
+statement on a third of a fight's frames, ~0.3 ms in Node and 0.4–0.6 in the browser), a
 level left (`leave`, which keeps the clients' health and flags for the next level as `SaveClientData` did, then
 keeps the level or, at a unit's end, forgets the unit), and the slots written, read,
 listed and loaded against a storage object. `src/main.js` holds one and does what only a page can: the

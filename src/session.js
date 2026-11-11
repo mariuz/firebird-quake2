@@ -259,7 +259,9 @@ export class Session {
   async frame({ sqlRenderer = false, client = 1, boxes = false } = {}) {
     const wantSpeakers = ++this.frameNo % 10 === 0;
     if (sqlRenderer && this.res.world && !this.res.world.faceVertsLoaded) await ensureFaceVerts(this.db, this.res);
-    const rows = (await this.db.query(`SELECT * FROM frame_all(${sqlRenderer ? 1 : 0}, ${this.lastSoundId}, ${this.lastFxId}, ${wantSpeakers ? 1 : 0}, ${client}, ${boxes ? 1 : 0})`, [], ARR)).rows;
+    // (the values bound, not written into the text: the sound and effect ids grow, and a new text is compiled afresh, ~0.3 ms in Node
+    // and 0.4–0.6 ms in the browser, where one text is found in the engine's statement cache)
+    const rows = (await this.db.query('SELECT * FROM frame_all(?, ?, ?, ?, ?, ?)', [sqlRenderer ? 1 : 0, this.lastSoundId, this.lastFxId, wantSpeakers ? 1 : 0, client, boxes ? 1 : 0], ARR)).rows;
     const f = decodeFrame(rows, this.styleBase);
     if (f.sounds.length) this.lastSoundId = f.sounds[f.sounds.length - 1][0];
     if (f.fx.length) this.lastFxId = f.fx[f.fx.length - 1][0];
