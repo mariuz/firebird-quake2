@@ -1750,9 +1750,25 @@ This ends the thirty-fifth list.
 
 The thirty-sixth list: values written into statements that run every frame. In the order they are to be taken.
 
-- **The demo's frame**: `demoFrame` writes the demo's view and each moved brush model's origin and angles into its
-  `UPDATE`s, a new text every frame of a demo's playback (and of `timedemo`). Bound as parameters they would be
-  compiled once; measured against now in Node and in the browser, a `timedemo` of the pak's demo before and after.
+- **The demo's frame**: done. `demoFrame` wrote the demo's view and each moved brush model's origin and angles into
+  its statements, a new text every frame of a playback and of `timedemo`. Each is one `EXECUTE BLOCK` with input
+  parameters now (`DEMO_VIEW`: the player's entity and row at the demo's view, relinked; `DEMO_BRUSH`: a brush model
+  where the demo has it, relinked), one text each, one round trip each as before. The pak's demo (632 frames) played
+  through `demoFrame` in Node, the old and the new alternating four runs each: 3198–3464 ms against 2715–3227, a frame
+  4.11 → 3.47 ms (median), 5.27 → 4.67 (mean). In a headless Chromium `timedemo q2demo1` runs at the animation
+  frames' pace, so it shows little: two rounds of three runs each, the old and the new alternating, 55.3–57.8 fps
+  against 57.0–58.3 (medians) on both builds. No other statement the page runs a frame writes values into its text
+  now: the rest that do are a load's or a client's, once. `test:demo` plays its frames through them as before.
+
+This ends the thirty-sixth list.
+
+The thirty-seventh list: the page's calls a frame. In the order they are to be taken.
+
+- **The calls counted**: a painted frame makes several calls to the worker (the tics' `q2_tic`, a coop game's
+  usercmds, the frame, `premark_ahead` in the spare time, the inventory or the score when shown), each a round trip
+  (0.1 ms without threads, 0.27 with them, measured with the thirty-fifth list). Counted first, in a headless Chromium
+  on both builds over a walk and a fight, by kind; any that run every frame without need, or that could ride another's
+  round trip, are the change.
 
 ## Playing the demo
 
