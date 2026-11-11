@@ -1732,10 +1732,27 @@ This ends the thirty-fourth list.
 
 The thirty-fifth list: the rows' trip to the page. In the order they are to be taken.
 
-- **The frame's decoding measured**: `session.frame` spends 0.5–1 ms over `frame_all`'s own time in Node, the rows
-  coming back through the transport and `decodeFrame` turning them into the painter's lists; in the browser the worker's
-  round trip adds to it. Measured first, by its parts (the transport, the binary rows, the face list's split), in Node
-  and in a headless Chromium on both builds.
+- **The frame's decoding measured**: done. By its parts, on the three demo maps in Node (median of 40 frames) and
+  on demo1 in a headless Chromium on both builds:
+  - the rows' trip over the query's own time (`SELECT *` against `SELECT COUNT(*)` of `frame_all`) is 0.1–0.3 ms in
+    Node and 0.1–0.4 in the browser; `decodeFrame` is under 0.1 ms; the worker's round trip itself (`SELECT 1`) is
+    0.1 ms on the build without threads and 0.27 on the threaded one;
+  - the one part worth a change was the statement's text: the frame's arguments were written into it, the sound and
+    effect ids among them, which only grow, so every frame after a new sound or effect was a text the engine had not
+    seen and compiled afresh: 1.41 against 1.05 ms on demo1 in Node, 1.4 against 1.0 and 2.02 against 1.46 in the
+    browser without and with threads. Over 200 tics of demo1 and demo2 with walking, turning and firing the ids were
+    new on 60 and 64 frames.
+  `session.frame` binds its six arguments now (`frame_all(?, ?, ?, ?, ?, ?)`): one text, kept compiled. The same 200
+  tics, the two ways alternating each frame: mean 2.56 → 2.37 ms on demo1 and 2.08 → 1.99 on demo2 (medians 2.23 →
+  2.16, 2.02 → 1.91), and the engine's statement cache no longer fills with texts used once.
+
+This ends the thirty-fifth list.
+
+The thirty-sixth list: values written into statements that run every frame. In the order they are to be taken.
+
+- **The demo's frame**: `demoFrame` writes the demo's view and each moved brush model's origin and angles into its
+  `UPDATE`s, a new text every frame of a demo's playback (and of `timedemo`). Bound as parameters they would be
+  compiled once; measured against now in Node and in the browser, a `timedemo` of the pak's demo before and after.
 
 ## Playing the demo
 
