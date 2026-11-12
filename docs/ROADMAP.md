@@ -1794,11 +1794,22 @@ This ends the thirty-eighth list.
 
 The thirty-ninth list: the tic in the page. In the order they are to be taken.
 
-- **The tic measured in the worker**: the perf guard holds the tic in Node (`DirectTransport`), where an idle tic is
-  about 3.7 ms and a walking one 7.5. In the page it runs in a worker, and on the threaded build behind a second
-  thread's handoff. Measured first, the same tics (`q2_tic` alone, standing and walking, demo1, seed 1) in Node and in a
-  headless Chromium on both builds, to see whether the page pays anything over the engine's own time; any part found
-  is the change.
+- **The tic measured in the worker**: measured, and left. The same tics on demo1 (`session.tic`, 200 standing and 100
+  walking, medians), twice each, in Node and in a headless Chromium with the page's game paused: standing 3.27 and 3.39
+  ms in Node, 3.1 and 2.5 in the page without threads, 2.78 and 2.91 with them; walking 7.16 and 6.94 in Node, 6.9 and
+  6.4 without threads, 6.94 and 6.81 with them. The page pays its round trip (`SELECT 1`: 0.1–0.13 ms against 0.02 in
+  Node) and the tic's row of 80 columns (`q2_tic` of no tics: 0.3–0.41 ms against 0.16), and nothing else: the engine
+  in the worker runs the tic as fast as in Node, on either build. Nothing to change.
+
+This ends the thirty-ninth list.
+
+The fortieth list: the player's move. In the order they are to be taken.
+
+- **The walking tic by its parts**: a walking tic costs about 4 ms more than a standing one (7 against 3, on demo1 in
+  Node and in the page alike), the player's move: `player_think`'s traces (`trace_box`, `rhc`, `clip_leaf`), the
+  water check, the ground check, the step. Counted first with `call-counts.mjs` (calls per tic of each routine) and
+  timed with the routines' own share; a routine that stands out, or a trace that runs where its answer is known, is
+  the change, made in `src/pmove.js` too.
 
 ## Playing the demo
 
