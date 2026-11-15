@@ -1805,11 +1805,25 @@ This ends the thirty-ninth list.
 
 The fortieth list: the player's move. In the order they are to be taken.
 
-- **The walking tic by its parts**: a walking tic costs about 4 ms more than a standing one (7 against 3, on demo1 in
-  Node and in the page alike), the player's move: `player_think`'s traces (`trace_box`, `rhc`, `clip_leaf`), the
-  water check, the ground check, the step. Counted first with `call-counts.mjs` (calls per tic of each routine) and
-  timed with the routines' own share; a routine that stands out, or a trace that runs where its answer is known, is
-  the change, made in `src/pmove.js` too.
+- **The walking tic by its parts**: measured, and left. Counted with `call-counts.mjs`'s instrumentation on demo1, 40
+  tics standing and 40 walking (forward, turning 3 degrees a tic, as the perf guard walks), calls per tic: `trace_move`
+  1.6 → 7.4, `trace_hull` 1.7 → 8.4, `rhc` 12.2 → 40.3, `clip_leaf` 2.6 → 10.4, `fly_move` 0.1 → 1.9, `walk_move`
+  0.1 → 1.0, `check_water` 0 → 0.8, `point_contents` 1.6 → 2.2; the monsters' thinks the same (4.6 and 4.5, the walk
+  wakes none), and the touch scans (triggers, doors, plats) run every tic either way. One `trace_move` from the
+  player is 0.31–0.54 ms, so the six traces more are the 3.6 ms (4.12 → 7.69 ms a tic): the slide, and when a wall
+  stops it the step tried as `PM_StepSlideMove` tried it (up 18, slide again, down), most tics of a walk that turns
+  along walls. `fly_move` and `walk_move` cost what their trace does (0.370 and 0.372 ms against 0.31–0.54 a trace,
+  timed alone from the walking state): the move around the traces is nothing to take. What a trace costs is the
+  engine's tree descent, measured and left before (*The tic's floor*, ARCHITECTURE.md §10).
+
+This ends the fortieth list.
+
+The forty-first list: the roadmap against the code. In the order they are to be taken.
+
+- **Entries without a verdict**: a few entries read as still to do though the code has them (`gamemap` and
+  `nextserver` in the seventeenth list: the console has both, `SV_GameMap_f`'s level kept aside and the `+` chain's
+  `nextserver`). Each list's entries are read against the code and the tests; one that is done is marked done with what
+  holds it, one that is not keeps its place.
 
 ## Playing the demo
 
