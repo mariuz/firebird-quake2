@@ -65,9 +65,9 @@ the order they are to be taken.
   has them), so the walls are the database's and the rest the recording's: no tic runs. A key or a click
   stops it and a new game starts, as the attract loop gave way to the menu. `test:demo` checks the parsing,
   the player, the session's frame and a painted frame headless; the browser test plays it from the select.
-  The attract loop itself came after (see *The attract loop* in the second list). Left: recording, which
+  The attract loop itself came after (see *The attract loop* in the second list). Left then: recording, which
   follows from the same format: the frame's rows written as the
-  messages (`SV_WriteFrameToClient`), so a recorded game plays in Quake 2 itself.
+  messages (`SV_WriteFrameToClient`), so a recorded game plays in Quake 2 itself; done since (`record`, `src/record.js`).
 - **The credits screen and the key bindings menu**: done. The game menu's `credits` scrolls menu.c's
   `idcredits` text (`src/credits.js`; the pak has no `credits` file) up the screen as
   `M_Credits_MenuDraw` did, the `+` lines highlighted, round again once the last is off the top. The
@@ -78,7 +78,8 @@ the order they are to be taken.
   (`src/settings.js` checks them on the way in) which `src/input.js` reads each tic; the options' reset
   defaults puts them back as `exec default.cfg` did. The weapon and item keys (1–0, G, Q, I, B, E) stay
   fixed, as Quake's menu did not list them; the mouse buttons and the wheel became bindable with the fifth list.
-- **Fidelity against the real software renderer**: `test:golden` compares the painter against itself.
+- **Fidelity against the real software renderer**: not done, and not to be done here: it needs the original engine's
+  own screenshots, which only a machine that runs Quake 2 can make. `test:golden` compares the painter against itself.
   Screenshots from ref_soft at the same viewpoints (the real engine on a Windows machine, `screenshot`
   at 320×240 with the same fov, the same frame of the same map), kept beside the docs' shots and
   compared with a tolerance, would measure how far the painter is from the original rather than from
@@ -97,7 +98,7 @@ the order they are to be taken.
   `info_player_coop` in order, or at deathmatch spots; `Session.tic` takes a usercmd per client, a gamepad
   each in the order the browser lists them; the painter splits the screen in quarters for three or four
   (the fourth black with three), the SQL's view the quarter's size. The status bar is 320 wide and overflows
-  a narrower view at its sides: 640×480 is the detail for four. Left: the HUD drawn to a view's width.
+  a narrower view at its sides: 640×480 is the detail for four. Left then: the HUD drawn to a view's width, done since (*The HUD drawn to a view's width*).
 - **The full game's monsters, logic first**: done for thirteen (gladiator, iron maiden, brain, medic,
   mutant, icarus, technician, barracuda shark, the supertank, the hornet, Jorg, Makron, the insane
   marines): a row each in `src/gamedata.js` with the frame runs of its m_*.h as a table, which the loader
@@ -149,7 +150,8 @@ the order they are to be taken.
   too; another `SAVE_VERSION` or anything else refused with a message) into the same load as a slot's, so a
   game moves between browsers and outlives the site data. `test:session` packs and unpacks; the browser test
   downloads a file, walks on, loads it back and finds the player where the file had it, and sees rubbish
-  refused. Left: a slot downloaded from the load menu (the game as it stands covers the use).
+  refused. Left then: a slot downloaded from the load menu, done since (`d` in the load menu: *A slot downloaded from the load
+  menu, and keys for the silencer and the power shield*).
 - **Installable and offline**: done. A web app manifest (`public/manifest.webmanifest`: standalone, landscape,
   icons of "Q2" in the pak's console font from `scripts/icon.mjs`) and a caching service worker
   (`public/sw.js`, its build id written in by the build): the page fills the build's cache and the data cache
@@ -1178,9 +1180,11 @@ the userinfo still lack of Quake 2's own words with the demo pak. In the order t
   `test:console` shows, sets (case aside), refuses, counts the restarts, reads config.cfg and Tab; the browser test
   sets the mode to 160×120 and the refresh to the projector and sees the controls and the painter follow, and back,
   on both builds.
-- **`gamemap` and `nextserver`**: `SV_GameMap_f` as the level change with the one running kept aside (an ordinary
+- **`gamemap` and `nextserver`**: done. `SV_GameMap_f` as the level change with the one running kept aside (an ordinary
   exit's way, `*` wiping the unit), and the `+` chain of `SV_Map` (`map intro.cin+demo1`: the cinematic, then the
-  map, `nextserver` holding what follows and read back with `nextserver` at the console).
+  map, `nextserver` holding what follows and read back with `nextserver` at the console). The console has both
+  (`gamemap` through the page's `gameMap`, `nextserver` shown and set); `test:console` runs them against a host, and
+  the browser test keeps demo1 aside with `gamemap demo2` and shows `victory.pcx+demo1` with `nextserver` holding demo1.
 - **`in_joystick`, `cl_paused` and `log_stats`**: done. `in_joystick 0` leaves the pads unread (`IN_Frame`'s;
   `Input.joystick`, `pollPad` and `pollPadAt` returning none), archived as Quake's was, 1 here where Quake's was 0;
   `cl_paused` shows the pause's state as `CL_Frame` set the cvar, a value refused (`pause` sets it); `log_stats 1`
@@ -1649,7 +1653,7 @@ This ends the thirtieth list.
 
 The thirty-first list: the engine. In the order they are to be taken.
 
-- **firebird-wasm 0.20**: 0.16.0 taken, 0.20.1 not. Under Node with `DirectTransport`, the way every suite runs the
+- **firebird-wasm 0.20**: done in two steps: 0.16.0 here, 0.20.1 not; 0.20.3 with the thirty-second list. Under Node with `DirectTransport`, the way every suite runs the
   engine, 0.20.1 fails every statement, `SELECT 1 FROM rdb$database` included, with the WebAssembly trap "null function
   or function signature mismatch"; 0.16.0, the release between, runs everything: every suite all good, both demos'
   renderer comparison 0 of 76800 pixels, the golden pictures, the perf guard, and the browser test on both builds.
@@ -1664,7 +1668,7 @@ This ends the thirty-first list.
 
 The thirty-second list: the engine past 0.16. In the order they are to be taken.
 
-- **firebird-wasm past 0.16.0**: 0.20.1 traps on its first statement under Node (`SELECT 1 FROM rdb$database` through
+- **firebird-wasm past 0.16.0**: done with 0.20.3 (below). 0.20.1 traps on its first statement under Node (`SELECT 1 FROM rdb$database` through
   `DirectTransport` gives "null function or function signature mismatch"; 0.16.0 runs the same script). Narrowed
   down, calling the transport step by step: `init`, `mkdir` and `exists` run, and the trap is in the engine's attach
   path itself, both `createDatabase` on a new file and `attachDatabase` on a database 0.16.0 made and handed over
@@ -1820,10 +1824,23 @@ This ends the fortieth list.
 
 The forty-first list: the roadmap against the code. In the order they are to be taken.
 
-- **Entries without a verdict**: a few entries read as still to do though the code has them (`gamemap` and
-  `nextserver` in the seventeenth list: the console has both, `SV_GameMap_f`'s level kept aside and the `+` chain's
-  `nextserver`). Each list's entries are read against the code and the tests; one that is done is marked done with what
-  holds it, one that is not keeps its place.
+- **Entries without a verdict**: done. Every entry of the lists was read for a verdict (done, measured, left, not a
+  bug). Four had none up front: `gamemap` and `nextserver` (done long since: the console has both and `test:console`
+  and the browser test run them; marked done with what holds it), the two firebird-wasm entries (their verdicts were
+  inside the text: now at the front), and the renderer's fidelity against ref_soft (not done, and marked so: it needs
+  the original engine's screenshots, which only a machine running Quake 2 can make). Six "Left:" notes were stale,
+  each now saying what came of it and where: recording, the HUD at a view's width, a slot downloaded from the load
+  menu, the silencer's and power shield's keys, the door's re-mark and the cinematics. The rest still hold: the
+  dmflags with no bearing here (teams by model or skin), the player model and skin themselves.
+
+This ends the forty-first list.
+
+The forty-second list: the player model in coop and deathmatch. In the order they are to be taken.
+
+- **The other player without `players/male`**: the demo pak has no `players/male/tris.md2`, so in coop and deathmatch
+  the other client is unseen (the coop entry under *The full game*). The page would draw a stand-in when the pak lacks
+  the model (the pak's own soldier, or a box in the player's size), its frame and angles as `G_SetClientFrame` sets
+  them, and the real model as before when a pak has it; `test:coop` would see the other client drawn.
 
 ## Playing the demo
 
@@ -1856,7 +1873,8 @@ The forty-first list: the roadmap against the code. In the order they are to be 
   own rule by another route (`SV_LinkEdict` gave a door straddling two areas an `areanum2`, and
   `SV_BuildClientFrame` sent it to a client in either), and each demo map has one portal, its
   door in it. What the skip costs is a brush model inside the PVS but behind a closed door, listed
-  and then hidden by the door; no pixel. Left: the re-mark a door causes is the usual hitch.
+  and then hidden by the door; no pixel. Left then: the re-mark a door causes, since a door's two states keep their marked sets and the
+  first opening is marked ahead (the thirty-third and thirty-fourth lists).
 - **Intermission and the unit's end**: done, as single-player Quake 2 has them. A plain exit is taken
   at once behind the loading plaque; a unit's end (`*` in the map) parks the player at an
   `info_player_intermission`, the world frozen, until fire or jump after five seconds; a `.pcx` exit
@@ -1864,7 +1882,7 @@ The forty-first list: the roadmap against the code. In the order they are to be 
   chains. The help computer (`F1`) shows the level's counts and the two `target_help` messages, and the
   status bar blinks its icon while there is news. At the intermission the status bar is drawn over the
   frozen view and nothing else, as `SCR_DrawStats` drew it with no layout in single player (the help
-  computer's counts used to be drawn there). Left: cinematics (`.cin`) are skipped.
+  computer's counts used to be drawn there). Left then: cinematics (`.cin`), played since (*Cinematics*, the second list).
 - **Teleporter in demo3**: not a bug. It and its destination carry spawnflags 1792 (not easy, not
   medium, not hard), Quake 2's mark for deathmatch-only entities, like every other entity the demo
   maps leave out in single player. Checking it found the filter skipping spawnflag 4096 as "coop
@@ -1980,9 +1998,10 @@ The forty-first list: the roadmap against the code. In the order they are to be 
   inventory, as in Quake 2, the power cube with its count (each cube taken is one, each door wanting one
   spends one; see *Coop* for the bits that tell them apart). Pickups as single player had them: a new weapon (or the first grenades) is
   raised at once, a weapon already held is taken for its ammo, a picked-up usable item becomes the
-  selection, and an item's targets fire the first time it is touched even when it stays. Left: the
-  silencer and the power shield have no key of their own here (`s` and `p` are the page's back and
-  pause): the inventory or `use` reach them.
+  selection, and an item's targets fire the first time it is touched even when it stays. Left then: the
+  silencer and the power shield had no key of their own (`s` and `p` are the page's back and
+  pause); they are bindable actions since (*A slot downloaded from the load menu, and keys for the silencer and the
+  power shield*).
 - **HUD and menus**: done. The status bar, centre prints, the help computer (`F1`), the inventory
   (`TAB`) and the menus (`src/menu.js`, from menu.c, qmenu.c and vid_menu.c): Escape (or the mouse let
   go) brings up the main menu over the game, which pauses as single player did, faded by ref_soft's
