@@ -10,6 +10,7 @@ import { exportSave, importSave, exportLevel, importLevel, savedLevels, saveNote
 import { packSave, unpackSave, saveHeader } from './savestore.js';
 import { parseChangeMap } from './levels.js';
 import { clampRate, skinOf } from './net.js';
+import { PLAYER_MODEL } from './standin.js';
 
 const ARR = { rowMode: 'array' };
 
@@ -99,6 +100,7 @@ export class Session {
     this.styleBase = new Float32Array(64);
     /** The unit's levels left by an ordinary exit, by map name (SV_WriteLevelFile), to come back to as they were left. */
     this.unitLevels = new Map();
+    this.standInMonsters = new Map();   // the stand-in's entities: true for a monster (the actor), false for a client or a body (noteStandIns)
     this.premarkIdle = null;   // the player's stand when premark_ahead last found nothing to do (premark)
     this.premarkAt = 0;
   }
@@ -233,6 +235,21 @@ export class Session {
     const { rows } = await this.db.query('SELECT MAX(id) m FROM sound_events');
     this.lastSoundId = rows[0].M ?? 0;
     this.lastFxId = 0;
+    this.standInMonsters.clear();
+  }
+
+  /**
+   * Which entities on the player model's row without a mesh are monsters (the actor, numbering its frames by its own
+   * runs) and which are clients or bodies (m_player.h's): asked once per entity the first time a frame has it, kept
+   * until the next map or load. The painter's stand-in maps the frame by it (src/standin.js).
+   */
+  async noteStandIns(ents) {
+    const pm = this.res?.placeholders?.get(PLAYER_MODEL);
+    if (pm == null) return;
+    const fresh = [...new Set(ents.filter((e) => e[1] === pm && !this.standInMonsters.has(Number(e[0]))).map((e) => Number(e[0])))];
+    if (!fresh.length) return;
+    for (const id of fresh) this.standInMonsters.set(id, false);
+    for (const [id] of (await this.db.query(`SELECT id FROM ents WHERE mtype IS NOT NULL AND id IN (${fresh.join(', ')})`, [], ARR)).rows) this.standInMonsters.set(Number(id), true);
   }
 
   /**
@@ -280,6 +297,7 @@ export class Session {
     const f = decodeFrame(rows, this.styleBase);
     if (f.sounds.length) this.lastSoundId = f.sounds[f.sounds.length - 1][0];
     if (f.fx.length) this.lastFxId = f.fx[f.fx.length - 1][0];
+    await this.noteStandIns(f.ents);
     return f;
   }
 

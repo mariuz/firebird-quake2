@@ -265,7 +265,8 @@ with a frame table of its own (`anims`: the runs of m_*.h, in the model's order)
 into a model row without a mesh and its `anims` rows when the pak lacks the MD2 (the demo pak does), so the
 logic animates, fires and dies on the right frames and the painter, having no mesh, skips it (but the player
 model's row, a client's or a body's, which the soldier stands in for: `src/standin.js` maps `m_player.h`'s runs
-onto his); a registered pak's MD2 takes over. Their attacks are kinds of `monster_missile`: 1- and 2-damage bolts (hover, floater,
+onto his, and the actor's own runs onto his for the actor, which the session tells apart by `mtype`, asked once per
+entity: `noteStandIns`); a registered pak's MD2 takes over. Their attacks are kinds of `monster_missile`: 1- and 2-damage bolts (hover, floater,
 medic), Makron's hyperblaster, the bosses' 6-damage machine guns (`chaingun`), the gladiator's and Makron's
 railgun, Jorg's and Makron's BFG; a second ranged attack (`alt_anim`, `alt_frames`, `alt_kind`,
 `alt_chance`: the supertank's rockets beside its machine gun, the hornet's, Jorg's BFG) is chosen by its

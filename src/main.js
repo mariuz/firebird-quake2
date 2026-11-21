@@ -1683,8 +1683,9 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       const light = lightPoint(bsp, x, y, z);
       const spin = effects & 1 ? (time * 100) % 360 : 0;   // EF_ROTATE items spin
       // (a row that carries the frame it left and the blend toward this one, from the lerp or the demo: the pose between)
-      r.drawAlias(m.mdl, sub ? sub.frame(frame) : frame, sub ? 0 : skin, [x, y, z], [pitch, yaw + spin, roll], light,
-        { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0, oldFrame: sub && e[14] != null ? sub.frame(e[14]) : e[14], backlerp: settings.rLerpmodels ? e[15] ?? 0 : 0 });   // (r_lerpmodels 0: no blend)
+      const subFrame = sub && (session.standInMonsters.get(Number(e[0])) ? sub.monsterFrame : sub.frame);   // (the actor by his own runs, a client or a body by the player's)
+      r.drawAlias(m.mdl, sub ? subFrame(frame) : frame, sub ? 0 : skin, [x, y, z], [pitch, yaw + spin, roll], light,
+        { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0, oldFrame: sub && e[14] != null ? subFrame(e[14]) : e[14], backlerp: settings.rLerpmodels ? e[15] ?? 0 : 0 });   // (r_lerpmodels 0: no blend)
       if (effects & 8) r.particles.push({ x, y, z, vx: 0, vy: 0, vz: 0, color: 0xe0 + (Math.random() * 4 | 0), die: time + 0.05, type: 'still' });   // the blaster bolt's glow
       if (effects & 16) r.spawnParticles('gunshot', x, y, z, 2, [0, 0, 0], 0xe0 + 8);   // rocket smoke
     } else if (kind === 'S') {

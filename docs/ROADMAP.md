@@ -1853,11 +1853,26 @@ This ends the forty-second list.
 
 The forty-third list: the stand-in's frames for the actor. In the order they are to be taken.
 
-- **The actor's runs on the stand-in**: the actor (`misc_actor`) is on the same model row as the clients but numbers
-  its frames by `m_actor.h`'s runs (attack, death1, death2, flip, pain1–3, push, run, stand, taunt, walk, jump), so
-  the stand-in maps them as the player's and poses him wrong. `frame_all` would mark a client's entity (a bit of the
-  renderfx it already sends) and the stand-in map the rest by the model row's own runs (the actor's, from `anims`);
-  `test:entities` would see the actor's walk drawn as the soldier's walk.
+- **The actor's runs on the stand-in**: done. The actor (`misc_actor`) is on the same model row as the clients but
+  numbers its frames by `m_actor.h`'s runs (attack, death1, death2, flip, pain1–3, push, run, stand, taunt, walk,
+  jump: `ACTOR_RUNS`, from `src/gamedata.js` as the loader numbers them), and the stand-in mapped them as the player's.
+  A bit of `renderfx` to mark the clients was not taken: `renderfx` goes into a recording as it is. The session asks
+  instead, once per entity the first time a frame has one on the player model's row, whether it is a monster
+  (`noteStandIns`: `mtype` set for the actor, not for a client or a body), kept until the next map or load; the
+  painter maps a monster's frame by the actor's runs onto the soldier's by name (walk on walk1, run on run, attack on
+  attak1, the pains on his pains, the deaths stretched over his to end lying; flip, push and taunt standing).
+  `test:entities` finds the actor's walk on the soldier's walk from first frame to last, his second death ending on
+  the soldier's last, and the session telling him from the client. A guest's page has no tables to ask and draws every
+  entity on the row by the player's runs: the next list.
+
+This ends the forty-third list.
+
+The forty-fourth list: the stand-in on a guest's page. In the order they are to be taken.
+
+- **The actor on a guest's page**: a guest paints the frames its host sends and has no tables, so it cannot ask which
+  entities on the player model's row are monsters, and draws the actor by the player's runs. The host knows
+  (`session.standInMonsters`): its frame message to a guest would carry the monsters' ids among the row's entities, and
+  the guest's painter use them as the host's does; `test:net` would see a guest told.
 
 ## Playing the demo
 
