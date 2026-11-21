@@ -1837,10 +1837,27 @@ This ends the forty-first list.
 
 The forty-second list: the player model in coop and deathmatch. In the order they are to be taken.
 
-- **The other player without `players/male`**: the demo pak has no `players/male/tris.md2`, so in coop and deathmatch
-  the other client is unseen (the coop entry under *The full game*). The page would draw a stand-in when the pak lacks
-  the model (the pak's own soldier, or a box in the player's size), its frame and angles as `G_SetClientFrame` sets
-  them, and the real model as before when a pak has it; `test:coop` would see the other client drawn.
+- **The other player without `players/male`**: done. The demo pak has no `players/male/tris.md2`, so in coop and
+  deathmatch the other client (and a body left behind) was on the model row without a mesh, and the painter drew
+  nothing. The soldier (`models/monsters/soldier/tris.md2`, a man of the player's size) stands in for it now
+  (`src/standin.js`): the painter draws his mesh where the row has no mesh of its own, the frame `G_SetClientFrame`
+  set mapped from `m_player.h`'s runs onto his (standing, running, firing, the three pains, the jump, the gestures
+  standing; a crouch holding his duck's last frame; each death stretched over one of his, ending lying), the blend
+  between two frames mapped alike, his own skin. A pak with the player model draws the model as before. `test:coop`
+  finds the other client on the row without a mesh and all 198 frames on the soldier's, a death ending on his last
+  and a crouch ducked; seen in a headless Chromium, each half of a coop game's split view shows the other player.
+  The actor (`misc_actor`, the full game's) shares the row and is drawn as the soldier too, his frames mapped as the
+  player's though they are numbered by his own runs: the next list.
+
+This ends the forty-second list.
+
+The forty-third list: the stand-in's frames for the actor. In the order they are to be taken.
+
+- **The actor's runs on the stand-in**: the actor (`misc_actor`) is on the same model row as the clients but numbers
+  its frames by `m_actor.h`'s runs (attack, death1, death2, flip, pain1–3, push, run, stand, taunt, walk, jump), so
+  the stand-in maps them as the player's and poses him wrong. `frame_all` would mark a client's entity (a bit of the
+  renderfx it already sends) and the stand-in map the rest by the model row's own runs (the actor's, from `anims`);
+  `test:entities` would see the actor's walk drawn as the soldier's walk.
 
 ## Playing the demo
 
@@ -2154,7 +2171,8 @@ picker). Missing for the rest of the game:
   first's from `q2_tic`'s parameters) runs its own `player_think`, and the tic returns a row per client;
   `view_setup(client)` and `frame_all(…, client)` give each its view, with the other's model in it
   (`G_SetClientFrame` animates it: stand, run, crouch, jump, attack, pain and death frames; the demo pak has no
-  `players/male/tris.md2`, so here the other player is unseen until a registered pak supplies it). The
+  `players/male/tris.md2`, so here the soldier stands in for the other player until a registered pak supplies
+  it: see the forty-second list). The
   monsters look for `game.sight_client`, which `AI_SetSightClient` rotates through the living, targetable
   clients each tic, and drop a dead enemy for the other. A weapon or a key one client takes stays for the
   other (`IT_STAY_COOP`; one already held is left). A dead client's button a second later is `respawn`: the

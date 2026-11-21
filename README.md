@@ -53,7 +53,7 @@ node scripts/icon.mjs  # the manifest's icons (public/icon-192.png, icon-512.png
 
 Two to four can play: the Players select (or the game menu's players spin) starts a coop game, the screen
 split in two views or in quarters, the keyboard and mouse the first player's and a gamepad each the others',
-as `p_client.c` had coop (the demo pak has no player model, so the other players are unseen until a
+as `p_client.c` had coop (the demo pak has no player model, so the soldier stands in for the other players until a
 registered pak supplies it; 640×480 gives four views of 320×240, and in a narrower view the status bar's
 parts stack in rows from the bottom so none leaves it, and the help computer, the inventory and the score
 board lay their text out to the view's width over their panel scaled to it).
