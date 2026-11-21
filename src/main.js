@@ -36,6 +36,7 @@ import { Netgraph } from './netgraph.js';
 import { DemoRecorder } from './record.js';
 import { DemoStore, FileStore } from './demostore.js';
 import { ClipMap, pmove, stateFromRow } from './pmove.js';
+import { standIn } from './standin.js';
 import { CinReader, CinPlayer, CIN_FPS } from './cinematic.js';
 import { loadSettings, saveSettings as saveSettingsTo, viewSize, OPTIONS_RESET, VIDEO_RESET } from './settings.js';
 
@@ -1673,15 +1674,17 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
   for (const e of drawEnts ? ents : []) {   // (r_drawentities 0: R_DrawEntitiesOnList skipped; cl_add_entities 0: none to list)
     const [, mid, frame, skin, x, y, z, pitch, yaw, roll, effects, alpha, kindRaw] = e;
     const kind = String(kindRaw).trim();
-    const m = res.models.get(mid);
+    // (a model the pak lacks has a row and no mesh: the player model's stand-in draws in its place, src/standin.js; the rest are skipped)
+    const sub = res.models.has(mid) ? null : kind === 'M' ? standIn(res, mid) : null;
+    const m = res.models.get(mid) ?? (sub ? { mdl: sub.mdl } : null);
     if (!m) continue;
     if (kind === 'M') {
       // R_LightPoint at the origin, with the dynamic lights (a projectile's own light makes it bright); items glow
       const light = lightPoint(bsp, x, y, z);
       const spin = effects & 1 ? (time * 100) % 360 : 0;   // EF_ROTATE items spin
       // (a row that carries the frame it left and the blend toward this one, from the lerp or the demo: the pose between)
-      r.drawAlias(m.mdl, frame, skin, [x, y, z], [pitch, yaw + spin, roll], light,
-        { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0, oldFrame: e[14], backlerp: settings.rLerpmodels ? e[15] ?? 0 : 0 });   // (r_lerpmodels 0: no blend)
+      r.drawAlias(m.mdl, sub ? sub.frame(frame) : frame, sub ? 0 : skin, [x, y, z], [pitch, yaw + spin, roll], light,
+        { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0, oldFrame: sub && e[14] != null ? sub.frame(e[14]) : e[14], backlerp: settings.rLerpmodels ? e[15] ?? 0 : 0 });   // (r_lerpmodels 0: no blend)
       if (effects & 8) r.particles.push({ x, y, z, vx: 0, vy: 0, vz: 0, color: 0xe0 + (Math.random() * 4 | 0), die: time + 0.05, type: 'still' });   // the blaster bolt's glow
       if (effects & 16) r.spawnParticles('gunshot', x, y, z, 2, [0, 0, 0], 0xe0 + 8);   // rocket smoke
     } else if (kind === 'S') {

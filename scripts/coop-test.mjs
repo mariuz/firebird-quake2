@@ -12,6 +12,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, SQL_FILES } from '../src/loader.js';
 import { Session, SLOT_KEY } from '../src/session.js';
+import { standIn, standInFrame, PLAYER_RUNS, PLAYER_MODEL } from '../src/standin.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));
@@ -72,6 +73,19 @@ check(Math.abs(v1.EX - ps[0].X) < 0.01 && Math.abs(v2.EX - ps[1].X) < 0.01 && v1
 const f1 = await session.frame({ client: 1 }), f2 = await session.frame({ client: 2 });
 check(f1.faces.length > 50 && f2.faces.length > 50 && f1.faces.length !== f2.faces.length, `each client's frame is its own (${f1.faces.length} and ${f2.faces.length} faces)`);
 check(!f1.ents.some((e) => e[0] === p1.ENT_ID) && !f2.ents.some((e) => e[0] === p2.ENT_ID), 'a client\'s own model is not in its frame');
+// the other client on a pak without players/male: its entity is on the model row without a mesh, and the soldier stands in,
+// every frame of m_player.h's runs a frame of his, a death ending on his last, a crouch holding his duck
+{
+  const mid = (await one(`SELECT model_id FROM ents WHERE id = ${p2.ENT_ID}`)).MODEL_ID;
+  const sub = standIn(res, mid);
+  const runs = sub?.mdl.animations() ?? [];
+  const run = (n) => runs.find((r) => r.name === n);
+  const all = Array.from({ length: 198 }, (_, f) => sub?.frame(f));
+  const ok = !res.models.has(mid) && mid === res.placeholders?.get(PLAYER_MODEL) && sub && all.every((f) => f >= 0 && f < sub.mdl.numFrames)
+    && sub.frame(197) === run('death3').first + run('death3').count - 1 && sub.frame(0) === run('stand1').first && sub.frame(140) === run('duck').first + run('duck').count - 1
+    && standInFrame(45, runs) === run('run').first + run('run').count - 1 && PLAYER_RUNS.at(-1)[1] + PLAYER_RUNS.at(-1)[2] === 198;
+  check(ok, `the other client, its model missing from the pak (row ${mid}), is drawn as the soldier: 198 frames onto his ${sub?.mdl.numFrames ?? 0}, a death ending lying, a crouch ducked`);
+}
 const sqlF = await session.frame({ client: 2, sqlRenderer: true });
 check(sqlF.faces.length > 0, 'the SQL-projecting mode takes the client too');
 check((await q('SELECT idx FROM inventory_list(2)')).some((r) => r.IDX === 7), 'inventory_list(client) is the client\'s (the blaster)');
