@@ -1,8 +1,11 @@
 // standin.js – a body to draw for a model the pak lacks. The demo pak has no players/male/tris.md2, so in coop and
 // deathmatch the other client (and a body left behind) was a model row without a mesh and the painter drew nothing:
 // the soldier, a man of the player's size, stands in for it, his frame the one that does what the player's frame does
-// (m_player.h's runs mapped onto the soldier's: standing, running, firing, pain, crouching, dying). A pak with the
-// player model draws the model itself, as before.
+// (m_player.h's runs mapped onto the soldier's: standing, running, firing, pain, crouching, dying). The actor
+// (misc_actor) is on the same row but numbers its frames by m_actor.h's runs, the row's own: those are mapped onto the
+// soldier's by name. A pak with the player model draws the model itself, as before.
+
+import { MONSTERS } from './gamedata.js';
 
 /** m_player.h's runs: [name, first frame, frames]. */
 export const PLAYER_RUNS = [['stand', 0, 40], ['run', 40, 6], ['attack', 46, 8], ['pain1', 54, 4], ['pain2', 58, 4], ['pain3', 62, 4],
@@ -15,6 +18,17 @@ const SOLDIER_RUN = { stand: 'stand1', run: 'run', attack: 'attak1', pain1: 'pai
   crdeath: 'death1', death1: 'death1', death2: 'death2', death3: 'death3' };
 const HOLD_LAST = new Set(['crstnd', 'crwalk', 'crattak', 'crpain']);
 
+/** The soldier's run that stands in for each of the actor's (m_actor.h's, the runs of the row without a mesh). */
+const ACTOR_SOLDIER_RUN = { attack: 'attak1', death1: 'death1', death2: 'death2', flip: 'stand1', pain1: 'pain1', pain2: 'pain2', pain3: 'pain3',
+  push: 'stand1', run: 'run', stand: 'stand1', taunt: 'stand1', walk: 'walk1', jump: 'run' };
+
+/** The actor's runs as the loader numbers them on the row without a mesh: [name, first frame, frames], gamedata's order. */
+export const ACTOR_RUNS = (() => {
+  const a = MONSTERS.find((m) => m.name === 'actor');
+  let first = 0;
+  return (a?.anims ?? []).map(([name, n]) => { const r = [name, first, n]; first += n; return r; });
+})();
+
 export const PLAYER_MODEL = 'players/male/tris.md2';
 export const STANDIN_MODEL = 'models/monsters/soldier/tris.md2';
 
@@ -23,11 +37,11 @@ export const STANDIN_MODEL = 'models/monsters/soldier/tris.md2';
  * frame to its last, so a death ends lying down). `runs` is the soldier's Md2.animations(). A frame past the player's
  * runs is the soldier's first standing frame.
  */
-export function standInFrame(frame, runs) {
+export function standInFrame(frame, runs, from = PLAYER_RUNS, onto = SOLDIER_RUN) {
   const f = Math.max(0, Math.floor(frame));
-  const p = PLAYER_RUNS.find(([, first, n]) => f >= first && f < first + n) ?? PLAYER_RUNS[0];
+  const p = from.find(([, first, n]) => f >= first && f < first + n) ?? from[0];
   const [name, first, n] = p;
-  const s = runs.find((r) => r.name === SOLDIER_RUN[name]) ?? runs[0];
+  const s = runs.find((r) => r.name === onto[name]) ?? runs[0];
   if (!s) return 0;
   if (HOLD_LAST.has(name)) return s.first + s.count - 1;
   const off = f >= first && f < first + n ? f - first : 0;
@@ -35,8 +49,9 @@ export function standInFrame(frame, runs) {
 }
 
 /**
- * What draws a model id that has no mesh (`res.placeholders`' rows): { mdl, frame(f) } for the player model when the
- * pak has the soldier, else null. Made once and kept on `res`.
+ * What draws a model id that has no mesh (`res.placeholders`' rows): { mdl, frame(f), monsterFrame(f) } for the player
+ * model when the pak has the soldier (frame for a client's or a body's frame, monsterFrame for the actor's), else null.
+ * Made once and kept on `res`.
  */
 export function standIn(res, mid) {
   if (!res.standIns) {
@@ -45,7 +60,7 @@ export function standIn(res, mid) {
     const soldier = res.models.get(res.byName.get(STANDIN_MODEL))?.mdl;
     if (id != null && soldier) {
       const runs = soldier.animations();
-      res.standIns.set(id, { mdl: soldier, frame: (f) => standInFrame(f, runs) });
+      res.standIns.set(id, { mdl: soldier, frame: (f) => standInFrame(f, runs), monsterFrame: (f) => standInFrame(f, runs, ACTOR_RUNS, ACTOR_SOLDIER_RUN) });
     }
   }
   return res.standIns.get(mid) ?? null;

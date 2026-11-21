@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url';
 import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, loadMap, SQL_FILES } from '../src/loader.js';
+import { Session } from '../src/session.js';
+import { standIn, ACTOR_RUNS } from '../src/standin.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));
@@ -296,6 +298,22 @@ const near = (a, b) => Math.abs(a - b) < 0.5;
   const runs = await qa(`SELECT anim, first_frame, frame_count FROM anims WHERE model_id = ${actor.MODEL_ID} ORDER BY first_frame`);
   assert(actor.MTYPE === 'actor' && actor.HEALTH === 100 && !res.models.has(actor.MODEL_ID) && runs.length === 13 && runs.reduce((n, r) => n + r.FRAME_COUNT, 0) === 133 && actor.TARGET === 'act1',
     `misc_actor is the monster 'actor' on a model row of m_actor.h's thirteen runs (133 frames) the painter has no mesh for, its target the first corner`);
+  // the soldier stands in for him as for the clients, but by his own runs: his walk is the soldier's walk, his deaths end lying;
+  // the session asks once which entities on the row are monsters, the actor being one and the player's client not
+  {
+    const sub = standIn(res, actor.MODEL_ID);
+    const soldierRuns = sub?.mdl.animations() ?? [];
+    const sr = (n) => soldierRuns.find((r) => r.name === n);
+    const ar = (n) => ACTOR_RUNS.find((r) => r[0] === n);
+    const walk = ar('walk'), death2 = ar('death2');
+    const session = new Session(db); session.use(pak, res);
+    const pe = (await q1('SELECT ent_id FROM player WHERE id = 1')).ENT_ID;
+    await session.noteStandIns([[actor.ID, actor.MODEL_ID], [pe, actor.MODEL_ID]]);
+    assert(sub && sub.monsterFrame(walk[1]) === sr('walk1').first && sub.monsterFrame(walk[1] + walk[2] - 1) === sr('walk1').first + sr('walk1').count - 1
+      && sub.monsterFrame(death2[1] + death2[2] - 1) === sr('death2').first + sr('death2').count - 1 && ACTOR_RUNS.reduce((n, r) => n + r[2], 0) === 133
+      && session.standInMonsters.get(Number(actor.ID)) === true && session.standInMonsters.get(Number(pe)) === false,
+      `the soldier stands in for the actor by his own runs (his walk on the soldier's walk, a death ending lying), the session telling him (a monster) from the client`);
+  }
   const corners = await qa("SELECT targetname, solid, spawnflags, p1x, p1y, speed, height FROM ents WHERE classname = 'target_actor' ORDER BY targetname");
   assert(corners.length === 3 && corners.every((c) => c.SOLID === 1) && Math.abs(corners[1].P1X - 1) < 1e-9 && corners[1].SPEED === 150 && corners[1].HEIGHT === 250,
     `the three corners are triggers, the JUMP one pointing east at 150 and 250 up`);
