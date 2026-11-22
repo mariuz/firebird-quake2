@@ -243,6 +243,11 @@ export class Session {
    * runs) and which are clients or bodies (m_player.h's): asked once per entity the first time a frame has it, kept
    * until the next map or load. The painter's stand-in maps the frame by it (src/standin.js).
    */
+  /** The ids of a frame's entities that noteStandIns found to be monsters (for a guest's frame: it has no tables to ask). */
+  standInMonsterIds(ents) {
+    return ents.map((e) => Number(e[0])).filter((id) => this.standInMonsters.get(id) === true);
+  }
+
   async noteStandIns(ents) {
     const pm = this.res?.placeholders?.get(PLAYER_MODEL);
     if (pm == null) return;

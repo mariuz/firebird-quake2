@@ -1869,10 +1869,23 @@ This ends the forty-third list.
 
 The forty-fourth list: the stand-in on a guest's page. In the order they are to be taken.
 
-- **The actor on a guest's page**: a guest paints the frames its host sends and has no tables, so it cannot ask which
-  entities on the player model's row are monsters, and draws the actor by the player's runs. The host knows
-  (`session.standInMonsters`): its frame message to a guest would carry the monsters' ids among the row's entities, and
-  the guest's painter use them as the host's does; `test:net` would see a guest told.
+- **The actor on a guest's page**: done. A guest paints the frames its host sends and has no tables to ask which
+  entities on the player model's row are monsters, so it drew the actor by the player's runs. The host's frame message
+  to a guest carries them now (`sm`, only when the frame has any: `session.standInMonsterIds` of the guest's frame's
+  entities), the guest link keeps them with the frame (`standInMonsters`), and the painter asks the link on a guest's
+  page as it asks the session on the host's. `test:net` tells a guest an entity of its frame and finds it known, and
+  finds none known after a frame with none.
+
+This ends the forty-fourth list.
+
+The forty-fifth list: the stand-in's uniforms. In the order they are to be taken.
+
+- **A uniform a client**: every client drawn as the soldier wears the same skin, so in a game of three or four the
+  players cannot tell each other apart. The soldier's model has three uniforms (light, regular and the SS, each with
+  its pain skin); Quake 2 gave each client its own skin on the player model (`ClientUserinfoChanged`'s skin
+  configstring). The stand-in would wear a uniform by client (the first the regular, then the light, then the SS, the
+  fourth the regular again), its pain skin while the client's pain frames play; `test:coop` would see four clients in
+  their uniforms.
 
 ## Playing the demo
 

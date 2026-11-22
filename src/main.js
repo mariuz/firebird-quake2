@@ -1108,7 +1108,7 @@ async function frame() {
         // SV_CheckTimeouts: a guest silent past the timeout cvar is dropped, every message line told ("timed out"), its page told the reason
         if (silentPast(g.host, Number(settings.timeout) || 0)) { timedOut(g); continue; }
         if (g.host.open && last.TIC % 20 === 0) g.host.sendPing();   // (a ping a second: the round trip on the score board, as the server's ping was)
-        if (g.host.open) g.host.sendFrame({ ...row, SCORES: scoreRows() }, gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv });
+        if (g.host.open) g.host.sendFrame({ ...row, SCORES: scoreRows() }, gf, { sounds: f.sounds, fx: f.fx, dt: tics * 0.05, inv, monsters: session.standInMonsterIds(gf.ents) });
       }
     }
     if (!running) { nextFrame(); return; }
@@ -1683,7 +1683,9 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       const light = lightPoint(bsp, x, y, z);
       const spin = effects & 1 ? (time * 100) % 360 : 0;   // EF_ROTATE items spin
       // (a row that carries the frame it left and the blend toward this one, from the lerp or the demo: the pose between)
-      const subFrame = sub && (session.standInMonsters.get(Number(e[0])) ? sub.monsterFrame : sub.frame);   // (the actor by his own runs, a client or a body by the player's)
+      // (the actor by his own runs, a client or a body by the player's: the session knows which, a guest is told by its host)
+      const monster = netGuest() ? net.guest.standInMonsters?.has(Number(e[0])) : session.standInMonsters.get(Number(e[0]));
+      const subFrame = sub && (monster ? sub.monsterFrame : sub.frame);
       r.drawAlias(m.mdl, sub ? subFrame(frame) : frame, sub ? 0 : skin, [x, y, z], [pitch, yaw + spin, roll], light,
         { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0, oldFrame: sub && e[14] != null ? subFrame(e[14]) : e[14], backlerp: settings.rLerpmodels ? e[15] ?? 0 : 0 });   // (r_lerpmodels 0: no blend)
       if (effects & 8) r.particles.push({ x, y, z, vx: 0, vy: 0, vz: 0, color: 0xe0 + (Math.random() * 4 | 0), die: time + 0.05, type: 'still' });   // the blaster bolt's glow
