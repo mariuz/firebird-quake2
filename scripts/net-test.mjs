@@ -65,7 +65,6 @@ const hostTic = async (cmd1 = idle) => {
   return { last, f, gf, cmd2, sent };
 };
 const p2 = async () => (await q('SELECT e.x, e.y, e.z, e.yaw, e.health FROM player p JOIN ents e ON e.id = p.ent_id WHERE p.id = 2'))[0];
-
 // the guest's userinfo (its player setup's name and hand) reaches the host, which gives it to the second client
 let infoSeen = null;
 host.onInfo = (i) => { infoSeen = i; };
@@ -480,6 +479,20 @@ check(typeof got.row.VX === 'number' && typeof got.row.ONGROUND === 'number', 't
   check(JSON.stringify(d.fr) === '[[1,2],[4,0,0,0,0]]' && !('ents' in d) && d.styles[0] === 2 && JSON.stringify(undeltaFrame(base, d)) === JSON.stringify({ ents: base.ents, loops: [], styles: [2], speakers: [], brushFrames: [], brushAngles: [], boxes: [], faces: cur.faces }),
     'a delta keeps a run of the base\'s faces as a pair, a new face whole, a part unchanged out, and rebuilds the frame');
 }
+// the stand-in's monsters (the actor on the player model's row without a mesh): the host's session knows them, a guest is told
+// with the frame they are in, and a frame without any tells it none
+{
+  await hostTic();
+  const gf = await session.frame({ client: 2, sqlRenderer: false });
+  const id = Number(gf.ents[0]?.[0]);
+  session.standInMonsters.set(id, true);
+  host.sendFrame(session.clients[1], gf, { dt: 0.05, monsters: session.standInMonsterIds(gf.ents) });
+  const told = guest.standInMonsters?.has(id) && guest.standInMonsters.size === 1;
+  session.standInMonsters.delete(id);
+  host.sendFrame(session.clients[1], gf, { dt: 0.05, monsters: session.standInMonsterIds(gf.ents) });
+  check(gf.ents.length > 0 && told && guest.standInMonsters.size === 0, `a guest is told the frame's monsters on the stand-in's row (entity ${id}), and none when the frame has none`);
+}
+
 // a message longer than a channel message goes in chunks and arrives whole
 const [c, d] = Loopback.pair();
 const big = new Link(c), bigIn = new Link(d);

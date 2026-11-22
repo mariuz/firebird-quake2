@@ -329,11 +329,13 @@ export class HostLink {
   /**
    * The guest's frame: its player row, its frame's rows (packed), the tic's sounds and effects (they come with
    * the host's own frame query, the first of the tic), the tic's length, the newest command the tic took (`ack`:
-   * the guest predicts from this frame with the commands after it) and, when asked, its inventory rows.
+   * the guest predicts from this frame with the commands after it), when asked its inventory rows, and the frame's
+   * entities that are monsters on the player model's row without a mesh (`monsters`: the actor, which the guest's
+   * painter draws by his own runs, src/standin.js; the guest has no tables to ask).
    * Dropped, not queued, when the channel is behind; held (SV_RateDrop) when the frames of the last second sum past
    * the guest's rate userinfo (its bytes a second), counted in `heldFrames` as surpressCount counted them.
    */
-  sendFrame(row, frame, { sounds = [], fx = [], dt = 0.05, inv = null } = {}) {
+  sendFrame(row, frame, { sounds = [], fx = [], dt = 0.05, inv = null, monsters = [] } = {}) {
     if (this.link.buffered > BACKLOG) { this.droppedFrames++; this.onDrop?.('dropped', row?.TIC ?? 0); return false; }
     const at = this.now();
     while (this.sizes.length && this.sizes[0][0] <= at - 1000) this.sizes.shift();
@@ -344,7 +346,7 @@ export class HostLink {
     this.sentPacked.set(n, packed); this.sentRows.set(n, row);
     if (this.sentPacked.size > DELTA_KEEP) { const old = this.sentPacked.keys().next().value; this.sentPacked.delete(old); this.sentRows.delete(old); }
     if (base) this.deltaFrames++;
-    const size = this.send({ t: 'f', n, ...(base ? { b: this.frameAck, df: deltaFrame(base, packed), rd: deltaRow(baseRow, row) } : { row, f: packed }), sounds, fx, dt, ack: this.ack, ...(inv ? { inv } : {}) });
+    const size = this.send({ t: 'f', n, ...(base ? { b: this.frameAck, df: deltaFrame(base, packed), rd: deltaRow(baseRow, row) } : { row, f: packed }), sounds, fx, dt, ack: this.ack, ...(inv ? { inv } : {}), ...(monsters.length ? { sm: monsters } : {}) });
     this.sizes.push([at, size]);
     this.sentFrames++;
     return true;
@@ -410,6 +412,8 @@ export class GuestLink {
         if (Number.isInteger(tic)) this.lastTic = tic;
         this.row = row; this.frame = unpackFrame(packed, m.sounds ?? [], m.fx ?? []); this.dt = m.dt ?? 0.05; this.ack = Number.isInteger(m.ack) ? m.ack : -1;
         if (m.inv) this.inv = m.inv;
+        // (the frame's monsters on the player model's row without a mesh, as the host's session knows them: the stand-in's runs)
+        this.standInMonsters = new Set(Array.isArray(m.sm) ? m.sm.filter(Number.isInteger) : []);
         this.fresh = true; this.frames++;
         break;
       }
