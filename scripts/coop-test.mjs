@@ -12,7 +12,7 @@ import { FirebirdBrowser, DirectTransport } from 'firebird-wasm/browser';
 import { Pak } from '../src/pak.js';
 import { createSchema, loadResources, SQL_FILES } from '../src/loader.js';
 import { Session, SLOT_KEY } from '../src/session.js';
-import { standIn, standInFrame, PLAYER_RUNS, PLAYER_MODEL } from '../src/standin.js';
+import { standIn, standInFrame, standInSkin, PLAYER_RUNS, PLAYER_MODEL } from '../src/standin.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sql = Object.fromEntries(SQL_FILES.map((n) => [n, fs.readFileSync(path.join(root, `sql/${n}.sql`), 'utf8')]));
@@ -382,6 +382,14 @@ check(Math.abs(four[2].Y - ps[2].Y) > 40 && Math.abs(four[1].Y - ps[1].Y) < 1 &&
 await session.tic(idle, null, null, cmd({ fwd: 1 }));
 check(Math.abs((await players())[3].Y - four[3].Y) > 3, 'a null stands for a client that sends nothing; the fourth\'s command moves the fourth');
 const f4 = await session.frame({ client: 4 });
+// a uniform a client: each client's skin its player number (PutClientInServer's skinnum), the stand-in's the regular, the light, the SS,
+// the regular again, each with its pain skin while a pain run plays (the soldier's six: lt, ltp, regular, pain, ss, ssp)
+{
+  const skins = (await q('SELECT e.skin FROM player p JOIN ents e ON e.id = p.ent_id ORDER BY p.id')).map((r) => r.SKIN);
+  const worn = skins.map((sk) => standInSkin(sk, 0));
+  check(skins.join() === '0,1,2,3' && worn.join() === '2,0,4,2' && standInSkin(1, 55) === 1 && standInSkin(2, 170) === 5 && standInSkin(0, 70, true) === 2 && standInSkin(0, 39, true) === 3 && standInSkin(0, 39) === 2,
+    `the four clients' skins are their numbers (${skins.join()}), the stand-in's uniforms ${worn.join()}, a pain frame the uniform's pain skin`);
+}
 check(f4.faces.length > 0 && !f4.ents.some((e) => e[0] === four[3].ENT_ID), 'the fourth client\'s frame has its view (its own entity not in it)');
 await session.writeSave(SLOT_KEY(2), 'four');
 await session.startMap('demo1', { newGame: true, skill: 2, seed: 1, coop: true, players: 2 });
