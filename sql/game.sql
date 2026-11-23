@@ -2933,7 +2933,9 @@ BEGIN
   UPDATE ents e SET e.classname = 'player', e.x = :x, e.y = :y, e.z = :z + 1, e.yaw = :yaw, e.pitch = 0, e.roll = 0, e.vx = 0, e.vy = 0, e.vz = 0,
          e.minx = -16, e.miny = -16, e.minz = -24, e.maxx = 16, e.maxy = 16, e.maxz = 32, e.viewheight = 22,
          e.solid = 3, e.movetype = 3, e.clipmask = 33619971, e.health = :hp, e.max_health = :mhp, e.takedamage = 2, e.mass = 200, e.flags = BIN_AND(:pflags, 16 + 64), e.anim = 'stand',
-         e.deadflag = 0, e.effects = 0, e.renderfx = 0, e.frame = 0, e.skin = 0, e.waterlevel = 0, e.watertype = 0, e.alpha = 0, e.teleport_time = now_() + 0.7e0
+         e.deadflag = 0, e.effects = 0, e.renderfx = 0, e.frame = 0, e.waterlevel = 0, e.watertype = 0, e.alpha = 0, e.teleport_time = now_() + 0.7e0,
+         -- (PutClientInServer: skinnum the player number, the client's skin among the player skins; the stand-in's uniform)
+         e.skin = COALESCE((SELECT p.id - 1 FROM player p WHERE p.ent_id = :pe), 0)
    WHERE e.id = :pe;
   EXECUTE PROCEDURE set_model(pe, 'players/male/tris.md2');
   -- (memset (client, 0): everything but the pers)

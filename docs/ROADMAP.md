@@ -1880,12 +1880,23 @@ This ends the forty-fourth list.
 
 The forty-fifth list: the stand-in's uniforms. In the order they are to be taken.
 
-- **A uniform a client**: every client drawn as the soldier wears the same skin, so in a game of three or four the
-  players cannot tell each other apart. The soldier's model has three uniforms (light, regular and the SS, each with
-  its pain skin); Quake 2 gave each client its own skin on the player model (`ClientUserinfoChanged`'s skin
-  configstring). The stand-in would wear a uniform by client (the first the regular, then the light, then the SS, the
-  fourth the regular again), its pain skin while the client's pain frames play; `test:coop` would see four clients in
-  their uniforms.
+- **A uniform a client**: done. Every client drawn as the soldier wore the same skin. `put_client_in_server` now sets
+  the entity's skin to the player number less one, as `PutClientInServer` set `s.skinnum` (each client's skin among the
+  player skins; it was 0 for all), and the stand-in dresses by it (`standInSkin`): the soldier's regular uniform, then
+  the light, then the SS, round again, each with its pain skin while a pain run plays (the player's pains and the
+  crouched pain; the actor's pains, the actor in the regular). A pak with the player model draws its skins by that
+  number as before. `test:coop` finds the four clients' skins 0 to 3 and their uniforms the regular, the light, the
+  SS and the regular, a pain frame the pain skin; in a headless Chromium a coop game's two players wear different
+  uniforms. Single player is as it was (the first client's skin is 0).
+
+This ends the forty-fifth list.
+
+The forty-sixth list: the network game's own gaps. In the order they are to be taken.
+
+- **The guest's pages read for what the host's have that they lack**: a guest paints from what its host sends, so
+  each feature the page gained since the network game (the stand-in, the uniforms, the demo recordings, the HUD at a
+  view's width) is a thing a guest may lack. Each is tried on a joined page in the browser test's net section, and
+  any a guest lacks is the change.
 
 ## Playing the demo
 

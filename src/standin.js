@@ -29,6 +29,21 @@ export const ACTOR_RUNS = (() => {
   return (a?.anims ?? []).map(([name, n]) => { const r = [name, first, n]; first += n; return r; });
 })();
 
+/**
+ * The soldier's skins (skin_lt, skin_ltp, skin, pain, skin_ss, skin_ssp): a uniform a client by its skin number (the
+ * player number, PutClientInServer's skinnum), the regular first, then the light, then the SS, round again; the uniform's
+ * pain skin while a pain run plays, as the soldier showed his. The actor (skin 0) wears the regular.
+ */
+const UNIFORMS = [2, 0, 4];
+const PLAYER_PAINS = new Set(['pain1', 'pain2', 'pain3', 'crpain']);
+const ACTOR_PAINS = new Set(['pain1', 'pain2', 'pain3']);
+export function standInSkin(skin, frame, monster = false) {
+  const base = UNIFORMS[(Math.max(0, Math.floor(skin ?? 0)) % UNIFORMS.length)];
+  const f = Math.floor(frame ?? 0);
+  const run = (monster ? ACTOR_RUNS : PLAYER_RUNS).find(([, first, n]) => f >= first && f < first + n);
+  return base + (run && (monster ? ACTOR_PAINS : PLAYER_PAINS).has(run[0]) ? 1 : 0);
+}
+
 export const PLAYER_MODEL = 'players/male/tris.md2';
 export const STANDIN_MODEL = 'models/monsters/soldier/tris.md2';
 
