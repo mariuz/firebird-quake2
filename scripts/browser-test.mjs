@@ -1810,6 +1810,22 @@ try {
       await gp.uncheck('#net-spectate'); await typeOn(page, 'maxspectators 4');
       assert(/Server spectator limit is full\./.test(msFull.line ?? '') && msRow?.SPECTATOR === 0 && msRow?.SOLID === 3,
         `maxspectators 0 keeps a guest that ticks spectate a player and tells it ("${msFull.line}", ${JSON.stringify(msRow)})`);
+      // the stand-in on the joined page: the host's player put before the guest's eye is on the player model's row without a mesh,
+      // which the guest's painter draws as the soldier (res.standIns holds the row), in the first client's uniform (skin 0); the
+      // guest's own client has skin 1 at the host
+      await page.evaluate(async () => {
+        const { db } = window.quake2;
+        const [a, b] = (await db.query('SELECT p.id, e.id AS eid, e.x, e.y, e.z, e.yaw FROM player p JOIN ents e ON e.id = p.ent_id ORDER BY p.id')).rows;
+        const yr = (b.YAW * Math.PI) / 180;
+        await db.exec(`UPDATE ents SET x = ${b.X + Math.cos(yr) * 90}, y = ${b.Y + Math.sin(yr) * 90}, z = ${b.Z}, yaw = ${b.YAW + 180} WHERE id = ${a.EID}; EXECUTE PROCEDURE link_ent(${a.EID})`);
+      }).catch(() => undefined);
+      let si = {};
+      for (let i = 0; i < 40 && !(si.n >= 1); i++) {
+        await sleep(250);
+        si = await gp.evaluate(() => { const r = window.quake2.res, f = window.quake2.net.guest.frame; const on = (f?.ents ?? []).filter((e) => r?.standIns?.has(e[1])); return { n: on.length, skins: on.map((e) => e[3]) }; }).catch(() => ({}));
+      }
+      const hostSkins = await page.evaluate(async () => (await window.quake2.db.query('SELECT e.skin FROM player p JOIN ents e ON e.id = p.ent_id ORDER BY p.id')).rows.map((r) => r.SKIN).join()).catch(() => '');
+      assert(si.n >= 1 && si.skins?.includes(0) && hostSkins === '0,1', `the joined page draws the host's player as the soldier stand-in in the first client's uniform (${JSON.stringify(si)}; the clients' skins ${hostSkins})`);
       // a third page joins the game running: Host makes another offer while hosting, the third answers it, and the
       // host's game gets a third client (ClientBegin) that the third page drives, each guest sent its own frames
       const tctx = await browser.newContext({ viewport: { width: 960, height: 720 } });

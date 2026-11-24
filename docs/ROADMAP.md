@@ -1893,10 +1893,24 @@ This ends the forty-fifth list.
 
 The forty-sixth list: the network game's own gaps. In the order they are to be taken.
 
-- **The guest's pages read for what the host's have that they lack**: a guest paints from what its host sends, so
-  each feature the page gained since the network game (the stand-in, the uniforms, the demo recordings, the HUD at a
-  view's width) is a thing a guest may lack. Each is tried on a joined page in the browser test's net section, and
-  any a guest lacks is the change.
+- **The guest's pages read for what the host's have that they lack**: done, nothing lacking. A joined page boots as any
+  page does and loads its pak into its own tables first, so it has the same model rows as the host (the placeholders
+  among them; a pak of another model count is warned of on joining) and paints the host's frames with them. Tried in
+  the browser test's net section: the host's player put before the guest's eye is on the player model's row without a
+  mesh and the joined page draws it as the soldier (its `res.standIns` holds the row) in the first client's uniform,
+  the guest's own client wearing the second's at the host. The recordings on a joined page and the HUD at its view's
+  width had their entries already (*Recording on a joined page*; the guest paints at the host's view). The page now
+  shows `res` on `window.quake2`, for that check.
+
+This ends the forty-sixth list.
+
+The forty-seventh list: the stand-in in a demo. In the order they are to be taken.
+
+- **The other player in a coop recording**: a coop or deathmatch game recorded (`record`) names the other clients'
+  model `players/male/tris.md2`, and played back on a pak without it (`DemoPlayer`'s `modelId` by name finds none) the
+  other players are left out of the frame. The demo's model lookup would fall back to the placeholder row
+  (`res.placeholders`), so the painter's stand-in draws them as in the game, their frames the player's runs and their
+  skins their uniforms; `test:record` would play a coop recording back and find the other client drawn.
 
 ## Playing the demo
 
