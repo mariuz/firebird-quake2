@@ -45,6 +45,19 @@ export function standInSkin(skin, frame, monster = false) {
 }
 
 export const PLAYER_MODEL = 'players/male/tris.md2';
+
+/** A model's name from its id, the rows without a mesh included (res.placeholders, name → id): what a recording names it. */
+export function modelName(res, id) {
+  const m = res.models.get(id);
+  if (m) return m.name;
+  res.placeholderNames ??= new Map([...(res.placeholders ?? new Map())].map(([n, i]) => [i, n]));
+  return res.placeholderNames.get(id);
+}
+
+/** A demo's model name to the page's id: the pak's model, else the row without a mesh (the player model's, the stand-in's). */
+export function demoModelId(res, name) {
+  return res.byName.get(name) ?? res.placeholders?.get(name);
+}
 export const STANDIN_MODEL = 'models/monsters/soldier/tris.md2';
 
 /**
