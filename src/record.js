@@ -16,6 +16,7 @@
 // decodeFrame's rows of each tic.
 
 import { ANORMS } from './md2.js';
+import { modelName } from './standin.js';
 import { SVC, CS } from './demo.js';
 import { WEAPONS, ITEMS, AMMO_ICONS, ARMOR_ICONS, TIMER_ICONS } from './gamedata.js';
 import { viewFrameLerp } from './hud.js';
@@ -351,8 +352,8 @@ export class DemoRecorder {
     player.number = 1; player.origin = [row.PX, row.PY, row.PZ]; player.angles = [0, row.YAW, 0];
     ents.set(1, { id: this.playerEnt, s: player });
     for (const e of f.ents) {
-      const m = this.res.models.get(e[1]);
-      const mi = this.model(m?.name);
+      // (a model the pak lacks, a row without a mesh, by its name too: a coop game's other client is the player model's, as Quake recorded it)
+      const mi = this.model(modelName(this.res, e[1]));
       if (!mi) continue;
       const n = this.number(e[0]);
       if (!n) continue;

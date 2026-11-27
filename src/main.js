@@ -36,7 +36,7 @@ import { Netgraph } from './netgraph.js';
 import { DemoRecorder } from './record.js';
 import { DemoStore, FileStore } from './demostore.js';
 import { ClipMap, pmove, stateFromRow } from './pmove.js';
-import { standIn, standInSkin } from './standin.js';
+import { standIn, standInSkin, demoModelId } from './standin.js';
 import { CinReader, CinPlayer, CIN_FPS } from './cinematic.js';
 import { loadSettings, saveSettings as saveSettingsTo, viewSize, OPTIONS_RESET, VIDEO_RESET } from './settings.js';
 
@@ -1405,7 +1405,7 @@ async function playDemo(name, { withMenu = false, timedemo = false } = {}) {
   await mapLoaded(await session.startMap(mapName, { newGame: true, skill: settings.skill, faceVerts: settings.renderer === 'sql', coop: false, deathmatch: false }));
   await session.demoBegin();
   // (a brush model's sounds come from its box's middle, as the client placed them: the map's bounds for its '*N')
-  const player = new DemoPlayer(parsed, { modelId: (n) => res.byName.get(n), brushBounds: (n) => map.bsp.models[Number(n.slice(1))] ?? null });
+  const player = new DemoPlayer(parsed, { modelId: (n) => demoModelId(res, n), brushBounds: (n) => map.bsp.models[Number(n.slice(1))] ?? null });
   demo = { name, player, time: 0, at: performance.now(), frames: parsed.frames.length, cprint: null, msg: null, timedemo: timedemo ? { start: performance.now(), frames: 0 } : null };
   $('mapname').textContent = `${mapName} (${timedemo ? 'timedemo' : 'demo'} ${name})`;
   if ([...$('demo').options].some((o) => o.value === name)) $('demo').value = name;
@@ -1684,7 +1684,7 @@ function drawFrame(which, last, faces, ents, styles, time, dt = 0.05) {
       const spin = effects & 1 ? (time * 100) % 360 : 0;   // EF_ROTATE items spin
       // (a row that carries the frame it left and the blend toward this one, from the lerp or the demo: the pose between)
       // (the actor by his own runs, a client or a body by the player's: the session knows which, a guest is told by its host)
-      const monster = netGuest() ? net.guest.standInMonsters?.has(Number(e[0])) : session.standInMonsters.get(Number(e[0]));
+      const monster = demo ? false : netGuest() ? net.guest.standInMonsters?.has(Number(e[0])) : session.standInMonsters.get(Number(e[0]));   // (a demo's numbers are not the game's ids: its clients by the player's runs)
       const subFrame = sub && (monster ? sub.monsterFrame : sub.frame);
       r.drawAlias(m.mdl, sub ? subFrame(frame) : frame, sub ? standInSkin(skin, frame, !!monster) : skin, [x, y, z], [pitch, yaw + spin, roll], light,
         { time, alpha: alpha === 1, dlight: dlightAt(r.dlights, x, y, z), glow: (e[13] & 4) !== 0, oldFrame: sub && e[14] != null ? subFrame(e[14]) : e[14], backlerp: settings.rLerpmodels ? e[15] ?? 0 : 0 });   // (r_lerpmodels 0: no blend)

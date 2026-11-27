@@ -1906,11 +1906,26 @@ This ends the forty-sixth list.
 
 The forty-seventh list: the stand-in in a demo. In the order they are to be taken.
 
-- **The other player in a coop recording**: a coop or deathmatch game recorded (`record`) names the other clients'
-  model `players/male/tris.md2`, and played back on a pak without it (`DemoPlayer`'s `modelId` by name finds none) the
-  other players are left out of the frame. The demo's model lookup would fall back to the placeholder row
-  (`res.placeholders`), so the painter's stand-in draws them as in the game, their frames the player's runs and their
-  skins their uniforms; `test:record` would play a coop recording back and find the other client drawn.
+- **The other player in a coop recording**: done, at both ends. Looking found the gap earlier than thought: the
+  recorder named an entity's model from the page's meshes (`res.models`), so an entity on a row without a mesh had no
+  name and was left out of the recording altogether; a coop game recorded had no other client in it. It names those
+  rows by their model's name now (`modelName`, `src/standin.js`: the mesh's, else the placeholder's), so the other
+  client goes in as `players/male/tris.md2`, as Quake 2 recorded it (and the full game's monsters on their rows, as
+  Quake 2 would). Playing back, the demo's model lookup falls back to the placeholder row for a name the pak has no
+  mesh for (`demoModelId`), and the painter's stand-in draws it, its frame by the player's runs and its skin its
+  uniform; a demo's entity numbers are not the game's ids, so the session's monsters are not asked while one plays.
+  `test:record` records a client on the player model's row for six tics, finds it in the recording by the model's
+  name with its skin, and plays it back onto the row with its run frame and skin.
+
+This ends the forty-seventh list.
+
+The forty-eighth list: a coop recording for Quake 2 itself. In the order they are to be taken.
+
+- **Every client in the recording's configstrings**: a recording says one client (`CS_MAXCLIENTS` 1) and gives
+  `CS_PLAYERSKINS` only the recording player's name and skin, so a coop or deathmatch game recorded, played in Quake 2
+  itself, has clients it has no skin for. The recorder would write the game's client count and each client's name
+  and skin (`CS_PLAYERSKINS + n`, from the session's userinfos), as `SV_ServerRecord_f` wrote every configstring;
+  `test:record` would read them back from a coop recording.
 
 ## Playing the demo
 

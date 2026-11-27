@@ -20,6 +20,7 @@ import { Renderer, lightPoint, entityFrame } from '../src/renderer.js';
 import { Link, Loopback, HostLink, GuestLink } from '../src/net.js';
 import { ITEMS } from '../src/gamedata.js';
 import { ANORMS } from '../src/md2.js';
+import { PLAYER_MODEL, demoModelId } from '../src/standin.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let failures = 0;
@@ -281,6 +282,28 @@ r.drawFaceList(frame.faces, st.lights, 0, frames, frame.brushAngles);
 let drawn = 0;
 for (const e of st.ents) { const m = res.models.get(e[1]); if (e[12] === 'M' && m.mdl) { r.drawAlias(m.mdl, e[2], e[3], [e[4], e[5], e[6]], [e[7], e[8], e[9]], lightPoint(setup.bsp, e[4], e[5], e[6]), { time: 0 }); drawn++; } }
 check(frame.faces.length > 50 && new Set(r.fb).size > 16 && drawn > 0, `a second later the recording paints over the map: ${frame.faces.length} faces, ${drawn} models`);
+
+// a model the pak lacks (a coop game's other client, on the player model's row without a mesh) is recorded by its name, as Quake
+// recorded players/male/tris.md2, and played back onto the same row, which the painter's stand-in draws: its frame and skin kept
+{
+  const pm = res.placeholders?.get(PLAYER_MODEL);
+  const rec3 = new DemoRecorder({ map: 'demo1', res, bsp: setup.bsp, mapBytes, setup, playerEnt, brushNames, levelname });
+  const other = Number((await q("SELECT MAX(id) FROM ents"))[0][0]) + 1000;
+  for (let i = 0; i < 6; i++) {
+    const row = await session.tic(cmd());
+    const f = await session.frame();
+    f.ents.push([other, pm, 40 + (i % 6), 1, row.PX + 64, row.PY, row.PZ, 0, 180, 0, 0, 0, 'M', 0]);
+    rec3.frame(row, f);
+  }
+  const d3 = parseDemo(rec3.finish());
+  const mi = d3.models.indexOf(PLAYER_MODEL);
+  const recorded = d3.frames.some((fr) => [...fr.ents.values()].some((s) => s.modelindex === mi && s.skin === 1));
+  const p3 = new DemoPlayer(d3, { modelId: (nm) => demoModelId(res, nm) });
+  const st3 = p3.at(d3.frames.at(-1).time);
+  const back = st3.ents.find((e) => e[1] === pm);
+  check(pm != null && mi > 0 && recorded && back && back[3] === 1 && back[2] >= 40 && back[2] < 46,
+    `a client on the player model's row without a mesh is recorded by its model's name (CS_MODELS ${mi}) and played back on that row, its run frame and skin kept (${JSON.stringify(back?.slice(1, 4))})`);
+}
 
 await db.close();
 console.log(failures ? `${failures} FAILED` : 'all good');
